@@ -1,0 +1,562 @@
+# -*- coding: utf-8 -*-
+"""
+interaction_2d_plot.py
+生成蛋白质-配体2D相互作用图
+
+支持功能：
+- 显示小分子结构
+- 标注与蛋白质残基的相互作用（氢键、疏水、π-π等）
+- 导出为PNG/SVG格式
+"""
+
+from __future__ import print_function
+import os
+import csv
+
+def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj_name=None,
+                                     output_path=None, width=800, height=600, dpi=150):
+    """
+    生成蛋白质-配体2D相互作用图
+
+    参数:
+        csv_path: 相互作用CSV文件路径
+        ligand_resname: 配体残基名称（例如 "LIG", "ATP" 等）
+        pdb_file: PDB文件路径（用于提取配体结构）
+        obj_name: PyMOL对象名称（如果已加载）
+        output_path: 输出图片路径（默认自动生成）
+        width: 图片宽度（像素）
+        height: 图片高度（像素）
+        dpi: 图片分辨率
+
+    返回:
+        output_path: 生成的图片文件路径
+    """
+    try:
+        from rdkit import Chem
+        from rdkit.Chem import AllChem, Draw
+        from rdkit.Chem.Draw import rdMolDraw2D
+    except ImportError:
+        raise ImportError("需要安装 RDKit: pip install rdkit")
+
+    try:
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        from matplotlib.patches import FancyBboxPatch, FancyArrowPatch
+    except ImportError:
+        raise ImportError("需要安装 matplotlib: pip install matplotlib")
+
+    import tempfile
+
+    # 1. 读取相互作用数据
+    print(f"[2D Diagram] 读取相互作用数据: {csv_path}")
+    interactions = []
+    with open(csv_path, "r", encoding="utf-8") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            res1 = row.get("Residue1", "").strip()
+            res2 = row.get("Residue2", "").strip()
+            chain1 = row.get("Chain1", "").strip()
+            chain2 = row.get("Chain2", "").strip()
+            interaction_type = row.get("Interaction", "").strip()
+            distance = row.get("Distance", "").strip()
+
+            # 识别配体相关的相互作用
+            if ligand_resname.upper() in res1.upper():
+                interactions.append({
+                    "ligand": res1,
+                    "protein": res2,
+                    "chain": chain2,
+                    "type": interaction_type,
+                    "distance": distance
+                })
+            elif ligand_resname.upper() in res2.upper():
+                interactions.append({
+                    "ligand": res2,
+                    "protein": res1,
+                    "chain": chain1,
+                    "type": interaction_type,
+                    "distance": distance
+                })
+
+    if not interactions:
+        print(f"[2D Diagram] ⚠️ 未找到配体 '{ligand_resname}' 的相互作用")
+        return None
+
+    print(f"[2D Diagram] 找到 {len(interactions)} 个相互作用")
+
+    # 2. 从PDB/PyMOL提取配体结构
+    mol = None
+    if obj_name:
+        # 从PyMOL导出配体
+        try:
+            from pymol import cmd
+            temp_sdf = tempfile.mktemp(suffix=".sdf")
+            cmd.save(temp_sdf, f"{obj_name} and resn {ligand_resname}")
+            if os.path.exists(temp_sdf):
+                mol = Chem.SDMolSupplier(temp_sdf)[0]
+                os.remove(temp_sdf)
+        except Exception as e:
+            print(f"[2D Diagram] 从PyMOL提取配体失败: {e}")
+
+    if mol is None and pdb_file and os.path.exists(pdb_file):
+        # 从PDB文件提取配体
+        try:
+            mol = _extract_ligand_from_pdb(pdb_file, ligand_resname)
+        except Exception as e:
+            print(f"[2D Diagram] 从PDB提取配体失败: {e}")
+
+    if mol is None:
+        print(f"[2D Diagram] ⚠️ 无法提取配体结构")
+        print(f"[2D Diagram] ℹ️ 请确保 PDB 文件包含配体的 HETATM 记录，或在 PyMOL 中加载配体")
+        print(f"[2D Diagram] 使用简化网络图（不包含结构式）")
+        # 使用简化的表格式视图
+        return _generate_simple_interaction_plot(interactions, ligand_resname, output_path, width, height, dpi)
+
+    # 3. 生成2D配体结构图 + 相互作用标注
+    print(f"[2D Diagram] 生成2D相互作用图...")
+    return _generate_rdkit_interaction_diagram(mol, interactions, ligand_resname, output_path, width, height, dpi)
+
+
+def _extract_ligand_from_pdb(pdb_file, ligand_resname):
+    """从PDB文件中提取配体的RDKit分子对象"""
+    from rdkit import Chem
+
+    # 读取PDB文件
+    with open(pdb_file, "r") as f:
+        lines = f.readlines()
+
+    # 提取配体的HETATM行
+    ligand_lines = []
+    for line in lines:
+        if line.startswith("HETATM") and ligand_resname.upper() in line:
+            ligand_lines.append(line)
+
+    if not ligand_lines:
+        return None
+
+    # 创建临时PDB文件
+    import tempfile
+    temp_pdb = tempfile.mktemp(suffix=".pdb")
+    with open(temp_pdb, "w") as f:
+        f.writelines(ligand_lines)
+        f.write("END\n")
+
+    # 用RDKit读取
+    try:
+        mol = Chem.MolFromPDBFile(temp_pdb, removeHs=False)
+        os.remove(temp_pdb)
+        return mol
+    except Exception:
+        if os.path.exists(temp_pdb):
+            os.remove(temp_pdb)
+        return None
+
+
+# 氨基酸分类和颜色
+AA_CATEGORIES = {
+    # 疏水性（蓝绿色）
+    "hydrophobic": {
+        "residues": ["ALA", "VAL", "LEU", "ILE", "MET", "PHE", "PRO", "TRP"],
+        "color": "#4dd0e1",  # 淡蓝绿
+        "name_zh": "疏水",
+        "name_en": "Hydrophobic"
+    },
+    # 极性不带电（绿色）
+    "polar": {
+        "residues": ["SER", "THR", "CYS", "TYR", "ASN", "GLN"],
+        "color": "#81c784",  # 淡绿色
+        "name_zh": "极性",
+        "name_en": "Polar"
+    },
+    # 带正电（蓝色）
+    "positive": {
+        "residues": ["ARG", "LYS", "HIS"],
+        "color": "#64b5f6",  # 淡蓝
+        "name_zh": "正电",
+        "name_en": "Positive"
+    },
+    # 带负电（红色）
+    "negative": {
+        "residues": ["ASP", "GLU"],
+        "color": "#e57373",  # 淡红
+        "name_zh": "负电",
+        "name_en": "Negative"
+    },
+    # 特殊（灰色）
+    "special": {
+        "residues": ["GLY"],
+        "color": "#bdbdbd",  # 灰色
+        "name_zh": "特殊",
+        "name_en": "Special"
+    }
+}
+
+# 氨基酸侧链SMILES（用于绘制结构）
+AA_SMILES = {
+    "ALA": "CC([NH3+])C([O-])=O",
+    "ARG": "NCCCC([NH3+])C([O-])=O",
+    "ASN": "NC(=O)CC([NH3+])C([O-])=O",
+    "ASP": "[O-]C(=O)CC([NH3+])C([O-])=O",
+    "CYS": "SCC([NH3+])C([O-])=O",
+    "GLN": "NC(=O)CCC([NH3+])C([O-])=O",
+    "GLU": "[O-]C(=O)CCC([NH3+])C([O-])=O",
+    "GLY": "[NH3+]CC([O-])=O",
+    "HIS": "c1c[nH]cn1CC([NH3+])C([O-])=O",
+    "ILE": "CCC(C)C([NH3+])C([O-])=O",
+    "LEU": "CC(C)CC([NH3+])C([O-])=O",
+    "LYS": "[NH3+]CCCCC([NH3+])C([O-])=O",
+    "MET": "CSCCC([NH3+])C([O-])=O",
+    "PHE": "c1ccc(CC([NH3+])C([O-])=O)cc1",
+    "PRO": "C1CC([NH2+]C1)C([O-])=O",
+    "SER": "OCC([NH3+])C([O-])=O",
+    "THR": "CC(O)C([NH3+])C([O-])=O",
+    "TRP": "c1ccc2c(c1)c(c[nH]2)CC([NH3+])C([O-])=O",
+    "TYR": "Oc1ccc(CC([NH3+])C([O-])=O)cc1",
+    "VAL": "CC(C)C([NH3+])C([O-])=O"
+}
+
+def get_residue_category(resname):
+    """获取残基类别"""
+    res = resname[:3].upper()
+    for cat, info in AA_CATEGORIES.items():
+        if res in info["residues"]:
+            return cat, info
+    return "other", {"color": "#9e9e9e", "name_zh": "其他", "name_en": "Other"}
+
+def _generate_rdkit_interaction_diagram(mol, interactions, ligand_name, output_path, width, height, dpi):
+    """使用RDKit生成配体2D结构图 + 相互作用标注（改进版）"""
+    from rdkit import Chem
+    from rdkit.Chem import AllChem, Draw
+    from rdkit.Chem.Draw import rdMolDraw2D
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    from matplotlib.patches import FancyBboxPatch, Circle, FancyArrowPatch
+    from PIL import Image
+    import tempfile
+    import math
+
+    print(f"[2D Diagram] 🎨 生成高级 2D 相互作用图...")
+
+    # 生成2D坐标
+    if not mol.GetNumConformers():
+        AllChem.Compute2DCoords(mol)
+
+    # 创建更大的画布
+    fig = plt.figure(figsize=(16, 12), dpi=dpi)
+    ax = fig.add_subplot(111)
+    ax.set_xlim(-8, 8)
+    ax.set_ylim(-6, 6)
+    ax.axis('off')
+
+    # 1. 在中心绘制配体结构
+    drawer = rdMolDraw2D.MolDraw2DCairo(600, 450)
+    drawer.DrawMolecule(mol)
+    drawer.FinishDrawing()
+
+    temp_img = tempfile.mktemp(suffix=".png")
+    with open(temp_img, "wb") as f:
+        f.write(drawer.GetDrawingText())
+
+    ligand_img = Image.open(temp_img)
+    ax.imshow(ligand_img, extent=[-3, 3, -2.2, 2.2], zorder=10)
+    os.remove(temp_img)
+
+    # 2. 收集所有残基和相互作用
+    residue_interactions = {}  # {residue_name: [(type, distance, ligand_atom, protein_atom)]}
+    
+    for inter in interactions:
+        prot_res = inter["protein"].strip()
+        itype = inter["type"]
+        distance = inter["distance"]
+        
+        # 提取残基名
+        res_name = prot_res.split()[0] if prot_res else "UNK"
+        
+        if res_name not in residue_interactions:
+            residue_interactions[res_name] = []
+        residue_interactions[res_name].append((itype, distance, "", ""))
+
+    # 3. 在配体周围布置残基（圆形布局）
+    residues = list(residue_interactions.keys())
+    n_residues = len(residues)
+    radius = 5.5
+
+    print(f"[2D Diagram] 绘制 {n_residues} 个相互作用残基...")
+
+    for i, res_name in enumerate(residues):
+        angle = 2 * math.pi * i / n_residues - math.pi/2
+        x = radius * math.cos(angle)
+        y = radius * math.sin(angle)
+
+        # 获取残基类别和颜色
+        cat, cat_info = get_residue_category(res_name)
+        res_color = cat_info["color"]
+        cat_name = cat_info["name_zh"]
+
+        # 尝试绘制残基结构（如果有SMILES）
+        res_3letter = res_name[:3].upper()
+        if res_3letter in AA_SMILES:
+            try:
+                aa_mol = Chem.MolFromSmiles(AA_SMILES[res_3letter])
+                if aa_mol:
+                    AllChem.Compute2DCoords(aa_mol)
+                    
+                    # 绘制小的残基结构
+                    aa_drawer = rdMolDraw2D.MolDraw2DCairo(180, 180)
+                    aa_drawer.DrawMolecule(aa_mol)
+                    aa_drawer.FinishDrawing()
+                    
+                    temp_aa_img = tempfile.mktemp(suffix=".png")
+                    with open(temp_aa_img, "wb") as f:
+                        f.write(aa_drawer.GetDrawingText())
+                    
+                    aa_img = Image.open(temp_aa_img)
+                    
+                    # 绘制带颜色边框的背景
+                    from matplotlib.patches import Rectangle
+                    rect = Rectangle((x-0.9, y-0.9), 1.8, 1.8,
+                                    facecolor='white', edgecolor=res_color,
+                                    linewidth=4, zorder=8, alpha=0.95)
+                    ax.add_patch(rect)
+                    
+                    # 显示残基结构
+                    ax.imshow(aa_img, extent=[x-0.85, x+0.85, y-0.85, y+0.85], zorder=9)
+                    os.remove(temp_aa_img)
+                    
+                    # 残基标签（在下方）
+                    ax.text(x, y-1.15, f"{res_name[:3]}",
+                           fontsize=9, fontweight='bold',
+                           ha='center', va='top',
+                           bbox=dict(boxstyle='round,pad=0.3', 
+                                   facecolor=res_color, edgecolor='none', alpha=0.9),
+                           color='white', zorder=11)
+                    
+                    # 类别标签（在上方）
+                    ax.text(x, y+1.15, cat_name,
+                           fontsize=7, ha='center', va='bottom',
+                           bbox=dict(boxstyle='round,pad=0.2',
+                                   facecolor=res_color, edgecolor='none', alpha=0.7),
+                           color='white', zorder=11)
+                    
+            except Exception as e:
+                # 如果绘制失败，使用圆圈
+                circle = Circle((x, y), 0.8, facecolor=res_color,
+                              edgecolor='white', linewidth=3, alpha=0.85, zorder=9)
+                ax.add_patch(circle)
+                ax.text(x, y, res_name[:3], fontsize=11, fontweight='bold',
+                       ha='center', va='center', color='white', zorder=10)
+        else:
+            # 使用圆圈显示
+            circle = Circle((x, y), 0.8, facecolor=res_color,
+                          edgecolor='white', linewidth=3, alpha=0.85, zorder=9)
+            ax.add_patch(circle)
+            ax.text(x, y, res_name[:3], fontsize=11, fontweight='bold',
+                   ha='center', va='center', color='white', zorder=10)
+
+        # 绘制连线到配体
+        interactions_list = residue_interactions[res_name]
+        
+        # 相互作用类型颜色
+        interaction_colors = {
+            "氢键": "#2196F3",
+            "盐桥": "#FF5722",
+            "疏水": "#4CAF50",
+            "π-π": "#9C27B0",
+            "π-阳": "#E91E63",
+        }
+        
+        for itype, distance, _, _ in interactions_list:
+            # 确定颜色
+            line_color = "#666666"
+            for key, color in interaction_colors.items():
+                if key in itype:
+                    line_color = color
+                    break
+            
+            # 绘制连线
+            # 计算连接点（从配体边缘到残基）
+            lig_x = 2.5 * math.cos(angle)
+            lig_y = 1.8 * math.sin(angle)
+            
+            arrow = FancyArrowPatch((lig_x, lig_y), (x, y),
+                                  arrowstyle='-',
+                                  color=line_color,
+                                  linewidth=2.5,
+                                  alpha=0.6,
+                                  zorder=2)
+            ax.add_patch(arrow)
+            
+            # 在线上标注距离
+            if distance and distance != "-":
+                mid_x = (lig_x + x) / 2
+                mid_y = (lig_y + y) / 2
+                ax.text(mid_x, mid_y, f"{distance}Å",
+                       fontsize=7, ha='center', va='center',
+                       bbox=dict(boxstyle='round,pad=0.2',
+                               facecolor='white', edgecolor=line_color, alpha=0.9),
+                       color=line_color, fontweight='bold', zorder=3)
+
+    # 4. 添加图例
+    legend_elements = []
+    
+    # 残基类别图例
+    for cat, info in AA_CATEGORIES.items():
+        legend_elements.append(mpatches.Patch(color=info["color"], 
+                                             label=info["name_zh"],
+                                             alpha=0.85))
+    
+    # 相互作用类型图例
+    from matplotlib.lines import Line2D
+    interaction_legend = [
+        Line2D([0], [0], color="#2196F3", linewidth=3, label="氢键"),
+        Line2D([0], [0], color="#FF5722", linewidth=3, label="盐桥"),
+        Line2D([0], [0], color="#4CAF50", linewidth=3, label="疏水"),
+        Line2D([0], [0], color="#9C27B0", linewidth=3, label="π-π"),
+        Line2D([0], [0], color="#E91E63", linewidth=3, label="π-阳离子"),
+    ]
+    
+    # 绘制两个图例
+    leg1 = ax.legend(handles=legend_elements, loc='upper left', 
+                    title="残基类别", fontsize=10, title_fontsize=11,
+                    framealpha=0.95, edgecolor='black')
+    ax.add_artist(leg1)
+    
+    leg2 = ax.legend(handles=interaction_legend, loc='upper right',
+                    title="相互作用", fontsize=10, title_fontsize=11,
+                    framealpha=0.95, edgecolor='black')
+
+    # 5. 添加标题
+    ax.text(0, 5.8, f"{ligand_name} 蛋白-配体 2D 相互作用图",
+           fontsize=18, fontweight='bold', ha='center',
+           bbox=dict(boxstyle='round,pad=0.5', facecolor='white',
+                   edgecolor='#333', linewidth=2, alpha=0.95))
+    
+    # 添加统计信息
+    ax.text(0, -5.6, f"总计: {len(residue_interactions)} 个相互作用残基",
+           fontsize=12, ha='center', style='italic', color='#666')
+
+    # 6. 保存图片
+    if output_path is None:
+        output_path = f"{ligand_name}_interaction_2d_detailed.png"
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
+    plt.close()
+
+    print(f"[2D Diagram] ✅ 高级2D相互作用图已生成: {output_path}")
+    print(f"[2D Diagram] ℹ️ 残基按类别着色：疏水(蓝绿)、极性(绿)、正电(蓝)、负电(红)")
+    print(f"[2D Diagram] ℹ️ 残基结构式已显示，相互作用线条按类型着色")
+    
+    return output_path
+
+
+def _generate_simple_interaction_plot(interactions, ligand_name, output_path, width, height, dpi):
+    """生成简化的相互作用图（当无法提取配体结构时）"""
+    import matplotlib.pyplot as plt
+    import matplotlib.patches as mpatches
+    from matplotlib.patches import FancyBboxPatch, Circle, FancyArrowPatch
+
+    fig, ax = plt.subplots(figsize=(width/dpi, height/dpi), dpi=dpi)
+    ax.set_xlim(0, 10)
+    ax.set_ylim(0, 10)
+    ax.axis('off')
+
+    # 相互作用类型颜色映射
+    color_map = {
+        "氢键": "#2196F3",
+        "HB": "#2196F3",
+        "盐桥": "#FF9800",
+        "SB": "#FF9800",
+        "疏水相互作用": "#4CAF50",
+        "HP": "#4CAF50",
+        "π–π 堆积": "#9C27B0",
+        "Pi-Pi": "#9C27B0",
+        "π–阳离子相互作用": "#E91E63",
+        "Pi-Cat": "#E91E63",
+    }
+
+    # 绘制配体中心圆圈
+    ligand_circle = Circle((5, 5), 1.5, color='#FF5722', alpha=0.3, ec='#FF5722', lw=3, zorder=2)
+    ax.add_patch(ligand_circle)
+    ax.text(5, 5, ligand_name, fontsize=16, fontweight='bold', ha='center', va='center', zorder=3)
+
+    # 按相互作用类型分组
+    grouped = {}
+    for inter in interactions:
+        itype = inter["type"]
+        if itype not in grouped:
+            grouped[itype] = []
+        grouped[itype].append(inter)
+
+    # 计算残基位置（圆形分布）
+    import math
+    num_types = len(grouped)
+    angle_step = 2 * math.pi / max(num_types, 1)
+
+    type_idx = 0
+    for itype, items in grouped.items():
+        color = color_map.get(itype, "#757575")
+        angle = type_idx * angle_step
+
+        # 计算扇形中心位置
+        cx = 5 + 3.5 * math.cos(angle)
+        cy = 5 + 3.5 * math.sin(angle)
+
+        # 绘制相互作用类型标签
+        box = FancyBboxPatch((cx-0.8, cy+0.5), 1.6, 0.4, boxstyle="round,pad=0.1",
+                            facecolor=color, edgecolor=color, alpha=0.8, zorder=2)
+        ax.add_patch(box)
+        ax.text(cx, cy+0.7, itype, fontsize=10, fontweight='bold',
+               color='white', ha='center', va='center', zorder=3)
+
+        # 绘制残基列表
+        y_offset = cy + 0.2
+        for i, item in enumerate(items[:3]):  # 最多显示3个
+            protein_res = item["protein"]
+            distance = item["distance"]
+
+            label_text = protein_res
+            if distance and distance != "-":
+                label_text += f"\n{distance}Å"
+
+            # 绘制残基圆圈
+            res_circle = Circle((cx, y_offset), 0.3, color=color, alpha=0.6, ec=color, lw=2, zorder=2)
+            ax.add_patch(res_circle)
+            ax.text(cx, y_offset, protein_res.split()[0][:3], fontsize=8,
+                   ha='center', va='center', zorder=3)
+
+            # 绘制连接线
+            arrow = FancyArrowPatch((5, 5), (cx, y_offset),
+                                   arrowstyle='-', color=color, alpha=0.4, lw=2, zorder=1)
+            ax.add_patch(arrow)
+
+            y_offset -= 0.8
+
+        if len(items) > 3:
+            ax.text(cx, y_offset, f"+{len(items)-3} more", fontsize=8,
+                   style='italic', color=color, ha='center', va='center')
+
+        type_idx += 1
+
+    # 添加标题
+    ax.text(5, 9.5, f"{ligand_name} 相互作用网络图", fontsize=16,
+           fontweight='bold', ha='center')
+
+    # 保存图片
+    if output_path is None:
+        output_path = f"{ligand_name}_interaction_network.png"
+
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
+    plt.close()
+
+    print(f"[2D Diagram] ✅ 相互作用网络图已生成: {output_path}")
+    return output_path
+
+
+# PyMOL命令注册
+try:
+    from pymol import cmd
+    cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
+except Exception:
+    pass
