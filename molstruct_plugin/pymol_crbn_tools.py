@@ -83,7 +83,9 @@ def _set_b_factors(sel: str, resi_to_value: Dict[Tuple[str, str, str], float]):
     for a in model.atom:
         key = (a.chain, a.resi, getattr(a, 'q', a.icode))
         if key in resi_to_value:
-            cmd.alter(f"{sel} and chain {a.chain} and resi {a.resi} and icode {getattr(a, 'q', a.icode) if getattr(a, 'q', a.icode) else '""'}", f"b={float(resi_to_value[key])}")
+            icode_part = getattr(a, 'q', a.icode)
+            icode_str = icode_part if icode_part else '""'
+            cmd.alter(f"{sel} and chain {a.chain} and resi {a.resi} and icode {icode_str}", f"b={float(resi_to_value[key])}")
     cmd.rebuild()
 
 
@@ -123,7 +125,7 @@ def interface_map(CRBN_sel: str, POI_sel: str, name: str = "iface", cutoff: floa
     basic = "resn LYS+ARG+HIS and elem N"
     cmd.delete(f"{name}_salt")
     cmd.distance(f"{name}_salt", f"({crbn}) and ({acidic})", f"({poi}) and ({basic})", cutoff=cutoff)
-    cmd.distance(f"{name}_salt}", f"({crbn}) and ({basic})", f"({poi}) and ({acidic})", cutoff=cutoff)
+    cmd.distance(f"{name}_salt", f"({crbn}) and ({basic})", f"({poi}) and ({acidic})", cutoff=cutoff)
     cmd.set("dash_color", "yellow", f"{name}_salt")
 
     # Hydrophobics: C-C contacts within 4.0 Å among hydrophobic residues
@@ -306,7 +308,15 @@ def _asa_ddg_proxy(poi_sel: str, complex_sel: str, scale: float = 0.025) -> Dict
 
 
 def ddg_heatmap(CRBN_sel: str, POI_sel: str, method: str = "auto", name: str = "ddg", scale: float = 0.025):
-    """Color POI by ΔΔG. method: auto|foldx|asa. Stores value to b-factor and colors by spectrum."""
+    """Color POI by ΔΔG. method: auto|foldx|asa. Stores value to b-factor and colors by spectrum.
+    
+    For publication-quality results, install FoldX:
+    - Download from: https://foldxsuite.crg.eu/
+    - Set environment variable: export FOLDX=/path/to/foldx
+    - Or place foldx binary in your PATH
+    
+    If FoldX is not available, falls back to ASA-based proxy (less accurate).
+    """
     poi = f"({POI_sel})"
     crbn = f"({CRBN_sel})"
     # Try FoldX if auto
@@ -316,15 +326,26 @@ def ddg_heatmap(CRBN_sel: str, POI_sel: str, method: str = "auto", name: str = "
         fx = _detect_foldx()
         if fx:
             use_foldx = True
+            print(f"[ddg_heatmap] ✅ Using FoldX at: {fx}")
             pdb_path, _ = _prep_complex_tmp(crbn, poi)
             ddg = _foldx_alanine_scan(fx, pdb_path, poi)
+        elif method == "foldx":
+            # User explicitly requested FoldX but it's not available
+            print("[ddg_heatmap] ❌ FoldX not found in PATH or $FOLDX")
+            print("[ddg_heatmap] 💡 Download FoldX from: https://foldxsuite.crg.eu/")
+            print("[ddg_heatmap] 💡 Then set: export FOLDX=/path/to/foldx")
+            if method == "foldx":  # Don't fallback if explicitly requested
+                return
+    
     if (not ddg) and method in ("auto", "asa"):
-        # ASA proxy
+        # ASA proxy fallback
+        print("[ddg_heatmap] ⚠️ Using ASA-based proxy (ΔΔG approximation, not publication quality)")
+        print("[ddg_heatmap] 💡 For accurate ΔΔG values, install FoldX: https://foldxsuite.crg.eu/")
         ddg = _asa_ddg_proxy(poi, f"{crbn} or {poi}", scale=scale)
 
     if not ddg:
         cmd.feedback("pop", "all", "actions")
-        print("[ddg_heatmap] No ΔΔG values computed. Check selections or install FoldX.")
+        print("[ddg_heatmap] ❌ No ΔΔG values computed. Check selections.")
         return
 
     _set_b_factors(poi, ddg)
@@ -475,11 +496,14 @@ def crbn_tools_doctor(verbose: int = 1):
     ok = True
     fx = _detect_foldx()
     if fx:
-        print(f"[doctor] FoldX detected: {fx}")
+        print(f"[doctor] ✅ FoldX detected: {fx}")
     else:
         ok = False
-        print("[doctor] FoldX not found; ddg_heatmap will fallback to ASA proxy.")
-    print("[doctor] PyMOL version:", cmd.get_version())
+        print("[doctor] ⚠️ FoldX not found")
+        print("[doctor] 💡 ddg_heatmap will use ASA-based approximation (not publication quality)")
+        print("[doctor] 💡 For publication-quality ΔΔG: download FoldX from https://foldxsuite.crg.eu/")
+        print("[doctor] 💡 Then set environment variable: export FOLDX=/path/to/foldx")
+    print(f"[doctor] PyMOL version: {cmd.get_version()[0]}")
     return ok
 
 cmd.extend("crbn_tools_doctor", crbn_tools_doctor)

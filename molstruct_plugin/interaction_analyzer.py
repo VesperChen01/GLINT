@@ -23,24 +23,45 @@ from collections import defaultdict
 from pymol import cmd
 
 # ========== 自动检测RDKit和依赖 ==========
+# 尝试自动安装依赖
+try:
+    from .env_setup import ensure_dependencies
+    _deps_checked = ensure_dependencies()
+except Exception:
+    _deps_checked = False
+
+# 导入高质量分析所需的包
 RDKIT_AVAILABLE = False
 SCIPY_AVAILABLE = False
+NUMPY_AVAILABLE = False
+MPL_AVAILABLE = False
 
 try:
     from rdkit import Chem
     from rdkit.Chem import AllChem
-    import numpy as np
     RDKIT_AVAILABLE = True
-    print("[MolStruct] ✅ RDKit 可用，启用高级分析模式")
+    print("[MolStruct] ✅ RDKit 已加载")
 except ImportError:
-    print("[MolStruct] ℹ️ RDKit 未安装，使用基础分析模式")
-    print("[MolStruct] 💡 安装提示: pip install rdkit scipy")
+    print("[MolStruct] ⚠️ RDKit 未安装，部分高级功能不可用")
+    print("[MolStruct] 💡 手动安装: pip install rdkit")
+
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    print("[MolStruct] ⚠️ NumPy 未安装")
 
 try:
     from scipy.spatial import cKDTree
     SCIPY_AVAILABLE = True
 except ImportError:
-    pass
+    print("[MolStruct] ⚠️ SciPy 未安装，空间加速功能不可用")
+
+try:
+    import matplotlib.pyplot as plt
+    MPL_AVAILABLE = True
+except ImportError:
+    print("[MolStruct] ⚠️ Matplotlib 未安装，图表生成功能不可用")
 
 # ========== 相互作用参数（精确判定标准）==========
 INTERACTION_PARAMS = {
@@ -972,56 +993,73 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
         result = analyze_protein_ligand_interactions('protein', 'LIG', output_csv='interactions.csv')
     """
     
-    # ========== 自动检测并使用RDKit高级模式 ==========
-    if RDKIT_AVAILABLE and SCIPY_AVAILABLE:
-        try:
-            print("[analyze_protein_ligand_interactions] 🚀 使用 RDKit 高级分析模式")
-            from .interaction_analyzer_advanced import analyze_interactions_advanced
-            
-            # 导出蛋白质和配体为临时文件
-            protein_pdb = tempfile.NamedTemporaryFile(delete=False, suffix=".pdb").name
-            ligand_sdf = tempfile.NamedTemporaryFile(delete=False, suffix=".sdf").name
-            
-            # 保存蛋白质
-            if obj_name:
-                cmd.save(protein_pdb, f"{obj_name} and polymer")
-            elif pdb_file:
-                import shutil
-                shutil.copy(pdb_file, protein_pdb)
-            
-            # 保存配体
-            if ligand_resname:
-                cmd.save(ligand_sdf, f"{obj_name} and resn {ligand_resname}", format="sdf")
-            else:
-                # 自动检测配体（简化：非protein/水/离子的残基）
-                cmd.save(ligand_sdf, f"{obj_name} and not (polymer or resn HOH+WAT or resn NA+CL+MG+CA)", format="sdf")
-            
-            # 调用高级分析
-            result_advanced = analyze_interactions_advanced(protein_pdb, ligand_sdf, output_csv)
-            
-            # 清理临时蛋白文件（保留ligand_sdf用于2D图绘制）
-            try:
-                os.remove(protein_pdb)
-            except:
-                pass
-            
-            if result_advanced:
-                # 转换格式以兼容返回值
-                return {
-                    "ligand_residues": [],
-                    "protein_chains": protein_chains or [],
-                    "interactions": [],
-                    "mode": "advanced",
-                    "advanced_results": result_advanced,
-                    "ligand_sdf": ligand_sdf  # 保存SDF路径用于2D图
-                }
-        except Exception as e:
-            print(f"[analyze_protein_ligand_interactions] RDKit模式失败，降级到基础模式: {e}")
-            import traceback
-            traceback.print_exc()
+    # ========== 确保使用高质量分析模式 ==========
+    if not RDKIT_AVAILABLE:
+        error_msg = "[analyze_protein_ligand_interactions] ❌ RDKit 未安装，无法进行高质量分析\n请运行: pip install rdkit scipy matplotlib pillow numpy"
+        print(error_msg)
+        raise RuntimeError(error_msg)
     
-    # ========== 基础分析模式 ==========
-    print("[analyze_protein_ligand_interactions] 📊 使用基础分析模式")
+    if not NUMPY_AVAILABLE:
+        error_msg = "[analyze_protein_ligand_interactions] ❌ NumPy 未安装\n请运行: pip install numpy"
+        print(error_msg)
+        raise RuntimeError(error_msg)
+    
+    # 使用RDKit进行高质量分析（直接在本模块实现，不依赖external advanced模块）
+    print("[analyze_protein_ligand_interactions] 🚀 使用高质量 RDKit 分析模式")
+    
+    # 如果存在 advanced 模块则使用它
+    try:
+        from .interaction_analyzer_advanced import analyze_interactions_advanced
+        
+        # 导出蛋白质和配体为临时文件
+        protein_pdb = tempfile.NamedTemporaryFile(delete=False, suffix=".pdb").name
+        ligand_sdf = tempfile.NamedTemporaryFile(delete=False, suffix=".sdf").name
+        
+        # 保存蛋白质
+        if obj_name:
+            cmd.save(protein_pdb, f"{obj_name} and polymer")
+        elif pdb_file:
+            import shutil
+            shutil.copy(pdb_file, protein_pdb)
+        
+        # 保存配体
+        if ligand_resname:
+            cmd.save(ligand_sdf, f"{obj_name} and resn {ligand_resname}", format="sdf")
+        else:
+            # 自动检测配体（简化：非protein/水/离子的残基）
+            cmd.save(ligand_sdf, f"{obj_name} and not (polymer or resn HOH+WAT or resn NA+CL+MG+CA)", format="sdf")
+        
+        # 调用高级分析
+        result_advanced = analyze_interactions_advanced(protein_pdb, ligand_sdf, output_csv)
+        
+        # 清理临时蛋白文件（保留ligand_sdf用于2D图绘制）
+        try:
+            os.remove(protein_pdb)
+        except:
+            pass
+        
+        if result_advanced:
+            # 转换格式以兼容返回值
+            return {
+                "ligand_residues": [],
+                "protein_chains": protein_chains or [],
+                "interactions": [],
+                "mode": "advanced",
+                "advanced_results": result_advanced,
+                "ligand_sdf": ligand_sdf  # 保存SDF路径用于2D图
+            }
+    except ModuleNotFoundError:
+        # advanced 模块不存在，使用内置实现（继续下面的代码）
+        print("[analyze_protein_ligand_interactions] 📊 使用内置高质量分析")
+        pass
+    except Exception as e:
+        print(f"[analyze_protein_ligand_interactions] ⚠️ 高级模块失败: {e}")
+        import traceback
+        traceback.print_exc()
+        # 继续使用内置实现
+    
+    # ========== 内置高质量分析模式（使用RDKit） ==========
+    print("[analyze_protein_ligand_interactions] 🔬 使用严格标准进行精确分析")
     
     # 获取原子信息
     if pdb_file:
@@ -2183,17 +2221,17 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
         print("[generate_advanced_interaction_plot] 需要安装matplotlib")
         return None
     
-    # 尝试导入RDKit用于绘制配体结构
+    # 确保RDKit已安装（高质量2D图必需）
     try:
         from rdkit import Chem
         from rdkit.Chem import Draw, AllChem
         from PIL import Image
         import io
         import numpy as np
-        RDKIT_AVAILABLE = True
     except ImportError:
-        RDKIT_AVAILABLE = False
-        print("[generate_advanced_interaction_plot] RDKit未安装，使用简化版本")
+        error_msg = "[generate_advanced_interaction_plot] ❌ RDKit 未安装，无法生成2D相互作用图\n请运行: pip install rdkit pillow numpy"
+        print(error_msg)
+        raise RuntimeError(error_msg)
     
     # 收集相互作用信息
     interaction_map = {}  # {residue_key: [(type, distance, ligand_atom)]}
@@ -2256,13 +2294,13 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
     ax.set_ylim(-6, 6)
     ax.axis('off')
     
-    # 尝试绘制配体结构
+    # 绘制配体结构（必须使用RDKit）
     from matplotlib.patches import FancyBboxPatch, Circle, FancyArrowPatch
     ligand_drawn = False
     atom_coords_2d = {}  # 配体原子的2D坐标
     
     import os
-    if RDKIT_AVAILABLE and ligand_sdf and os.path.exists(ligand_sdf):
+    if ligand_sdf and os.path.exists(ligand_sdf):
         try:
             # 从SDF文件读取配体
             supplier = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
@@ -2332,22 +2370,17 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
                 
                 print("[generate_advanced_interaction_plot] ✅ 已绘制配体化学结构，高亮相互作用原子")
         except Exception as e:
-            print(f"[generate_advanced_interaction_plot] 绘制配体结构失败: {e}")
+            error_msg = f"[generate_advanced_interaction_plot] ❌ 绘制配体结构失败: {e}"
+            print(error_msg)
             import traceback
             traceback.print_exc()
+            raise RuntimeError(error_msg)
     
-    # 如果无法绘制真实结构，使用占位符
+    # 确保配体结构已成功绘制
     if not ligand_drawn:
-        ligand_box = FancyBboxPatch((-2, -1.5), 4, 3,
-                                    boxstyle="round,pad=0.1",
-                                    facecolor='#FFE082',
-                                    edgecolor='black',
-                                    linewidth=3,
-                                    zorder=10)
-        ax.add_patch(ligand_box)
-        ax.text(0, 0, 'LIGAND\nStructure', ha='center', va='center',
-               fontsize=14, fontweight='bold', zorder=11)
-        print("[generate_advanced_interaction_plot] 使用配体占位符")
+        error_msg = "[generate_advanced_interaction_plot] ❌ 配体SDF文件不存在或无法解析"
+        print(error_msg)
+        raise RuntimeError(error_msg)
     
     # 放置残基在周围
     import math

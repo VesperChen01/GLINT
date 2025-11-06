@@ -13,6 +13,14 @@ import locale
 __version__ = "1.0.0"
 __author__ = "Vesper"
 
+# ---- 环境依赖检查与自动安装 ----
+try:
+    from .env_setup import ensure_dependencies
+    _DEPS_OK = ensure_dependencies()
+except Exception as e:
+    print(f"[MolStruct] ⚠️ 依赖检查失败: {e}")
+    _DEPS_OK = False
+
 # ---- 语言工具 ----
 def _zh():
     try:

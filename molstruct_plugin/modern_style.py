@@ -110,16 +110,18 @@ def get_dark_theme():
     /* ========== 标题标签 ========== */
     QLabel {{
         color: {COLORS['text_primary']};
+        padding: 2px 0;      /* 适中的垂直间距 */
+        min-height: 20px;    /* 适中的最小高度 */
     }}
     
     QGroupBox {{
         background: {COLORS['bg_card']};
         border: 1px solid {COLORS['border']};
-        border-radius: 12px;
-        margin-top: 16px;
-        padding-top: 24px;
-        font-weight: 600;
-        font-size: 14px;
+        border-radius: 10px;
+        margin-top: 10px;
+        padding: 18px 12px 10px 12px; /* 上/左右/下 */
+        font-weight: 500;
+        font-size: 13px;
         color: {COLORS['text_primary']};
     }}
     
@@ -135,11 +137,13 @@ def get_dark_theme():
     QLineEdit {{
         background: {COLORS['bg_main']};
         border: 1px solid {COLORS['border']};
-        border-radius: 8px;
-        padding: 10px 14px;
+        border-radius: 6px;
+        padding: 3px 8px;   /* 进一步减小垂直内边距 */
+        min-height: 24px;    /* 进一步减小最小高度 */
+        max-height: 24px;    /* 限制最大高度 */
         color: {COLORS['text_primary']};
         selection-background-color: {COLORS['primary']};
-        font-size: 13px;
+        font-size: 12px;     /* 减小字体 */
     }}
     
     QLineEdit:focus {{
@@ -158,9 +162,11 @@ def get_dark_theme():
         color: {COLORS['text_primary']};
         border: 1px solid {COLORS['border']};
         border-radius: 8px;
-        padding: 10px 20px;
+        padding: 4px 14px; /* 进一步减小按钮垂直内边距 */
+        min-height: 24px;    /* 限制按钮高度 */
+        max-height: 26px;
         font-weight: 500;
-        font-size: 13px;
+        font-size: 12px;     /* 减小字体 */
     }}
     
     QPushButton:hover {{
@@ -192,7 +198,7 @@ def get_dark_theme():
         color: white;
         border: none;
         font-weight: 600;
-        padding: 12px 24px;
+        padding: 8px 20px; /* 减小主要按钮垂直内边距 */
     }}
     
     QPushButton#analyze_btn:hover,
@@ -325,10 +331,12 @@ def get_dark_theme():
     QComboBox {{
         background: {COLORS['bg_main']};
         border: 1px solid {COLORS['border']};
-        border-radius: 8px;
-        padding: 8px 12px;
+        border-radius: 6px;
+        padding: 3px 8px;   /* 进一步减小垂直内边距 */
+        min-height: 24px;    /* 进一步减小最小高度 */
+        max-height: 24px;    /* 限制最大高度 */
         color: {COLORS['text_primary']};
-        font-size: 13px;
+        font-size: 12px;     /* 减小字体 */
         min-width: 120px;
     }}
     
@@ -395,8 +403,8 @@ def get_dark_theme():
     }}
     
     QTableWidget::item {{
-        padding: 12px 8px;
-        min-height: 32px;
+        padding: 10px 8px;  /* 适中的垂直内边距 */
+        min-height: 34px;   /* 适中的最小行高 */
         color: {COLORS['text_primary']};
     }}
     
@@ -408,8 +416,8 @@ def get_dark_theme():
     QHeaderView::section {{
         background: {COLORS['bg_main']};
         color: {COLORS['text_secondary']};
-        padding: 12px 10px;
-        min-height: 36px;
+        padding: 11px 10px;  /* 适中的内边距 */
+        min-height: 36px;    /* 适中的表头高度 */
         border: none;
         border-bottom: 2px solid {COLORS['primary']};
         font-weight: 600;
@@ -583,11 +591,11 @@ def get_light_theme():
     QGroupBox {{
         background: white;
         border: 1px solid {COLORS['border_light']};
-        border-radius: 12px;
-        margin-top: 16px;
-        padding-top: 24px;
-        font-weight: 600;
-        font-size: 14px;
+        border-radius: 10px;
+        margin-top: 10px;
+        padding: 18px 12px 10px 12px; /* 上/左右/下 */
+        font-weight: 500;
+        font-size: 13px;
         color: {COLORS['text_dark']};
     }}
     
@@ -603,8 +611,9 @@ def get_light_theme():
     QLineEdit {{
         background: white;
         border: 1px solid {COLORS['border_light']};
-        border-radius: 8px;
-        padding: 10px 14px;
+        border-radius: 6px;
+        padding: 7px 12px;   /* 更紧凑的垂直内边距 */
+        min-height: 28px;    /* 更小的最小高度 */
         color: {COLORS['text_dark']};
         selection-background-color: {COLORS['primary']};
         font-size: 13px;
@@ -783,8 +792,9 @@ def get_light_theme():
     QComboBox {{
         background: white;
         border: 1px solid {COLORS['border_light']};
-        border-radius: 8px;
-        padding: 8px 12px;
+        border-radius: 6px;
+        padding: 7px 12px;   /* 更紧凑的垂直内边距 */
+        min-height: 28px;    /* 更小的最小高度 */
         color: {COLORS['text_dark']};
         font-size: 13px;
         min-width: 120px;
@@ -853,8 +863,8 @@ def get_light_theme():
     }}
     
     QTableWidget::item {{
-        padding: 12px 8px;
-        min-height: 32px;
+        padding: 10px 8px;  /* 适中的垂直内边距 */
+        min-height: 34px;   /* 适中的最小行高 */
         color: {COLORS['text_dark']};
         font-size: 13px;
     }}
@@ -867,8 +877,8 @@ def get_light_theme():
     QHeaderView::section {{
         background: #f1f5f9;
         color: {COLORS['text_dark']};
-        padding: 12px 10px;
-        min-height: 36px;
+        padding: 11px 10px;  /* 适中的内边距 */
+        min-height: 36px;    /* 适中的表头高度 */
         border: none;
         border-bottom: 2px solid {COLORS['primary']};
         font-weight: 600;

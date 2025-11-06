@@ -22,10 +22,10 @@ QT_LIB = None
 try:
     from PyQt5.QtCore import Qt, QThread, pyqtSignal, QLocale, QTimer
     from PyQt5.QtWidgets import (
-        QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
+        QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QLabel,
         QLineEdit, QPushButton, QCheckBox, QComboBox, QFileDialog, QGroupBox,
         QFormLayout, QMessageBox, QTextEdit, QProgressBar, QFrame, QTabWidget,
-        QTableWidget, QTableWidgetItem, QSizePolicy
+        QTableWidget, QTableWidgetItem, QSizePolicy, QGridLayout, QListWidget, QStackedWidget
     )
     QT_LIB = "PyQt5"
 except Exception:
@@ -35,7 +35,7 @@ except Exception:
             QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
             QLineEdit, QPushButton, QCheckBox, QComboBox, QFileDialog, QGroupBox,
             QFormLayout, QMessageBox, QTextEdit, QProgressBar, QFrame, QTabWidget,
-            QTableWidget, QTableWidgetItem, QSizePolicy
+            QTableWidget, QTableWidgetItem, QSizePolicy, QGridLayout, QListWidget, QStackedWidget
         )
         QT_LIB = "PyQt6"
     except Exception as e:
@@ -109,6 +109,34 @@ def _import_helpers():
     return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs
 
 highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs = _import_helpers()
+
+# -------- 依赖检查 --------
+def _check_and_install_deps():
+    """检查并安装依赖，GUI启动时调用"""
+    try:
+        # 尝试导入env_setup模块
+        here = os.path.dirname(os.path.abspath(__file__))
+        sys.path.insert(0, here)
+        try:
+            from .env_setup import ensure_dependencies, get_dependency_status
+        except ImportError:
+            from env_setup import ensure_dependencies, get_dependency_status
+        
+        # 检查依赖状态
+        status = get_dependency_status()
+        missing = [pkg for pkg, avail in status.items() if not avail and pkg in ['rdkit', 'scipy', 'matplotlib', 'pillow', 'numpy']]
+        
+        if missing:
+            print(f"[MolStruct GUI] 检测到缺失依赖: {', '.join(missing)}")
+            print("[MolStruct GUI] 正在自动安装...")
+            success = ensure_dependencies()
+            if not success:
+                print("[MolStruct GUI] ⚠️ 部分依赖安装失败，请手动安装")
+                return False
+        return True
+    except Exception as e:
+        print(f"[MolStruct GUI] 依赖检查失败: {e}")
+        return False
 
 # -------- Language & Text --------
 LANG_FORCE = "en"  # Force English for all GUI
@@ -253,7 +281,12 @@ class MolStructDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(t("title"))
-        # 改小初始尺寸（屏幕的60%高度，70%宽度），确保不会太大
+        # 固定窗口尺寸（锁定大小，不可调整）
+        fixed_w = 1280
+        fixed_h = 720
+        self.setFixedSize(fixed_w, fixed_h)  # 锁定窗口大小
+        
+        # 居中显示
         try:
             from PyQt5.QtGui import QGuiApplication as _QGA  # type: ignore
         except Exception:
@@ -265,21 +298,9 @@ class MolStructDialog(QDialog):
             scr = _QGA.primaryScreen()
             if scr:
                 geom = scr.availableGeometry()
-                w = int(geom.width() * 0.70)  # 70% 宽度
-                h = int(geom.height() * 0.60)  # 60% 高度
-                # 限制最大初始尺寸
-                w = min(1100, w)
-                h = min(650, h)
-                # 设置最小尺寸
-                w = max(900, w)
-                h = max(500, h)
-                self.resize(w, h)
-            else:
-                self.resize(1000, 600)
-        else:
-            self.resize(1000, 600)
-        # 设置最小窗口尺寸，允许用户缩小
-        self.setMinimumSize(800, 450)
+                x = (geom.width() - fixed_w) // 2
+                y = (geom.height() - fixed_h) // 2
+                self.move(x, y)
 
         self.analysis_thread: AnalysisWorker | None = None
         self.gmotif_thread: GMotifWorker | None = None
@@ -291,12 +312,15 @@ class MolStructDialog(QDialog):
         self._dark_mode: bool = True  # 默认深色主题
         self._ui_scale: float = 1.0   # 自动缩放比例
 
+        # 检查并安装依赖
+        _check_and_install_deps()
+        
         self.build_ui()
         self.setup_style()
         # 初始化主题图标
         self.theme_toggle_btn.setText("🌙" if self._dark_mode else "☀️")
-        # 启用自动缩放（随屏幕/系统字号）
-        self.apply_auto_scaling()
+        # 禁用自动缩放以保持固定高度
+        # self.apply_auto_scaling()
 
         # ❗关键修复：延后首次 PyMOL 调用，避免构造期阻塞
         QTimer.singleShot(0, self.refresh_objects)
@@ -309,17 +333,17 @@ class MolStructDialog(QDialog):
     def build_ui(self):
         # ========== 主布局 ==========
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(18, 18, 18, 18)
-        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(15, 15, 15, 15)  # 恢复到舒适的外边距
+        main_layout.setSpacing(12)  # 恢复到舒适的间距
 
         # 水平分割：导航 | 内容 | 结果
         content_row = QHBoxLayout()
-        content_row.setSpacing(18)
+        content_row.setSpacing(10)  # 减小间距
 
         # ========== Left: Navigation List ==========
         nav_widget = QWidget()
         nav_layout = QVBoxLayout(nav_widget)
-        nav_layout.setSpacing(10)
+        nav_layout.setSpacing(6)  # 减小间距
         nav_layout.setContentsMargins(0, 0, 0, 0)
 
         # Header: Theme icon + Modules label (centered)
@@ -341,6 +365,7 @@ class MolStructDialog(QDialog):
         self.modules_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.modules_btn.setFlat(True)
         self.modules_btn.setToolTip("Modules")
+        self.modules_btn.setMinimumWidth(120)  # 设置最小宽度以显示完整文本
         
         nav_header.addStretch()
         nav_header.addWidget(self.theme_toggle_btn)
@@ -358,11 +383,11 @@ class MolStructDialog(QDialog):
         nav_layout.addWidget(nav_header_widget)
 
         # 导航按钮列表
-        from PyQt5.QtWidgets import QListWidget, QStackedWidget
         self.nav_list = QListWidget()
 
         nav_items = [
-            ("Molecular Glue", "Molecular Glue"),
+            ("Welcome", "Welcome"),
+            ("POI Discovery", "POI Discovery"),
             ("Interaction Analysis", "Interaction Analysis"),
             ("Electrostatics", "Electrostatics"),
         ]
@@ -373,10 +398,7 @@ class MolStructDialog(QDialog):
 
         self.nav_list.setCurrentRow(0)
         self.nav_list.currentRowChanged.connect(self.on_nav_changed)
-        nav_layout.addWidget(self.nav_list)
-        
-        # Add stretch to push bottom items down
-        nav_layout.addStretch(1)
+        nav_layout.addWidget(self.nav_list, 1)
         
         # Bottom items (Check Environment, README and Contact)
         from PyQt5.QtWidgets import QFrame
@@ -386,12 +408,21 @@ class MolStructDialog(QDialog):
         separator.setStyleSheet("background-color: #e2e8f0; margin: 8px 0;")
         nav_layout.addWidget(separator)
         
+        # Check Environment button
+        check_env_btn = QPushButton("Check Env")
+        check_env_btn.setObjectName("bottom_nav_btn")
+        check_env_btn.setFlat(True)
+        check_env_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        check_env_btn.clicked.connect(self.check_environment)
+        check_env_btn.setToolTip("Check dependencies and environment status")
+        nav_layout.addWidget(check_env_btn)
+        
         # README button
         readme_btn = QPushButton("README")
         readme_btn.setObjectName("bottom_nav_btn")
         readme_btn.setFlat(True)
         readme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        readme_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(3))
+        readme_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(4))
         nav_layout.addWidget(readme_btn)
         
         # Contact button
@@ -399,28 +430,29 @@ class MolStructDialog(QDialog):
         contact_btn.setObjectName("bottom_nav_btn")
         contact_btn.setFlat(True)
         contact_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        contact_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(4))
+        contact_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(5))
         nav_layout.addWidget(contact_btn)
 
         # ========== 中间：内容堆栈 ==========
         self.content_stack = QStackedWidget()
 
         # 创建各个页面
-        self.content_stack.addWidget(self.create_molecular_glue_tab())  # 0: Molecular Glue (POI + Ternary + CRBN)
-        self.content_stack.addWidget(self.create_interaction_tab())     # 1: Interaction Analysis (Prot-Prot + Prot-Lig + Atom)
-        self.content_stack.addWidget(self.create_apbs_tab())            # 2: Electrostatics
-        self.content_stack.addWidget(self.create_readme_tab())          # 3: README
-        self.content_stack.addWidget(self.create_contact_tab())         # 4: Contact
+        self.content_stack.addWidget(self.create_welcome_tab())         # 0: Welcome
+        self.content_stack.addWidget(self.create_molecular_glue_tab())  # 1: POI Discovery (G-Motif + Ternary Complex)
+        self.content_stack.addWidget(self.create_interaction_tab())     # 2: Interaction Analysis (Prot-Prot + Prot-Lig + Atom)
+        self.content_stack.addWidget(self.create_apbs_tab())            # 3: Electrostatics
+        self.content_stack.addWidget(self.create_readme_tab())          # 4: README
+        self.content_stack.addWidget(self.create_contact_tab())         # 5: Contact
 
         # ========== 右侧：结果与日志 ==========
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
-        right_layout.setSpacing(12)
+        right_layout.setSpacing(6)  # 减小间距
         right_layout.setContentsMargins(0, 0, 0, 0)
 
         grp = QGroupBox(t("right_results"))
         grp_layout = QVBoxLayout(grp)
-        grp_layout.setSpacing(12)
+        grp_layout.setSpacing(6)  # 减小间距
 
         self.table = QTableWidget()
         self.table.setColumnCount(6)
@@ -441,7 +473,7 @@ class MolStructDialog(QDialog):
 
         self.log_edit = QTextEdit()
         self.log_edit.setReadOnly(True)
-        self.log_edit.setMinimumHeight(130)
+        self.log_edit.setMinimumHeight(100)  # 减小日志框高度
         grp_layout.addWidget(self.log_edit)
 
         self.progress_bar = QProgressBar()
@@ -449,18 +481,23 @@ class MolStructDialog(QDialog):
         grp_layout.addWidget(self.progress_bar)
 
         right_layout.addWidget(grp)
+        
+        # Store right widget reference for show/hide
+        self.right_widget = right_widget
 
-        # ========== Assemble horizontal layout (narrow left, wider center, right) ==========
-        content_row.addWidget(nav_widget, 0)  # Left nav: minimal width (auto-size)
-        nav_widget.setMaximumWidth(160)  # Max width for nav panel (再窄一点)
-        nav_widget.setMinimumWidth(140)  # Min width for nav panel
-        content_row.addWidget(self.content_stack, 4)  # Center content: 4 parts (主要区域)
-        content_row.addWidget(right_widget, 3)  # Right results: 3 parts
+        # ========== Assemble horizontal layout (wider nav, balanced center, narrow right) ==========
+        content_row.addWidget(nav_widget, 0)  # Left nav: auto-size to content
+        nav_widget.setMaximumWidth(240)  # Further increased max width for nav panel to show full text
+        nav_widget.setMinimumWidth(220)  # Further increased min width for nav panel
+        content_row.addWidget(self.content_stack, 4)  # Center content: 4 parts (reduced from 6)
+        content_row.addWidget(right_widget, 1)  # Right results: 1 part (窄结果栏)
+        right_widget.setMaximumWidth(320)  # Slightly increased for better readability
+        right_widget.setMinimumWidth(280)  # Adjusted min width
 
         # ========== Bottom: Empty (no status bar needed) ==========
         btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(12)
-        btn_layout.setContentsMargins(0, 12, 0, 0)
+        btn_layout.setSpacing(8)  # 减小间距
+        btn_layout.setContentsMargins(0, 6, 0, 0)  # 减小上边距
         btn_layout.addStretch(1)
 
         # ========== 添加到主布局 ==========
@@ -470,59 +507,83 @@ class MolStructDialog(QDialog):
     def on_nav_changed(self, index):
         """导航切换"""
         self.content_stack.setCurrentIndex(index)
+        # Hide right panel (CSV/log) when on Welcome page (index 0)
+        if hasattr(self, 'right_widget'):
+            self.right_widget.setVisible(index != 0)
 
     def create_interaction_tab(self) -> QWidget:
         """创建整合的相互作用分析标签页（Protein-Protein + Protein-Ligand + Atom Pairs）"""
         w = QWidget()
         main_layout = QVBoxLayout(w)
-        main_layout.setSpacing(14)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(6)  # 大幅减小间距
+        main_layout.setContentsMargins(6, 6, 6, 6)  # 减小边距
         
         # ========== 1. Protein-Protein Interaction ==========
         grp_pp = QGroupBox("Protein-Protein Interaction Analysis")
-        form_pp = QFormLayout(grp_pp)
-        form_pp.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form_pp.setSpacing(8)
+        # 使用网格布局实现两栏式
+        pp_grid = QGridLayout(grp_pp)
+        pp_grid.setColumnStretch(0, 0)
+        pp_grid.setColumnStretch(1, 1)
+        pp_grid.setColumnStretch(2, 0)
+        pp_grid.setColumnStretch(3, 1)
+        pp_grid.setHorizontalSpacing(8)  # 恢复水平间距
+        pp_grid.setVerticalSpacing(8)  # 恢复垂直间距
         
-        row0 = QHBoxLayout()
+        # 第一行: Target Object | [combo + refresh] | PDB File | [input + browse]
+        pp_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
         self.obj_combo_analysis = QComboBox()
+        self.obj_combo_analysis.setMinimumHeight(26)
         self.refresh_obj_analysis = QPushButton(t("refresh"))
         self.refresh_obj_analysis.setObjectName("refresh_btn")
+        self.refresh_obj_analysis.setMinimumHeight(26)
         self.refresh_obj_analysis.clicked.connect(self.refresh_objects)
+        row0_container = QWidget()
+        row0 = QHBoxLayout(row0_container)
+        row0.setContentsMargins(0, 0, 0, 0)
         row0.addWidget(self.obj_combo_analysis, 1)
         row0.addWidget(self.refresh_obj_analysis)
-        form_pp.addRow(QLabel(t("target_obj")), row0)
+        pp_grid.addWidget(row0_container, 0, 1)
         
-        row1 = QHBoxLayout()
+        pp_grid.addWidget(QLabel("PDB File (optional)"), 0, 2, Qt.AlignmentFlag.AlignRight)
         self.pdb_path = QLineEdit()
+        self.pdb_path.setMinimumHeight(26)
         self.pdb_browse = QPushButton(t("browse"))
+        self.pdb_browse.setMinimumHeight(26)
         self.pdb_browse.setObjectName("browse_btn")
         self.pdb_browse.clicked.connect(self.browse_pdb)
+        row1_container = QWidget()
+        row1 = QHBoxLayout(row1_container)
+        row1.setContentsMargins(0, 0, 0, 0)
         row1.addWidget(self.pdb_path, 1)
         row1.addWidget(self.pdb_browse)
-        form_pp.addRow(QLabel(t("pdb_file")), row1)
+        pp_grid.addWidget(row1_container, 0, 3)
         
+        # 第二行: Only between chains | [checkbox] | Output CSV | [input + browse]
+        pp_grid.addWidget(QLabel(""), 1, 0)  # 空位
         self.chk_between = QCheckBox(t("between_chains"))
-        form_pp.addRow(QLabel(""), self.chk_between)
+        pp_grid.addWidget(self.chk_between, 1, 1)
         
-        row2 = QHBoxLayout()
+        pp_grid.addWidget(QLabel("Output CSV (optional)"), 1, 2, Qt.AlignmentFlag.AlignRight)
         self.out_csv = QLineEdit()
+        self.out_csv.setMinimumHeight(26)
         self.out_browse = QPushButton(t("browse"))
+        self.out_browse.setMinimumHeight(26)
         self.out_browse.setObjectName("save_btn")
         self.out_browse.clicked.connect(self.browse_out_csv)
+        row2_container = QWidget()
+        row2 = QHBoxLayout(row2_container)
+        row2.setContentsMargins(0, 0, 0, 0)
         row2.addWidget(self.out_csv, 1)
         row2.addWidget(self.out_browse)
-        form_pp.addRow(QLabel(t("output_csv")), row2)
+        pp_grid.addWidget(row2_container, 1, 3)
         
         btn_pp_row = QHBoxLayout()
         self.analyze_btn = QPushButton("Analyze")
         self.analyze_btn.setObjectName("highlight_btn")
-        self.analyze_btn.setMinimumHeight(40)
         self.analyze_btn.clicked.connect(self.start_analysis)
         
         self.render_interact_btn = QPushButton("Render (Analyze + Beautify + PNG)")
         self.render_interact_btn.setObjectName("highlight_btn")
-        self.render_interact_btn.setMinimumHeight(40)
         self.render_interact_btn.clicked.connect(self.render_interactions_beautifully_clicked)
         
         btn_pp_row.addWidget(self.analyze_btn)
@@ -534,54 +595,73 @@ class MolStructDialog(QDialog):
         
         # ========== 2. Protein-Ligand Interaction ==========
         grp_pl = QGroupBox("Protein-Ligand Interaction Analysis")
-        form_pl = QFormLayout(grp_pl)
-        form_pl.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form_pl.setSpacing(8)
+        # 使用网格布局实现两栏式
+        pl_grid = QGridLayout(grp_pl)
+        pl_grid.setColumnStretch(0, 0)
+        pl_grid.setColumnStretch(1, 1)
+        pl_grid.setColumnStretch(2, 0)
+        pl_grid.setColumnStretch(3, 1)
+        pl_grid.setHorizontalSpacing(8)  # 恢复水平间距
+        pl_grid.setVerticalSpacing(8)  # 恢复垂直间距
         
-        pl_obj_row = QHBoxLayout()
+        # 第一行: Target Object | [combo + refresh] | Ligand Resname | [input]
+        pl_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
         self.pl_obj_combo = QComboBox()
+        self.pl_obj_combo.setMinimumHeight(26)
         self.pl_refresh_btn = QPushButton(t("refresh"))
         self.pl_refresh_btn.setObjectName("refresh_btn")
+        self.pl_refresh_btn.setMinimumHeight(26)
         self.pl_refresh_btn.clicked.connect(self.refresh_objects)
+        pl_obj_row_container = QWidget()
+        pl_obj_row = QHBoxLayout(pl_obj_row_container)
+        pl_obj_row.setContentsMargins(0, 0, 0, 0)
         pl_obj_row.addWidget(self.pl_obj_combo, 1)
         pl_obj_row.addWidget(self.pl_refresh_btn)
-        form_pl.addRow(QLabel(t("target_obj")), pl_obj_row)
+        pl_grid.addWidget(pl_obj_row_container, 0, 1)
         
+        pl_grid.addWidget(QLabel("Ligand Resname:"), 0, 2, Qt.AlignmentFlag.AlignRight)
         self.pl_ligand_name = QLineEdit()
-        self.pl_ligand_name.setPlaceholderText("Auto-detect if blank, e.g.: LIG, ATP")
-        form_pl.addRow(QLabel("Ligand Resname:"), self.pl_ligand_name)
+        self.pl_ligand_name.setMinimumHeight(26)
+        self.pl_ligand_name.setPlaceholderText("Auto-detect if blank")
+        pl_grid.addWidget(self.pl_ligand_name, 0, 3)
         
+        # 第二行: Protein Chains | [input] | Distance cutoff | [input]
+        pl_grid.addWidget(QLabel("Protein Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight)
         self.pl_protein_chains = QLineEdit()
-        self.pl_protein_chains.setPlaceholderText("Auto-detect if blank, e.g.: A,B")
-        form_pl.addRow(QLabel("Protein Chains:"), self.pl_protein_chains)
+        self.pl_protein_chains.setMinimumHeight(26)
+        self.pl_protein_chains.setPlaceholderText("Auto-detect if blank")
+        pl_grid.addWidget(self.pl_protein_chains, 1, 1)
         
+        pl_grid.addWidget(QLabel("Distance cutoff (Å):"), 1, 2, Qt.AlignmentFlag.AlignRight)
         self.pl_distance = QLineEdit("4.5")
-        form_pl.addRow(QLabel("Distance cutoff (Å):"), self.pl_distance)
+        self.pl_distance.setMinimumHeight(26)
+        pl_grid.addWidget(self.pl_distance, 1, 3)
         
-        pl_csv_row = QHBoxLayout()
+        # 第三行: Output CSV | [input + browse] (跨两列)
+        pl_grid.addWidget(QLabel("Output CSV (optional)"), 2, 0, Qt.AlignmentFlag.AlignRight)
         self.pl_csv = QLineEdit()
+        self.pl_csv.setMinimumHeight(26)
         self.pl_csv.setPlaceholderText("Optional")
         self.pl_csv_btn = QPushButton(t("browse"))
+        self.pl_csv_btn.setMinimumHeight(26)
         self.pl_csv_btn.setObjectName("browse_btn")
         self.pl_csv_btn.clicked.connect(lambda: self._browse_save_file(self.pl_csv, "CSV (*.csv)"))
+        pl_csv_row = QHBoxLayout()
         pl_csv_row.addWidget(self.pl_csv, 1)
         pl_csv_row.addWidget(self.pl_csv_btn)
-        form_pl.addRow(QLabel(t("output_csv")), pl_csv_row)
+        pl_grid.addLayout(pl_csv_row, 2, 1, 1, 3)  # 跨三列
         
         btn_pl_row = QHBoxLayout()
         self.pl_analyze_btn = QPushButton("Analyze")
         self.pl_analyze_btn.setObjectName("highlight_btn")
-        self.pl_analyze_btn.setMinimumHeight(40)
         self.pl_analyze_btn.clicked.connect(self.run_pl_analysis)
         
         self.pl_visualize_btn = QPushButton("3D Visualize")
         self.pl_visualize_btn.setObjectName("highlight_btn")
-        self.pl_visualize_btn.setMinimumHeight(40)
         self.pl_visualize_btn.clicked.connect(self.run_pl_visualize)
         
         self.pl_network_btn = QPushButton("Network Plot")
         self.pl_network_btn.setObjectName("highlight_btn")
-        self.pl_network_btn.setMinimumHeight(40)
         self.pl_network_btn.clicked.connect(self.run_pl_network)
         
         btn_pl_row.addWidget(self.pl_analyze_btn)
@@ -594,50 +674,74 @@ class MolStructDialog(QDialog):
         
         # ========== 3. Atom Pair Analysis ==========
         grp_ap = QGroupBox("Atom Pair Analysis (Atomic-Level Precision)")
-        form_ap = QFormLayout(grp_ap)
-        form_ap.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form_ap.setSpacing(8)
+        # 使用网格布局实现两栏式
+        ap_grid = QGridLayout(grp_ap)
+        ap_grid.setColumnStretch(0, 0)
+        ap_grid.setColumnStretch(1, 1)
+        ap_grid.setColumnStretch(2, 0)
+        ap_grid.setColumnStretch(3, 1)
+        ap_grid.setHorizontalSpacing(8)  # 恢复水平间距
+        ap_grid.setVerticalSpacing(8)  # 恢复垂直间距
         
-        ap_obj_row = QHBoxLayout()
+        # 第一行: Target Object | [combo + refresh] | Atom1 Selection | [input]
+        ap_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
         self.ap_obj_combo = QComboBox()
+        self.ap_obj_combo.setMinimumHeight(26)
         self.ap_refresh_btn = QPushButton(t("refresh"))
         self.ap_refresh_btn.setObjectName("refresh_btn")
+        self.ap_refresh_btn.setMinimumHeight(26)
         self.ap_refresh_btn.clicked.connect(self.refresh_objects)
+        ap_obj_row_container = QWidget()
+        ap_obj_row = QHBoxLayout(ap_obj_row_container)
+        ap_obj_row.setContentsMargins(0, 0, 0, 0)
         ap_obj_row.addWidget(self.ap_obj_combo, 1)
         ap_obj_row.addWidget(self.ap_refresh_btn)
-        form_ap.addRow(QLabel(t("target_obj")), ap_obj_row)
+        ap_grid.addWidget(ap_obj_row_container, 0, 1)
         
+        ap_grid.addWidget(QLabel("Atom1 Selection:"), 0, 2, Qt.AlignmentFlag.AlignRight)
         self.ap_atom1 = QLineEdit()
+        self.ap_atom1.setMinimumHeight(26)
         self.ap_atom1.setPlaceholderText('e.g.: "resn LIG and name N1"')
-        form_ap.addRow(QLabel("Atom1 Selection:"), self.ap_atom1)
+        ap_grid.addWidget(self.ap_atom1, 0, 3)
         
+        # 第二行: Atom2 Selection | [input] | Distance cutoff | [input]
+        ap_grid.addWidget(QLabel("Atom2 Selection:"), 1, 0, Qt.AlignmentFlag.AlignRight)
         self.ap_atom2 = QLineEdit()
+        self.ap_atom2.setMinimumHeight(26)
         self.ap_atom2.setPlaceholderText('e.g.: "elem O"')
-        form_ap.addRow(QLabel("Atom2 Selection:"), self.ap_atom2)
+        ap_grid.addWidget(self.ap_atom2, 1, 1)
         
+        ap_grid.addWidget(QLabel("Distance cutoff (Å):"), 1, 2, Qt.AlignmentFlag.AlignRight)
         self.ap_distance = QLineEdit("5.0")
-        form_ap.addRow(QLabel("Distance cutoff (Å):"), self.ap_distance)
+        self.ap_distance.setMinimumHeight(26)
+        ap_grid.addWidget(self.ap_distance, 1, 3)
         
-        ap_csv_row = QHBoxLayout()
+        # 第三行: Output CSV | [input + browse] (跨两列)
+        ap_grid.addWidget(QLabel("Output CSV (optional)"), 2, 0, Qt.AlignmentFlag.AlignRight)
         self.ap_csv = QLineEdit()
+        self.ap_csv.setMinimumHeight(26)
         self.ap_csv.setPlaceholderText("Optional")
         self.ap_csv_btn = QPushButton(t("browse"))
+        self.ap_csv_btn.setMinimumHeight(26)
         self.ap_csv_btn.setObjectName("browse_btn")
         self.ap_csv_btn.clicked.connect(lambda: self._browse_save_file(self.ap_csv, "CSV (*.csv)"))
+        ap_csv_row = QHBoxLayout()
         ap_csv_row.addWidget(self.ap_csv, 1)
         ap_csv_row.addWidget(self.ap_csv_btn)
-        form_ap.addRow(QLabel(t("output_csv")), ap_csv_row)
+        ap_grid.addLayout(ap_csv_row, 2, 1, 1, 3)  # 跨三列
         
-        # Quick templates
+        # Quick templates - 确保所有按钮在一行显示
         template_row = QHBoxLayout()
         templates = [
             ("N-O H-bonds", '"elem N"', '"elem O"', "3.5"),
             ("Lig-SER", '"resn LIG"', '"resn SER"', "4.5"),
             ("S-S", '"name SG"', '"name SG"', "2.5"),
+            ("π-Stacking", '"aromatic"', '"aromatic"', "4.5"),
+            ("π-Cation", '"aromatic"', '"basic"', "4.0"),
         ]
         for label, atom1, atom2, dist in templates:
             btn = QPushButton(label)
-            btn.setObjectName("browse_btn")
+            btn.setObjectName("browse_btn") # 使用一个比较紧凑的样式
             btn.setMinimumHeight(28)
             btn.clicked.connect(lambda checked, a1=atom1, a2=atom2, d=dist: self.apply_ap_template(a1, a2, d))
             template_row.addWidget(btn)
@@ -646,12 +750,10 @@ class MolStructDialog(QDialog):
         btn_ap_row = QHBoxLayout()
         self.ap_analyze_btn = QPushButton("Analyze Pairs")
         self.ap_analyze_btn.setObjectName("highlight_btn")
-        self.ap_analyze_btn.setMinimumHeight(40)
         self.ap_analyze_btn.clicked.connect(self.run_ap_analysis)
         
         self.ap_visualize_btn = QPushButton("Visualize")
         self.ap_visualize_btn.setObjectName("highlight_btn")
-        self.ap_visualize_btn.setMinimumHeight(40)
         self.ap_visualize_btn.clicked.connect(self.run_ap_visualize)
         
         btn_ap_row.addWidget(self.ap_analyze_btn)
@@ -670,7 +772,7 @@ class MolStructDialog(QDialog):
         w = QWidget(); lay = QVBoxLayout(w); lay.setSpacing(8)
 
         # ===== 相互作用分析组 =====
-        grp = QGroupBox(t("grp_analysis")); form = QFormLayout(grp); form.setLabelAlignment(Qt.AlignmentFlag.AlignRight); form.setSpacing(8)
+        grp = QGroupBox(t("grp_analysis")); form = QFormLayout(grp); form.setLabelAlignment(Qt.AlignmentFlag.AlignRight); form.setSpacing(10)
         row0 = QHBoxLayout()
         self.obj_combo_analysis = QComboBox()
         self.refresh_obj_analysis = QPushButton(t("refresh")); self.refresh_obj_analysis.setObjectName("refresh_btn"); self.refresh_obj_analysis.clicked.connect(self.refresh_objects)
@@ -720,64 +822,128 @@ class MolStructDialog(QDialog):
         lay.addWidget(grp_csv)
         lay.addStretch(1)
         return w
+    
+    def create_welcome_tab(self) -> QWidget:
+        """Create welcome page with molecular glue introduction"""
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(20)
+        layout.setContentsMargins(50, 30, 50, 30)
+        
+        # Welcome title
+        title_label = QLabel("MolStruct Plugin for PyMOL")
+        title_label.setStyleSheet("""
+            QLabel {
+                font-size: 36px;
+                font-weight: bold;
+                color: #1e40af;
+                padding: 10px;
+            }
+        """)
+        title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(title_label)
+        
+        # Subtitle
+        subtitle = QLabel("POI Discovery & Targeted Protein Degradation Analysis")
+        subtitle.setStyleSheet("""
+            QLabel {
+                font-size: 18px;
+                color: #475569;
+                padding: 5px;
+            }
+        """)
+        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout.addWidget(subtitle)
+        
+        
+        layout.addStretch()
+        return w
 
     def create_molecular_glue_tab(self) -> QWidget:
-        """创建分子胶设计模块（整合G-Motif识别和CRBN界面工具）"""
+        """创建分子胶设计模块 - POI Discovery"""
         w = QWidget()
         main_layout = QVBoxLayout(w)
-        main_layout.setSpacing(14)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        main_layout.setSpacing(12) # 恢复间距
+        main_layout.setContentsMargins(10, 10, 10, 10) # 恢复边距
         
-        # ========== 1. G-Motif (POI Discovery) ==========
+        # ========== POI Discovery - G-Motif Detection ==========
         grp_gm = QGroupBox("POI Discovery - G-Motif (CRBN G-loop) Detection")
-        form_gm = QFormLayout(grp_gm)
-        form_gm.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form_gm.setSpacing(8)
+        # 使用网格布局代替FormLayout，实现两栏式
+        gm_grid = QGridLayout(grp_gm)
+        gm_grid.setColumnStretch(0, 0)
+        gm_grid.setColumnStretch(1, 1)
+        gm_grid.setColumnStretch(2, 0)
+        gm_grid.setColumnStretch(3, 1)
+        gm_grid.setHorizontalSpacing(8)  # 恢复水平间距
+        gm_grid.setVerticalSpacing(16)  # 再次增加此页面的垂直间距以解决重叠
         
-        r0 = QHBoxLayout()
+        # 第一行： Target Object | [combo + refresh] | PDB File | [input + browse]
+        gm_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
         self.obj_combo_gm = QComboBox()
+        self.obj_combo_gm.setMinimumHeight(24)
         self.refresh_obj_gm = QPushButton(t("refresh"))
         self.refresh_obj_gm.setObjectName("refresh_btn")
+        self.refresh_obj_gm.setMinimumHeight(24)
         self.refresh_obj_gm.clicked.connect(self.refresh_objects)
-        r0.addWidget(self.obj_combo_gm, 1)
-        r0.addWidget(self.refresh_obj_gm)
-        form_gm.addRow(QLabel(t("target_obj")), r0)
+        obj_row_container = QWidget()
+        obj_row = QHBoxLayout(obj_row_container)
+        obj_row.setContentsMargins(0, 0, 0, 0)
+        obj_row.addWidget(self.obj_combo_gm, 1)
+        obj_row.addWidget(self.refresh_obj_gm)
+        gm_grid.addWidget(obj_row_container, 0, 1)
         
-        r1 = QHBoxLayout()
+        gm_grid.addWidget(QLabel("PDB File (optional)"), 0, 2, Qt.AlignmentFlag.AlignRight)
         self.gm_pdb = QLineEdit()
+        self.gm_pdb.setMinimumHeight(24)
         self.gm_pdb_browse = QPushButton(t("browse"))
+        self.gm_pdb_browse.setMinimumHeight(24)
         self.gm_pdb_browse.setObjectName("browse_btn")
         self.gm_pdb_browse.clicked.connect(self.browse_gm_pdb)
-        r1.addWidget(self.gm_pdb, 1)
-        r1.addWidget(self.gm_pdb_browse)
-        form_gm.addRow(QLabel(t("pdb_file")), r1)
+        pdb_row_container = QWidget()
+        pdb_row = QHBoxLayout(pdb_row_container)
+        pdb_row.setContentsMargins(0, 0, 0, 0)
+        pdb_row.addWidget(self.gm_pdb, 1)
+        pdb_row.addWidget(self.gm_pdb_browse)
+        gm_grid.addWidget(pdb_row_container, 0, 3)
         
+        # 第二行： RMSD cutoff | [input] | Require Gly | [checkbox]
+        gm_grid.addWidget(QLabel("RMSD cutoff (Å)"), 1, 0, Qt.AlignmentFlag.AlignRight)
         self.gm_rmsd = QLineEdit("3.5")
-        form_gm.addRow(QLabel(t("rmsd")), self.gm_rmsd)
+        self.gm_rmsd.setMinimumHeight(24)
+        gm_grid.addWidget(self.gm_rmsd, 1, 1)
+        
+        gm_grid.addWidget(QLabel(""), 1, 2)  # 空位
         self.gm_require_gly = QCheckBox(t("require_gly"))
         self.gm_require_gly.setChecked(True)
-        form_gm.addRow(QLabel(""), self.gm_require_gly)
+        gm_grid.addWidget(self.gm_require_gly, 1, 3)
         
-        # 模板来源
+        # 第三行： Template Source | [combo] | Template Selection | [input + button]
+        gm_grid.addWidget(QLabel("Template Source"), 2, 0, Qt.AlignmentFlag.AlignRight)
         self.gm_template_mode = QComboBox()
+        self.gm_template_mode.setMinimumHeight(24)
         self.gm_template_mode.addItems([
-            "理想化(8×Cα)",
-            "内置: GSPT1 (6H0G A:60-67)",
-            "内置: CK1α (3M51 A:36-43)",
-            "内置: VAV1 (2MC1 A:95-102)",
-            "从选择(8×Cα)",
+            "Idealized (8×Cα)",
+            "Built-in: GSPT1 (6H0G A:60-67)",
+            "Built-in: CK1α (3M51 A:36-43)",
+            "Built-in: VAV1 (2MC1 A:95-102)",
+            "From Selection (8×Cα)",
         ])
-        form_gm.addRow(QLabel("Template Source"), self.gm_template_mode)
+        gm_grid.addWidget(self.gm_template_mode, 2, 1)
         
-        r_temp = QHBoxLayout()
+        gm_grid.addWidget(QLabel("Template Selection"), 2, 2, Qt.AlignmentFlag.AlignRight)
         self.gm_template_sel = QLineEdit()
-        self.gm_template_sel.setPlaceholderText("Enter selection name or expression (e.g., sele)")
+        self.gm_template_sel.setMinimumHeight(24)
+        self.gm_template_sel.setPlaceholderText("Enter selection, e.g., sele")
         self.gm_template_pick = QPushButton("Get Current (sele)")
+        self.gm_template_pick.setMinimumHeight(24)
         self.gm_template_pick.setObjectName("refresh_btn")
         self.gm_template_pick.clicked.connect(lambda: self.gm_template_sel.setText("sele"))
-        r_temp.addWidget(self.gm_template_sel, 1)
-        r_temp.addWidget(self.gm_template_pick)
-        form_gm.addRow(QLabel("Template Selection"), r_temp)
+        temp_row_container = QWidget()
+        temp_row = QHBoxLayout(temp_row_container)
+        temp_row.setContentsMargins(0, 0, 0, 0)
+        temp_row.addWidget(self.gm_template_sel, 1)
+        temp_row.addWidget(self.gm_template_pick)
+        gm_grid.addWidget(temp_row_container, 2, 3)
         
         def _toggle_template_inputs(idx):
             use_sel = (idx == 4)
@@ -786,24 +952,28 @@ class MolStructDialog(QDialog):
         self.gm_template_mode.currentIndexChanged.connect(_toggle_template_inputs)
         _toggle_template_inputs(self.gm_template_mode.currentIndex())
         
-        r2 = QHBoxLayout()
+        # 第四行： Output CSV | [input + browse] (跨两列)
+        gm_grid.addWidget(QLabel("Output CSV (optional)"), 3, 0, Qt.AlignmentFlag.AlignRight)
         self.gm_out_csv = QLineEdit()
+        self.gm_out_csv.setMinimumHeight(24)
         self.gm_out_csv.setPlaceholderText("Optional - leave blank for temp CSV")
         self.gm_out_browse = QPushButton(t("browse"))
+        self.gm_out_browse.setMinimumHeight(24)
         self.gm_out_browse.setObjectName("save_btn")
         self.gm_out_browse.clicked.connect(self.browse_gm_out_csv)
-        r2.addWidget(self.gm_out_csv, 1)
-        r2.addWidget(self.gm_out_browse)
-        form_gm.addRow(QLabel(t("output_csv")), r2)
+        out_row_container = QWidget()
+        out_row = QHBoxLayout(out_row_container)
+        out_row.setContentsMargins(0, 0, 0, 0)
+        out_row.addWidget(self.gm_out_csv, 1)
+        out_row.addWidget(self.gm_out_browse)
+        gm_grid.addWidget(out_row_container, 3, 1, 1, 3)  # 跨三列
         
         btn_gm_row = QHBoxLayout()
         self.gm_btn = QPushButton("Detect POI")
         self.gm_btn.setObjectName("highlight_btn")
-        self.gm_btn.setMinimumHeight(40)
         self.gm_btn.clicked.connect(self.start_gmotif)
         self.gm_btn_render = QPushButton("Render All (POI + ESP + PNG)")
         self.gm_btn_render.setObjectName("highlight_btn")
-        self.gm_btn_render.setMinimumHeight(40)
         self.gm_btn_render.clicked.connect(self.render_gmotif_with_esp)
         btn_gm_row.addWidget(self.gm_btn)
         btn_gm_row.addWidget(self.gm_btn_render)
@@ -812,152 +982,100 @@ class MolStructDialog(QDialog):
         main_layout.addWidget(grp_gm)
         main_layout.addLayout(btn_gm_row)
         
-        # ========== 2. CRBN Interface Tools ==========
-        grp_crbn = QGroupBox("CRBN Interface Analysis Tools")
-        crbn_form = QFormLayout(grp_crbn)
-        crbn_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        crbn_form.setSpacing(8)
+        # ========== Ternary Complex Analysis (with inte        grp_ternary = QGroupBox("Ternary Complex Analysis (E3-PROTAC-POI with Interface Tools)")
+        # 使用网格布局实现两栏式
+        ternary_grid = QGridLayout(grp_ternary)
+        ternary_grid.setColumnStretch(0, 0)
+        ternary_grid.setColumnStretch(1, 1)
+        ternary_grid.setColumnStretch(2, 0)
+        ternary_grid.setColumnStretch(3, 1)
+        ternary_grid.setHorizontalSpacing(8)  # 恢复水平间距
+        ternary_grid.setVerticalSpacing(16)  # 再次增加此页面的垂直间距以解决重叠
         
-        # CRBN 选择
-        crbn_sel_row = QHBoxLayout()
-        self.crbn_sel = QLineEdit()
-        self.crbn_sel.setPlaceholderText("CRBN selection, e.g.: chain A and resi 1-100")
-        crbn_sel_row.addWidget(self.crbn_sel, 1)
-        crbn_form.addRow(QLabel("CRBN Selection:"), crbn_sel_row)
-        
-        # POI selection
-        poi_sel_row = QHBoxLayout()
-        self.poi_sel = QLineEdit()
-        self.poi_sel.setPlaceholderText("POI selection, e.g.: chain B and resi 50-150")
-        poi_sel_row.addWidget(self.poi_sel, 1)
-        crbn_form.addRow(QLabel("POI Selection:"), poi_sel_row)
-        
-        # Interface parameters
-        self.crbn_cutoff = QLineEdit("4.0")
-        crbn_form.addRow(QLabel("Interface cutoff (Å):"), self.crbn_cutoff)
-        
-        # ΔΔG method
-        self.ddg_method = QComboBox()
-        self.ddg_method.addItems(["auto", "foldx", "asa"])
-        crbn_form.addRow(QLabel("ΔΔG Method:"), self.ddg_method)
-        
-        # 评分 CSV
-        score_csv_row = QHBoxLayout()
-        self.score_csv_path = QLineEdit()
-        self.score_csv_path.setPlaceholderText("Optional: score CSV (chain,resi,score)")
-        self.score_csv_browse = QPushButton(t("browse"))
-        self.score_csv_browse.setObjectName("browse_btn")
-        self.score_csv_browse.clicked.connect(lambda: self._browse_open_file(self.score_csv_path, "CSV (*.csv)"))
-        score_csv_row.addWidget(self.score_csv_path, 1)
-        score_csv_row.addWidget(self.score_csv_browse)
-        crbn_form.addRow(QLabel("Score CSV:"), score_csv_row)
-        
-        # Degron CSV
-        degron_csv_row = QHBoxLayout()
-        self.degron_csv_path = QLineEdit()
-        self.degron_csv_path.setPlaceholderText("Optional: degron region CSV (chain,start,end,label)")
-        self.degron_csv_browse = QPushButton(t("browse"))
-        self.degron_csv_browse.setObjectName("browse_btn")
-        self.degron_csv_browse.clicked.connect(lambda: self._browse_open_file(self.degron_csv_path, "CSV (*.csv)"))
-        degron_csv_row.addWidget(self.degron_csv_path, 1)
-        degron_csv_row.addWidget(self.degron_csv_browse)
-        crbn_form.addRow(QLabel("Degron CSV:"), degron_csv_row)
-        
-        self.degron_auto = QCheckBox("Auto-detect degron (C2H2-ZF/β-hairpin)")
-        self.degron_auto.setChecked(True)
-        crbn_form.addRow(QLabel(""), self.degron_auto)
-        
-        # CRBN 工具按钮组
-        crbn_btn_grid = QHBoxLayout()
-        
-        self.crbn_interface_btn = QPushButton("Interface Map")
-        self.crbn_interface_btn.setObjectName("highlight_btn")
-        self.crbn_interface_btn.setMinimumHeight(36)
-        self.crbn_interface_btn.clicked.connect(self.run_crbn_interface_map)
-        
-        self.crbn_ddg_btn = QPushButton("ΔΔG Heatmap")
-        self.crbn_ddg_btn.setObjectName("highlight_btn")
-        self.crbn_ddg_btn.setMinimumHeight(36)
-        self.crbn_ddg_btn.clicked.connect(self.run_crbn_ddg_heatmap)
-        
-        self.crbn_score_btn = QPushButton("Score Color")
-        self.crbn_score_btn.setObjectName("highlight_btn")
-        self.crbn_score_btn.setMinimumHeight(36)
-        self.crbn_score_btn.clicked.connect(self.run_crbn_score_color)
-        
-        self.crbn_degron_btn = QPushButton("Degron Annotate")
-        self.crbn_degron_btn.setObjectName("highlight_btn")
-        self.crbn_degron_btn.setMinimumHeight(36)
-        self.crbn_degron_btn.clicked.connect(self.run_crbn_degron_annotate)
-        
-        crbn_btn_grid.addWidget(self.crbn_interface_btn)
-        crbn_btn_grid.addWidget(self.crbn_ddg_btn)
-        crbn_btn_grid.addWidget(self.crbn_score_btn)
-        crbn_btn_grid.addWidget(self.crbn_degron_btn)
-        
-        main_layout.addWidget(grp_crbn)
-        main_layout.addLayout(crbn_btn_grid)
-        
-        # ========== 3. Ternary Complex Analysis ==========
-        grp_ternary = QGroupBox("Ternary Complex Analysis (E3-PROTAC-POI)")
-        ternary_form = QFormLayout(grp_ternary)
-        ternary_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        ternary_form.setSpacing(8)
-        
-        # Object selection
-        tc_obj_row = QHBoxLayout()
+        # 第一行: Target Object | [combo + refresh] | Ligand Resname | [input]
+        ternary_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
         self.tc_obj_combo = QComboBox()
+        self.tc_obj_combo.setMinimumHeight(24)
         self.tc_refresh_btn = QPushButton(t("refresh"))
         self.tc_refresh_btn.setObjectName("refresh_btn")
+        self.tc_refresh_btn.setMinimumHeight(24)
         self.tc_refresh_btn.clicked.connect(self.refresh_objects)
+        tc_obj_row_container = QWidget()
+        tc_obj_row = QHBoxLayout(tc_obj_row_container)
+        tc_obj_row.setContentsMargins(0, 0, 0, 0)
         tc_obj_row.addWidget(self.tc_obj_combo, 1)
         tc_obj_row.addWidget(self.tc_refresh_btn)
-        ternary_form.addRow(QLabel(t("target_obj")), tc_obj_row)
+        ternary_grid.addWidget(tc_obj_row_container, 0, 1)
         
-        # Ligand resname
+        ternary_grid.addWidget(QLabel("Ligand Resname:"), 0, 2, Qt.AlignmentFlag.AlignRight)
         self.tc_ligand_name = QLineEdit()
-        self.tc_ligand_name.setPlaceholderText("PROTAC name, auto-detect if blank")
-        ternary_form.addRow(QLabel("Ligand Resname:"), self.tc_ligand_name)
+        self.tc_ligand_name.setMinimumHeight(24)
+        self.tc_ligand_name.setPlaceholderText("PROTAC/Glue name, auto-detect if blank")
+        ternary_grid.addWidget(self.tc_ligand_name, 0, 3)
         
-        # Protein1 chains
+        # 第二行: E3 Chains (CRBN/VHL) | [input] | POI Chains | [input]
+        ternary_grid.addWidget(QLabel("E3 Ligase Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight)
         self.tc_protein1_chains = QLineEdit()
-        self.tc_protein1_chains.setPlaceholderText("e.g.: A")
-        ternary_form.addRow(QLabel("Protein1 Chains:"), self.tc_protein1_chains)
+        self.tc_protein1_chains.setMinimumHeight(24)
+        self.tc_protein1_chains.setPlaceholderText("e.g.: A (CRBN/VHL/IAP)")
+        ternary_grid.addWidget(self.tc_protein1_chains, 1, 1)
         
-        # Protein2 chains
+        ternary_grid.addWidget(QLabel("POI Chains:"), 1, 2, Qt.AlignmentFlag.AlignRight)
         self.tc_protein2_chains = QLineEdit()
-        self.tc_protein2_chains.setPlaceholderText("e.g.: B")
-        ternary_form.addRow(QLabel("Protein2 Chains:"), self.tc_protein2_chains)
+        self.tc_protein2_chains.setMinimumHeight(24)
+        self.tc_protein2_chains.setPlaceholderText("e.g.: B (Target Protein)")
+        ternary_grid.addWidget(self.tc_protein2_chains, 1, 3)
         
-        # Distance cutoff
+        # 第三行: Interface cutoff | [input] | Output CSV | [input + browse]
+        ternary_grid.addWidget(QLabel("Interface cutoff (Å):"), 2, 0, Qt.AlignmentFlag.AlignRight)
         self.tc_distance = QLineEdit("4.5")
-        ternary_form.addRow(QLabel("Distance cutoff (Å):"), self.tc_distance)
+        self.tc_distance.setMinimumHeight(24)
+        ternary_grid.addWidget(self.tc_distance, 2, 1)
         
-        # Output CSV
-        tc_csv_row = QHBoxLayout()
+        ternary_grid.addWidget(QLabel("Output CSV (optional)"), 2, 2, Qt.AlignmentFlag.AlignRight)
         self.tc_csv = QLineEdit()
+        self.tc_csv.setMinimumHeight(24)
         self.tc_csv.setPlaceholderText("Optional")
         self.tc_csv_btn = QPushButton(t("browse"))
+        self.tc_csv_btn.setMinimumHeight(24)
         self.tc_csv_btn.setObjectName("browse_btn")
         self.tc_csv_btn.clicked.connect(lambda: self._browse_save_file(self.tc_csv, "CSV (*.csv)"))
+        tc_csv_row = QHBoxLayout()
         tc_csv_row.addWidget(self.tc_csv, 1)
         tc_csv_row.addWidget(self.tc_csv_btn)
-        ternary_form.addRow(QLabel(t("output_csv")), tc_csv_row)
+        ternary_grid.addLayout(tc_csv_row, 2, 3)
         
-        # Ternary buttons
+        # 第四行: Analyze P-P Interface | [checkbox] | Include ΔΔG | [checkbox]
+        ternary_grid.addWidget(QLabel(""), 3, 0)  # 空位
+        self.tc_analyze_interface = QCheckBox("Analyze Protein-Protein Interface")
+        self.tc_analyze_interface.setChecked(True)
+        ternary_grid.addWidget(self.tc_analyze_interface, 3, 1, 1, 2)
+        
+        self.tc_include_ddg = QCheckBox("Calculate ΔΔG")
+        ternary_grid.addWidget(self.tc_include_ddg, 3, 3)
+        
+        # Ternary buttons (expanded functionality)
         tc_btn_row = QHBoxLayout()
-        self.tc_analyze_btn = QPushButton("Analyze Ternary")
+        self.tc_analyze_btn = QPushButton("Analyze Complex")
         self.tc_analyze_btn.setObjectName("highlight_btn")
-        self.tc_analyze_btn.setMinimumHeight(40)
         self.tc_analyze_btn.clicked.connect(self.run_tc_analysis)
+        
+        self.tc_interface_btn = QPushButton("Interface Map")
+        self.tc_interface_btn.setObjectName("highlight_btn")
+        self.tc_interface_btn.clicked.connect(self.run_tc_interface)
         
         self.tc_network_btn = QPushButton("Network Plot")
         self.tc_network_btn.setObjectName("highlight_btn")
-        self.tc_network_btn.setMinimumHeight(40)
         self.tc_network_btn.clicked.connect(self.run_tc_network)
         
+        self.tc_render_btn = QPushButton("Render All")
+        self.tc_render_btn.setObjectName("highlight_btn") 
+        self.tc_render_btn.clicked.connect(self.run_tc_render)
+        
         tc_btn_row.addWidget(self.tc_analyze_btn)
+        tc_btn_row.addWidget(self.tc_interface_btn)
         tc_btn_row.addWidget(self.tc_network_btn)
+        tc_btn_row.addWidget(self.tc_render_btn)
         tc_btn_row.addStretch(1)
         
         main_layout.addWidget(grp_ternary)
@@ -982,32 +1100,32 @@ class MolStructDialog(QDialog):
         r1.addWidget(self.gm_pdb, 1); r1.addWidget(self.gm_pdb_browse)
         form.addRow(QLabel(t("pdb_file")), r1)
 
-        self.gm_rmsd = QLineEdit("3.5")              # 默认放宽到 3.5 Å
+        self.gm_rmsd = QLineEdit("3.5")              # Default cutoff 3.5 Å
         form.addRow(QLabel(t("rmsd")), self.gm_rmsd)
         self.gm_require_gly = QCheckBox(t("require_gly")); self.gm_require_gly.setChecked(True)
         form.addRow(QLabel(""), self.gm_require_gly)
 
-        # —— 模板来源 ——（理想化 / 内置 / 自定义选择）
+        # --- Template Source --- (Ideal / Built-in / Custom Selection)
         self.gm_template_mode = QComboBox()
         self.gm_template_mode.addItems([
-            "理想化(8×Cα)",
-            "内置: GSPT1 (6H0G A:60-67)",
-            "内置: CK1α (3M51 A:36-43)",
-            "内置: VAV1 (2MC1 A:95-102)",
-            "从选择(8×Cα)",
+            "Idealized (8×Cα)",
+            "Built-in: GSPT1 (6H0G A:60-67)",
+            "Built-in: CK1α (3M51 A:36-43)",
+            "Built-in: VAV1 (2MC1 A:95-102)",
+            "From Selection (8×Cα)",
         ])
-        form.addRow(QLabel("模板来源"), self.gm_template_mode)
+        form.addRow(QLabel("Template Source"), self.gm_template_mode)
 
         r_temp = QHBoxLayout()
         self.gm_template_sel = QLineEdit()
-        self.gm_template_sel.setPlaceholderText("当选择“从选择(8×Cα)”时填写：sele 名或选择表达式")
-        self.gm_template_pick = QPushButton("取当前选择(sele)")
+        self.gm_template_sel.setPlaceholderText("For 'From Selection': a selection name")
+        self.gm_template_pick = QPushButton("Pick Current (sele)")
         self.gm_template_pick.setObjectName("refresh_btn")
         self.gm_template_pick.clicked.connect(lambda: self.gm_template_sel.setText("sele"))
         r_temp.addWidget(self.gm_template_sel, 1); r_temp.addWidget(self.gm_template_pick)
-        form.addRow(QLabel("模板选择"), r_temp)
+        form.addRow(QLabel("Template Selection"), r_temp)
 
-        # 按钮行
+        # Button row
         row_btns = QHBoxLayout()
         self.gm_btn = QPushButton(t("btn_gmotif"))
         self.gm_btn.setObjectName("highlight_btn")
@@ -1019,15 +1137,15 @@ class MolStructDialog(QDialog):
         row_btns.addWidget(self.gm_btn_render)
         row_btns.addStretch(1)
 
-        # 输出 CSV
+        # Output CSV
         r2 = QHBoxLayout()
         self.gm_out_csv = QLineEdit()
-        self.gm_out_csv.setPlaceholderText("（可选）不填将生成临时 CSV")
+        self.gm_out_csv.setPlaceholderText("(Optional) A temp file is used if blank")
         self.gm_out_browse = QPushButton(t("browse")); self.gm_out_browse.setObjectName("save_btn"); self.gm_out_browse.clicked.connect(self.browse_gm_out_csv)
         r2.addWidget(self.gm_out_csv, 1); r2.addWidget(self.gm_out_browse)
         form.addRow(QLabel(t("output_csv")), r2)
 
-        # 模板输入框启用/禁用逻辑
+        # Enable/disable logic for template inputs
         def _toggle_template_inputs(idx):
             use_sel = (idx == 4)
             self.gm_template_sel.setEnabled(use_sel)
@@ -1193,7 +1311,7 @@ class MolStructDialog(QDialog):
             rmsd = 3.5
         require_gly = self.gm_require_gly.isChecked()
 
-        # 模板来源映射
+        # Template source mapping
         idx = self.gm_template_mode.currentIndex()
         if idx == 0:
             template_mode, template_sel, template_builtin = "ideal", None, None
@@ -1203,7 +1321,7 @@ class MolStructDialog(QDialog):
             template_builtin = [
                 "GSPT1 (6H0G A:60-67)",
                 "CK1α (3M51 A:36-43)",
-                "VAV1 RT-loop (2MC1 A:95-102)",
+                "VAV1 (2MC1 A:95-102)",
             ][idx - 1]
         else:
             template_mode, template_sel, template_builtin = "selection", (self.gm_template_sel.text().strip() or None), None
@@ -1626,16 +1744,16 @@ class MolStructDialog(QDialog):
 
         grp = QGroupBox("蛋白-配体相互作用分析" if get_lang() == "zh" else "Protein-Ligand Interactions")
         form = QFormLayout(grp)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setVerticalSpacing(10)
         form.setSpacing(10)
 
         # 对象选择
         obj_row = QHBoxLayout()
         self.pl_obj_combo = QComboBox()
-        self.pl_obj_combo.setMinimumHeight(32)
+        self.pl_obj_combo.setMinimumHeight(26)
         self.pl_refresh_btn = QPushButton(t("refresh"))
         self.pl_refresh_btn.setObjectName("refresh_btn")
-        self.pl_refresh_btn.setMinimumHeight(32)
+        self.pl_refresh_btn.setMinimumHeight(26)
         self.pl_refresh_btn.clicked.connect(self.refresh_objects)
         obj_row.addWidget(self.pl_obj_combo, 1)
         obj_row.addWidget(self.pl_refresh_btn)
@@ -1643,34 +1761,36 @@ class MolStructDialog(QDialog):
 
         # 配体残基名
         self.pl_ligand_name = QLineEdit()
-        self.pl_ligand_name.setMinimumHeight(32)
+        self.pl_ligand_name.setMinimumHeight(26)
         self.pl_ligand_name.setPlaceholderText("留空自动检测，例如: LIG, ATP" if get_lang() == "zh" else "Auto-detect if blank, e.g.: LIG, ATP")
         form.addRow(QLabel("配体残基名:" if get_lang() == "zh" else "Ligand Resname:"), self.pl_ligand_name)
 
         # 蛋白链
         self.pl_protein_chains = QLineEdit()
-        self.pl_protein_chains.setMinimumHeight(32)
+        self.pl_protein_chains.setMinimumHeight(26)
         self.pl_protein_chains.setPlaceholderText("留空自动检测，例如: A,B" if get_lang() == "zh" else "Auto-detect if blank, e.g.: A,B")
         form.addRow(QLabel("蛋白质链:" if get_lang() == "zh" else "Protein Chains:"), self.pl_protein_chains)
 
         # 距离截断
         self.pl_distance = QLineEdit("4.5")
-        self.pl_distance.setMinimumHeight(32)
+        self.pl_distance.setMinimumHeight(26)
         form.addRow(QLabel("距离截断 (Å):" if get_lang() == "zh" else "Distance cutoff (Å):"), self.pl_distance)
 
         # 输出CSV
         csv_row = QHBoxLayout()
         self.pl_csv = QLineEdit()
-        self.pl_csv.setMinimumHeight(32)
+        self.pl_csv.setMinimumHeight(26)
         self.pl_csv.setPlaceholderText("可选，留空不保存" if get_lang() == "zh" else "Optional")
         self.pl_csv_btn = QPushButton(t("browse"))
         self.pl_csv_btn.setObjectName("browse_btn")
         self.pl_csv_btn.setMinimumHeight(32)
         self.pl_csv_btn.clicked.connect(lambda: self._browse_save_file(self.pl_csv, "CSV (*.csv)"))
-        csv_row.addWidget(self.pl_csv, 1)
-        csv_row.addWidget(self.pl_csv_btn)
-        form.addRow(QLabel(t("output_csv")), csv_row)
-
+        pl_csv_row_container = QWidget()
+        pl_csv_row = QHBoxLayout(pl_csv_row_container)
+        pl_csv_row.setContentsMargins(0, 0, 0, 0)
+        pl_csv_row.addWidget(self.pl_csv, 1)
+        pl_csv_row.addWidget(self.pl_csv_btn)
+        pl_grid.addWidget(pl_csv_row_container, 2, 1, 1, 3)  # 跨三列
         layout.addWidget(grp)
         
         # 提示信息
@@ -1733,10 +1853,10 @@ class MolStructDialog(QDialog):
         # 对象选择
         obj_row = QHBoxLayout()
         self.tc_obj_combo = QComboBox()
-        self.tc_obj_combo.setMinimumHeight(32)
+        self.tc_obj_combo.setMinimumHeight(26)
         self.tc_refresh_btn = QPushButton(t("refresh"))
         self.tc_refresh_btn.setObjectName("refresh_btn")
-        self.tc_refresh_btn.setMinimumHeight(32)
+        self.tc_refresh_btn.setMinimumHeight(26)
         self.tc_refresh_btn.clicked.connect(self.refresh_objects)
         obj_row.addWidget(self.tc_obj_combo, 1)
         obj_row.addWidget(self.tc_refresh_btn)
@@ -1744,40 +1864,42 @@ class MolStructDialog(QDialog):
 
         # 配体残基名
         self.tc_ligand_name = QLineEdit()
-        self.tc_ligand_name.setMinimumHeight(32)
+        self.tc_ligand_name.setMinimumHeight(26)
         self.tc_ligand_name.setPlaceholderText("PROTAC分子名称，留空自动检测" if get_lang() == "zh" else "PROTAC name, auto-detect if blank")
         form.addRow(QLabel("配体残基名:" if get_lang() == "zh" else "Ligand Resname:"), self.tc_ligand_name)
 
         # 蛋白1链
         self.tc_protein1_chains = QLineEdit()
-        self.tc_protein1_chains.setMinimumHeight(32)
+        self.tc_protein1_chains.setMinimumHeight(26)
         self.tc_protein1_chains.setPlaceholderText("例如: A" if get_lang() == "zh" else "e.g.: A")
         form.addRow(QLabel("蛋白质1链:" if get_lang() == "zh" else "Protein1 Chains:"), self.tc_protein1_chains)
 
         # 蛋白2链
         self.tc_protein2_chains = QLineEdit()
-        self.tc_protein2_chains.setMinimumHeight(32)
+        self.tc_protein2_chains.setMinimumHeight(26)
         self.tc_protein2_chains.setPlaceholderText("例如: B" if get_lang() == "zh" else "e.g.: B")
         form.addRow(QLabel("蛋白质2链:" if get_lang() == "zh" else "Protein2 Chains:"), self.tc_protein2_chains)
 
         # 距离截断
         self.tc_distance = QLineEdit("4.5")
-        self.tc_distance.setMinimumHeight(32)
+        self.tc_distance.setMinimumHeight(26)
         form.addRow(QLabel("距离截断 (Å):" if get_lang() == "zh" else "Distance cutoff (Å):"), self.tc_distance)
 
         # 输出CSV
         csv_row = QHBoxLayout()
         self.tc_csv = QLineEdit()
-        self.tc_csv.setMinimumHeight(32)
+        self.tc_csv.setMinimumHeight(26)
         self.tc_csv.setPlaceholderText("可选" if get_lang() == "zh" else "Optional")
         self.tc_csv_btn = QPushButton(t("browse"))
         self.tc_csv_btn.setObjectName("browse_btn")
         self.tc_csv_btn.setMinimumHeight(32)
         self.tc_csv_btn.clicked.connect(lambda: self._browse_save_file(self.tc_csv, "CSV (*.csv)"))
-        csv_row.addWidget(self.tc_csv, 1)
-        csv_row.addWidget(self.tc_csv_btn)
-        form.addRow(QLabel(t("output_csv")), csv_row)
-
+        tc_csv_row_container = QWidget()
+        tc_csv_row = QHBoxLayout(tc_csv_row_container)
+        tc_csv_row.setContentsMargins(0, 0, 0, 0)
+        tc_csv_row.addWidget(self.tc_csv, 1)
+        tc_csv_row.addWidget(self.tc_csv_btn)
+        ternary_grid.addWidget(tc_csv_row_container, 2, 3)
         layout.addWidget(grp)
 
         # 按钮组（醒目）
@@ -1818,10 +1940,10 @@ class MolStructDialog(QDialog):
         # 对象选择
         obj_row = QHBoxLayout()
         self.ap_obj_combo = QComboBox()
-        self.ap_obj_combo.setMinimumHeight(32)
+        self.ap_obj_combo.setMinimumHeight(26)
         self.ap_refresh_btn = QPushButton(t("refresh"))
         self.ap_refresh_btn.setObjectName("refresh_btn")
-        self.ap_refresh_btn.setMinimumHeight(32)
+        self.ap_refresh_btn.setMinimumHeight(26)
         self.ap_refresh_btn.clicked.connect(self.refresh_objects)
         obj_row.addWidget(self.ap_obj_combo, 1)
         obj_row.addWidget(self.ap_refresh_btn)
@@ -1829,34 +1951,36 @@ class MolStructDialog(QDialog):
 
         # 原子1选择
         self.ap_atom1 = QLineEdit()
-        self.ap_atom1.setMinimumHeight(32)
+        self.ap_atom1.setMinimumHeight(26)
         self.ap_atom1.setPlaceholderText('例如: "resn LIG and name N1" 或 "LIG/301/N1"' if get_lang() == "zh" else 'e.g.: "resn LIG and name N1"')
         form.addRow(QLabel("原子1选择:" if get_lang() == "zh" else "Atom1 Selection:"), self.ap_atom1)
 
         # 原子2选择
         self.ap_atom2 = QLineEdit()
-        self.ap_atom2.setMinimumHeight(32)
+        self.ap_atom2.setMinimumHeight(26)
         self.ap_atom2.setPlaceholderText('例如: "elem O" 或 "SER/50/OG"' if get_lang() == "zh" else 'e.g.: "elem O"')
         form.addRow(QLabel("原子2选择:" if get_lang() == "zh" else "Atom2 Selection:"), self.ap_atom2)
 
         # 距离截断
         self.ap_distance = QLineEdit("5.0")
-        self.ap_distance.setMinimumHeight(32)
+        self.ap_distance.setMinimumHeight(26)
         form.addRow(QLabel("距离截断 (Å):" if get_lang() == "zh" else "Distance cutoff (Å):"), self.ap_distance)
 
         # 输出CSV
         csv_row = QHBoxLayout()
         self.ap_csv = QLineEdit()
-        self.ap_csv.setMinimumHeight(32)
+        self.ap_csv.setMinimumHeight(26)
         self.ap_csv.setPlaceholderText("可选" if get_lang() == "zh" else "Optional")
         self.ap_csv_btn = QPushButton(t("browse"))
         self.ap_csv_btn.setObjectName("browse_btn")
         self.ap_csv_btn.setMinimumHeight(32)
         self.ap_csv_btn.clicked.connect(lambda: self._browse_save_file(self.ap_csv, "CSV (*.csv)"))
-        csv_row.addWidget(self.ap_csv, 1)
-        csv_row.addWidget(self.ap_csv_btn)
-        form.addRow(QLabel(t("output_csv")), csv_row)
-
+        ap_csv_row_container = QWidget()
+        ap_csv_row = QHBoxLayout(ap_csv_row_container)
+        ap_csv_row.setContentsMargins(0, 0, 0, 0)
+        ap_csv_row.addWidget(self.ap_csv, 1)
+        ap_csv_row.addWidget(self.ap_csv_btn)
+        ap_grid.addWidget(ap_csv_row_container, 2, 1, 1, 3)  # 跨三列
         layout.addWidget(grp)
 
         # 快速模板
@@ -2042,42 +2166,39 @@ class MolStructDialog(QDialog):
         
         # 标题
         title = QLabel("Contact Us" if get_lang() == "en" else "联系我们")
-        title.setStyleSheet("""
-            font-size: 20px;
-            font-weight: bold;
-            color: #3b82f6;
-            padding: 10px;
-        """)
+        title.setObjectName("contact_title")
         layout.addWidget(title)
         
         # 内容文本框
         text = QTextEdit()
         text.setReadOnly(True)
-        
+        text.setObjectName("contact_body")
+
+        # --- Dynamic style for privacy box ---
+        if self._dark_mode:
+            privacy_style = "margin-top: 30px; padding: 15px; background: #2d3748; border: 1px solid #4a5568; border-radius: 8px; color: #a0aec0;"
+            footer_color = "#718096"
+        else:
+            privacy_style = "margin-top: 30px; padding: 15px; background: #e7f3ff; border: 1px solid #93c5fd; border-radius: 8px; color: #1e40af;"
+            footer_color = "#64748b"
+
         if get_lang() == "zh":
-            contact_content = """
+            contact_content = f'''
 <h3>👋 感谢使用 MolStruct！</h3>
 
 <p>如果你有任何问题、建议或反馈，欢迎联系我们！</p>
 
 <h3>📩 联系方式</h3>
 
-<p style="font-size: 14px; line-height: 1.8;">
-<b>开发者：</b> MolStruct Team<br>
-<b>Email：</b> <a href="mailto:your-email@example.com">your-email@example.com</a><br>
-<b>项目主页：</b> <a href="https://github.com/yourusername/molstruct">GitHub</a><br>
-<b>文档：</b> <a href="https://molstruct.readthedocs.io">ReadTheDocs</a>
+<p style='font-size: 14px; line-height: 1.8;'>
+<b>开发者：</b> Roufen Chen<br>
+<b>Email：</b> <a href="mailto:12319021@zju.edu.cn">12319021@zju.edu.cn</a><br>
+<b>GitHub：</b> <a href="https://github.com/VesperChen01/glue-pymol">https://github.com/VesperChen01/glue-pymol</a><br>
 </p>
 
 <h3>问题报告</h3>
 <p>发现 Bug？请在 GitHub 上提交 Issue，并包含：</p>
-<ul>
-<li>PyMOL 版本</li>
-<li>Python 版本</li>
-<li>操作系统</li>
-<li>错误信息和日志</li>
-<li>复现步骤</li>
-</ul>
+<ul><li>PyMOL 版本</li><li>Python 版本</li><li>操作系统</li><li>错误信息和日志</li><li>复现步骤</li></ul>
 
 <h3>功能建议</h3>
 <p>有新功能想法？欢迎在 GitHub Discussions 中分享！</p>
@@ -2086,45 +2207,32 @@ class MolStructDialog(QDialog):
 <p>欢迎提交 Pull Request！请阅读 <code>CONTRIBUTING.md</code> 了解贡献指南。</p>
 
 <h3>支持项目</h3>
-<p>如果 MolStruct 对你的研究有帮助，请考虑：</p>
-<ul>
-<li>在 GitHub 上给我们一个 Star ⭐</li>
-<li>在论文中引用 MolStruct</li>
-<li>分享给同事</li>
-</ul>
+<p>如果 MolStruct 对你的研究有帮助，请考虑：</p><ul><li>在 GitHub 上给我们一个 Star ⭐</li><li>在论文中引用 MolStruct</li><li>分享给同事</li></ul>
 
-<p style="margin-top: 30px; padding: 15px; background: #f1f5f9; border-radius: 8px;">
+<p style='{privacy_style}'>
 <b>隐私声明：</b>MolStruct 不会收集任何个人数据或结构信息。所有分析都在本地进行。
 </p>
 
-<p style="margin-top: 20px; color: #64748b; text-align: center;">
+<p style='margin-top: 20px; color: {footer_color}; text-align: center;'>
 感谢你的支持！🚀
-</p>
-            """
+</p>'''
         else:
-            contact_content = """
+            contact_content = f'''
 <h3>👋 Thank you for using MolStruct!</h3>
 
 <p>If you have any questions, suggestions, or feedback, please don't hesitate to contact us!</p>
 
 <h3>📩 Contact Information</h3>
 
-<p style="font-size: 14px; line-height: 1.8;">
-<b>Developer:</b> MolStruct Team<br>
-<b>Email:</b> <a href="mailto:your-email@example.com">your-email@example.com</a><br>
-<b>Project Homepage:</b> <a href="https://github.com/yourusername/molstruct">GitHub</a><br>
-<b>Documentation:</b> <a href="https://molstruct.readthedocs.io">ReadTheDocs</a>
+<p style='font-size: 14px; line-height: 1.8;'>
+<b>Developer:</b> Roufen Chen<br>
+<b>Email:</b> <a href="mailto:12319021@zju.edu.cn">12319021@zju.edu.cn</a><br>
+<b>GitHub:</b> <a href="https://github.com/VesperChen01/glue-pymol">https://github.com/VesperChen01/glue-pymol</a><br>
 </p>
 
 <h3>Bug Reports</h3>
 <p>Found a bug? Please submit an Issue on GitHub with:</p>
-<ul>
-<li>PyMOL version</li>
-<li>Python version</li>
-<li>Operating system</li>
-<li>Error messages and logs</li>
-<li>Steps to reproduce</li>
-</ul>
+<ul><li>PyMOL version</li><li>Python version</li><li>Operating system</li><li>Error messages and logs</li><li>Steps to reproduce</li></ul>
 
 <h3>Feature Requests</h3>
 <p>Have ideas for new features? Share them in GitHub Discussions!</p>
@@ -2134,20 +2242,15 @@ class MolStructDialog(QDialog):
 
 <h3>Support the Project</h3>
 <p>If MolStruct helped your research, please consider:</p>
-<ul>
-<li>Giving us a Star on GitHub</li>
-<li>Citing MolStruct in your papers</li>
-<li>Sharing with colleagues</li>
-</ul>
+<ul><li>Giving us a Star on GitHub</li><li>Citing MolStruct in your papers</li><li>Sharing with colleagues</li></ul>
 
-<p style="margin-top: 30px; padding: 15px; background: #f1f5f9; border-radius: 8px;">
+<p style='{privacy_style}'>
 <b>Privacy:</b> MolStruct does not collect any personal data or structural information. All analyses are performed locally.
 </p>
 
-<p style="margin-top: 20px; color: #64748b; text-align: center;">
+<p style='margin-top: 20px; color: {footer_color}; text-align: center;'>
 Thank you for your support! 🚀
-</p>
-            """
+</p>'''
         
         text.setHtml(contact_content)
         layout.addWidget(text)
@@ -2605,6 +2708,138 @@ Thank you for your support! 🚀
         except Exception as e:
             self.log(f"错误: {e}")
 
+    def run_tc_interface(self):
+        """分析三元复合体蛋白-蛋白界面"""
+        try:
+            from pymol import cmd
+            
+            obj_name = self.tc_obj_combo.currentText()
+            if obj_name == t("no_object"):
+                QMessageBox.warning(self, t("title"), "请先加载PDB结构" if get_lang() == "zh" else "Load PDB first")
+                return
+
+            p1_chains = self.tc_protein1_chains.text().strip()
+            p2_chains = self.tc_protein2_chains.text().strip()
+            
+            if not p1_chains or not p2_chains:
+                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
+                    "请指定E3和POI链" if get_lang() == "zh" else "Please specify E3 and POI chains")
+                return
+                
+            cutoff = float(self.tc_distance.text())
+            
+            self.log(f"\n{'分析蛋白-蛋白界面...' if get_lang() == 'zh' else 'Analyzing protein-protein interface...'}")
+            
+            # 创建界面选择
+            interface_sel = f"interface_{obj_name}"
+            e3_sel = f"{obj_name} and chain {p1_chains}"
+            poi_sel = f"{obj_name} and chain {p2_chains}"
+            
+            cmd.select(interface_sel, f"(byres ({e3_sel} within {cutoff} of {poi_sel})) or (byres ({poi_sel} within {cutoff} of {e3_sel}))")
+            
+            # 高亮界面
+            cmd.hide("everything", obj_name)
+            cmd.show("cartoon", obj_name)
+            cmd.show("sticks", interface_sel)
+            cmd.color("gray80", obj_name)
+            cmd.color("cyan", f"{interface_sel} and chain {p1_chains}")
+            cmd.color("orange", f"{interface_sel} and chain {p2_chains}")
+            
+            # 计算界面统计
+            n_e3_residues = cmd.count_atoms(f"{interface_sel} and chain {p1_chains} and name CA")
+            n_poi_residues = cmd.count_atoms(f"{interface_sel} and chain {p2_chains} and name CA")
+            
+            self.log(f"界面分析完成:")
+            self.log(f"  E3侧: {n_e3_residues} 个残基")
+            self.log(f"  POI侧: {n_poi_residues} 个残基")
+            
+            # 如果选中了计算ΔΔG
+            if hasattr(self, 'tc_include_ddg') and self.tc_include_ddg.isChecked():
+                self.log(f"计算界面ΔΔG..." if get_lang() == "zh" else "Calculating interface ΔΔG...")
+                # 这里可以调用FoldX或其他方法计算ΔΔG
+                # 暂时使用简化的ASA方法估算
+                import numpy as np
+                asa = cmd.get_area(interface_sel)
+                ddg_estimate = asa * 0.01  # 简化估算: ~0.01 kcal/mol per Å²
+                self.log(f"  估算ΔΔG: {ddg_estimate:.2f} kcal/mol (基于ASA)")
+                
+        except Exception as e:
+            self.log(f"错误: {e}")
+            import traceback; traceback.print_exc()
+
+    def run_tc_render(self):
+        """渲染三元复合体的完整展示"""
+        try:
+            from pymol import cmd
+            
+            obj_name = self.tc_obj_combo.currentText()
+            if obj_name == t("no_object"):
+                QMessageBox.warning(self, t("title"), "请先加载PDB结构" if get_lang() == "zh" else "Load PDB first")
+                return
+                
+            self.log(f"\n{'渲染三元复合体...' if get_lang() == 'zh' else 'Rendering ternary complex...'}")
+            
+            # 先运行分析（如果还没有）
+            if not hasattr(self, 'current_tc_result'):
+                self.run_tc_analysis()
+                if not hasattr(self, 'current_tc_result'):
+                    return
+            
+            p1_chains = self.tc_protein1_chains.text().strip()
+            p2_chains = self.tc_protein2_chains.text().strip()
+            ligand_resname = self.tc_ligand_name.text().strip()
+            
+            # 设置显示样式
+            cmd.hide("everything", obj_name)
+            cmd.show("cartoon", obj_name)
+            
+            # E3 ligase (CRBN/VHL) - 蓝色系
+            if p1_chains:
+                cmd.color("slate", f"{obj_name} and chain {p1_chains}")
+                cmd.set("cartoon_transparency", 0.2, f"{obj_name} and chain {p1_chains}")
+            
+            # POI - 橙色系
+            if p2_chains:
+                cmd.color("wheat", f"{obj_name} and chain {p2_chains}")
+                cmd.set("cartoon_transparency", 0.2, f"{obj_name} and chain {p2_chains}")
+            
+            # PROTAC/分子胶 - 绿色球棍
+            if ligand_resname:
+                ligand_sel = f"{obj_name} and resn {ligand_resname}"
+                cmd.show("sticks", ligand_sel)
+                cmd.show("spheres", ligand_sel)
+                cmd.color("forest", ligand_sel)
+                cmd.set("sphere_scale", 0.3, ligand_sel)
+                cmd.set("stick_radius", 0.2, ligand_sel)
+            
+            # 显示界面残基
+            if self.tc_analyze_interface.isChecked():
+                cutoff = float(self.tc_distance.text())
+                interface_sel = f"interface_{obj_name}_render"
+                e3_sel = f"{obj_name} and chain {p1_chains}"
+                poi_sel = f"{obj_name} and chain {p2_chains}"
+                
+                cmd.select(interface_sel, f"(byres ({e3_sel} within {cutoff} of {poi_sel})) or (byres ({poi_sel} within {cutoff} of {e3_sel}))")
+                cmd.show("sticks", f"{interface_sel} and sidechain")
+                cmd.set("stick_radius", 0.15, interface_sel)
+            
+            # 设置视角和光照
+            cmd.orient(obj_name)
+            cmd.zoom(obj_name, 5)
+            cmd.set("ambient", 0.3)
+            cmd.set("spec_power", 200)
+            cmd.set("spec_reflect", 0.2)
+            
+            # 导出PNG
+            output_path = os.path.join(os.getcwd(), f"ternary_complex_{obj_name}.png")
+            cmd.png(output_path, width=2400, height=2400, dpi=300, ray=1)
+            
+            self.log(f"渲染完成，已保存至: {output_path}")
+            
+        except Exception as e:
+            self.log(f"错误: {e}")
+            import traceback; traceback.print_exc()
+
     def run_ap_analysis(self):
         """运行原子对分析"""
         try:
@@ -2758,138 +2993,63 @@ Thank you for your support! 🚀
         if fn:
             line_edit.setText(fn)
     
-    # ========== CRBN 工具回调 ==========
-    def run_crbn_interface_map(self):
-        """调用 PyMOL CRBN interface_map 命令"""
+    # Note: CRBN interface tools have been integrated into Ternary Complex analysis
+    
+    def check_environment(self):
+        """检查环境和依赖状态"""
         try:
-            # 加载 pymol_crbn_tools
-            self._ensure_crbn_tools_loaded()
+            self.log(f"\n{'='*50}")
+            self.log("⚡ 检查环境和依赖" if get_lang() == "zh" else "⚡ Checking Environment and Dependencies")
+            self.log(f"{'='*50}\n")
             
-            crbn_sel = self.crbn_sel.text().strip()
-            poi_sel = self.poi_sel.text().strip()
-            
-            if not crbn_sel or not poi_sel:
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
-                    "请输入 CRBN 和 POI 选择语句" if get_lang() == "zh" else "Enter CRBN and POI selections")
-                return
-            
+            # 检查 Python 依赖
             try:
-                cutoff = float(self.crbn_cutoff.text().strip() or "4.0")
-            except:
-                cutoff = 4.0
+                from .env_setup import get_dependency_status
+                status = get_dependency_status()
+                
+                self.log("📦 Python 依赖:" if get_lang() == "zh" else "📦 Python Dependencies:")
+                for pkg, available in status.items():
+                    symbol = "✅" if available else "❌"
+                    self.log(f"  {symbol} {pkg:20} {'已安装' if available else '未安装'}")
+                
+                missing = [pkg for pkg, avail in status.items() if not avail]
+                if missing:
+                    self.log(f"\n⚠️  缺失依赖: {', '.join(missing)}")
+                    self.log("💡 安装命令: pip install " + " ".join(missing))
+                else:
+                    self.log("\n✅ 所有 Python 依赖已满足" if get_lang() == "zh" else "\n✅ All Python dependencies satisfied")
+            except Exception as e:
+                self.log(f"⚠️  无法检查 Python 依赖: {e}")
             
-            self.log(f"\n{'生成界面接触图...' if get_lang() == 'zh' else 'Generating interface map...'}")
-            self.log(f"   CRBN: {crbn_sel}")
-            self.log(f"   POI: {poi_sel}")
-            self.log(f"   截断: {cutoff} Å")
+            # 检查 FoldX
+            self.log("\n🛠️  外部工具:" if get_lang() == "zh" else "\n🛠️  External Tools:")
+            try:
+                self._ensure_crbn_tools_loaded()
+                from pymol import cmd
+                ok = cmd.crbn_tools_doctor(verbose=0)
+                if ok:
+                    self.log("  ✅ FoldX: 已检测到")
+                else:
+                    self.log("  ❌ FoldX: 未检测到")
+                    self.log("     💡 下载: https://foldxsuite.crg.eu/")
+                    self.log("     💡 设置: export FOLDX=/path/to/foldx")
+            except Exception as e:
+                self.log(f"  ⚠️  FoldX 检查失败: {e}")
             
-            from pymol import cmd
-            cmd.interface_map(crbn_sel, poi_sel, name="iface", cutoff=cutoff)
+            # PyMOL 版本
+            try:
+                from pymol import cmd
+                version = cmd.get_version()[0]
+                self.log(f"\n🐍 PyMOL: {version}")
+            except Exception:
+                pass
             
-            self.log("界面接触图生成完成！" if get_lang() == "zh" else "Interface map done!")
-            self.log("   - iface_hbond: 氢键")
-            self.log("   - iface_salt: 盐桥")
-            self.log("   - iface_hydroph: 疏水相互作用")
-            self.log("   - iface_resi_map: 残基接触计数热图")
-            
-        except Exception as e:
-            self.log(f"错误: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def run_crbn_ddg_heatmap(self):
-        """调用 PyMOL CRBN ddg_heatmap 命令"""
-        try:
-            self._ensure_crbn_tools_loaded()
-            
-            crbn_sel = self.crbn_sel.text().strip()
-            poi_sel = self.poi_sel.text().strip()
-            
-            if not crbn_sel or not poi_sel:
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
-                    "请输入 CRBN 和 POI 选择语句" if get_lang() == "zh" else "Enter CRBN and POI selections")
-                return
-            
-            method = self.ddg_method.currentText()
-            
-            self.log(f"\n{'计算 ΔΔG 热图...' if get_lang() == 'zh' else 'Computing ΔΔG heatmap...'}")
-            self.log(f"   CRBN: {crbn_sel}")
-            self.log(f"   POI: {poi_sel}")
-            self.log(f"   方法: {method}")
-            
-            from pymol import cmd
-            cmd.ddg_heatmap(crbn_sel, poi_sel, method=method, name="ddg")
-            
-            self.log("ΔΔG 热图生成完成！" if get_lang() == "zh" else "ΔΔG heatmap done!")
-            self.log("   - 颜色：蓝（低 ΔΔG）→ 白 → 红（高 ΔΔG）")
+            self.log(f"\n{'='*50}")
+            self.log("✅ 环境检查完成" if get_lang() == "zh" else "✅ Environment check complete")
+            self.log(f"{'='*50}\n")
             
         except Exception as e:
-            self.log(f"错误: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def run_crbn_score_color(self):
-        """调用 PyMOL CRBN score_color 命令"""
-        try:
-            self._ensure_crbn_tools_loaded()
-            
-            poi_sel = self.poi_sel.text().strip()
-            csv_path = self.score_csv_path.text().strip()
-            
-            if not poi_sel:
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
-                    "请输入 POI 选择语句" if get_lang() == "zh" else "Enter POI selection")
-                return
-            
-            if not csv_path or not os.path.exists(csv_path):
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
-                    "请选择评分 CSV 文件" if get_lang() == "zh" else "Select score CSV file")
-                return
-            
-            self.log(f"\n{'根据评分着色...' if get_lang() == 'zh' else 'Coloring by score...'}")
-            self.log(f"   POI: {poi_sel}")
-            self.log(f"   CSV: {os.path.basename(csv_path)}")
-            
-            from pymol import cmd
-            cmd.score_color(poi_sel, csv_path)
-            
-            self.log("评分着色完成！" if get_lang() == "zh" else "Score coloring done!")
-            
-        except Exception as e:
-            self.log(f"错误: {e}")
-            import traceback
-            traceback.print_exc()
-    
-    def run_crbn_degron_annotate(self):
-        """调用 PyMOL CRBN degron_annotate 命令"""
-        try:
-            self._ensure_crbn_tools_loaded()
-            
-            poi_sel = self.poi_sel.text().strip()
-            
-            if not poi_sel:
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
-                    "请输入 POI 选择语句" if get_lang() == "zh" else "Enter POI selection")
-                return
-            
-            degron_csv = self.degron_csv_path.text().strip() or None
-            auto = self.degron_auto.isChecked()
-            
-            self.log(f"\n{'Degron 标注...' if get_lang() == 'zh' else 'Degron annotation...'}")
-            self.log(f"   POI: {poi_sel}")
-            self.log(f"   自动检测: {'是' if auto else '否'}")
-            if degron_csv:
-                self.log(f"   CSV: {os.path.basename(degron_csv)}")
-            
-            from pymol import cmd
-            cmd.degron_annotate(poi_sel, csv=degron_csv, auto=auto, name="degron")
-            
-            self.log("Degron 标注完成！" if get_lang() == "zh" else "Degron annotation done!")
-            self.log("   - C2H2_like: 紫色")
-            self.log("   - beta_hairpin_like: 绿色")
-            
-        except Exception as e:
-            self.log(f"错误: {e}")
+            self.log(f"❌ 检查失败: {e}")
             import traceback
             traceback.print_exc()
     
@@ -3027,43 +3187,18 @@ Thank you for your support! 🚀
         return scale
 
     def apply_auto_scaling(self):
-        # 计算并缓存缩放比例
-        s = self._ui_scale = float(self._compute_ui_scale())
-        # 追加样式以提升字体大小与表头高度（不引入手动控制）
-        try:
-            base_font_px = 13
-            new_font_px = int(round(base_font_px * s))
-            header_h = int(round(36 * s))
-            item_min_h = int(round(28 * s))
-            pad = int(round(8 * s))
-            extra = f"""
-            QDialog {{ font-size: {new_font_px}px; }}
-            QHeaderView::section {{ min-height: {header_h}px; padding: {pad + 2}px {pad + 2}px; }}
-            QTableWidget::item {{ min-height: {item_min_h}px; padding: {pad}px; }}
-            """
-            self.setStyleSheet(self.styleSheet() + "\n" + extra)
-        except Exception:
-            pass
-        # 更新表格行高
+        # 禁用自动缩放，保持固定高度
+        # s = self._ui_scale = float(self._compute_ui_scale())
+        self._ui_scale = 1.0  # 固定缩放比例为1.0
+        # 只更新表格行高，不改变控件高度
         try:
             vh = self.table.verticalHeader()
-            vh.setDefaultSectionSize(int(28 * s))
+            vh.setDefaultSectionSize(34)  # 固定行高
         except Exception:
             pass
-        # 缩放小图标按钮尺寸
+        # 只缩放主题切换按钮
         try:
-            size = int(round(28 * s))
-            self.theme_toggle_btn.setFixedSize(size, size)
-        except Exception:
-            pass
-        # 缩放已有按钮的最小高度（仅一次）
-        try:
-            if not hasattr(self, "_auto_scaled_buttons"):
-                self._auto_scaled_buttons = True
-                for btn in self.findChildren(QPushButton):
-                    mh = btn.minimumHeight()
-                    if mh and mh >= 28:
-                        btn.setMinimumHeight(int(round(mh * s)))
+            self.theme_toggle_btn.setFixedSize(28, 28)  # 固定尺寸
         except Exception:
             pass
 
@@ -3114,8 +3249,8 @@ QGroupBox {
     font-size: 12px;
     border: 1px solid #ddd;
     border-radius: 6px;
-    margin-top: 15px;
-    padding: 15px;
+    margin-top: 10px;
+    padding: 18px 12px 10px 12px;
     background-color: white;
     color: #111;
 }
@@ -3128,17 +3263,19 @@ QGroupBox::title {
 
 QLabel {
     color: #333;
-    font-size: 11px;
+    font-size: 12px;     /* 适中的字体大小 */
+    padding: 2px 0;      /* 适中的垂直间距 */
+    min-height: 20px;    /* 适中的最小高度 */
 }
 
 QLineEdit, QComboBox {
     border: 1px solid #ccc;
     border-radius: 4px;
-    padding: 6px 8px;
+    padding: 6px 8px;      /* 更紧凑的垂直内边距 */
     background-color: white;
-    min-height: 24px;
+    min-height: 26px;      /* 更小的最小高度 */
     color: #222;
-    font-size: 11px;
+    font-size: 12px;       /* 适中的字体大小 */
 }
 QLineEdit:focus, QComboBox:focus {
     border: 2px solid #2563eb;
@@ -3310,7 +3447,8 @@ QHeaderView::section {
     font-size: 11px;
 }
 QTableWidget::item {
-    padding: 6px;
+    padding: 8px 6px;   /* 适中的垂直内边距 */
+    min-height: 32px;   /* 适中的最小行高 */
     border-bottom: 1px solid #eee;
 }
 QTableWidget::item:selected {
