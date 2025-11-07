@@ -103,7 +103,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         from rdkit.Chem import AllChem
         from rdkit.Chem.Draw import rdMolDraw2D
     except ImportError:
-        print("[2D Diagram] 需要安装 RDKit: pip install rdkit")
+        print("[2D Diagram] RDKit is required: pip install rdkit")
         return None
 
     try:
@@ -113,10 +113,10 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         from matplotlib.lines import Line2D
         from PIL import Image
     except ImportError:
-        print("[2D Diagram] 需要安装 matplotlib 和 Pillow")
+        print("[2D Diagram] matplotlib and Pillow are required")
         return None
 
-    print(f"[2D Diagram] 读取相互作用数据: {csv_path}")
+    print(f"[2D Diagram] Reading interaction data: {csv_path}")
     
     # 读取相互作用数据
     interactions = []
@@ -150,10 +150,10 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
             })
 
     if not interactions:
-        print(f"[2D Diagram] 未找到配体 '{ligand_resname}' 的相互作用")
+        print(f"[2D Diagram] No interactions found for ligand '{ligand_resname}'")
         return None
 
-    print(f"[2D Diagram] 找到 {len(interactions)} 个相互作用")
+    print(f"[2D Diagram] Found {len(interactions)} interactions")
 
     # 提取配体结构
     mol = None
@@ -166,10 +166,10 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 mol = Chem.SDMolSupplier(temp_sdf, removeHs=False)[0]
                 os.remove(temp_sdf)
         except Exception as e:
-            print(f"[2D Diagram] 从PyMOL提取配体失败: {e}")
+            print(f"[2D Diagram] Failed to extract ligand from PyMOL: {e}")
 
     if mol is None:
-        print(f"[2D Diagram] 无法提取配体结构")
+        print(f"[2D Diagram] Unable to extract ligand structure")
         return None
 
     if not mol.GetNumConformers():
@@ -183,7 +183,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     ax.axis('off')
 
     # 绘制配体结构
-    print(f"[2D Diagram] 绘制配体结构...")
+    print(f"[2D Diagram] Drawing ligand structure...")
     drawer = rdMolDraw2D.MolDraw2DCairo(600, 450)
     drawer.DrawMolecule(mol)
     drawer.FinishDrawing()
@@ -210,7 +210,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     n_residues = len(residues)
     radius = 5.5
 
-    print(f"[2D Diagram] 绘制 {n_residues} 个相互作用残基...")
+    print(f"[2D Diagram] Drawing {n_residues} interacting residues...")
 
     # 绘制残基（圆形布局）
     for i, res_name in enumerate(residues):
@@ -220,7 +220,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
 
         cat, cat_info = get_residue_category(res_name)
         res_color = cat_info["color"]
-        cat_name = cat_info["name_zh"]
+        cat_name = cat_info["name_en"]
 
         # 尝试绘制残基结构
         res_3letter = res_name[:3].upper()
@@ -324,24 +324,24 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     legend_elements = []
     for cat, info in AA_CATEGORIES.items():
         legend_elements.append(mpatches.Patch(color=info["color"], 
-                                             label=info["name_zh"],
+                                             label=info["name_en"],
                                              alpha=0.85))
     
     interaction_legend = [
-        Line2D([0], [0], color="#2196F3", linewidth=3, label="氢键"),
-        Line2D([0], [0], color="#FF5722", linewidth=3, label="盐桥"),
-        Line2D([0], [0], color="#4CAF50", linewidth=3, label="疏水"),
-        Line2D([0], [0], color="#9C27B0", linewidth=3, label="π-π"),
-        Line2D([0], [0], color="#E91E63", linewidth=3, label="π-阳离子"),
+        Line2D([0], [0], color="#2196F3", linewidth=3, label="Hydrogen bond"),
+        Line2D([0], [0], color="#FF5722", linewidth=3, label="Salt bridge"),
+        Line2D([0], [0], color="#4CAF50", linewidth=3, label="Hydrophobic"),
+        Line2D([0], [0], color="#9C27B0", linewidth=3, label="Pi-Pi"),
+        Line2D([0], [0], color="#E91E63", linewidth=3, label="Pi-Cation"),
     ]
     
     leg1 = ax.legend(handles=legend_elements, loc='upper left', 
-                    title="残基类别", fontsize=10, title_fontsize=11,
+                    title="Residue categories", fontsize=10, title_fontsize=11,
                     framealpha=0.95, edgecolor='black')
     ax.add_artist(leg1)
     
     ax.legend(handles=interaction_legend, loc='upper right',
-                    title="相互作用", fontsize=10, title_fontsize=11,
+                    title="Interactions", fontsize=10, title_fontsize=11,
                     framealpha=0.95, edgecolor='black')
 
     # 添加标题
@@ -361,8 +361,8 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     plt.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
     plt.close()
 
-    print(f"[2D Diagram] 2D相互作用图已生成: {output_path}")
-    print(f"[2D Diagram] 残基按类别着色：疏水(青)、极性(绿)、正电(蓝)、负电(红)")
+    print(f"[2D Diagram] 2D interaction diagram saved: {output_path}")
+    print(f"[2D Diagram] Residues colored by category: Hydrophobic (cyan), Polar (green), Positive (blue), Negative (red)")
     
     return output_path
 

@@ -63,7 +63,7 @@ def _install_package(pip_name: str, silent: bool = True) -> bool:
         
         return result.returncode == 0
     except Exception as e:
-        print(f"[env_setup] 安装 {pip_name} 失败: {e}")
+        print(f"[env_setup] Failed to install {pip_name}: {e}")
         return False
 
 
@@ -81,23 +81,23 @@ def check_and_install_dependencies(silent: bool = True, required_only: bool = Tr
     missing_packages = []
     packages_to_check = REQUIRED_PACKAGES if required_only else REQUIRED_PACKAGES + OPTIONAL_PACKAGES
     
-    print("[env_setup] 🔍 检查依赖包...")
+    print("[env_setup] 🔍 Checking dependencies...")
     
     for import_name, pip_name in packages_to_check:
         if not _check_package(import_name):
             missing_packages.append(pip_name)
-            print(f"[env_setup] ⚠️  缺少依赖: {pip_name}")
+            print(f"[env_setup] ⚠️  Missing dependency: {pip_name}")
     
     if not missing_packages:
-        print("[env_setup] ✅ 所有依赖已满足")
+        print("[env_setup] ✅ All dependencies satisfied")
         return True, []
     
     # 开始安装缺失的包
-    print(f"[env_setup] 📦 开始自动安装 {len(missing_packages)} 个缺失的包...")
+    print(f"[env_setup] 📦 Installing {len(missing_packages)} missing package(s)...")
     
     failed_packages = []
     for pip_name in missing_packages:
-        print(f"[env_setup] ⏳ 正在安装 {pip_name}...", end=" ")
+        print(f"[env_setup] ⏳ Installing {pip_name}...", end=" ")
         if _install_package(pip_name, silent=silent):
             print("✓")
         else:
@@ -105,11 +105,11 @@ def check_and_install_dependencies(silent: bool = True, required_only: bool = Tr
             failed_packages.append(pip_name)
     
     if failed_packages:
-        print(f"[env_setup] ⚠️  以下包安装失败: {', '.join(failed_packages)}")
-        print("[env_setup] 💡 请手动安装: pip install " + " ".join(failed_packages))
+        print(f"[env_setup] ⚠️  Failed to install: {', '.join(failed_packages)}")
+        print("[env_setup] 💡 Please install manually: pip install " + " ".join(failed_packages))
         return False, failed_packages
     
-    print("[env_setup] ✅ 所有依赖安装完成")
+    print("[env_setup] ✅ All dependencies installed")
     return True, []
 
 
@@ -141,24 +141,24 @@ def get_dependency_status() -> dict:
 
 
 def print_dependency_report():
-    """打印依赖状态报告"""
+    """Print dependency status report"""
     print("\n" + "="*50)
-    print("MolStruct 依赖包状态报告")
+    print("MolStruct Dependency Status Report")
     print("="*50)
     
     status = get_dependency_status()
     
-    print("\n【必需依赖】")
+    print("\n[Required]")
     for import_name, pip_name in REQUIRED_PACKAGES:
         available = status.get(pip_name, False)
         symbol = "✓" if available else "✗"
-        print(f"  {symbol} {pip_name:20} {'已安装' if available else '未安装'}")
+        print(f"  {symbol} {pip_name:20} {'installed' if available else 'not installed'}")
     
-    print("\n【可选依赖】")
+    print("\n[Optional]")
     for import_name, pip_name in OPTIONAL_PACKAGES:
         available = status.get(pip_name, False)
         symbol = "✓" if available else "✗"
-        print(f"  {symbol} {pip_name:20} {'已安装' if available else '未安装'}")
+        print(f"  {symbol} {pip_name:20} {'installed' if available else 'not installed'}")
     
     print("="*50 + "\n")
 
@@ -167,5 +167,5 @@ if __name__ == "__main__":
     # 命令行测试
     print_dependency_report()
     ensure_dependencies()
-    print("\n检查完成后的状态：")
+    print("\nStatus after check:")
     print_dependency_report()

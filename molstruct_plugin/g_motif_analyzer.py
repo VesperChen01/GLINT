@@ -87,7 +87,7 @@ def _ideal_beta_hairpin_template():
 def _coords_from_selection(sel: str):
     """从选择中抓 8×Cα（按 resi 排序取前 8 个）。"""
     if not sel:
-        raise ValueError("template_sel 为空。请提供一个包含 8 个 Cα 的选择。")
+        raise ValueError("template_sel is empty. Provide a selection containing 8 CA atoms.")
     sel_ca = f"({sel}) and name CA"
     m = cmd.get_model(sel_ca)
     items = []
@@ -99,7 +99,7 @@ def _coords_from_selection(sel: str):
         sort_key = _parse_resi(resi_label)
         items.append((sort_key, (a.coord[0], a.coord[1], a.coord[2])))
     if len(items) < 8:
-        raise ValueError(f"模板选择中 Cα 数不足 8（实际 {len(items)}），选择：{sel_ca}")
+        raise ValueError(f"Insufficient CA atoms (<8) in template selection (got {len(items)}): {sel_ca}")
     items.sort(key=lambda x: (x[0][0], x[0][1]))
     return [xyz for _, xyz in items[:8]]
 
@@ -113,7 +113,7 @@ def _find_loaded_object_contains(code: str):
 def _coords_from_builtin(name: str):
     info = BUILTIN_TEMPLATES.get(name)
     if not info:
-        raise ValueError(f"未知内置模板：{name}")
+        raise ValueError(f"Unknown builtin template: {name}")
     pdb_code = info["pdb"]
     # 若会话中不存在，自动 fetch（注意 async_）
     obj = _find_loaded_object_contains(pdb_code)
@@ -122,7 +122,7 @@ def _coords_from_builtin(name: str):
             cmd.fetch(pdb_code, async_=0)  # ✅ 修复：用 async_ 避免语法错误
             obj = _find_loaded_object_contains(pdb_code) or pdb_code
         except Exception as e:
-            raise RuntimeError(f"无法 fetch {pdb_code}（{e}）。可先手动加载该 PDB 或改用“选择模板”。")
+            raise RuntimeError(f"Failed to fetch {pdb_code} ({e}). Load the PDB manually or use the 'selection' template.")
     sel = info["selection_fmt"].format(obj=obj)
     return _coords_from_selection(sel)
 
@@ -154,14 +154,14 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
     else:
         obj = obj_name or (cmd.get_object_list()[0] if cmd.get_object_list() else None)
     if not obj:
-        print("[G-MOTIF] 没有可用对象；请先加载结构或提供 pdb_file")
+        print("[G-MOTIF] No object available; load a structure or provide pdb_file")
         return []
 
     # 模板坐标
     try:
         tmpl = _get_template_coords(template_mode, template_sel, template_builtin)
     except Exception as e:
-        print(f"[G-MOTIF] 模板错误：{e}；已自动回退为理想化模板。")
+        print(f"[G-MOTIF] Template error: {e}; falling back to idealized template.")
         tmpl = _ideal_beta_hairpin_template()
 
     hits = []
@@ -193,13 +193,13 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
                 hits.append((ch, resi_s, resi_e, seq8, rmsd))
 
     # 调试输出
-    print(f"[G-MOTIF] 窗口总数: {total_windows}")
+    print(f"[G-MOTIF] Total windows: {total_windows}")
     if require_gly_pos6:
-        print(f"[G-MOTIF] 满足 pos6=Gly 的窗口: {gly_pos6_windows}")
+        print(f"[G-MOTIF] Windows with pos6=Gly: {gly_pos6_windows}")
     if best_rmsd_pool:
         best_rmsd_pool.sort(key=lambda x: x[0])
         nshow = min(topk_debug, len(best_rmsd_pool))
-        print(f"[G-MOTIF] 最小 RMSD (前{nshow}):")
+        print(f"[G-MOTIF] Smallest RMSD (top {nshow}):")
         for k in range(nshow):
             r, ch, window = best_rmsd_pool[k]
             seq8 = ''.join((aa[:1] if aa else 'X') for aa in [w[1] for w in window])
@@ -219,7 +219,7 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         for (ch, s, e, seq8, rmsd) in hits:
             w.writerow([ch, seq8, s, e, f"{rmsd:.2f}", "G-Motif"])
 
-    print(f"[G-MOTIF] 命中 {len(hits)} 条；结果: {out_csv}")
+    print(f"[G-MOTIF] Hits: {len(hits)}; output: {out_csv}")
 
     # 自动高亮
     if auto_highlight and hits:
@@ -230,7 +230,7 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
                 from highlight_residues import highlight_csv_residues
             highlight_csv_residues(out_csv, obj=obj, show_labels=1, stick_by_element=1)
         except Exception as e:
-            print(f"[G-MOTIF] 自动高亮失败: {e}")
+            print(f"[G-MOTIF] Auto highlight failed: {e}")
 
     if tmp_obj:
         try: cmd.delete(tmp_obj)

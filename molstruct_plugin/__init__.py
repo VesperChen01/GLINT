@@ -18,7 +18,7 @@ try:
     from .env_setup import ensure_dependencies
     _DEPS_OK = ensure_dependencies()
 except Exception as e:
-    print(f"[MolStruct] ⚠️ 依赖检查失败: {e}")
+    print(f"[MolStruct] ⚠️ Dependency check failed: {e}")
     _DEPS_OK = False
 
 # ---- 语言工具 ----
@@ -30,7 +30,8 @@ def _zh():
         return False
 
 def _info(cn, en):
-    print(cn if _zh() else en)
+    # Force English output for all prompts
+    print(en)
 
 # ---- 命令注册（与 GUI 解耦）----
 def _register_commands():
@@ -115,27 +116,27 @@ def __init_plugin__(app=None):
     _register_commands()
     try:
         from pymol.plugins import addmenuitemqt
-        addmenuitemqt('MolStruct - 分子相互作用分析' if _zh() else 'MolStruct - Interaction Analysis', molstruct_gui)
+        addmenuitemqt('MolStruct - Interaction Analysis', molstruct_gui)
         _info("✅ GUI 菜单已启用：Plugins → MolStruct", "✅ GUI menu enabled: Plugins → MolStruct")
     except Exception as e:
         _info(f"⚠️ 无法添加 GUI 菜单（命令行仍可用）：{e}",
               f"⚠️ Unable to add GUI menu (CLI still available): {e}")
 
-    print("📋 " + ("可用命令:" if _zh() else "Commands:"))
+    print("📋 Commands:")
     print("")
-    print("  🔬 " + ("相互作用分析:" if _zh() else "Interaction Analysis:"))
-    print("    • analyze_pdb_interactions - " + ("分析PDB结构中的相互作用（严格标准）" if _zh() else "Analyze interactions in a PDB structure (strict standards)"))
-    print("    • analyze_protein_ligand_interactions - " + ("分析蛋白-配体相互作用（严格标准）" if _zh() else "Analyze protein-ligand interactions (strict standards)"))
-    print("    • analyze_ternary_complex - " + ("分析三元复合体" if _zh() else "Analyze ternary complex"))
-    print("    • analyze_atom_pair_interactions - " + ("分析原子对相互作用" if _zh() else "Analyze atom pair interactions"))
+    print("  🔬 Interaction Analysis:")
+    print("    • analyze_pdb_interactions - Analyze interactions in a PDB structure (strict standards)")
+    print("    • analyze_protein_ligand_interactions - Analyze protein-ligand interactions (strict standards)")
+    print("    • analyze_ternary_complex - Analyze ternary complex")
+    print("    • analyze_atom_pair_interactions - Analyze atom pair interactions")
     print("")
-    print("  🎨 " + ("可视化:" if _zh() else "Visualization:"))
-    print("    • highlight_csv_residues - " + ("从CSV文件高亮显示残基相互作用" if _zh() else "Highlight residue interactions from CSV"))
-    print("    • visualize_protein_ligand_3d - " + ("3D可视化蛋白-配体相互作用" if _zh() else "3D visualization of protein-ligand interactions"))
-    print("    • generate_interaction_network_plot - " + ("生成交互网络图" if _zh() else "Generate interaction network plot"))
+    print("  🎨 Visualization:")
+    print("    • highlight_csv_residues - Highlight residue interactions from CSV")
+    print("    • visualize_protein_ligand_3d - 3D visualization of protein-ligand interactions")
+    print("    • generate_interaction_network_plot - Generate interaction network plot")
     print("")
-    print("  🖥️  " + ("图形界面:" if _zh() else "GUI:"))
-    print("    • molstruct_gui - " + ("打开统一分析界面（包含所有功能）" if _zh() else "Open unified analysis GUI (all features)"))
+    print("  🖥️  GUI:")
+    print("    • molstruct_gui - Open unified analysis GUI (all features)")
     print("")
-    print("💡 " + ("使用 help(命令名) 查看详细参数说明" if _zh() else "Use help(command_name) for details"))
-    print("⭐ " + ("采用严格标准：氢键 ≤2.8Å，盐桥 ≤4.0Å，适合发表" if _zh() else "Using strict standards: H-bond ≤2.8Å, Salt bridge ≤4.0Å, suitable for publication"))
+    print("💡 Use help(command_name) for details")
+    print("⭐ Using strict standards: H-bond ≤2.8Å, Salt bridge ≤4.0Å, suitable for publication")

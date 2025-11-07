@@ -94,7 +94,7 @@ def _import_helpers():
         from interaction_2d_plot import generate_2d_interaction_diagram  # type: ignore
     except Exception as e:
         raise ModuleNotFoundError(
-            "未找到 highlight_residues / interaction_analyzer；请确认与 unified_gui.py 同目录或包内存在。"
+            "highlight_residues / interaction_analyzer not found; ensure they are in the same directory as unified_gui.py or inside the package."
         ) from e
     find_crbn_g_motif = None
     try:
@@ -127,15 +127,15 @@ def _check_and_install_deps():
         missing = [pkg for pkg, avail in status.items() if not avail and pkg in ['rdkit', 'scipy', 'matplotlib', 'pillow', 'numpy']]
         
         if missing:
-            print(f"[MolStruct GUI] 检测到缺失依赖: {', '.join(missing)}")
-            print("[MolStruct GUI] 正在自动安装...")
+            print(f"[MolStruct GUI] Missing dependencies: {', '.join(missing)}")
+            print("[MolStruct GUI] Installing automatically...")
             success = ensure_dependencies()
             if not success:
-                print("[MolStruct GUI] ⚠️ 部分依赖安装失败，请手动安装")
+                print("[MolStruct GUI] ⚠️ Some dependencies failed to install; please install manually")
                 return False
         return True
     except Exception as e:
-        print(f"[MolStruct GUI] 依赖检查失败: {e}")
+        print(f"[MolStruct GUI] Dependency check failed: {e}")
         return False
 
 # -------- Language & Text --------
@@ -254,7 +254,7 @@ class GMotifWorker(QThread):
     def run(self):
         try:
             if find_crbn_g_motif is None:
-                raise RuntimeError("未找到 find_crbn_g_motif，请确认 g_motif_analyzer.py 在插件目录中。")
+                raise RuntimeError("find_crbn_g_motif not found; ensure g_motif_analyzer.py exists in the plugin directory.")
             self.progress.emit("[G-Motif] " + ("开始识别…" if get_lang()=="zh" else "Detecting…"))
             out_csv_path = self.out_csv
             if not out_csv_path:
@@ -982,7 +982,8 @@ class MolStructDialog(QDialog):
         main_layout.addWidget(grp_gm)
         main_layout.addLayout(btn_gm_row)
         
-        # ========== Ternary Complex Analysis (with inte        grp_ternary = QGroupBox("Ternary Complex Analysis (E3-PROTAC-POI with Interface Tools)")
+        # ========== Ternary Complex Analysis (with integrated interface tools) ==========
+        grp_ternary = QGroupBox("Ternary Complex Analysis (E3-PROTAC-POI with Interface Tools)")
         # 使用网格布局实现两栏式
         ternary_grid = QGridLayout(grp_ternary)
         ternary_grid.setColumnStretch(0, 0)
@@ -1264,13 +1265,13 @@ class MolStructDialog(QDialog):
             if not csv_file or not os.path.exists(csv_file):
                 QMessageBox.warning(self, t("title"), t("select_csv")); return
 
-            self.log(f"开始高亮显示：{os.path.basename(csv_file)}")
+            self.log(f"Start highlighting: {os.path.basename(csv_file)}")
             result = highlight_csv_residues(csv_file, obj, show_labels=1, clear_old=1, debug=0, stick_by_element=1)
 
             if result and isinstance(result, dict):
                 pairs = result.get("pairs", 0)
                 unique = result.get("unique_residues", 0)
-                self.log(f"高亮完成：{pairs} 对相互作用，{unique} 个唯一残基")
+                self.log(f"Highlight done: {pairs} pairs, {unique} unique residues")
             else:
                 self.log(t("log_highlight_ok"))
         except Exception as e:
@@ -1348,9 +1349,9 @@ class MolStructDialog(QDialog):
             if self._last_gmotif_csv and os.path.exists(self._last_gmotif_csv):
                 try:
                     highlight_gmotif_loops(self._last_gmotif_csv, obj, color="yellow", show_labels=True)
-                    self.log("已应用 G-Motif 高亮（基于最新 CSV）")
+                    self.log("Applied G-Motif highlight (latest CSV)")
                 except Exception as e:
-                    self.log(f"G-Motif 高亮跳过：{e}")
+                    self.log(f"G-Motif highlight skipped: {e}")
 
             # 2) 生成电势并着色
             if getattr(self, "obj_combo_apbs", None):
@@ -1415,15 +1416,15 @@ class MolStructDialog(QDialog):
                             gloop_sel = f"{obj} and chain {ch} and resi {st}-{ed}"
                             cmd.hide("surface", gloop_sel)
 
-                        self.log("静电势表面仅显示在 G-loop 周围 10Å 区域")
+                        self.log("Electrostatic surface shown only around G-loop (10 Å region)")
                     else:
                         # 没有 G-loop 数据，显示整个蛋白表面
                         self._show_full_surface_esp(obj, ramp_name)
                 except Exception as e:
-                    self.log(f"G-loop 区域静电势失败，回退到全表面: {e}")
+                    self.log(f"ESP around G-loop failed; fallback to full surface: {e}")
                     self._show_full_surface_esp(obj, ramp_name)
             else:
-                # 没有 G-Motif CSV，显示整个蛋白表面
+                # No G-Motif CSV; show full protein surface
                 self._show_full_surface_esp(obj, ramp_name)
 
 
@@ -1435,7 +1436,7 @@ class MolStructDialog(QDialog):
             cmd.set("fog_start", 0.45)
             cmd.orient(obj)
 
-            self.log(f"已渲染：G-Motif + ESP（grid={grid} Å, range=({vmin},{v0},{vmax})）")
+            self.log(f"Rendered: G-Motif + ESP (grid={grid} Å, range=({vmin},{v0},{vmax}))")
 
             # 5) 导出 PNG
             self._export_png_for_object(obj)
@@ -1444,14 +1445,14 @@ class MolStructDialog(QDialog):
             self.on_error(str(e))
 
     def _show_full_surface_esp(self, obj: str, ramp_name: str):
-        """显示整个蛋白的静电势表面（回退方案）"""
+        """Show full-protein electrostatic surface (fallback)."""
         from pymol import cmd
         cmd.show("surface", obj)
         cmd.set("surface_quality", 1, obj)
         cmd.set("surface_color_smoothing", 1, obj)
         cmd.set("transparency", 0.2, obj)
         cmd.color(ramp_name, obj)
-        self.log("显示整个蛋白表面静电势（无 G-loop 数据）")
+        self.log("Showing full-protein electrostatic surface (no G-loop data)")
 
 
     # --- 线程回调 ---
@@ -1641,15 +1642,15 @@ class MolStructDialog(QDialog):
                     apbs_tools = None
 
             if apbs_tools is None or not hasattr(apbs_tools, "run_apbs"):
-                self.log("APBS 工具不可用（未找到 apbs_tools.run_apbs）。已自动降级到 Quick 模式。")
+                self.log("APBS tools unavailable (apbs_tools.run_apbs not found). Falling back to Quick mode.")
                 self.apbs_run_quick()
                 return
 
             try:
                 apbs_tools.run_apbs(selection=obj)
-                self.log("APBS 计算已提交；若无可视化结果，请在 APBS Tools 中检查外部路径配置。")
+                self.log("APBS job submitted; if no visualization appears, check external paths in APBS Tools.")
             except Exception as ee:
-                self.log(f"APBS 调用失败：{ee}。已自动降级到 Quick 模式。")
+                self.log(f"APBS call failed: {ee}. Falling back to Quick mode.")
                 self.apbs_run_quick()
         except Exception as e:
             self.on_error(str(e))
@@ -1661,9 +1662,9 @@ class MolStructDialog(QDialog):
             if w and h:
                 self.png_w.setText(str(int(w)))
                 self.png_h.setText(str(int(h)))
-                self.log(f"视口尺寸: {w}x{h}px → 已填入导出设置")
+                self.log(f"Viewport: {w}x{h}px → filled into export settings")
             else:
-                self.log("未能获取视口尺寸，已保持默认值")
+                self.log("Failed to get viewport size; kept defaults")
         except Exception as e:
             self.on_error(str(e))
 
@@ -1693,7 +1694,7 @@ class MolStructDialog(QDialog):
             cmd.bg_color("white"); cmd.set("ray_opaque_background", 1)
 
         cmd.png(fn, width=W, height=H, dpi=dpi, ray=ray)
-        self.log(f"PNG 导出完成：{os.path.basename(fn)} | {W}x{H}px @ {dpi} dpi | ray={ray} | bg={'transparent' if want_trans else 'white'}")
+        self.log(f"PNG export done: {os.path.basename(fn)} | {W}x{H}px @ {dpi} dpi | ray={ray} | bg={'transparent' if want_trans else 'white'}")
 
         # 恢复背景设置
         try:
@@ -1730,7 +1731,7 @@ class MolStructDialog(QDialog):
             if not fn: return
             if not fn.lower().endswith(".dx"): fn += ".dx"
             cmd.save(fn, map_name)
-            self.log(f"DX 导出完成：{os.path.basename(fn)} （源：{map_name}）")
+            self.log(f"DX export done: {os.path.basename(fn)} (source: {map_name})")
         except Exception as e:
             self.on_error(str(e))
 
@@ -2468,7 +2469,7 @@ Thank you for your support! 🚀
             ligand_resname = self.pl_ligand_name.text().strip() or None
             output_csv = self.pl_csv.text().strip() or None
 
-            # ========== 统一分析（自动检测使用RDKit或基础模式） ==========
+            # ========== 使用严格标准分析 ==========
             from .interaction_analyzer import analyze_protein_ligand_interactions
 
             protein_chains_str = self.pl_protein_chains.text().strip()
@@ -2495,12 +2496,13 @@ Thank you for your support! 🚀
             )
 
             if result:
-                mode = result.get("mode", "unknown")
-                mode_text = "RDKit 高级模式" if mode == "advanced" else "基础模式"
+                mode = result.get("mode", "strict")
+                standard = result.get("standard", "Publication")
+                mode_text = f"{standard}标准" if get_lang() == "zh" else f"{standard} Standard"
                 
                 # 处理结果
                 if mode == "advanced":
-                    # 高级分析模式
+                    # 高级分析模式（如果有定制advanced模块）
                     advanced_results = result.get("advanced_results", {})
                     total = sum(len(v) for v in advanced_results.values())
                     self.log(f"\n分析完成 ({mode_text}): 总计 {total} 个相互作用")
@@ -2515,14 +2517,14 @@ Thank you for your support! 🚀
                     
                     result_msg = f"分析完成 ({mode_text})\n总计: {total} 个相互作用" if get_lang() == "zh" else f"Done ({mode_text})\nTotal: {total} interactions"
                 else:
-                    # 基础分析模式
+                    # 严格标准模式
                     n_interactions = len(result["interactions"])
-                    self.log(f"\n分析完成 ({mode_text}): 发现 {n_interactions} 个相互作用")
+                    self.log(f"\n分析完成 ({mode_text}): 发现 {n_interactions} 个关键相互作用")
                     self.current_pl_result = result
                     if hasattr(self, 'current_pl_result_advanced'):
                         delattr(self, 'current_pl_result_advanced')
                     
-                    result_msg = f"发现 {n_interactions} 个相互作用 ({mode_text})" if get_lang() == "zh" else f"Found {n_interactions} interactions ({mode_text})"
+                    result_msg = f"发现 {n_interactions} 个关键相互作用 ({mode_text})" if get_lang() == "zh" else f"Found {n_interactions} key interactions ({mode_text})"
                 
                 # 显示CSV表格
                 if output_csv and os.path.exists(output_csv):
@@ -2607,20 +2609,26 @@ Thank you for your support! 🚀
             # 优先使用CSV文件（支持两种模式）
             csv_path = self.pl_csv.text().strip() or None
             ligand_sdf = getattr(self, 'current_pl_ligand_sdf', None)
+            obj_name = self.pl_obj_combo.currentText()
+            ligand_resname = self.pl_ligand_name.text().strip() or None
             
             if csv_path and os.path.exists(csv_path):
                 output_path = generate_interaction_network_plot(
                     csv_path=csv_path,
                     output_path=fn,
                     show_plot=False,
-                    ligand_sdf=ligand_sdf
+                    ligand_sdf=ligand_sdf,
+                    obj_name=obj_name,
+                    ligand_resname=ligand_resname
                 )
             elif hasattr(self, 'current_pl_result'):
                 output_path = generate_interaction_network_plot(
                     interactions_result=self.current_pl_result,
                     output_path=fn,
                     show_plot=False,
-                    ligand_sdf=ligand_sdf
+                    ligand_sdf=ligand_sdf,
+                    obj_name=obj_name,
+                    ligand_resname=ligand_resname
                 )
             else:
                 self.log("没有可用的数据生成网络图" if get_lang() == "zh" else "No data for network plot")

@@ -233,20 +233,20 @@ def highlight_csv_residues(csv_path, obj=None,
     """
     csv_path = os.path.abspath(csv_path)
     if not os.path.exists(csv_path):
-        print(f"[highlight_csv_residues] CSV文件未找到: {csv_path}")
+        print(f"[highlight_csv_residues] CSV not found: {csv_path}")
         return
 
     # 获取对象
     if obj is None:
         objs = cmd.get_object_list()
         if not objs:
-            print("[highlight_csv_residues] 没有加载的对象。请先加载结构文件。")
+            print("[highlight_csv_residues] No objects loaded. Please load a structure first.")
             return
         obj = objs[0]
-        print(f"[highlight_csv_residues] 使用第一个对象: {obj}")
+        print(f"[highlight_csv_residues] Using first object: {obj}")
 
     if obj not in cmd.get_object_list():
-        print(f"[highlight_csv_residues] 对象 '{obj}' 未找到。可用对象: {cmd.get_object_list()}")
+        print(f"[highlight_csv_residues] Object '{obj}' not found. Available: {cmd.get_object_list()}")
         return
 
     # 清除旧的选择和标签
@@ -283,10 +283,10 @@ def highlight_csv_residues(csv_path, obj=None,
                     if res1 and res2:
                         rows.append((res1, res2, ch1, ch2, interaction))
                 except Exception as e:
-                    print(f"[highlight_csv_residues] 跳过行: {r}, 错误: {e}")
+                    print(f"[highlight_csv_residues] Skipping row: {r}, Error: {e}")
                     continue
     except Exception as e:
-        print(f"[highlight_csv_residues] 读取CSV文件失败: {e}")
+        print(f"[highlight_csv_residues] Failed to read CSV: {e}")
         return
 
     # 处理每一行数据
@@ -311,8 +311,8 @@ def highlight_csv_residues(csv_path, obj=None,
         sel2 = _res_sel(obj, c2, n2, i2)
 
         if debug and idx <= 5:
-            print(f"[debug] 残基1选择 -> {sel1}")
-            print(f"[debug] 残基2选择 -> {sel2}")
+            print(f"[debug] Residue1 selection -> {sel1}")
+            print(f"[debug] Residue2 selection -> {sel2}")
 
         # 创建选择并显示为棍状模型
         cmd.select(s1, sel1)
@@ -350,7 +350,7 @@ def highlight_csv_residues(csv_path, obj=None,
     cmd.refresh()
     cmd.rebuild()
 
-    print(f"[highlight_csv_residues] 已高亮显示 {len(rows)} 个相互作用残基对，{len(labeled_residues)} 个唯一残基")
+    print(f"[highlight_csv_residues] Highlighted {len(rows)} interaction residue pairs, {len(labeled_residues)} unique residues")
 
     # 返回统计信息，供GUI使用
     return {
@@ -375,19 +375,19 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
     """
     csv_path = os.path.abspath(csv_path)
     if not os.path.exists(csv_path):
-        print(f"[highlight_gmotif_loops] CSV文件未找到: {csv_path}")
+        print(f"[highlight_gmotif_loops] CSV not found: {csv_path}")
         return
 
     # 获取对象
     if obj is None:
         objs = cmd.get_object_list()
         if not objs:
-            print("[highlight_gmotif_loops] 没有加载的对象")
+            print("[highlight_gmotif_loops] No objects loaded")
             return
         obj = objs[0]
 
     if obj not in cmd.get_object_list():
-        print(f"[highlight_gmotif_loops] 对象 '{obj}' 未找到")
+        print(f"[highlight_gmotif_loops] Object '{obj}' not found")
         return
 
     # 清除旧的高亮
@@ -418,14 +418,14 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
                     if chain and start and end:
                         loops.append((chain, sequence, start, end, rmsd))
                 except Exception as e:
-                    print(f"[highlight_gmotif_loops] 跳过行: {r}, 错误: {e}")
+                    print(f"[highlight_gmotif_loops] Skipping row: {r}, Error: {e}")
                     continue
     except Exception as e:
-        print(f"[highlight_gmotif_loops] 读取CSV失败: {e}")
+        print(f"[highlight_gmotif_loops] Failed to read CSV: {e}")
         return
 
     if not loops:
-        print("[highlight_gmotif_loops] 没有找到 G-loop 数据")
+        print("[highlight_gmotif_loops] No G-loop data found")
         return
 
     # 高亮每个 G-loop
@@ -460,13 +460,13 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
                 cmd.set("label_bg_color", "yellow", obj_name)
                 cmd.set("label_bg_transparency", 0.3, obj_name)
             except Exception as e:
-                print(f"[highlight_gmotif_loops] 标签创建失败: {e}")
+                print(f"[highlight_gmotif_loops] Failed to create label: {e}")
 
     # 缩放到 G-loops
     all_loops = " or ".join([f"gloop_{i}" for i in range(1, len(loops)+1)])
     if all_loops:
         cmd.zoom(all_loops, buffer=8.0, complete=1)
 
-    print(f"[highlight_gmotif_loops] 已高亮 {len(loops)} 个 G-loop 区域")
+    print(f"[highlight_gmotif_loops] Highlighted {len(loops)} G-loop regions")
 
 cmd.extend("highlight_gmotif_loops", highlight_gmotif_loops)
