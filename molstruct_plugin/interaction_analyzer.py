@@ -1194,8 +1194,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
 
     for lig_key, lig_atoms in ligand_residues:
         lig_chain, lig_name, lig_id = lig_key
-
-    print(f"[analyze_protein_ligand_interactions] Analyzing ligand: {lig_name} {lig_id} (chain {lig_chain})")
+        print(f"[analyze_protein_ligand_interactions] Analyzing ligand: {lig_name} {lig_id} (chain {lig_chain})")
 
         for prot_key, prot_atoms in protein_residues:
             prot_chain, prot_name, prot_id = prot_key

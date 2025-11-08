@@ -46,6 +46,14 @@ def _register_commands():
             generate_interaction_network_plot
         )
         from .interaction_2d_plot import generate_2d_interaction_diagram
+        from .binding_score import score_protein_ligand, score_ternary_complex
+        
+        # Vina评分(可选,需要安装Vina)
+        try:
+            from .vina_scoring import vina_score_complex, compare_scoring_methods
+            _vina_available = True
+        except ImportError:
+            _vina_available = False
     except Exception as e:
         _info(
             f"⚠️ 无法导入命令模块：{e}\n请确认 highlight_residues.py 与 interaction_analyzer.py 在插件目录。",
@@ -63,6 +71,13 @@ def _register_commands():
         cmd.extend("visualize_protein_ligand_3d", visualize_protein_ligand_3d)
         cmd.extend("generate_interaction_network_plot", generate_interaction_network_plot)
         cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
+        cmd.extend("score_protein_ligand", score_protein_ligand)
+        cmd.extend("score_ternary_complex", score_ternary_complex)
+        
+        # Vina评分命令(可选)
+        if _vina_available:
+            cmd.extend("vina_score_complex", vina_score_complex)
+            cmd.extend("compare_scoring_methods", compare_scoring_methods)
         
         _info("✅ 已注册命令：highlight_csv_residues / analyze_pdb_interactions / analyze_protein_ligand_interactions 等",
               "✅ Commands registered: highlight_csv_residues / analyze_pdb_interactions / analyze_protein_ligand_interactions etc.")
@@ -129,6 +144,17 @@ def __init_plugin__(app=None):
     print("    • analyze_protein_ligand_interactions - Analyze protein-ligand interactions (strict standards)")
     print("    • analyze_ternary_complex - Analyze ternary complex")
     print("    • analyze_atom_pair_interactions - Analyze atom pair interactions")
+    print("")
+    print("  ⚖️  Binding Energy Scoring:")
+    print("    • score_protein_ligand - Calculate binding energy for protein-ligand complex (empirical)")
+    print("    • score_ternary_complex - Calculate binding energy for molecular glue/PROTAC (with cooperativity)")
+    try:
+        from .vina_scoring import check_vina_available
+        if check_vina_available():
+            print("    • vina_score_complex - Calculate binding energy using AutoDock Vina (requires vina installed)")
+            print("    • compare_scoring_methods - Compare empirical vs Vina scoring")
+    except:
+        pass
     print("")
     print("  🎨 Visualization:")
     print("    • highlight_csv_residues - Highlight residue interactions from CSV")

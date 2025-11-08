@@ -389,6 +389,7 @@ class MolStructDialog(QDialog):
             ("Welcome", "Welcome"),
             ("POI Discovery", "POI Discovery"),
             ("Interaction Analysis", "Interaction Analysis"),
+            ("Docking & Scoring", "Docking & Scoring"),
             ("Electrostatics", "Electrostatics"),
         ]
 
@@ -422,7 +423,7 @@ class MolStructDialog(QDialog):
         readme_btn.setObjectName("bottom_nav_btn")
         readme_btn.setFlat(True)
         readme_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        readme_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(4))
+        readme_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(5))
         nav_layout.addWidget(readme_btn)
         
         # Contact button
@@ -430,7 +431,7 @@ class MolStructDialog(QDialog):
         contact_btn.setObjectName("bottom_nav_btn")
         contact_btn.setFlat(True)
         contact_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        contact_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(5))
+        contact_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))
         nav_layout.addWidget(contact_btn)
 
         # ========== 中间：内容堆栈 ==========
@@ -440,9 +441,10 @@ class MolStructDialog(QDialog):
         self.content_stack.addWidget(self.create_welcome_tab())         # 0: Welcome
         self.content_stack.addWidget(self.create_molecular_glue_tab())  # 1: POI Discovery (G-Motif + Ternary Complex)
         self.content_stack.addWidget(self.create_interaction_tab())     # 2: Interaction Analysis (Prot-Prot + Prot-Lig + Atom)
-        self.content_stack.addWidget(self.create_apbs_tab())            # 3: Electrostatics
-        self.content_stack.addWidget(self.create_readme_tab())          # 4: README
-        self.content_stack.addWidget(self.create_contact_tab())         # 5: Contact
+        self.content_stack.addWidget(self.create_docking_scoring_tab()) # 3: Docking & Scoring
+        self.content_stack.addWidget(self.create_apbs_tab())            # 4: Electrostatics
+        self.content_stack.addWidget(self.create_readme_tab())          # 5: README
+        self.content_stack.addWidget(self.create_contact_tab())         # 6: Contact
 
         # ========== 右侧：结果与日志 ==========
         right_widget = QWidget()
@@ -1160,6 +1162,370 @@ class MolStructDialog(QDialog):
         lay.addStretch(1)
         return w
 
+    def create_docking_scoring_tab(self) -> QWidget:
+        """创建 Docking & Scoring 标签页 - 优化版"""
+        w = QWidget()
+        main_layout = QVBoxLayout(w)
+        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(16, 16, 16, 16)
+        
+        # ========== 顶部介绍 ==========
+        intro_label = QLabel(
+            "<h2 style='color: #3b82f6; margin: 0;'>⚡ Fast Binding Energy Scoring</h2>"
+            "<p style='color: #64748b; margin-top: 8px;'>"
+            "Quick estimation for protein-ligand and ternary complexes. "
+            "Ideal for initial screening and design optimization."
+            "</p>"
+        )
+        intro_label.setWordWrap(True)
+        main_layout.addWidget(intro_label)
+        
+        # ========== 横向分栏: 左右分布 ==========
+        content_layout = QHBoxLayout()
+        content_layout.setSpacing(16)
+        
+        # === 左侧: 输入区 ===
+        left_panel = QWidget()
+        left_layout = QVBoxLayout(left_panel)
+        left_layout.setSpacing(12)
+        left_layout.setContentsMargins(0, 0, 0, 0)
+        
+        # --- 二元复合物卡片 ---
+        binary_card = self._create_binary_scoring_card()
+        left_layout.addWidget(binary_card)
+        
+        # --- 三元复合物卡片 ---
+        ternary_card = self._create_ternary_scoring_card()
+        left_layout.addWidget(ternary_card)
+        
+        left_layout.addStretch(1)
+        
+        # === 右侧: 结果显示 ===
+        right_panel = QWidget()
+        right_layout = QVBoxLayout(right_panel)
+        right_layout.setSpacing(8)
+        right_layout.setContentsMargins(0, 0, 0, 0)
+        
+        result_label = QLabel("<b style='font-size: 14px;'>📊 Scoring Results</b>")
+        right_layout.addWidget(result_label)
+        
+        self.score_result_text = QTextEdit()
+        self.score_result_text.setReadOnly(True)
+        self.score_result_text.setPlaceholderText(
+            "Results will appear here after scoring...\n\n"
+            "Tip: Negative values = stronger binding"
+        )
+        self.score_result_text.setStyleSheet("""
+            QTextEdit {
+                background: #1e293b;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 12px;
+                font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
+                font-size: 12px;
+                color: #e2e8f0;
+            }
+        """)
+        right_layout.addWidget(self.score_result_text, 1)
+        
+        # 布局比例: 左 45%, 右 55%
+        content_layout.addWidget(left_panel, 45)
+        content_layout.addWidget(right_panel, 55)
+        
+        main_layout.addLayout(content_layout)
+        
+        return w
+    
+    def _create_binary_scoring_card(self) -> QWidget:
+        """创建二元复合物评分卡片"""
+        card = QGroupBox()
+        card.setTitle("")
+        card.setStyleSheet("""
+            QGroupBox {
+                background: #1e293b;
+                border: 2px solid #334155;
+                border-radius: 12px;
+                padding: 16px;
+            }
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setSpacing(12)
+        
+        # 标题
+        title = QLabel("<h3 style='color: #3b82f6; margin: 0;'>🧬 Protein-Ligand Complex</h3>")
+        layout.addWidget(title)
+        
+        # 说明
+        desc = QLabel(
+            "<span style='color: #94a3b8; font-size: 11px;'>"
+            "For standard protein-ligand interactions"
+            "</span>"
+        )
+        layout.addWidget(desc)
+        
+        # 分隔线
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background: #334155; max-height: 1px;")
+        layout.addWidget(line)
+        
+        # 表单
+        form = QFormLayout()
+        form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        
+        # Object
+        obj_row = QHBoxLayout()
+        self.score_binary_obj = QComboBox()
+        self.score_binary_obj.setMinimumWidth(180)
+        self.score_binary_refresh = QPushButton("🔄")
+        self.score_binary_refresh.setObjectName("refresh_btn")
+        self.score_binary_refresh.setToolTip("Refresh objects")
+        self.score_binary_refresh.setMaximumWidth(32)
+        self.score_binary_refresh.clicked.connect(self.refresh_objects)
+        obj_row.addWidget(self.score_binary_obj)
+        obj_row.addWidget(self.score_binary_refresh)
+        form.addRow("<b>Object:</b>", obj_row)
+        
+        # Ligand
+        self.score_binary_ligand = QLineEdit()
+        self.score_binary_ligand.setPlaceholderText("e.g., LIG, MK1")
+        self.score_binary_ligand.setMinimumWidth(180)
+        form.addRow("<b>Ligand:</b>", self.score_binary_ligand)
+        
+        layout.addLayout(form)
+        
+        # 按钮 - 只保留 Vina
+        self.score_vina_btn = QPushButton("🛠️ Vina Score")
+        self.score_vina_btn.setObjectName("highlight_btn")
+        self.score_vina_btn.setToolTip("AutoDock Vina scoring (requires vina installed)")
+        self.score_vina_btn.clicked.connect(self.run_vina_scoring)
+        layout.addWidget(self.score_vina_btn)
+        
+        return card
+    
+    def _create_ternary_scoring_card(self) -> QWidget:
+        """创建三元复合物评分卡片"""
+        card = QGroupBox()
+        card.setTitle("")
+        card.setStyleSheet("""
+            QGroupBox {
+                background: #1e293b;
+                border: 2px solid #334155;
+                border-radius: 12px;
+                padding: 16px;
+            }
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setSpacing(12)
+        
+        # 标题
+        title = QLabel("<h3 style='color: #8b5cf6; margin: 0;'>🧲 Ternary Complex (PROTAC/Glue)</h3>")
+        layout.addWidget(title)
+        
+        # 说明
+        desc = QLabel(
+            "<span style='color: #94a3b8; font-size: 11px;'>"
+            "For molecular glue and PROTAC (includes cooperativity analysis)"
+            "</span>"
+        )
+        layout.addWidget(desc)
+        
+        # 分隔线
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background: #334155; max-height: 1px;")
+        layout.addWidget(line)
+        
+        # 表单
+        form = QFormLayout()
+        form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        # Object
+        obj_row = QHBoxLayout()
+        self.score_ternary_obj = QComboBox()
+        self.score_ternary_obj.setMinimumWidth(180)
+        self.score_ternary_refresh = QPushButton("🔄")
+        self.score_ternary_refresh.setObjectName("refresh_btn")
+        self.score_ternary_refresh.setToolTip("Refresh objects")
+        self.score_ternary_refresh.setMaximumWidth(32)
+        self.score_ternary_refresh.clicked.connect(self.refresh_objects)
+        obj_row.addWidget(self.score_ternary_obj)
+        obj_row.addWidget(self.score_ternary_refresh)
+        form.addRow("<b>Object:</b>", obj_row)
+        
+        # Ligand
+        self.score_ternary_ligand = QLineEdit()
+        self.score_ternary_ligand.setPlaceholderText("e.g., PROTAC")
+        self.score_ternary_ligand.setMinimumWidth(180)
+        form.addRow("<b>Ligand:</b>", self.score_ternary_ligand)
+        
+        # Chains
+        chains_row = QHBoxLayout()
+        chains_row.setSpacing(8)
+        
+        p1_container = QVBoxLayout()
+        p1_container.setSpacing(2)
+        p1_label = QLabel("<small>Protein 1</small>")
+        p1_label.setStyleSheet("color: #94a3b8;")
+        self.score_ternary_p1 = QLineEdit()
+        self.score_ternary_p1.setPlaceholderText("A")
+        self.score_ternary_p1.setMaximumWidth(50)
+        self.score_ternary_p1.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        p1_container.addWidget(p1_label)
+        p1_container.addWidget(self.score_ternary_p1)
+        
+        p2_container = QVBoxLayout()
+        p2_container.setSpacing(2)
+        p2_label = QLabel("<small>Protein 2</small>")
+        p2_label.setStyleSheet("color: #94a3b8;")
+        self.score_ternary_p2 = QLineEdit()
+        self.score_ternary_p2.setPlaceholderText("B")
+        self.score_ternary_p2.setMaximumWidth(50)
+        self.score_ternary_p2.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        p2_container.addWidget(p2_label)
+        p2_container.addWidget(self.score_ternary_p2)
+        
+        chains_row.addLayout(p1_container)
+        chains_row.addLayout(p2_container)
+        chains_row.addStretch(1)
+        
+        form.addRow("<b>Chains:</b>", chains_row)
+        
+        layout.addLayout(form)
+        
+        # 按钮
+        self.score_ternary_btn = QPushButton("🎯 Score Ternary Complex")
+        self.score_ternary_btn.setObjectName("highlight_btn")
+        self.score_ternary_btn.setToolTip("Calculate binding energy with cooperativity")
+        self.score_ternary_btn.clicked.connect(self.run_ternary_scoring)
+        layout.addWidget(self.score_ternary_btn)
+        
+        return card
+        
+        # --- 二元复合物评分 ---
+        binary_grp = QGroupBox("🧬 Binary Complex (Protein-Ligand)" if get_lang() == "en" else "🧬 二元复合物（蛋白-配体）")
+        binary_form = QFormLayout(binary_grp)
+        binary_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        # Object
+        binary_obj_row = QHBoxLayout()
+        self.score_binary_obj = QComboBox()
+        self.score_binary_refresh = QPushButton("Refresh")
+        self.score_binary_refresh.setObjectName("refresh_btn")
+        self.score_binary_refresh.clicked.connect(self.refresh_objects)
+        binary_obj_row.addWidget(self.score_binary_obj, 1)
+        binary_obj_row.addWidget(self.score_binary_refresh)
+        binary_form.addRow(QLabel("Object:"), binary_obj_row)
+        
+        # Ligand residue name
+        self.score_binary_ligand = QLineEdit()
+        self.score_binary_ligand.setPlaceholderText("e.g., LIG, MK1, PROTAC")
+        binary_form.addRow(QLabel("Ligand Residue:"), self.score_binary_ligand)
+        
+        # Buttons
+        binary_btn_row = QHBoxLayout()
+        self.score_binary_btn = QPushButton("📋 Empirical Scoring (Fast)")
+        self.score_binary_btn.setObjectName("highlight_btn")
+        self.score_binary_btn.clicked.connect(self.run_binary_scoring)
+        binary_btn_row.addWidget(self.score_binary_btn)
+        
+        # Vina scoring (optional)
+        self.score_vina_btn = QPushButton("⚙️ Vina Scoring (if installed)")
+        self.score_vina_btn.setObjectName("save_btn")
+        self.score_vina_btn.clicked.connect(self.run_vina_scoring)
+        binary_btn_row.addWidget(self.score_vina_btn)
+        
+        self.score_compare_btn = QPushButton("🔍 Compare Methods")
+        self.score_compare_btn.setObjectName("browse_btn")
+        self.score_compare_btn.clicked.connect(self.run_compare_scoring)
+        binary_btn_row.addWidget(self.score_compare_btn)
+        binary_btn_row.addStretch(1)
+        
+        binary_form.addRow(binary_btn_row)
+        score_layout.addWidget(binary_grp)
+        
+        # --- 三元复合物评分 ---
+        ternary_grp = QGroupBox("🧲 Ternary Complex (Molecular Glue/PROTAC)" if get_lang() == "en" else "🧲 三元复合物（分子胶/PROTAC）")
+        ternary_form = QFormLayout(ternary_grp)
+        ternary_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        
+        # Object
+        ternary_obj_row = QHBoxLayout()
+        self.score_ternary_obj = QComboBox()
+        self.score_ternary_refresh = QPushButton("Refresh")
+        self.score_ternary_refresh.setObjectName("refresh_btn")
+        self.score_ternary_refresh.clicked.connect(self.refresh_objects)
+        ternary_obj_row.addWidget(self.score_ternary_obj, 1)
+        ternary_obj_row.addWidget(self.score_ternary_refresh)
+        ternary_form.addRow(QLabel("Object:"), ternary_obj_row)
+        
+        # Ligand
+        self.score_ternary_ligand = QLineEdit()
+        self.score_ternary_ligand.setPlaceholderText("e.g., PROTAC, LIG")
+        ternary_form.addRow(QLabel("Ligand Residue:"), self.score_ternary_ligand)
+        
+        # Protein chains
+        chains_row = QHBoxLayout()
+        self.score_ternary_p1 = QLineEdit()
+        self.score_ternary_p1.setPlaceholderText("A")
+        self.score_ternary_p1.setMaximumWidth(60)
+        self.score_ternary_p2 = QLineEdit()
+        self.score_ternary_p2.setPlaceholderText("B")
+        self.score_ternary_p2.setMaximumWidth(60)
+        chains_row.addWidget(QLabel("Protein 1:"))
+        chains_row.addWidget(self.score_ternary_p1)
+        chains_row.addWidget(QLabel("Protein 2:"))
+        chains_row.addWidget(self.score_ternary_p2)
+        chains_row.addStretch(1)
+        ternary_form.addRow(QLabel("Chains:"), chains_row)
+        
+        # Button
+        ternary_btn_row = QHBoxLayout()
+        self.score_ternary_btn = QPushButton("🎯 Score Ternary Complex (with Cooperativity)")
+        self.score_ternary_btn.setObjectName("highlight_btn")
+        self.score_ternary_btn.clicked.connect(self.run_ternary_scoring)
+        ternary_btn_row.addWidget(self.score_ternary_btn)
+        ternary_btn_row.addStretch(1)
+        ternary_form.addRow(ternary_btn_row)
+        
+        score_layout.addWidget(ternary_grp)
+        
+        # --- 评分结果显示 ---
+        result_grp = QGroupBox("📊 Scoring Results" if get_lang() == "en" else "📊 评分结果")
+        result_layout = QVBoxLayout(result_grp)
+        
+        self.score_result_text = QTextEdit()
+        self.score_result_text.setReadOnly(True)
+        self.score_result_text.setMinimumHeight(200)
+        self.score_result_text.setPlaceholderText(
+            "Scoring results will be displayed here..." if get_lang() == "en" else "评分结果将显示在这里..."
+        )
+        result_layout.addWidget(self.score_result_text)
+        
+        score_layout.addWidget(result_grp)
+        
+        main_layout.addWidget(grp_score)
+        
+        # ========== 信息提示 ==========
+        info_label = QLabel(
+            "ℹ️ <b>Quick Guide:</b><br>"
+            "• <b>Vina Scoring</b>: AutoDock Vina score_only mode (~1s), requires <code>vina</code> installed<br>"
+            "• <b>Ternary Complex</b>: Calculates cooperativity effect for molecular glue/PROTAC<br>"
+            "• All scores are in kcal/mol (more negative = stronger binding)<br>"
+            "• Install Vina: <code>conda install -c conda-forge vina</code>"
+        )
+        info_label.setWordWrap(True)
+        info_label.setStyleSheet("padding: 10px; background: #e7f3ff; border-radius: 6px; color: #1e40af;")
+        main_layout.addWidget(info_label)
+        
+        main_layout.addStretch(1)
+        return w
+
     def create_apbs_tab(self) -> QWidget:
         w = QWidget(); lay = QVBoxLayout(w); lay.setSpacing(10)
         grp = QGroupBox(t("grp_apbs")); form = QFormLayout(grp); form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
@@ -1228,7 +1594,9 @@ class MolStructDialog(QDialog):
                    getattr(self, "obj_combo_apbs", None),
                    getattr(self, "pl_obj_combo", None),
                    getattr(self, "tc_obj_combo", None),
-                   getattr(self, "ap_obj_combo", None)):
+                   getattr(self, "ap_obj_combo", None),
+                   getattr(self, "score_binary_obj", None),
+                   getattr(self, "score_ternary_obj", None)):
             if cb is not None:
                 cb.blockSignals(True); cb.clear()
                 for n in names: cb.addItem(n)
@@ -3004,33 +3372,16 @@ Thank you for your support! 🚀
     # Note: CRBN interface tools have been integrated into Ternary Complex analysis
     
     def check_environment(self):
-        """检查环境和依赖状态"""
+        """检查环境和依赖状态（完整版）"""
         try:
-            self.log(f"\n{'='*50}")
-            self.log("⚡ 检查环境和依赖" if get_lang() == "zh" else "⚡ Checking Environment and Dependencies")
-            self.log(f"{'='*50}\n")
+            # 使用新的环境检测模块
+            from .env_checker import check_environment
             
-            # 检查 Python 依赖
-            try:
-                from .env_setup import get_dependency_status
-                status = get_dependency_status()
-                
-                self.log("📦 Python 依赖:" if get_lang() == "zh" else "📦 Python Dependencies:")
-                for pkg, available in status.items():
-                    symbol = "✅" if available else "❌"
-                    self.log(f"  {symbol} {pkg:20} {'已安装' if available else '未安装'}")
-                
-                missing = [pkg for pkg, avail in status.items() if not avail]
-                if missing:
-                    self.log(f"\n⚠️  缺失依赖: {', '.join(missing)}")
-                    self.log("💡 安装命令: pip install " + " ".join(missing))
-                else:
-                    self.log("\n✅ 所有 Python 依赖已满足" if get_lang() == "zh" else "\n✅ All Python dependencies satisfied")
-            except Exception as e:
-                self.log(f"⚠️  无法检查 Python 依赖: {e}")
+            # 运行完整检查，并将日志输出到 GUI
+            result = check_environment(log_callback=self.log)
             
-            # 检查 FoldX
-            self.log("\n🛠️  外部工具:" if get_lang() == "zh" else "\n🛠️  External Tools:")
+            # 检查 FoldX (额外的工具)
+            self.log("\n🛠️  额外工具:" if get_lang() == "zh" else "\n🛠️  Additional Tools:")
             try:
                 self._ensure_crbn_tools_loaded()
                 from pymol import cmd
@@ -3038,11 +3389,11 @@ Thank you for your support! 🚀
                 if ok:
                     self.log("  ✅ FoldX: 已检测到")
                 else:
-                    self.log("  ❌ FoldX: 未检测到")
+                    self.log("  ❌ FoldX: 未检测到 (可选)")
                     self.log("     💡 下载: https://foldxsuite.crg.eu/")
                     self.log("     💡 设置: export FOLDX=/path/to/foldx")
             except Exception as e:
-                self.log(f"  ⚠️  FoldX 检查失败: {e}")
+                self.log(f"  ⚠️  FoldX 检查跳过: {e}")
             
             # PyMOL 版本
             try:
@@ -3052,14 +3403,50 @@ Thank you for your support! 🚀
             except Exception:
                 pass
             
-            self.log(f"\n{'='*50}")
-            self.log("✅ 环境检查完成" if get_lang() == "zh" else "✅ Environment check complete")
-            self.log(f"{'='*50}\n")
+            self.log("\n" + "=" * 60)
+            if result.get("all_ok"):
+                self.log("🎉 环境检查完成！所有功能可用" if get_lang() == "zh" else "🎉 Environment check complete! All features available")
+            else:
+                self.log("⚠️  环境检查完成，请根据上述提示安装缺失的依赖" if get_lang() == "zh" else "⚠️  Check complete. Please install missing dependencies as instructed above")
+            self.log("=" * 60)
             
+        except ImportError:
+            # 如果 env_checker 不可用，使用简单版本
+            self.log("⚠️  无法加载环境检测模块，使用简单检查...")
+            self._check_environment_simple()
         except Exception as e:
             self.log(f"❌ 检查失败: {e}")
             import traceback
             traceback.print_exc()
+    
+    def _check_environment_simple(self):
+        """简单版环境检查（备用）"""
+        self.log(f"\n{'='*50}")
+        self.log("⚡ 检查环境和依赖 (简单模式)" if get_lang() == "zh" else "⚡ Checking Environment (Simple Mode)")
+        self.log(f"{'='*50}\n")
+        
+        # 检查 Python 依赖
+        try:
+            from .env_setup import get_dependency_status
+            status = get_dependency_status()
+            
+            self.log("📦 Python 依赖:" if get_lang() == "zh" else "📦 Python Dependencies:")
+            for pkg, available in status.items():
+                symbol = "✅" if available else "❌"
+                self.log(f"  {symbol} {pkg:20} {'已安装' if available else '未安装'}")
+            
+            missing = [pkg for pkg, avail in status.items() if not avail]
+            if missing:
+                self.log(f"\n⚠️  缺失依赖: {', '.join(missing)}")
+                self.log("💡 安装命令: pip install " + " ".join(missing))
+            else:
+                self.log("\n✅ 所有 Python 依赖已满足" if get_lang() == "zh" else "\n✅ All Python dependencies satisfied")
+        except Exception as e:
+            self.log(f"⚠️  无法检查 Python 依赖: {e}")
+        
+        self.log(f"\n{'='*50}")
+        self.log("✅ 环境检查完成" if get_lang() == "zh" else "✅ Environment check complete")
+        self.log(f"{'='*50}\n")
     
     def run_crbn_doctor(self):
         """调用 PyMOL CRBN crbn_tools_doctor 命令检查环境"""
@@ -3078,6 +3465,238 @@ Thank you for your support! 🚀
             
         except Exception as e:
             self.log(f"错误: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # ==========================
+    # Scoring Callbacks
+    # ==========================
+    def run_binary_scoring(self):
+        """运行二元复合物经验评分"""
+        try:
+            obj = self.score_binary_obj.currentText().strip()
+            ligand = self.score_binary_ligand.text().strip()
+            
+            if not obj or obj == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select an object")
+                return
+            if not ligand:
+                QMessageBox.warning(self, "Warning", "Please enter ligand residue name")
+                return
+            
+            self.log(f"\n📋 Scoring: {obj} + {ligand} (Empirical)...")
+            self.score_result_text.clear()
+            
+            # Import scoring modules
+            try:
+                from .binding_score import calculate_binary_score, format_score_report
+                from .interaction_analyzer import analyze_protein_ligand_interactions
+            except ImportError:
+                from binding_score import calculate_binary_score, format_score_report
+                from interaction_analyzer import analyze_protein_ligand_interactions
+            
+            # Analyze interactions
+            result = analyze_protein_ligand_interactions(obj, ligand)
+            if not result:
+                self.log("⚠️  Analysis failed")
+                self.score_result_text.setPlainText("Analysis failed. Check if ligand exists.")
+                return
+            
+            # Calculate score
+            score = calculate_binary_score(result)
+            if not score:
+                self.log("⚠️  Scoring failed")
+                return
+            
+            # Format and display
+            report = format_score_report(score, mode="binary")
+            self.score_result_text.setPlainText(report)
+            
+            self.log(f"✅ Score: {score['total']:.2f} kcal/mol")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def run_vina_scoring(self):
+        """运行Vina评分（可选）"""
+        try:
+            obj = self.score_binary_obj.currentText().strip()
+            ligand = self.score_binary_ligand.text().strip()
+            
+            if not obj or obj == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select an object")
+                return
+            if not ligand:
+                QMessageBox.warning(self, "Warning", "Please enter ligand residue name")
+                return
+            
+            self.log(f"\n⚙️  Scoring: {obj} + {ligand} (Vina)...")
+            self.score_result_text.clear()
+            
+            # Check if Vina is available
+            try:
+                from .vina_scoring import vina_score_complex, check_vina_available
+            except ImportError:
+                from vina_scoring import vina_score_complex, check_vina_available
+            
+            if not check_vina_available():
+                msg = (
+                    "Vina is not installed or not found in PATH.\n\n"
+                    "To install Vina:\n"
+                    "  conda install -c conda-forge vina\n\n"
+                    "Or download from:\n"
+                    "  https://github.com/ccsb-scripps/AutoDock-Vina/releases"
+                )
+                QMessageBox.information(self, "Vina Not Available", msg)
+                self.log("⚠️  Vina not available")
+                return
+            
+            # Run Vina scoring
+            result = vina_score_complex(obj, f"resn {ligand}", mode='score_only', show_report=False)
+            
+            if result and result['success']:
+                report = f"""
+{'='*60}
+Vina Scoring Report
+{'='*60}
+Protein: {obj}
+Ligand:  {ligand}
+
+Affinity: {result['affinity']:.2f} kcal/mol
+{'='*60}
+⚠️  Note: This is Vina's empirical scoring function
+    For publication, use full flexible docking workflow
+{'='*60}
+                """
+                self.score_result_text.setPlainText(report)
+                self.log(f"✅ Vina Score: {result['affinity']:.2f} kcal/mol")
+            else:
+                error_msg = result.get('error', 'Unknown error') if result else 'No result'
+                self.log(f"⚠️  Vina scoring failed: {error_msg}")
+                self.score_result_text.setPlainText(f"Vina scoring failed: {error_msg}")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def run_compare_scoring(self):
+        """对比经验评分 vs Vina评分"""
+        try:
+            obj = self.score_binary_obj.currentText().strip()
+            ligand = self.score_binary_ligand.text().strip()
+            
+            if not obj or obj == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select an object")
+                return
+            if not ligand:
+                QMessageBox.warning(self, "Warning", "Please enter ligand residue name")
+                return
+            
+            self.log(f"\n🔍 Comparing scoring methods: {obj} + {ligand}...")
+            self.score_result_text.clear()
+            self.score_result_text.setPlainText("Running comparison...\nThis may take a few seconds...")
+            
+            # Check if Vina comparison is available
+            try:
+                from .vina_scoring import compare_scoring_methods
+            except ImportError:
+                from vina_scoring import compare_scoring_methods
+            
+            # Capture output
+            import io
+            import sys
+            captured_output = io.StringIO()
+            old_stdout = sys.stdout
+            sys.stdout = captured_output
+            
+            try:
+                result = compare_scoring_methods(obj, ligand)
+            finally:
+                sys.stdout = old_stdout
+            
+            output = captured_output.getvalue()
+            self.score_result_text.setPlainText(output)
+            self.log("✅ Comparison complete")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def run_ternary_scoring(self):
+        """运行三元复合物评分（含协同效应）"""
+        try:
+            obj = self.score_ternary_obj.currentText().strip()
+            ligand = self.score_ternary_ligand.text().strip()
+            p1_str = self.score_ternary_p1.text().strip()
+            p2_str = self.score_ternary_p2.text().strip()
+            
+            if not obj or obj == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select an object")
+                return
+            if not ligand:
+                QMessageBox.warning(self, "Warning", "Please enter ligand residue name")
+                return
+            
+            # Parse chains
+            p1_chains = [p1_str] if p1_str else None
+            p2_chains = [p2_str] if p2_str else None
+            
+            self.log(f"\n🎯 Scoring ternary complex: {obj} + {ligand}...")
+            if p1_chains:
+                self.log(f"   Protein 1 chains: {p1_chains}")
+            if p2_chains:
+                self.log(f"   Protein 2 chains: {p2_chains}")
+            
+            self.score_result_text.clear()
+            self.score_result_text.setPlainText("Analyzing ternary complex...\nThis may take a few seconds...")
+            
+            # Import modules
+            try:
+                from .binding_score import calculate_ternary_score, format_score_report
+                from .interaction_analyzer import analyze_ternary_complex
+            except ImportError:
+                from binding_score import calculate_ternary_score, format_score_report
+                from interaction_analyzer import analyze_ternary_complex
+            
+            # Analyze ternary complex
+            result = analyze_ternary_complex(
+                obj_name=obj,
+                ligand_resname=ligand,
+                protein1_chains=p1_chains,
+                protein2_chains=p2_chains
+            )
+            
+            if not result:
+                self.log("⚠️  Ternary analysis failed")
+                self.score_result_text.setPlainText("Analysis failed. Check parameters.")
+                return
+            
+            # Prepare input for scoring
+            ternary_input = {
+                'protein1_result': {'interactions': result.get('protein1_interactions', [])},
+                'protein2_result': {'interactions': result.get('protein2_interactions', [])}
+            }
+            
+            # Calculate score
+            score = calculate_ternary_score(ternary_input)
+            if not score:
+                self.log("⚠️  Scoring failed")
+                return
+            
+            # Format and display
+            report = format_score_report(score, mode="ternary")
+            self.score_result_text.setPlainText(report)
+            
+            self.log(f"✅ Total Score: {score['total']:.2f} kcal/mol")
+            self.log(f"   Cooperativity: {score['cooperativity']:+.2f} kcal/mol")
+            self.log(f"   Balance: {score['balance_factor']:.3f}")
+            
+        except Exception as e:
+            self.on_error(str(e))
             import traceback
             traceback.print_exc()
     
