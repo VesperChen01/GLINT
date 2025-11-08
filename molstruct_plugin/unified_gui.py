@@ -1198,6 +1198,10 @@ class MolStructDialog(QDialog):
         ternary_card = self._create_ternary_scoring_card()
         left_layout.addWidget(ternary_card)
         
+        # --- 批量热图卡片 ---
+        heatmap_card = self._create_heatmap_card()
+        left_layout.addWidget(heatmap_card)
+        
         left_layout.addStretch(1)
         
         # === 右侧: 结果显示 ===
@@ -1404,6 +1408,76 @@ class MolStructDialog(QDialog):
         self.score_ternary_btn.setToolTip("Calculate binding energy with cooperativity")
         self.score_ternary_btn.clicked.connect(self.run_ternary_scoring)
         layout.addWidget(self.score_ternary_btn)
+        
+        return card
+    
+    def _create_heatmap_card(self) -> QWidget:
+        """创建批量热图生成卡片"""
+        card = QGroupBox()
+        card.setTitle("")
+        card.setStyleSheet("""
+            QGroupBox {
+                background: #1e293b;
+                border: 2px solid #334155;
+                border-radius: 12px;
+                padding: 16px;
+            }
+        """)
+        
+        layout = QVBoxLayout(card)
+        layout.setSpacing(12)
+        
+        # 标题
+        title = QLabel("<h3 style='color: #f59e0b; margin: 0;'>🔥 Batch Heatmap</h3>")
+        layout.addWidget(title)
+        
+        # 说明
+        desc = QLabel(
+            "<span style='color: #94a3b8; font-size: 11px;'>"
+            "Generate binding energy heatmap from multiple CSV files"
+            "</span>"
+        )
+        layout.addWidget(desc)
+        
+        # 分隔线
+        line = QFrame()
+        line.setFrameShape(QFrame.Shape.HLine)
+        line.setStyleSheet("background: #334155; max-height: 1px;")
+        layout.addWidget(line)
+        
+        # 表单
+        form = QFormLayout()
+        form.setSpacing(10)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        
+        # CSV 文件夹
+        folder_row = QHBoxLayout()
+        self.heatmap_folder = QLineEdit()
+        self.heatmap_folder.setPlaceholderText("Select folder containing *_scores.csv")
+        self.heatmap_folder.setMinimumWidth(150)
+        self.heatmap_browse = QPushButton("📁")
+        self.heatmap_browse.setObjectName("refresh_btn")
+        self.heatmap_browse.setToolTip("Browse folder")
+        self.heatmap_browse.setMaximumWidth(32)
+        self.heatmap_browse.clicked.connect(self.browse_heatmap_folder)
+        folder_row.addWidget(self.heatmap_folder)
+        folder_row.addWidget(self.heatmap_browse)
+        form.addRow("<b>Folder:</b>", folder_row)
+        
+        # 模式
+        self.heatmap_pattern = QLineEdit("*_scores.csv")
+        self.heatmap_pattern.setMinimumWidth(150)
+        form.addRow("<b>Pattern:</b>", self.heatmap_pattern)
+        
+        layout.addLayout(form)
+        
+        # 按钮
+        self.heatmap_generate_btn = QPushButton("📊 Generate Heatmap")
+        self.heatmap_generate_btn.setObjectName("highlight_btn")
+        self.heatmap_generate_btn.setToolTip("Generate binding energy heatmap from CSV files")
+        self.heatmap_generate_btn.clicked.connect(self.run_generate_heatmap)
+        layout.addWidget(self.heatmap_generate_btn)
         
         return card
         
@@ -3694,6 +3768,84 @@ Affinity: {result['affinity']:.2f} kcal/mol
             self.log(f"✅ Total Score: {score['total']:.2f} kcal/mol")
             self.log(f"   Cooperativity: {score['cooperativity']:+.2f} kcal/mol")
             self.log(f"   Balance: {score['balance_factor']:.3f}")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def browse_heatmap_folder(self):
+        """浏览选择热图 CSV 文件夹"""
+        from PyQt5.QtWidgets import QFileDialog
+        folder = QFileDialog.getExistingDirectory(self, "Select Folder Containing CSV Files", "")
+        if folder:
+            self.heatmap_folder.setText(folder)
+    
+    def run_generate_heatmap(self):
+        """生成批量热图"""
+        try:
+            folder = self.heatmap_folder.text().strip()
+            pattern = self.heatmap_pattern.text().strip() or "*_scores.csv"
+            
+            if not folder:
+                QMessageBox.warning(self, "Warning", "Please select a folder")
+                return
+            
+            if not os.path.exists(folder):
+                QMessageBox.warning(self, "Warning", f"Folder does not exist: {folder}")
+                return
+            
+            self.log(f"\n🔥 Generating heatmap from: {folder}")
+            self.log(f"   Pattern: {pattern}")
+            self.score_result_text.clear()
+            self.score_result_text.setPlainText("Generating heatmap...\nThis may take a few seconds...")
+            
+            # Import heatmap module
+            try:
+                from .binding_heatmap import generate_binding_heatmap
+            except ImportError:
+                from binding_heatmap import generate_binding_heatmap
+            
+            # Generate heatmap
+            result = generate_binding_heatmap(folder, pattern=pattern)
+            
+            if result['success']:
+                report = f"""
+{'='*60}
+Binding Energy Heatmap Generated
+{'='*60}
+Receptors: {result['n_receptors']}
+Ligands:   {result['n_ligands']}
+Output:    {result['output_path']}
+{'='*60}
+✅ Heatmap saved successfully!
+{'='*60}
+                """
+                self.score_result_text.setPlainText(report)
+                self.log(f"✅ Heatmap saved: {result['output_path']}")
+                
+                # 询问是否打开图片
+                reply = QMessageBox.question(
+                    self, 
+                    "Success", 
+                    f"Heatmap generated successfully!\n\nOpen the image?",
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                )
+                
+                if reply == QMessageBox.StandardButton.Yes:
+                    import subprocess
+                    import sys
+                    if sys.platform == 'darwin':  # macOS
+                        subprocess.run(['open', result['output_path']])
+                    elif sys.platform == 'win32':  # Windows
+                        os.startfile(result['output_path'])
+                    else:  # Linux
+                        subprocess.run(['xdg-open', result['output_path']])
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                self.log(f"⚠️  Heatmap generation failed: {error_msg}")
+                self.score_result_text.setPlainText(f"Failed to generate heatmap:\n{error_msg}")
+                QMessageBox.warning(self, "Error", f"Failed to generate heatmap:\n{error_msg}")
             
         except Exception as e:
             self.on_error(str(e))

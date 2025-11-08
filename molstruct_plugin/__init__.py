@@ -47,6 +47,7 @@ def _register_commands():
         )
         from .interaction_2d_plot import generate_2d_interaction_diagram
         from .binding_score import score_protein_ligand, score_ternary_complex
+        from .binding_heatmap import plot_binding_heatmap
         
         # Vina评分(可选,需要安装Vina)
         try:
@@ -73,6 +74,7 @@ def _register_commands():
         cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
         cmd.extend("score_protein_ligand", score_protein_ligand)
         cmd.extend("score_ternary_complex", score_ternary_complex)
+        cmd.extend("plot_binding_heatmap", plot_binding_heatmap)
         
         # Vina评分命令(可选)
         if _vina_available:
@@ -145,9 +147,10 @@ def __init_plugin__(app=None):
     print("    • analyze_ternary_complex - Analyze ternary complex")
     print("    • analyze_atom_pair_interactions - Analyze atom pair interactions")
     print("")
-    print("  ⚖️  Binding Energy Scoring:")
+    print("  ⛖️  Binding Energy Scoring:")
     print("    • score_protein_ligand - Calculate binding energy for protein-ligand complex (empirical)")
     print("    • score_ternary_complex - Calculate binding energy for molecular glue/PROTAC (with cooperativity)")
+    print("    • plot_binding_heatmap - Generate batch binding energy heatmap from CSV files")
     try:
         from .vina_scoring import check_vina_available
         if check_vina_available():
