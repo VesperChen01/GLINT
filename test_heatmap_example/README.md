@@ -34,7 +34,7 @@ LIG3,-8.2
 
 ### 1. GUI 方式
 
-1. 启动 PyMOL 插件：`molstruct_gui`
+1. 启动 PyMOL 插件：`gluetk_gui`
 2. 切换到 **Scoring** 标签页
 3. 滚动到 **🔥 Batch Heatmap** 卡片
 4. 点击 📁 浏览按钮，选择包含 CSV 文件的文件夹

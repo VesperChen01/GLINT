@@ -1,6 +1,6 @@
 #!/bin/bash
 # -*- coding: utf-8 -*-
-# MolStruct 环境检测与自动配置脚本
+# GlueTK 环境检测与自动配置脚本
 # 支持 Windows (Git Bash/WSL)、macOS、Linux
 # 检测系统 → 检测/安装 conda → 创建/检测环境 → 安装/检测依赖 → 验证 GUI 功能
 
@@ -31,7 +31,7 @@ log_error() {
 }
 
 # 环境名称和 Python 版本
-ENV_NAME="molstruct"
+ENV_NAME="gluetk"
 PYTHON_VERSION="3.9"
 
 # 必要的包列表
@@ -167,9 +167,9 @@ check_conda_env() {
     fi
 }
 
-# 创建 MolStruct 环境
-create_molstruct_env() {
-    log_info "创建 MolStruct conda 环境..."
+# 创建 GlueTK 环境
+create_gluetk_env() {
+    log_info "创建 GlueTK conda 环境..."
     
     # 检查环境是否已存在
     if check_conda_env; then
@@ -423,7 +423,7 @@ verify_installation() {
     echo ""
     log_info "使用方法:"
     echo -e "  1. 激活环境: ${GREEN}conda activate $ENV_NAME${NC}"
-    echo -e "  2. 运行插件: 在 PyMOL 中载入 molstruct_plugin"
+    echo -e "  2. 运行插件: 在 PyMOL 中载入 gluetk"
     echo -e "  3. 打开 GUI: ${GREEN}molstruct_gui${NC} (在 PyMOL 命令行)"
     echo ""
     log_info "测试命令:"
@@ -435,7 +435,7 @@ verify_installation() {
 main() {
     echo ""
     log_info "======================================"
-    log_info "   MolStruct 环境检测与配置脚本"
+    log_info "   GlueTK 环境检测与配置脚本"
     log_info "======================================"
     echo ""
     
@@ -474,7 +474,7 @@ main() {
         log_info "环境已存在，跳过创建"
     else
         log_warning "环境不存在，即将创建"
-        create_molstruct_env
+        create_gluetk_env
     fi
     echo ""
     

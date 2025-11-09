@@ -1,16 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-MolStruct 统一 GUI
-- 浅色主题 + 中英自动切换
-- 表格化结果
-- G-Motif 识别（置于首个标签）
-- 相互作用分析
-- 静电势（APBS/Quick）+ PNG(300dpi)/DX 导出
-- G-Motif 一键渲染（电势+高亮+出图）
+GlueTK 统一 GUI - PyMOL Plugin for Molecular Glue Analysis
+- Molecular Glue vs PROTAC Classification
+- PPI Interface & Neo-Epitope Detection
+- G-Motif Recognition & CRBN Analysis
+- Interaction Analysis & Visualization
+- Electrostatics (APBS/Quick) + Export
 
-说明：
-1) 本文件与 __init__.py 配合使用（GUI 非模态，避免“未响应”）
-2) Quick 电势不依赖 APBS；APBS 真解算可选，需配置 apbs_tools
+Features:
+1) Non-modal GUI integration with PyMOL
+2) Advanced molecular glue analysis with PPI quantification
+3) Neo-substrate epitope detection
+4) CRBN G-motif recognition with glue binding validation
+5) Quick electrostatics (no APBS required) + full APBS support
 """
 
 from __future__ import annotations
@@ -127,15 +129,15 @@ def _check_and_install_deps():
         missing = [pkg for pkg, avail in status.items() if not avail and pkg in ['rdkit', 'scipy', 'matplotlib', 'pillow', 'numpy']]
         
         if missing:
-            print(f"[MolStruct GUI] Missing dependencies: {', '.join(missing)}")
-            print("[MolStruct GUI] Installing automatically...")
+            print(f"[GlueTK] Missing dependencies: {', '.join(missing)}")
+            print("[GlueTK] Installing automatically...")
             success = ensure_dependencies()
             if not success:
-                print("[MolStruct GUI] ⚠️ Some dependencies failed to install; please install manually")
+                print("[GlueTK] ⚠️ Some dependencies failed to install; please install manually")
                 return False
         return True
     except Exception as e:
-        print(f"[MolStruct GUI] Dependency check failed: {e}")
+        print(f"[GlueTK] Dependency check failed: {e}")
         return False
 
 # -------- Language & Text --------
@@ -144,7 +146,7 @@ def get_lang() -> str:
     return "en"  # Always return English
 
 T = {
-    "title": {"zh": "MolStruct 统一 GUI", "en": "MolStruct Unified GUI"},
+    "title": {"zh": "GlueTK 统一 GUI", "en": "GlueTK - Molecular Glue Analyzer"},
     "tab_gmotif": {"zh": "G-Motif 识别", "en": "G-Motif Detection"},
     "tab_analysis": {"zh": "相互作用分析与高亮", "en": "Interaction Analysis & Highlight"},
     "tab_apbs": {"zh": "静电势（APBS/Quick）", "en": "Electrostatics (APBS/Quick)"},
@@ -277,7 +279,7 @@ class GMotifWorker(QThread):
             self.error.emit(str(e))
 
 # -------- 主对话框 --------
-class MolStructDialog(QDialog):
+class GlueTKDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(t("title"))
@@ -434,18 +436,6 @@ class MolStructDialog(QDialog):
         contact_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))
         nav_layout.addWidget(contact_btn)
 
-        # ========== 中间：内容堆栈 ==========
-        self.content_stack = QStackedWidget()
-
-        # 创建各个页面
-        self.content_stack.addWidget(self.create_welcome_tab())         # 0: Welcome
-        self.content_stack.addWidget(self.create_molecular_glue_tab())  # 1: POI Discovery (G-Motif + Ternary Complex)
-        self.content_stack.addWidget(self.create_interaction_tab())     # 2: Interaction Analysis (Prot-Prot + Prot-Lig + Atom)
-        self.content_stack.addWidget(self.create_docking_scoring_tab()) # 3: Docking & Scoring
-        self.content_stack.addWidget(self.create_apbs_tab())            # 4: Electrostatics
-        self.content_stack.addWidget(self.create_readme_tab())          # 5: README
-        self.content_stack.addWidget(self.create_contact_tab())         # 6: Contact
-
         # ========== 右侧：结果与日志 ==========
         right_widget = QWidget()
         right_layout = QVBoxLayout(right_widget)
@@ -486,6 +476,18 @@ class MolStructDialog(QDialog):
         
         # Store right widget reference for show/hide
         self.right_widget = right_widget
+
+        # ========== 中间：内容堆栈 ==========
+        self.content_stack = QStackedWidget()
+
+        # 创建各个页面
+        self.content_stack.addWidget(self.create_welcome_tab())         # 0: Welcome
+        self.content_stack.addWidget(self.create_molecular_glue_tab())  # 1: POI Discovery (G-Motif + Ternary Complex)
+        self.content_stack.addWidget(self.create_interaction_tab())     # 2: Interaction Analysis (Prot-Prot + Prot-Lig + Atom)
+        self.content_stack.addWidget(self.create_docking_scoring_tab()) # 3: Docking & Scoring
+        self.content_stack.addWidget(self.create_apbs_tab())            # 4: Electrostatics
+        self.content_stack.addWidget(self.create_readme_tab())          # 5: README
+        self.content_stack.addWidget(self.create_contact_tab())         # 6: Contact
 
         # ========== Assemble horizontal layout (wider nav, balanced center, narrow right) ==========
         content_row.addWidget(nav_widget, 0)  # Left nav: auto-size to content
@@ -833,7 +835,7 @@ class MolStructDialog(QDialog):
         layout.setContentsMargins(50, 30, 50, 30)
         
         # Welcome title
-        title_label = QLabel("MolStruct Plugin for PyMOL")
+        title_label = QLabel("GlueTK - Molecular Glue Analyzer")
         title_label.setStyleSheet("""
             QLabel {
                 font-size: 36px;
@@ -1084,6 +1086,118 @@ class MolStructDialog(QDialog):
         main_layout.addWidget(grp_ternary)
         main_layout.addLayout(tc_btn_row)
         
+        # ========== 新增: Molecular Glue-Specific Analysis ==========
+        grp_glue = QGroupBox("✨ Molecular Glue Analysis (PPI + Neo-Epitope Detection)")
+        glue_grid = QGridLayout(grp_glue)
+        glue_grid.setColumnStretch(0, 0)
+        glue_grid.setColumnStretch(1, 1)
+        glue_grid.setColumnStretch(2, 0)
+        glue_grid.setColumnStretch(3, 1)
+        glue_grid.setHorizontalSpacing(8)
+        glue_grid.setVerticalSpacing(16)
+        
+        # 第一行: Target Object | [combo + refresh] | Glue Residue Name | [input]
+        glue_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        self.glue_obj_combo = QComboBox()
+        self.glue_obj_combo.setMinimumHeight(24)
+        self.glue_refresh_btn = QPushButton(t("refresh"))
+        self.glue_refresh_btn.setObjectName("refresh_btn")
+        self.glue_refresh_btn.setMinimumHeight(24)
+        self.glue_refresh_btn.clicked.connect(self.refresh_objects)
+        glue_obj_row_container = QWidget()
+        glue_obj_row = QHBoxLayout(glue_obj_row_container)
+        glue_obj_row.setContentsMargins(0, 0, 0, 0)
+        glue_obj_row.addWidget(self.glue_obj_combo, 1)
+        glue_obj_row.addWidget(self.glue_refresh_btn)
+        glue_grid.addWidget(glue_obj_row_container, 0, 1)
+        
+        glue_grid.addWidget(QLabel("Glue Residue Name:"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        self.glue_resname = QLineEdit()
+        self.glue_resname.setMinimumHeight(24)
+        self.glue_resname.setPlaceholderText("e.g., CC885, 1N6 (Lenalidomide)")
+        glue_grid.addWidget(self.glue_resname, 0, 3)
+        
+        # 第二行: E3 Chains | [input] | Substrate Chains | [input]
+        glue_grid.addWidget(QLabel("E3 Ligase Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight)
+        self.glue_e3_chains = QLineEdit()
+        self.glue_e3_chains.setMinimumHeight(24)
+        self.glue_e3_chains.setPlaceholderText("e.g., A (CRBN)")
+        glue_grid.addWidget(self.glue_e3_chains, 1, 1)
+        
+        glue_grid.addWidget(QLabel("Substrate Chains:"), 1, 2, Qt.AlignmentFlag.AlignRight)
+        self.glue_sub_chains = QLineEdit()
+        self.glue_sub_chains.setMinimumHeight(24)
+        self.glue_sub_chains.setPlaceholderText("e.g., B (Substrate)")
+        glue_grid.addWidget(self.glue_sub_chains, 1, 3)
+        
+        # 第三行: Interface Distance | [input] | Neo-Epitope Distance | [input]
+        glue_grid.addWidget(QLabel("Interface Distance (Å):"), 2, 0, Qt.AlignmentFlag.AlignRight)
+        self.glue_interface_dist = QLineEdit("4.5")
+        self.glue_interface_dist.setMinimumHeight(24)
+        glue_grid.addWidget(self.glue_interface_dist, 2, 1)
+        
+        glue_grid.addWidget(QLabel("Neo-Epitope Dist (Å):"), 2, 2, Qt.AlignmentFlag.AlignRight)
+        self.glue_neo_dist = QLineEdit("5.0")
+        self.glue_neo_dist.setMinimumHeight(24)
+        glue_grid.addWidget(self.glue_neo_dist, 2, 3)
+        
+        # 第四行: Output PPI CSV | [input + browse]
+        glue_grid.addWidget(QLabel("Output PPI CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight)
+        self.glue_ppi_csv = QLineEdit()
+        self.glue_ppi_csv.setMinimumHeight(24)
+        self.glue_ppi_csv.setPlaceholderText("Optional")
+        self.glue_ppi_browse = QPushButton(t("browse"))
+        self.glue_ppi_browse.setMinimumHeight(24)
+        self.glue_ppi_browse.setObjectName("save_btn")
+        self.glue_ppi_browse.clicked.connect(lambda: self._browse_save_file(self.glue_ppi_csv, "CSV (*.csv)"))
+        ppi_csv_row_container = QWidget()
+        ppi_csv_row = QHBoxLayout(ppi_csv_row_container)
+        ppi_csv_row.setContentsMargins(0, 0, 0, 0)
+        ppi_csv_row.addWidget(self.glue_ppi_csv, 1)
+        ppi_csv_row.addWidget(self.glue_ppi_browse)
+        glue_grid.addWidget(ppi_csv_row_container, 3, 1)
+        
+        # 第四行右侧: Output Neo-Epitope CSV | [input + browse]
+        glue_grid.addWidget(QLabel("Output Neo-Epitope CSV:"), 3, 2, Qt.AlignmentFlag.AlignRight)
+        self.glue_neo_csv = QLineEdit()
+        self.glue_neo_csv.setMinimumHeight(24)
+        self.glue_neo_csv.setPlaceholderText("Optional")
+        self.glue_neo_browse = QPushButton(t("browse"))
+        self.glue_neo_browse.setMinimumHeight(24)
+        self.glue_neo_browse.setObjectName("save_btn")
+        self.glue_neo_browse.clicked.connect(lambda: self._browse_save_file(self.glue_neo_csv, "CSV (*.csv)"))
+        neo_csv_row_container = QWidget()
+        neo_csv_row = QHBoxLayout(neo_csv_row_container)
+        neo_csv_row.setContentsMargins(0, 0, 0, 0)
+        neo_csv_row.addWidget(self.glue_neo_csv, 1)
+        neo_csv_row.addWidget(self.glue_neo_browse)
+        glue_grid.addWidget(neo_csv_row_container, 3, 3)
+        
+        # Molecular Glue 按钮行
+        glue_btn_row = QHBoxLayout()
+        self.glue_ppi_btn = QPushButton("🔗 Analyze PPI Interface")
+        self.glue_ppi_btn.setObjectName("highlight_btn")
+        self.glue_ppi_btn.setToolTip("Detect protein-protein interface (key for glue vs PROTAC)")
+        self.glue_ppi_btn.clicked.connect(self.run_glue_ppi_analysis)
+        
+        self.glue_neo_btn = QPushButton("✨ Detect Neo-Epitope")
+        self.glue_neo_btn.setObjectName("highlight_btn")
+        self.glue_neo_btn.setToolTip("Identify neo-substrate epitope residues")
+        self.glue_neo_btn.clicked.connect(self.run_glue_neo_epitope)
+        
+        self.glue_full_btn = QPushButton("🚀 Full Glue Analysis")
+        self.glue_full_btn.setObjectName("highlight_btn")
+        self.glue_full_btn.setToolTip("PPI + Neo-Epitope + Scoring + Classification")
+        self.glue_full_btn.clicked.connect(self.run_glue_full_analysis)
+        
+        glue_btn_row.addWidget(self.glue_ppi_btn)
+        glue_btn_row.addWidget(self.glue_neo_btn)
+        glue_btn_row.addWidget(self.glue_full_btn)
+        glue_btn_row.addStretch(1)
+        
+        main_layout.addWidget(grp_glue)
+        main_layout.addLayout(glue_btn_row)
+        
         main_layout.addStretch(1)
         return w
     
@@ -1169,81 +1283,33 @@ class MolStructDialog(QDialog):
         main_layout.setSpacing(16)
         main_layout.setContentsMargins(16, 16, 16, 16)
         
-        # ========== 顶部介绍 ==========
-        intro_label = QLabel(
-            "<h2 style='color: #3b82f6; margin: 0;'>⚡ Fast Binding Energy Scoring</h2>"
-            "<p style='color: #64748b; margin-top: 8px;'>"
-            "Quick estimation for protein-ligand and ternary complexes. "
-            "Ideal for initial screening and design optimization."
-            "</p>"
-        )
-        intro_label.setWordWrap(True)
-        main_layout.addWidget(intro_label)
-        
-        # ========== 横向分栏: 左右分布 ==========
-        content_layout = QHBoxLayout()
-        content_layout.setSpacing(16)
-        
-        # === 左侧: 输入区 ===
-        left_panel = QWidget()
-        left_layout = QVBoxLayout(left_panel)
-        left_layout.setSpacing(12)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        # ========== 卡片纵向排列 ==========
+        cards_layout = QVBoxLayout()
+        cards_layout.setSpacing(16)
         
         # --- 二元复合物卡片 ---
         binary_card = self._create_binary_scoring_card()
-        left_layout.addWidget(binary_card)
+        cards_layout.addWidget(binary_card)
         
         # --- 三元复合物卡片 ---
         ternary_card = self._create_ternary_scoring_card()
-        left_layout.addWidget(ternary_card)
+        cards_layout.addWidget(ternary_card)
         
         # --- 批量热图卡片 ---
         heatmap_card = self._create_heatmap_card()
-        left_layout.addWidget(heatmap_card)
+        cards_layout.addWidget(heatmap_card)
         
-        left_layout.addStretch(1)
+        main_layout.addLayout(cards_layout)
+        main_layout.addStretch(1)
         
-        # === 右侧: 结果显示 ===
-        right_panel = QWidget()
-        right_layout = QVBoxLayout(right_panel)
-        right_layout.setSpacing(8)
-        right_layout.setContentsMargins(0, 0, 0, 0)
-        
-        result_label = QLabel("<b style='font-size: 14px;'>📊 Scoring Results</b>")
-        right_layout.addWidget(result_label)
-        
-        self.score_result_text = QTextEdit()
-        self.score_result_text.setReadOnly(True)
-        self.score_result_text.setPlaceholderText(
-            "Results will appear here after scoring...\n\n"
-            "Tip: Negative values = stronger binding"
-        )
-        self.score_result_text.setStyleSheet("""
-            QTextEdit {
-                background: #1e293b;
-                border: 1px solid #334155;
-                border-radius: 8px;
-                padding: 12px;
-                font-family: 'Monaco', 'Menlo', 'Consolas', monospace;
-                font-size: 12px;
-                color: #e2e8f0;
-            }
-        """)
-        right_layout.addWidget(self.score_result_text, 1)
-        
-        # 布局比例: 左 45%, 右 55%
-        content_layout.addWidget(left_panel, 45)
-        content_layout.addWidget(right_panel, 55)
-        
-        main_layout.addLayout(content_layout)
+        # 结果将显示在右侧的全局日志和表格中
+        # Scoring results will be displayed in the global log and table on the right
+        self.score_result_text = self.log_edit # 重定向到主日志
         
         return w
-    
     def _create_binary_scoring_card(self) -> QWidget:
         """创建二元复合物评分卡片"""
-        card = QGroupBox()
-        card.setTitle("")
+        card = QGroupBox("Protein-Ligand Complex")
         card.setStyleSheet("""
             QGroupBox {
                 background: #1e293b;
@@ -1256,64 +1322,37 @@ class MolStructDialog(QDialog):
         layout = QVBoxLayout(card)
         layout.setSpacing(12)
         
-        # 标题
-        title = QLabel("<h3 style='color: #3b82f6; margin: 0;'>🧬 Protein-Ligand Complex</h3>")
-        layout.addWidget(title)
-        
-        # 说明
-        desc = QLabel(
-            "<span style='color: #94a3b8; font-size: 11px;'>"
-            "For standard protein-ligand interactions"
-            "</span>"
-        )
-        layout.addWidget(desc)
-        
-        # 分隔线
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("background: #334155; max-height: 1px;")
-        layout.addWidget(line)
-        
-        # 表单
-        form = QFormLayout()
-        form.setSpacing(10)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        
         # Object
         obj_row = QHBoxLayout()
+        obj_row.setSpacing(8)
         self.score_binary_obj = QComboBox()
-        self.score_binary_obj.setMinimumWidth(180)
-        self.score_binary_refresh = QPushButton("🔄")
+        self.score_binary_obj.setFixedHeight(36)
+        self.score_binary_refresh = QPushButton("Refresh")
         self.score_binary_refresh.setObjectName("refresh_btn")
-        self.score_binary_refresh.setToolTip("Refresh objects")
-        self.score_binary_refresh.setMaximumWidth(32)
+        self.score_binary_refresh.setFixedHeight(36)
+        self.score_binary_refresh.setFixedWidth(80)
         self.score_binary_refresh.clicked.connect(self.refresh_objects)
-        obj_row.addWidget(self.score_binary_obj)
+        obj_row.addWidget(self.score_binary_obj, 1)
         obj_row.addWidget(self.score_binary_refresh)
-        form.addRow("<b>Object:</b>", obj_row)
+        layout.addLayout(obj_row)
         
         # Ligand
         self.score_binary_ligand = QLineEdit()
-        self.score_binary_ligand.setPlaceholderText("e.g., LIG, MK1")
-        self.score_binary_ligand.setMinimumWidth(180)
-        form.addRow("<b>Ligand:</b>", self.score_binary_ligand)
+        self.score_binary_ligand.setFixedHeight(36)
+        self.score_binary_ligand.setPlaceholderText("Ligand (e.g., LIG, MK1)")
+        layout.addWidget(self.score_binary_ligand)
         
-        layout.addLayout(form)
-        
-        # 按钮 - 只保留 Vina
-        self.score_vina_btn = QPushButton("🛠️ Vina Score")
+        # 按钮
+        self.score_vina_btn = QPushButton("Vina Score")
         self.score_vina_btn.setObjectName("highlight_btn")
         self.score_vina_btn.setToolTip("AutoDock Vina scoring (requires vina installed)")
         self.score_vina_btn.clicked.connect(self.run_vina_scoring)
         layout.addWidget(self.score_vina_btn)
         
         return card
-    
     def _create_ternary_scoring_card(self) -> QWidget:
         """创建三元复合物评分卡片"""
-        card = QGroupBox()
-        card.setTitle("")
+        card = QGroupBox("Ternary Complex (PROTAC/Glue)")
         card.setStyleSheet("""
             QGroupBox {
                 background: #1e293b;
@@ -1326,95 +1365,53 @@ class MolStructDialog(QDialog):
         layout = QVBoxLayout(card)
         layout.setSpacing(12)
         
-        # 标题
-        title = QLabel("<h3 style='color: #8b5cf6; margin: 0;'>🧲 Ternary Complex (PROTAC/Glue)</h3>")
-        layout.addWidget(title)
-        
-        # 说明
-        desc = QLabel(
-            "<span style='color: #94a3b8; font-size: 11px;'>"
-            "For molecular glue and PROTAC (includes cooperativity analysis)"
-            "</span>"
-        )
-        layout.addWidget(desc)
-        
-        # 分隔线
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("background: #334155; max-height: 1px;")
-        layout.addWidget(line)
-        
-        # 表单
-        form = QFormLayout()
-        form.setSpacing(10)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        
         # Object
         obj_row = QHBoxLayout()
+        obj_row.setSpacing(8)
         self.score_ternary_obj = QComboBox()
-        self.score_ternary_obj.setMinimumWidth(180)
-        self.score_ternary_refresh = QPushButton("🔄")
+        self.score_ternary_obj.setFixedHeight(36)
+        self.score_ternary_refresh = QPushButton("Refresh")
         self.score_ternary_refresh.setObjectName("refresh_btn")
-        self.score_ternary_refresh.setToolTip("Refresh objects")
-        self.score_ternary_refresh.setMaximumWidth(32)
+        self.score_ternary_refresh.setFixedHeight(36)
+        self.score_ternary_refresh.setFixedWidth(80)
         self.score_ternary_refresh.clicked.connect(self.refresh_objects)
-        obj_row.addWidget(self.score_ternary_obj)
+        obj_row.addWidget(self.score_ternary_obj, 1)
         obj_row.addWidget(self.score_ternary_refresh)
-        form.addRow("<b>Object:</b>", obj_row)
+        layout.addLayout(obj_row)
         
         # Ligand
         self.score_ternary_ligand = QLineEdit()
-        self.score_ternary_ligand.setPlaceholderText("e.g., PROTAC")
-        self.score_ternary_ligand.setMinimumWidth(180)
-        form.addRow("<b>Ligand:</b>", self.score_ternary_ligand)
+        self.score_ternary_ligand.setFixedHeight(36)
+        self.score_ternary_ligand.setPlaceholderText("Ligand (e.g., PROTAC)")
+        layout.addWidget(self.score_ternary_ligand)
         
-        # Chains
-        chains_row = QHBoxLayout()
-        chains_row.setSpacing(8)
+        # Protein 1 & 2 (两栏)
+        protein_row = QHBoxLayout()
+        protein_row.setSpacing(8)
         
-        p1_container = QVBoxLayout()
-        p1_container.setSpacing(2)
-        p1_label = QLabel("<small>Protein 1</small>")
-        p1_label.setStyleSheet("color: #94a3b8;")
         self.score_ternary_p1 = QLineEdit()
-        self.score_ternary_p1.setPlaceholderText("A")
-        self.score_ternary_p1.setMaximumWidth(50)
-        self.score_ternary_p1.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        p1_container.addWidget(p1_label)
-        p1_container.addWidget(self.score_ternary_p1)
+        self.score_ternary_p1.setFixedHeight(36)
+        self.score_ternary_p1.setPlaceholderText("Protein 1 (e.g. A)")
         
-        p2_container = QVBoxLayout()
-        p2_container.setSpacing(2)
-        p2_label = QLabel("<small>Protein 2</small>")
-        p2_label.setStyleSheet("color: #94a3b8;")
         self.score_ternary_p2 = QLineEdit()
-        self.score_ternary_p2.setPlaceholderText("B")
-        self.score_ternary_p2.setMaximumWidth(50)
-        self.score_ternary_p2.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        p2_container.addWidget(p2_label)
-        p2_container.addWidget(self.score_ternary_p2)
+        self.score_ternary_p2.setFixedHeight(36)
+        self.score_ternary_p2.setPlaceholderText("Protein 2 (e.g. B)")
         
-        chains_row.addLayout(p1_container)
-        chains_row.addLayout(p2_container)
-        chains_row.addStretch(1)
-        
-        form.addRow("<b>Chains:</b>", chains_row)
-        
-        layout.addLayout(form)
+        protein_row.addWidget(self.score_ternary_p1)
+        protein_row.addWidget(self.score_ternary_p2)
+        layout.addLayout(protein_row)
         
         # 按钮
-        self.score_ternary_btn = QPushButton("🎯 Score Ternary Complex")
+        self.score_ternary_btn = QPushButton("Score Ternary Complex")
         self.score_ternary_btn.setObjectName("highlight_btn")
         self.score_ternary_btn.setToolTip("Calculate binding energy with cooperativity")
         self.score_ternary_btn.clicked.connect(self.run_ternary_scoring)
         layout.addWidget(self.score_ternary_btn)
         
         return card
-    
     def _create_heatmap_card(self) -> QWidget:
-        """创建批量热图生成卡片"""
-        card = QGroupBox()
-        card.setTitle("")
+        """创建批量热图卡片"""
+        card = QGroupBox("Batch Heatmap")
         card.setStyleSheet("""
             QGroupBox {
                 background: #1e293b;
@@ -1427,178 +1424,34 @@ class MolStructDialog(QDialog):
         layout = QVBoxLayout(card)
         layout.setSpacing(12)
         
-        # 标题
-        title = QLabel("<h3 style='color: #f59e0b; margin: 0;'>🔥 Batch Heatmap</h3>")
-        layout.addWidget(title)
-        
-        # 说明
-        desc = QLabel(
-            "<span style='color: #94a3b8; font-size: 11px;'>"
-            "Generate binding energy heatmap from multiple CSV files"
-            "</span>"
-        )
-        layout.addWidget(desc)
-        
-        # 分隔线
-        line = QFrame()
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setStyleSheet("background: #334155; max-height: 1px;")
-        layout.addWidget(line)
-        
-        # 表单
-        form = QFormLayout()
-        form.setSpacing(10)
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        form.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
-        
-        # CSV 文件夹
+        # Folder
         folder_row = QHBoxLayout()
+        folder_row.setSpacing(8)
         self.heatmap_folder = QLineEdit()
-        self.heatmap_folder.setPlaceholderText("Select folder containing *_scores.csv")
-        self.heatmap_folder.setMinimumWidth(150)
-        self.heatmap_browse = QPushButton("📁")
+        self.heatmap_folder.setFixedHeight(36)
+        self.heatmap_folder.setPlaceholderText("Folder with CSV files")
+        self.heatmap_browse = QPushButton("Browse")
         self.heatmap_browse.setObjectName("refresh_btn")
-        self.heatmap_browse.setToolTip("Browse folder")
-        self.heatmap_browse.setMaximumWidth(32)
+        self.heatmap_browse.setFixedHeight(36)
+        self.heatmap_browse.setFixedWidth(80)
         self.heatmap_browse.clicked.connect(self.browse_heatmap_folder)
-        folder_row.addWidget(self.heatmap_folder)
+        folder_row.addWidget(self.heatmap_folder, 1)
         folder_row.addWidget(self.heatmap_browse)
-        form.addRow("<b>Folder:</b>", folder_row)
+        layout.addLayout(folder_row)
         
-        # 模式
+        # Pattern
         self.heatmap_pattern = QLineEdit("*_scores.csv")
-        self.heatmap_pattern.setMinimumWidth(150)
-        form.addRow("<b>Pattern:</b>", self.heatmap_pattern)
-        
-        layout.addLayout(form)
+        self.heatmap_pattern.setFixedHeight(36)
+        layout.addWidget(self.heatmap_pattern)
         
         # 按钮
-        self.heatmap_generate_btn = QPushButton("📊 Generate Heatmap")
+        self.heatmap_generate_btn = QPushButton("Generate Heatmap")
         self.heatmap_generate_btn.setObjectName("highlight_btn")
         self.heatmap_generate_btn.setToolTip("Generate binding energy heatmap from CSV files")
         self.heatmap_generate_btn.clicked.connect(self.run_generate_heatmap)
         layout.addWidget(self.heatmap_generate_btn)
         
         return card
-        
-        # --- 二元复合物评分 ---
-        binary_grp = QGroupBox("🧬 Binary Complex (Protein-Ligand)" if get_lang() == "en" else "🧬 二元复合物（蛋白-配体）")
-        binary_form = QFormLayout(binary_grp)
-        binary_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        
-        # Object
-        binary_obj_row = QHBoxLayout()
-        self.score_binary_obj = QComboBox()
-        self.score_binary_refresh = QPushButton("Refresh")
-        self.score_binary_refresh.setObjectName("refresh_btn")
-        self.score_binary_refresh.clicked.connect(self.refresh_objects)
-        binary_obj_row.addWidget(self.score_binary_obj, 1)
-        binary_obj_row.addWidget(self.score_binary_refresh)
-        binary_form.addRow(QLabel("Object:"), binary_obj_row)
-        
-        # Ligand residue name
-        self.score_binary_ligand = QLineEdit()
-        self.score_binary_ligand.setPlaceholderText("e.g., LIG, MK1, PROTAC")
-        binary_form.addRow(QLabel("Ligand Residue:"), self.score_binary_ligand)
-        
-        # Buttons
-        binary_btn_row = QHBoxLayout()
-        self.score_binary_btn = QPushButton("📋 Empirical Scoring (Fast)")
-        self.score_binary_btn.setObjectName("highlight_btn")
-        self.score_binary_btn.clicked.connect(self.run_binary_scoring)
-        binary_btn_row.addWidget(self.score_binary_btn)
-        
-        # Vina scoring (optional)
-        self.score_vina_btn = QPushButton("⚙️ Vina Scoring (if installed)")
-        self.score_vina_btn.setObjectName("save_btn")
-        self.score_vina_btn.clicked.connect(self.run_vina_scoring)
-        binary_btn_row.addWidget(self.score_vina_btn)
-        
-        self.score_compare_btn = QPushButton("🔍 Compare Methods")
-        self.score_compare_btn.setObjectName("browse_btn")
-        self.score_compare_btn.clicked.connect(self.run_compare_scoring)
-        binary_btn_row.addWidget(self.score_compare_btn)
-        binary_btn_row.addStretch(1)
-        
-        binary_form.addRow(binary_btn_row)
-        score_layout.addWidget(binary_grp)
-        
-        # --- 三元复合物评分 ---
-        ternary_grp = QGroupBox("🧲 Ternary Complex (Molecular Glue/PROTAC)" if get_lang() == "en" else "🧲 三元复合物（分子胶/PROTAC）")
-        ternary_form = QFormLayout(ternary_grp)
-        ternary_form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        
-        # Object
-        ternary_obj_row = QHBoxLayout()
-        self.score_ternary_obj = QComboBox()
-        self.score_ternary_refresh = QPushButton("Refresh")
-        self.score_ternary_refresh.setObjectName("refresh_btn")
-        self.score_ternary_refresh.clicked.connect(self.refresh_objects)
-        ternary_obj_row.addWidget(self.score_ternary_obj, 1)
-        ternary_obj_row.addWidget(self.score_ternary_refresh)
-        ternary_form.addRow(QLabel("Object:"), ternary_obj_row)
-        
-        # Ligand
-        self.score_ternary_ligand = QLineEdit()
-        self.score_ternary_ligand.setPlaceholderText("e.g., PROTAC, LIG")
-        ternary_form.addRow(QLabel("Ligand Residue:"), self.score_ternary_ligand)
-        
-        # Protein chains
-        chains_row = QHBoxLayout()
-        self.score_ternary_p1 = QLineEdit()
-        self.score_ternary_p1.setPlaceholderText("A")
-        self.score_ternary_p1.setMaximumWidth(60)
-        self.score_ternary_p2 = QLineEdit()
-        self.score_ternary_p2.setPlaceholderText("B")
-        self.score_ternary_p2.setMaximumWidth(60)
-        chains_row.addWidget(QLabel("Protein 1:"))
-        chains_row.addWidget(self.score_ternary_p1)
-        chains_row.addWidget(QLabel("Protein 2:"))
-        chains_row.addWidget(self.score_ternary_p2)
-        chains_row.addStretch(1)
-        ternary_form.addRow(QLabel("Chains:"), chains_row)
-        
-        # Button
-        ternary_btn_row = QHBoxLayout()
-        self.score_ternary_btn = QPushButton("🎯 Score Ternary Complex (with Cooperativity)")
-        self.score_ternary_btn.setObjectName("highlight_btn")
-        self.score_ternary_btn.clicked.connect(self.run_ternary_scoring)
-        ternary_btn_row.addWidget(self.score_ternary_btn)
-        ternary_btn_row.addStretch(1)
-        ternary_form.addRow(ternary_btn_row)
-        
-        score_layout.addWidget(ternary_grp)
-        
-        # --- 评分结果显示 ---
-        result_grp = QGroupBox("📊 Scoring Results" if get_lang() == "en" else "📊 评分结果")
-        result_layout = QVBoxLayout(result_grp)
-        
-        self.score_result_text = QTextEdit()
-        self.score_result_text.setReadOnly(True)
-        self.score_result_text.setMinimumHeight(200)
-        self.score_result_text.setPlaceholderText(
-            "Scoring results will be displayed here..." if get_lang() == "en" else "评分结果将显示在这里..."
-        )
-        result_layout.addWidget(self.score_result_text)
-        
-        score_layout.addWidget(result_grp)
-        
-        main_layout.addWidget(grp_score)
-        
-        # ========== 信息提示 ==========
-        info_label = QLabel(
-            "ℹ️ <b>Quick Guide:</b><br>"
-            "• <b>Vina Scoring</b>: AutoDock Vina score_only mode (~1s), requires <code>vina</code> installed<br>"
-            "• <b>Ternary Complex</b>: Calculates cooperativity effect for molecular glue/PROTAC<br>"
-            "• All scores are in kcal/mol (more negative = stronger binding)<br>"
-            "• Install Vina: <code>conda install -c conda-forge vina</code>"
-        )
-        info_label.setWordWrap(True)
-        info_label.setStyleSheet("padding: 10px; background: #e7f3ff; border-radius: 6px; color: #1e40af;")
-        main_layout.addWidget(info_label)
-        
-        main_layout.addStretch(1)
-        return w
 
     def create_apbs_tab(self) -> QWidget:
         w = QWidget(); lay = QVBoxLayout(w); lay.setSpacing(10)
@@ -1670,7 +1523,8 @@ class MolStructDialog(QDialog):
                    getattr(self, "tc_obj_combo", None),
                    getattr(self, "ap_obj_combo", None),
                    getattr(self, "score_binary_obj", None),
-                   getattr(self, "score_ternary_obj", None)):
+                   getattr(self, "score_ternary_obj", None),
+                   getattr(self, "glue_obj_combo", None)):
             if cb is not None:
                 cb.blockSignals(True); cb.clear()
                 for n in names: cb.addItem(n)
@@ -2489,7 +2343,7 @@ class MolStructDialog(QDialog):
         layout.addLayout(top_row)
         
         # 标题
-        title = QLabel("MolStruct - README" if get_lang() == "en" else "MolStruct - 说明文档")
+        title = QLabel("GlueTK - README" if get_lang() == "en" else "GlueTK - 说明文档")
         title.setStyleSheet("""
             font-size: 20px;
             font-weight: bold;
@@ -2504,9 +2358,9 @@ class MolStructDialog(QDialog):
         
         if get_lang() == "zh":
             readme_content = """
-<h2>欢迎使用 MolStruct</h2>
+<h2>欢迎使用 GlueTK</h2>
 
-<p><b>MolStruct</b> 是一个功能强大的 PyMOL 插件，用于分子结构分析。</p>
+<p><b>GlueTK</b> 是一个专为分子胶降解剂分析设计的 PyMOL 插件。</p>
 
 <h3>主要功能</h3>
 <ul>
@@ -2550,9 +2404,9 @@ class MolStructDialog(QDialog):
             """
         else:
             readme_content = """
-<h2>Welcome to MolStruct</h2>
+<h2>Welcome to GlueTK</h2>
 
-<p><b>MolStruct</b> is a powerful PyMOL plugin for molecular structure analysis.</p>
+<p><b>GlueTK</b> is a PyMOL plugin designed for molecular glue degrader analysis and classification.</p>
 
 <h3>Main Features</h3>
 <ul>
@@ -2627,7 +2481,7 @@ class MolStructDialog(QDialog):
 
         if get_lang() == "zh":
             contact_content = f'''
-<h3>👋 感谢使用 MolStruct！</h3>
+<h3>👋 感谢使用 GlueTK！</h3>
 
 <p>如果你有任何问题、建议或反馈，欢迎联系我们！</p>
 
@@ -2650,10 +2504,10 @@ class MolStructDialog(QDialog):
 <p>欢迎提交 Pull Request！请阅读 <code>CONTRIBUTING.md</code> 了解贡献指南。</p>
 
 <h3>支持项目</h3>
-<p>如果 MolStruct 对你的研究有帮助，请考虑：</p><ul><li>在 GitHub 上给我们一个 Star ⭐</li><li>在论文中引用 MolStruct</li><li>分享给同事</li></ul>
+<p>如果 GlueTK 对你的研究有帮助，请考虑：</p><ul><li>在 GitHub 上给我们一个 Star ⭐</li><li>在论文中引用 GlueTK</li><li>分享给同事</li></ul>
 
 <p style='{privacy_style}'>
-<b>隐私声明：</b>MolStruct 不会收集任何个人数据或结构信息。所有分析都在本地进行。
+<b>隐私声明：</b>GlueTK 不会收集任何个人数据或结构信息。所有分析都在本地进行。
 </p>
 
 <p style='margin-top: 20px; color: {footer_color}; text-align: center;'>
@@ -2661,7 +2515,7 @@ class MolStructDialog(QDialog):
 </p>'''
         else:
             contact_content = f'''
-<h3>👋 Thank you for using MolStruct!</h3>
+<h3>👋 Thank you for using GlueTK!</h3>
 
 <p>If you have any questions, suggestions, or feedback, please don't hesitate to contact us!</p>
 
@@ -2684,11 +2538,11 @@ class MolStructDialog(QDialog):
 <p>Pull requests are welcome! Please read <code>CONTRIBUTING.md</code> for contribution guidelines.</p>
 
 <h3>Support the Project</h3>
-<p>If MolStruct helped your research, please consider:</p>
-<ul><li>Giving us a Star on GitHub</li><li>Citing MolStruct in your papers</li><li>Sharing with colleagues</li></ul>
+<p>If GlueTK helped your research, please consider:</p>
+<ul><li>Giving us a Star on GitHub</li><li>Citing GlueTK in your papers</li><li>Sharing with colleagues</li></ul>
 
 <p style='{privacy_style}'>
-<b>Privacy:</b> MolStruct does not collect any personal data or structural information. All analyses are performed locally.
+<b>Privacy:</b> GlueTK does not collect any personal data or structural information. All analyses are performed locally.
 </p>
 
 <p style='margin-top: 20px; color: {footer_color}; text-align: center;'>
@@ -3289,6 +3143,244 @@ Thank you for your support! 🚀
         except Exception as e:
             self.log(f"错误: {e}")
             import traceback; traceback.print_exc()
+    
+    # ========== 新增: Molecular Glue 特异分析函数 ==========
+    def run_glue_ppi_analysis(self):
+        """分析蛋白-蛋白界面 (PPI Interface)"""
+        try:
+            from .ppi_analyzer import analyze_protein_protein_interface
+            
+            obj_name = self.glue_obj_combo.currentText()
+            if obj_name == t("no_object") or not obj_name:
+                QMessageBox.warning(self, "Warning", "Please select a structure object")
+                return
+            
+            e3_chains_str = self.glue_e3_chains.text().strip()
+            sub_chains_str = self.glue_sub_chains.text().strip()
+            
+            if not e3_chains_str or not sub_chains_str:
+                QMessageBox.warning(self, "Warning", "Please specify both E3 and Substrate chains")
+                return
+            
+            e3_chains = [c.strip() for c in e3_chains_str.split(",")]
+            sub_chains = [c.strip() for c in sub_chains_str.split(",")]
+            interface_dist = float(self.glue_interface_dist.text())
+            ppi_csv = self.glue_ppi_csv.text().strip() or None
+            
+            self.log("\n🔗 Analyzing Protein-Protein Interface...")
+            self.log(f"   E3 Chains: {e3_chains}")
+            self.log(f"   Substrate Chains: {sub_chains}")
+            
+            result = analyze_protein_protein_interface(
+                obj_name=obj_name,
+                protein1_chains=e3_chains,
+                protein2_chains=sub_chains,
+                interface_distance=interface_dist,
+                output_csv=ppi_csv
+            )
+            
+            if result:
+                # 保存结果
+                self.current_glue_ppi_result = result
+                
+                # 显示结果
+                contacts = result.get('interface_contacts', 0)
+                bsa = result.get('bsa')
+                is_strong = result.get('is_strong_interface', False)
+                strength = result.get('interface_strength', 0)
+                
+                self.log(f"\n✅ PPI Analysis Complete:")
+                self.log(f"   Interface Contacts: {contacts}")
+                if bsa:
+                    self.log(f"   BSA: {bsa:.1f} Ų")
+                self.log(f"   Interface Strength: {strength:.1f}/10")
+                self.log(f"   Classification: {'🌟 Strong Interface' if is_strong else '⚠️ Weak Interface'}")
+                
+                # 判断机制
+                if is_strong or contacts >= 10:
+                    self.log(f"   💡 Likely: Molecular Glue (strong PPI)")
+                elif contacts < 3:
+                    self.log(f"   💡 Likely: PROTAC (weak PPI)")
+                
+                QMessageBox.information(self, "PPI Analysis Complete",
+                    f"Interface Contacts: {contacts}\n"
+                    f"{'BSA: ' + str(round(bsa, 1)) + ' Ų' if bsa else 'BSA: N/A'}\n"
+                    f"Interface Strength: {strength:.1f}/10\n\n"
+                    f"{'✨ Strong Interface (likely Molecular Glue)' if is_strong else '⚠️ Weak Interface (likely PROTAC)'}")
+            else:
+                self.log("⚠️ PPI analysis failed")
+        
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback; traceback.print_exc()
+    
+    def run_glue_neo_epitope(self):
+        """识别 Neo-表位 (Neo-Substrate Epitope)"""
+        try:
+            from .ppi_analyzer import identify_neo_epitope
+            
+            obj_name = self.glue_obj_combo.currentText()
+            if obj_name == t("no_object") or not obj_name:
+                QMessageBox.warning(self, "Warning", "Please select a structure object")
+                return
+            
+            glue_resname = self.glue_resname.text().strip()
+            e3_chains_str = self.glue_e3_chains.text().strip()
+            sub_chains_str = self.glue_sub_chains.text().strip()
+            
+            if not glue_resname or not e3_chains_str or not sub_chains_str:
+                QMessageBox.warning(self, "Warning", "Please specify Glue residue name, E3 and Substrate chains")
+                return
+            
+            e3_chains = [c.strip() for c in e3_chains_str.split(",")]
+            sub_chains = [c.strip() for c in sub_chains_str.split(",")]
+            neo_dist = float(self.glue_neo_dist.text())
+            neo_csv = self.glue_neo_csv.text().strip() or None
+            
+            self.log("\n✨ Detecting Neo-Substrate Epitope...")
+            self.log(f"   Glue: {glue_resname}")
+            self.log(f"   E3: {e3_chains} → Substrate: {sub_chains}")
+            
+            result = identify_neo_epitope(
+                obj_name=obj_name,
+                e3_ligase_chains=e3_chains,
+                substrate_chains=sub_chains,
+                glue_resname=glue_resname,
+                distance_threshold=neo_dist,
+                output_csv=neo_csv
+            )
+            
+            if result:
+                # 保存结果
+                self.current_glue_neo_result = result
+                
+                # 显示结果
+                neo_count = result.get('neo_epitope_count', 0)
+                bridging_atoms = result.get('bridging_glue_atoms', 0)
+                is_glue = result.get('is_molecular_glue', False)
+                confidence = result.get('confidence', 0)
+                
+                self.log(f"\n✅ Neo-Epitope Detection Complete:")
+                self.log(f"   Bridging Glue Atoms: {bridging_atoms}")
+                self.log(f"   Neo-Epitope Residues: {neo_count}")
+                self.log(f"   Confidence: {confidence:.2f}")
+                self.log(f"   Classification: {'✨ Molecular Glue' if is_glue else '⚠️ Not Typical Glue'}")
+                
+                # 列出Neo-表位残基
+                if result.get('neo_substrate_residues'):
+                    self.log(f"\n   Neo-Epitope Residues:")
+                    for res in result['neo_substrate_residues'][:10]:  # 显示前10个
+                        self.log(f"      {res['chain']}:{res['resname']} {res['resid']}")
+                
+                QMessageBox.information(self, "Neo-Epitope Detection Complete",
+                    f"Bridging Glue Atoms: {bridging_atoms}\n"
+                    f"Neo-Epitope Residues: {neo_count}\n"
+                    f"Confidence: {confidence:.2f}\n\n"
+                    f"{'✨ Classified as Molecular Glue' if is_glue else '⚠️ Not typical Glue mechanism'}")
+            else:
+                self.log("⚠️ Neo-epitope detection failed")
+        
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback; traceback.print_exc()
+    
+    def run_glue_full_analysis(self):
+        """完整分子胶分析: PPI + Neo-Epitope + Scoring + Classification"""
+        try:
+            obj_name = self.glue_obj_combo.currentText()
+            if obj_name == t("no_object") or not obj_name:
+                QMessageBox.warning(self, "Warning", "Please select a structure object")
+                return
+            
+            glue_resname = self.glue_resname.text().strip()
+            e3_chains_str = self.glue_e3_chains.text().strip()
+            sub_chains_str = self.glue_sub_chains.text().strip()
+            
+            if not glue_resname or not e3_chains_str or not sub_chains_str:
+                QMessageBox.warning(self, "Warning", "Please specify Glue residue name, E3 and Substrate chains")
+                return
+            
+            self.log("\n" + "="*60)
+            self.log("🚀 Starting Full Molecular Glue Analysis")
+            self.log("="*60)
+            
+            # Step 1: PPI Analysis
+            self.log("\n[1/3] Analyzing Protein-Protein Interface...")
+            self.run_glue_ppi_analysis()
+            
+            if not hasattr(self, 'current_glue_ppi_result'):
+                self.log("⚠️ PPI analysis failed, aborting")
+                return
+            
+            # Step 2: Neo-Epitope Detection
+            self.log("\n[2/3] Detecting Neo-Substrate Epitope...")
+            self.run_glue_neo_epitope()
+            
+            if not hasattr(self, 'current_glue_neo_result'):
+                self.log("⚠️ Neo-epitope detection failed, continuing...")
+            
+            # Step 3: Integrated Analysis & Classification
+            self.log("\n[3/3] Integrated Mechanism Classification...")
+            
+            ppi_result = self.current_glue_ppi_result
+            neo_result = getattr(self, 'current_glue_neo_result', None)
+            
+            # 提取关键指标
+            ppi_contacts = ppi_result.get('interface_contacts', 0)
+            bsa = ppi_result.get('bsa')
+            is_strong_ppi = ppi_result.get('is_strong_interface', False)
+            
+            neo_count = neo_result.get('neo_epitope_count', 0) if neo_result else 0
+            is_glue_neo = neo_result.get('is_molecular_glue', False) if neo_result else False
+            
+            # 综合判断
+            final_mechanism = "Unknown"
+            confidence = 0.0
+            
+            if is_glue_neo and is_strong_ppi:
+                final_mechanism = "Molecular Glue"
+                confidence = 0.95
+            elif is_strong_ppi and neo_count >= 3:
+                final_mechanism = "Molecular Glue"
+                confidence = 0.85
+            elif ppi_contacts >= 10 or (bsa and bsa > 800):
+                final_mechanism = "Likely Molecular Glue"
+                confidence = 0.75
+            elif ppi_contacts < 3 and neo_count == 0:
+                final_mechanism = "PROTAC (Linker-based)"
+                confidence = 0.80
+            else:
+                final_mechanism = "Uncertain"
+                confidence = 0.50
+            
+            # 输出最终报告
+            self.log("\n" + "="*60)
+            self.log("🎯 FINAL CLASSIFICATION")
+            self.log("="*60)
+            self.log(f"   Mechanism: {final_mechanism}")
+            self.log(f"   Confidence: {confidence:.0%}")
+            self.log(f"\n   Key Evidence:")
+            self.log(f"      PPI Contacts: {ppi_contacts}")
+            if bsa:
+                self.log(f"      BSA: {bsa:.1f} Ų")
+            self.log(f"      Neo-Epitope: {neo_count} residues")
+            self.log(f"      Strong PPI: {'Yes' if is_strong_ppi else 'No'}")
+            self.log("="*60)
+            
+            # 弹窗显示
+            icon = QMessageBox.Icon.Information if "Glue" in final_mechanism else QMessageBox.Icon.Warning
+            QMessageBox.information(self, "🎯 Molecular Glue Analysis Complete",
+                f"Classification: {final_mechanism}\n"
+                f"Confidence: {confidence:.0%}\n\n"
+                f"Evidence:\n"
+                f"  • PPI Contacts: {ppi_contacts}\n"
+                f"  • BSA: {round(bsa, 1) if bsa else 'N/A'} Ų\n"
+                f"  • Neo-Epitope: {neo_count} residues\n\n"
+                f"{'\u2728 This complex exhibits Molecular Glue characteristics!' if 'Glue' in final_mechanism else '🔗 This complex likely uses a PROTAC/linker mechanism.'}")
+        
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback; traceback.print_exc()
 
     def run_ap_analysis(self):
         """运行原子对分析"""
@@ -3451,8 +3543,22 @@ Thank you for your support! 🚀
             # 使用新的环境检测模块
             from .env_checker import check_environment
             
+            # 询问用户是否要自动安装缺失的依赖
+            reply = QMessageBox.question(
+                self,
+                "Environment Check" if get_lang() == "en" else "环境检查",
+                "Do you want to automatically install missing dependencies?\n(Requires Conda)" if get_lang() == "en" else "是否自动安装缺失的依赖？\n（需要 Conda）",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No
+            )
+            
+            auto_install = (reply == QMessageBox.StandardButton.Yes)
+            
+            if auto_install:
+                self.log("🚀 自动安装模式已启用" if get_lang() == "zh" else "🚀 Auto-install mode enabled")
+            
             # 运行完整检查，并将日志输出到 GUI
-            result = check_environment(log_callback=self.log)
+            result = check_environment(log_callback=self.log, auto_install=auto_install)
             
             # 检查 FoldX (额外的工具)
             self.log("\n🛠️  额外工具:" if get_lang() == "zh" else "\n🛠️  Additional Tools:")
@@ -4313,7 +4419,7 @@ QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
 # -------- 独立运行入口（可选）--------
 def launch_standalone():
     app = QApplication.instance() or QApplication(sys.argv)
-    dlg = MolStructDialog()
+    dlg = GlueTKDialog()
     try:
         sys.exit(app.exec())
     except AttributeError:

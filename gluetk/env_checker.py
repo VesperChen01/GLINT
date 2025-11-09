@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-MolStruct 环境检测和配置模块
+GlueTK 环境检测和配置模块
 支持 Windows/macOS/Linux 环境检测、Conda 安装、依赖安装、GUI 功能测试
 """
 
@@ -12,7 +12,7 @@ import tempfile
 from typing import Dict, List, Tuple, Optional
 
 # 环境配置
-ENV_NAME = "molstruct"
+ENV_NAME = "gluetk"
 PYTHON_VERSION = "3.9"
 
 # 必需的 Python 包 (import_name, display_name, pip_name)
@@ -35,12 +35,14 @@ REQUIRED_COMMANDS = [
 class EnvironmentChecker:
     """环境检测和配置类"""
     
-    def __init__(self, log_callback=None):
+    def __init__(self, log_callback=None, auto_install=False):
         """
         Args:
             log_callback: 日志回调函数，用于输出消息到 GUI
+            auto_install: 是否自动安装缺失的依赖
         """
         self.log_callback = log_callback or print
+        self.auto_install = auto_install
         self.os_type = None
         self.os_arch = None
         self.conda_path = None
@@ -330,6 +332,166 @@ class EnvironmentChecker:
         
         return base_url
     
+    # ========== 自动安装 ==========
+    
+    def auto_install_conda_env(self) -> bool:
+        """
+        自动创建 conda 环境
+        
+        Returns:
+            bool: True 如果成功
+        """
+        if not self.check_conda():
+            self.log("✗ 无法自动创建环境: Conda 未安装")
+            return False
+        
+        if self.check_conda_env(ENV_NAME):
+            self.log(f"✓ 环境 '{ENV_NAME}' 已存在，跳过创建")
+            return True
+        
+        self.log(f"\n🔧 正在创建 Conda 环境 '{ENV_NAME}'...")
+        
+        try:
+            result = subprocess.run(
+                ["conda", "create", "-n", ENV_NAME, f"python={PYTHON_VERSION}", "-y"],
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            
+            if result.returncode == 0:
+                self.log(f"✅ 环境 '{ENV_NAME}' 创建成功")
+                return True
+            else:
+                self.log(f"✗ 环境创建失败: {result.stderr}")
+                return False
+        except subprocess.TimeoutExpired:
+            self.log("✗ 环境创建超时")
+            return False
+        except Exception as e:
+            self.log(f"✗ 环境创建出错: {e}")
+            return False
+    
+    def auto_install_dependencies(self) -> Dict[str, bool]:
+        """
+        自动安装缺失的依赖
+        
+        Returns:
+            Dict[str, bool]: {依赖名: 是否安装成功}
+        """
+        if not self.check_conda():
+            self.log("✗ 无法自动安装: Conda 未安装")
+            return {}
+        
+        status = self.check_all_dependencies()
+        missing = [name for name, avail in status.items() if not avail]
+        
+        if not missing:
+            self.log("✅ 所有依赖已安装，无需操作")
+            return status
+        
+        self.log(f"\n📦 开始自动安装缺失的依赖...")
+        
+        install_results = {}
+        
+        # 区分 Python 包和命令行工具
+        py_packages = [p for p in missing if p not in ["AutoDock Vina", "Open Babel"]]
+        cmd_tools = [p for p in missing if p in ["AutoDock Vina", "Open Babel"]]
+        
+        # 批量安装 Python 包
+        if py_packages:
+            self.log(f"\n  安装 Python 包: {', '.join(py_packages)}")
+            packages_to_install = []
+            
+            for _, display_name, pip_name in REQUIRED_PACKAGES:
+                if display_name in py_packages:
+                    packages_to_install.append(pip_name)
+            
+            if packages_to_install:
+                try:
+                    cmd = [
+                        "conda", "install", "-c", "conda-forge",
+                        "-y"
+                    ] + packages_to_install
+                    
+                    self.log(f"  执行: {' '.join(cmd)}")
+                    
+                    result = subprocess.run(
+                        cmd,
+                        capture_output=True,
+                        text=True,
+                        timeout=600
+                    )
+                    
+                    if result.returncode == 0:
+                        for pkg in py_packages:
+                            install_results[pkg] = True
+                            self.log(f"  ✅ {pkg} 安装成功")
+                    else:
+                        for pkg in py_packages:
+                            install_results[pkg] = False
+                            self.log(f"  ✗ {pkg} 安装失败")
+                        self.log(f"  错误信息: {result.stderr[:200]}")
+                except subprocess.TimeoutExpired:
+                    for pkg in py_packages:
+                        install_results[pkg] = False
+                        self.log(f"  ✗ {pkg} 安装超时")
+                except Exception as e:
+                    for pkg in py_packages:
+                        install_results[pkg] = False
+                        self.log(f"  ✗ {pkg} 安装出错: {e}")
+        
+        # 安装命令行工具
+        if "AutoDock Vina" in cmd_tools:
+            self.log(f"\n  安装 AutoDock Vina...")
+            success = self._install_conda_package("autodock-vina")
+            install_results["AutoDock Vina"] = success
+            if success:
+                self.log("  ✅ AutoDock Vina 安装成功")
+            else:
+                self.log("  ✗ AutoDock Vina 安装失败")
+        
+        if "Open Babel" in cmd_tools:
+            self.log(f"\n  安装 Open Babel...")
+            success = self._install_conda_package("openbabel")
+            install_results["Open Babel"] = success
+            if success:
+                self.log("  ✅ Open Babel 安装成功")
+            else:
+                self.log("  ✗ Open Babel 安装失败")
+        
+        # 总结
+        success_count = sum(1 for v in install_results.values() if v)
+        total_count = len(install_results)
+        
+        if success_count == total_count:
+            self.log(f"\n✅ 所有依赖安装完成 ({success_count}/{total_count})")
+        else:
+            self.log(f"\n⚠️  部分依赖安装失败 ({success_count}/{total_count})")
+        
+        return install_results
+    
+    def _install_conda_package(self, package_name: str) -> bool:
+        """
+        安装单个 conda 包
+        
+        Args:
+            package_name: 包名
+            
+        Returns:
+            bool: True 如果成功
+        """
+        try:
+            result = subprocess.run(
+                ["conda", "install", "-c", "conda-forge", package_name, "-y"],
+                capture_output=True,
+                text=True,
+                timeout=300
+            )
+            return result.returncode == 0
+        except:
+            return False
+    
     def get_install_instructions(self) -> Dict[str, str]:
         """
         获取安装说明
@@ -396,7 +558,7 @@ conda activate {ENV_NAME}
 2. 启动 PyMOL (在激活的环境中)
 
 3. 加载插件:
-   run /path/to/molstruct_plugin/__init__.py
+   run /path/to/gluetk/__init__.py
 
 4. 打开 GUI:
    molstruct_gui
@@ -414,7 +576,7 @@ conda activate {ENV_NAME}
             Dict: 检查结果摘要
         """
         self.log("=" * 60)
-        self.log("⚡ MolStruct 环境检查")
+        self.log("⚡ GlueTK 环境检查")
         self.log("=" * 60)
         
         # 1. 检测操作系统
@@ -435,10 +597,27 @@ conda activate {ENV_NAME}
         # 4. 检查依赖
         dep_status = self.check_all_dependencies()
         
-        # 5. 测试 GUI 功能
+        # 5. 自动安装（如果启用）
+        if self.auto_install and has_conda:
+            self.log("\n" + "=" * 60)
+            self.log("🚀 自动安装模式")
+            self.log("=" * 60)
+            
+            # 创建环境（如果不存在）
+            if not has_env:
+                has_env = self.auto_install_conda_env()
+            
+            # 安装依赖
+            install_results = self.auto_install_dependencies()
+            
+            # 重新检查依赖状态
+            self.log("\n🔍 重新检查依赖状态...")
+            dep_status = self.check_all_dependencies()
+        
+        # 6. 测试 GUI 功能
         gui_ok = self.test_gui_functionality()
         
-        # 6. 生成安装说明
+        # 7. 生成安装说明或总结
         self.log("\n" + "=" * 60)
         
         all_ok = has_conda and has_env and all(dep_status.values()) and gui_ok
@@ -446,7 +625,10 @@ conda activate {ENV_NAME}
         if all_ok:
             self.log("✅ 环境配置完美！所有功能可用")
         else:
-            self.log("⚠️  环境需要配置")
+            if self.auto_install:
+                self.log("⚠️  部分依赖安装失败或需要手动配置")
+            else:
+                self.log("⚠️  环境需要配置")
             instructions = self.get_install_instructions()
             for key, text in instructions.items():
                 self.log(f"\n{text}")
@@ -466,17 +648,18 @@ conda activate {ENV_NAME}
 
 # ========== 便捷函数 ==========
 
-def check_environment(log_callback=None) -> Dict[str, any]:
+def check_environment(log_callback=None, auto_install=False) -> Dict[str, any]:
     """
     检查环境（便捷函数）
     
     Args:
         log_callback: 日志回调函数
+        auto_install: 是否自动安装缺失的依赖
         
     Returns:
         Dict: 检查结果
     """
-    checker = EnvironmentChecker(log_callback)
+    checker = EnvironmentChecker(log_callback, auto_install=auto_install)
     return checker.run_full_check()
 
 
@@ -495,7 +678,18 @@ def get_dependency_status() -> Dict[str, bool]:
 
 if __name__ == "__main__":
     # 命令行模式
-    checker = EnvironmentChecker()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description="GlueTK 环境检查和自动配置工具")
+    parser.add_argument(
+        "--auto-install",
+        action="store_true",
+        help="自动安装缺失的依赖（需要 Conda）"
+    )
+    
+    args = parser.parse_args()
+    
+    checker = EnvironmentChecker(auto_install=args.auto_install)
     result = checker.run_full_check()
     
     sys.exit(0 if result["all_ok"] else 1)

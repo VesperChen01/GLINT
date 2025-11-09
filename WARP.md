@@ -4,7 +4,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ## Project Overview
 
-**MolStruct Plugin for PyMOL** - A PyMOL plugin for protein-ligand interaction analysis and visualization, with support for strict Schrödinger standards suitable for publication.
+**GlueTK - PyMOL Plugin for Molecular Glue Analysis** - A PyMOL plugin for protein-ligand interaction analysis and visualization, with support for strict Schrödinger standards suitable for publication.
 
 **Language**: Python (PyMOL plugin)  
 **Version**: 1.0.0  
@@ -14,7 +14,7 @@ This file provides guidance to WARP (warp.dev) when working with code in this re
 
 ### Installation
 This is a PyMOL plugin. Installation is manual:
-1. Copy `molstruct_plugin/` directory to PyMOL's plugin directory
+1. Copy `gluetk/` directory to PyMOL's plugin directory
 2. Or use PyMOL's Plugin Manager to install the ZIP file
 
 ### Dependencies
@@ -33,13 +33,13 @@ To test the plugin:
 3. Test basic commands:
    ```python
    analyze_protein_ligand_interactions('1hsg', 'MK1')
-   molstruct_gui
+   gluetk_gui
    ```
 
 ### Running in PyMOL
 ```python
 # In PyMOL command line:
-run /path/to/molstruct_plugin/__init__.py
+run /path/to/gluetk/__init__.py
 
 # Or load via Plugin Manager (GUI):
 # Plugin → Plugin Manager → Install New Plugin
@@ -52,7 +52,7 @@ run /path/to/molstruct_plugin/__init__.py
 The plugin follows a **modular architecture** with clear separation of concerns:
 
 ```
-molstruct_plugin/
+gluetk/
 ├── __init__.py              # Plugin entry point, command registration
 ├── interaction_analyzer.py   # Core interaction detection engine
 ├── highlight_residues.py     # Visualization and highlighting
@@ -149,7 +149,7 @@ Commands available in PyMOL:
 - `analyze_protein_ligand_interactions`
 - `analyze_pdb_interactions`
 - `highlight_csv_residues`
-- `molstruct_gui`
+- `gluetk_gui`
 - `visualize_protein_ligand_3d`
 - `generate_interaction_network_plot`
 - `generate_2d_diagram`
@@ -208,7 +208,7 @@ Helper: `_parse_resi()`, `_split_residue_tag()`
 5. Update README.md with Chinese/English descriptions
 
 ### Adding a New GUI Tab
-1. Extend `MolStructDialog` in `unified_gui.py`
+1. Extend `GlueTKDialog` in `unified_gui.py`
 2. Add translations to `T` dictionary
 3. Create tab with `QWidget` + layout
 4. Implement worker thread if needed (inherit `QThread`)

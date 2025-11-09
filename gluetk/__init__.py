@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
-MolStruct Plugin for PyMOL
-分子结构相互作用分析和可视化插件
+GlueTK - PyMOL Plugin for Molecular Glue Analysis
+Molecular Glue vs PROTAC Classification Toolkit
 
-作者: Vesper
-版本: 1.0.0
+Author: Vesper
+Version: 1.0.0
 """
 
 from __future__ import print_function
@@ -18,7 +18,7 @@ try:
     from .env_setup import ensure_dependencies
     _DEPS_OK = ensure_dependencies()
 except Exception as e:
-    print(f"[MolStruct] ⚠️ Dependency check failed: {e}")
+    print(f"[GlueTK] ⚠️ Dependency check failed: {e}")
     _DEPS_OK = False
 
 # ---- 语言工具 ----
@@ -49,6 +49,19 @@ def _register_commands():
         from .binding_score import score_protein_ligand, score_ternary_complex
         from .binding_heatmap import plot_binding_heatmap
         
+        # 新增: 分子胶特异功能 (PPI 分析 & Neo-表位)
+        from .ppi_analyzer import (
+            analyze_protein_protein_interface,
+            identify_neo_epitope,
+            calculate_interface_bsa,
+            ppi_analyze,
+            neo_epitope_find
+        )
+        from .g_motif_analyzer import (
+            find_crbn_g_motif,
+            analyze_g_motif_glue_binding
+        )
+        
         # Vina评分(可选,需要安装Vina)
         try:
             from .vina_scoring import vina_score_complex, compare_scoring_methods
@@ -76,6 +89,15 @@ def _register_commands():
         cmd.extend("score_ternary_complex", score_ternary_complex)
         cmd.extend("plot_binding_heatmap", plot_binding_heatmap)
         
+        # 分子胶特异命令
+        cmd.extend("ppi_analyze", ppi_analyze)
+        cmd.extend("neo_epitope_find", neo_epitope_find)
+        cmd.extend("analyze_protein_protein_interface", analyze_protein_protein_interface)
+        cmd.extend("identify_neo_epitope", identify_neo_epitope)
+        cmd.extend("calculate_interface_bsa", calculate_interface_bsa)
+        cmd.extend("find_crbn_g_motif", find_crbn_g_motif)
+        cmd.extend("analyze_g_motif_glue_binding", analyze_g_motif_glue_binding)
+        
         # Vina评分命令(可选)
         if _vina_available:
             cmd.extend("vina_score_complex", vina_score_complex)
@@ -90,12 +112,12 @@ def _register_commands():
 # ---- GUI 启动（非模态，防卡死）----
 _dlg = None
 
-def molstruct_gui():
-    """启动 MolStruct 统一 GUI 窗口（非模态，不阻塞事件循环）"""
+def gluetk_gui():
+    """启动 GlueTK 统一 GUI 窗口（非模态，不阻塞事件循环）"""
     global _dlg
-    _info("[MolStruct] 正在启动统一GUI界面...", "[MolStruct] Launching unified GUI...")
+    _info("[GlueTK] 正在启动统一GUI界面...", "[GlueTK] Launching unified GUI...")
     try:
-        from .unified_gui import MolStructDialog
+        from .unified_gui import GlueTKDialog
     except Exception as e:
         _info(f"GUI 导入失败：{e}", f"Failed to import GUI: {e}")
         import traceback; traceback.print_exc()
@@ -111,16 +133,21 @@ def molstruct_gui():
             except Exception:
                 _dlg = None
         # 新建并非模态展示
-        _dlg = MolStructDialog()
+        _dlg = GlueTKDialog()
         _dlg.setModal(False)
         _dlg.show()
         _dlg.raise_()
         _dlg.activateWindow()
-        _info("[MolStruct] GUI 已打开（非模态）", "[MolStruct] GUI opened (non-modal)")
+        _info("[GlueTK] GUI 已打开（非模态）", "[GlueTK] GUI opened (non-modal)")
     except Exception as e:
         _info(f"GUI 启动失败: {e}", f"GUI start failed: {e}")
         import traceback; traceback.print_exc()
         _print_cli_fallback()
+
+# Backward compatibility alias
+def molstruct_gui():
+    """Legacy alias for gluetk_gui() - for backward compatibility"""
+    return gluetk_gui()
 
 def _print_cli_fallback():
     _info("请使用命令行：", "Use CLI instead:")
@@ -129,12 +156,21 @@ def _print_cli_fallback():
 
 # ---- 插件入口 ----
 def __init_plugin__(app=None):
-    _info("🧬 MolStruct 插件已加载", "🧬 MolStruct plugin loaded")
+    _info("🧬 GlueTK 插件已加载", "🧬 GlueTK plugin loaded")
     _register_commands()
+    
+    # Register GUI commands
+    try:
+        from pymol import cmd
+        cmd.extend("gluetk_gui", gluetk_gui)
+        cmd.extend("molstruct_gui", molstruct_gui)  # Legacy alias
+    except Exception as e:
+        print(f"Warning: Failed to register GUI command: {e}")
+    
     try:
         from pymol.plugins import addmenuitemqt
-        addmenuitemqt('MolStruct - Interaction Analysis', molstruct_gui)
-        _info("✅ GUI 菜单已启用：Plugins → MolStruct", "✅ GUI menu enabled: Plugins → MolStruct")
+        addmenuitemqt('GlueTK - Molecular Glue Analyzer', gluetk_gui)
+        _info("✅ GUI 菜单已启用：Plugins → GlueTK", "✅ GUI menu enabled: Plugins → GlueTK")
     except Exception as e:
         _info(f"⚠️ 无法添加 GUI 菜单（命令行仍可用）：{e}",
               f"⚠️ Unable to add GUI menu (CLI still available): {e}")
@@ -147,7 +183,13 @@ def __init_plugin__(app=None):
     print("    • analyze_ternary_complex - Analyze ternary complex")
     print("    • analyze_atom_pair_interactions - Analyze atom pair interactions")
     print("")
-    print("  ⛖️  Binding Energy Scoring:")
+    print("  ✨ Molecular Glue Analysis (NEW):")
+    print("    • ppi_analyze - Analyze protein-protein interface (PPI)")
+    print("    • neo_epitope_find - Identify neo-substrate epitope")
+    print("    • analyze_g_motif_glue_binding - Validate G-motif as glue substrate")
+    print("    • find_crbn_g_motif - Find CRBN G-motif/G-loop")
+    print("")
+    print("  ⚡ Binding Energy Scoring:")
     print("    • score_protein_ligand - Calculate binding energy for protein-ligand complex (empirical)")
     print("    • score_ternary_complex - Calculate binding energy for molecular glue/PROTAC (with cooperativity)")
     print("    • plot_binding_heatmap - Generate batch binding energy heatmap from CSV files")
@@ -165,7 +207,8 @@ def __init_plugin__(app=None):
     print("    • generate_interaction_network_plot - Generate interaction network plot")
     print("")
     print("  🖥️  GUI:")
-    print("    • molstruct_gui - Open unified analysis GUI (all features)")
+    print("    • gluetk_gui - Open GlueTK unified analysis GUI (all features)")
+    print("    • molstruct_gui - Legacy alias for gluetk_gui (for backward compatibility)")
     print("")
     print("💡 Use help(command_name) for details")
     print("⭐ Using strict standards: H-bond ≤2.8Å, Salt bridge ≤4.0Å, suitable for publication")

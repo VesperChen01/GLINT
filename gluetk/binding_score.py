@@ -183,15 +183,21 @@ def calculate_binary_score(interactions_result):
     }
 
 
-def calculate_ternary_score(ternary_result):
+def calculate_ternary_score(ternary_result, ppi_result=None, neo_epitope_result=None):
     """
     计算分子胶/PROTAC三元复合物结合能(含协同效应)
+    
+    ✨ 新增分子胶特异分析:
+    - ppi_result: 蛋白-蛋白界面分析结果 (来自 ppi_analyzer.analyze_protein_protein_interface)
+    - neo_epitope_result: Neo-表位识别结果 (来自 ppi_analyzer.identify_neo_epitope)
     
     参数:
         ternary_result: analyze_ternary_complex() 返回的字典,包含:
             - protein1_result: 蛋白1-配体相互作用
             - protein2_result: 蛋白2-配体相互作用
             - bridging_analysis: 桥接分析
+        ppi_result: (可选) PPI分析结果,用于分子胶判定
+        neo_epitope_result: (可选) Neo-表位分析结果
     
     返回:
         dict: {
@@ -199,7 +205,9 @@ def calculate_ternary_score(ternary_result):
             'protein1_score': {...},  # 蛋白1评分
             'protein2_score': {...},  # 蛋白2评分
             'cooperativity': float,  # 协同效应 (kcal/mol)
+            'cooperativity_breakdown': {...},  # 协同效应分解
             'balance_factor': float,  # 相互作用平衡度 [0-1]
+            'mechanism': str,  # "Molecular Glue" 或 "PROTAC" 或 "Unknown"
             'recommendation': str  # 设计建议
         }
     """
@@ -237,42 +245,103 @@ def calculate_ternary_score(ternary_result):
             entropy = -(p1_frac * math.log2(p1_frac) + p2_frac * math.log2(p2_frac))
             balance_factor = entropy / 1.0  # normalize to [0, 1]
     
-    # 计算协同效应
-    cooperativity = 0.0
+    # ========== 基础协同效应 (PROTAC模式) ==========
+    cooperativity_base = 0.0
     coop_params = SCORE_PARAMS['cooperativity']
     
     if balance_factor >= coop_params['balanced_threshold']:
         # 平衡的相互作用 → 协同奖励
-        # 奖励与平衡度和总接触数正相关
-        cooperativity = coop_params['bonus_max'] * balance_factor * min(1.0, total_contacts / 10.0)
+        cooperativity_base = coop_params['bonus_max'] * balance_factor * min(1.0, total_contacts / 10.0)
     else:
         # 不平衡 → 惩罚
-        cooperativity = coop_params['penalty_imbalance'] * (1.0 - balance_factor)
+        cooperativity_base = coop_params['penalty_imbalance'] * (1.0 - balance_factor)
+    
+    # ========== 分子胶特异协同因子 ==========
+    cooperativity_factors = {
+        'base': cooperativity_base,
+        'ppi_bonus': 0.0,           # 蛋白-蛋白接触奖励
+        'neo_epitope_bonus': 0.0,   # Neo-表位奖励
+        'interface_strength': 0.0,  # 界面强度奖励
+        'bsa_bonus': 0.0            # 埋藏表面积奖励
+    }
+    
+    mechanism = "Unknown"  # "Molecular Glue" / "PROTAC" / "Unknown"
+    
+    # 如果提供了PPI分析结果
+    if ppi_result:
+        interface_contacts = ppi_result.get('interface_contacts', 0)
+        is_strong_interface = ppi_result.get('is_strong_interface', False)
+        interface_strength = ppi_result.get('interface_strength', 0.0)
+        bsa = ppi_result.get('bsa', 0.0)
+        
+        # PPI接触奖励 (强界面显著奖励)
+        if interface_contacts >= 10:
+            cooperativity_factors['ppi_bonus'] = -5.0  # 强PPI → 大奖励
+            mechanism = "Molecular Glue"
+        elif interface_contacts >= 5:
+            cooperativity_factors['ppi_bonus'] = -2.5  # 中等PPI
+        
+        # 界面强度奖励
+        if interface_strength > 6.0:
+            cooperativity_factors['interface_strength'] = -2.0
+        
+        # BSA奖励 (BSA > 800 Ų 认为是强界面)
+        if bsa and bsa > 800.0:
+            cooperativity_factors['bsa_bonus'] = -3.0
+            mechanism = "Molecular Glue"  # 高BSA强烈提示分子胶
+        elif bsa and bsa > 400.0:
+            cooperativity_factors['bsa_bonus'] = -1.5
+    
+    # 如果提供了Neo-表位分析结果
+    if neo_epitope_result:
+        neo_epitope_count = neo_epitope_result.get('neo_epitope_count', 0)
+        is_molecular_glue = neo_epitope_result.get('is_molecular_glue', False)
+        confidence = neo_epitope_result.get('confidence', 0.0)
+        
+        # Neo-表位奖励 (分子胶的核心特征)
+        if is_molecular_glue:
+            cooperativity_factors['neo_epitope_bonus'] = -4.0 * confidence  # 最高-4.0 kcal/mol
+            mechanism = "Molecular Glue"  # Neo-表位是分子胶的决定性证据
+        elif neo_epitope_count >= 2:
+            cooperativity_factors['neo_epitope_bonus'] = -2.0 * confidence
+    
+    # 如果没有明显PPI/Neo-表位特征，判定为PROTAC
+    if mechanism == "Unknown":
+        if ppi_result and ppi_result.get('interface_contacts', 0) < 3:
+            mechanism = "PROTAC"  # 弱/无PPI通常是PROTAC
+    
+    # 总协同效应
+    cooperativity_total = sum(cooperativity_factors.values())
     
     # 总结合能 = 蛋白1 + 蛋白2 + 协同效应
-    total_score = p1_score['total'] + p2_score['total'] + cooperativity
+    total_score = p1_score['total'] + p2_score['total'] + cooperativity_total
     
     # 生成设计建议
-    recommendation = _generate_recommendation(p1_score, p2_score, balance_factor, cooperativity)
+    recommendation = _generate_recommendation_v2(
+        p1_score, p2_score, balance_factor, cooperativity_total,
+        mechanism, ppi_result, neo_epitope_result
+    )
     
     return {
         'total': round(total_score, 2),
         'protein1_score': p1_score,
         'protein2_score': p2_score,
-        'cooperativity': round(cooperativity, 2),
+        'cooperativity': round(cooperativity_total, 2),
+        'cooperativity_breakdown': {k: round(v, 2) for k, v in cooperativity_factors.items()},
         'balance_factor': round(balance_factor, 3),
+        'mechanism': mechanism,
         'recommendation': recommendation,
         'breakdown': {
             'protein1_total': p1_score['total'],
             'protein2_total': p2_score['total'],
-            'cooperativity_bonus': round(cooperativity, 2)
+            'cooperativity_bonus': round(cooperativity_total, 2)
         }
     }
 
 
 def _generate_recommendation(p1_score, p2_score, balance_factor, cooperativity):
     """
-    基于评分生成分子设计建议
+    基于评分生成分子设计建议（旧版，保留向后兼容）
     """
     recommendations = []
     
@@ -306,6 +375,100 @@ def _generate_recommendation(p1_score, p2_score, balance_factor, cooperativity):
         recommendations.append("⚠️ 预测结合能偏弱,建议优化设计")
     
     return " | ".join(recommendations) if recommendations else "无特殊建议"
+
+
+def _generate_recommendation_v2(p1_score, p2_score, balance_factor, cooperativity,
+                                mechanism, ppi_result, neo_epitope_result):
+    """
+    基于评分生成分子设计建议（分子胶特异版本）
+    
+    参数:
+        mechanism: "Molecular Glue" / "PROTAC" / "Unknown"
+        ppi_result: PPI分析结果
+        neo_epitope_result: Neo-表位分析结果
+    """
+    recommendations = []
+    
+    # 机制判定
+    if mechanism == "Molecular Glue":
+        recommendations.append("✨ 检测到分子胶机制 (Molecular Glue)")
+    elif mechanism == "PROTAC":
+        recommendations.append("🔗 检测到PROTAC机制 (Linker-based)")
+    else:
+        recommendations.append("❓ 未能确定机制类型")
+    
+    # PPI相关建议
+    if ppi_result:
+        interface_contacts = ppi_result.get('interface_contacts', 0)
+        bsa = ppi_result.get('bsa')
+        
+        if interface_contacts >= 10:
+            recommendations.append(f"💪 强蛋白-蛋白界面 ({interface_contacts}个接触)")
+        elif interface_contacts >= 5:
+            recommendations.append(f"⚡ 中等蛋白-蛋白界面 ({interface_contacts}个接触)")
+        elif interface_contacts < 3 and mechanism == "Unknown":
+            recommendations.append("⚠️ 蛋白-蛋白接触弱,可能是PROTAC或需优化界面")
+        
+        if bsa:
+            if bsa > 800.0:
+                recommendations.append(f"🌟 高埋藏表面积 (BSA={bsa:.1f}Ų),界面稳定")
+            elif bsa < 400.0:
+                recommendations.append(f"⚠️ 低埋藏表面积 (BSA={bsa:.1f}Ų),考虑增强界面")
+    
+    # Neo-表位相关建议
+    if neo_epitope_result:
+        neo_count = neo_epitope_result.get('neo_epitope_count', 0)
+        confidence = neo_epitope_result.get('confidence', 0.0)
+        is_glue = neo_epitope_result.get('is_molecular_glue', False)
+        
+        if is_glue:
+            recommendations.append(f"🎯 识别到{neo_count}个Neo-表位残基 (置信度={confidence:.2f})")
+        elif neo_count >= 2:
+            recommendations.append(f"💡 检测到{neo_count}个候选Neo-表位,可能具有分子胶特征")
+        elif neo_count == 0:
+            recommendations.append("⚠️ 未检测到Neo-表位,不符合典型分子胶特征")
+    
+    # 平衡度建议
+    if balance_factor < 0.3:
+        weak_side = "E3 Ligase" if p1_score['contact_count'] < p2_score['contact_count'] else "Substrate"
+        recommendations.append(f"⚠️ {weak_side}侧接触偏少,建议增强")
+    elif balance_factor > 0.7:
+        recommendations.append("✅ 相互作用平衡良好")
+    
+    # 氢键建议
+    p1_hb = p1_score['interaction_counts'].get('hbond', 0)
+    p2_hb = p2_score['interaction_counts'].get('hbond', 0)
+    
+    if p1_hb < 2:
+        recommendations.append("💡 E3侧氢键偏少(<2),考虑引入极性基团")
+    if p2_hb < 2:
+        recommendations.append("💡 Substrate侧氢键偏少(<2),考虑引入极性基团")
+    
+    # 协同效应
+    if cooperativity < -3.0:
+        recommendations.append(f"🚀 强协同效应 ({cooperativity:.1f} kcal/mol),设计优秀")
+    elif cooperativity < -1.0:
+        recommendations.append(f"✨ 显著协同效应 ({cooperativity:.1f} kcal/mol)")
+    elif cooperativity > 2.0:
+        recommendations.append(f"❌ 大幅不平衡惩罚 (+{cooperativity:.1f} kcal/mol),需优化")
+    
+    # 总分评估
+    total = p1_score['total'] + p2_score['total'] + cooperativity
+    if total < -15.0:
+        recommendations.append("🏆 预测结合能极优 (<-15 kcal/mol),强烈建议实验验证")
+    elif total < -10.0:
+        recommendations.append("🎯 预测结合能优秀,建议实验验证")
+    elif total > -5.0:
+        recommendations.append("⚠️ 预测结合能偏弱,建议优化设计")
+    
+    # 针对分子胶的特殊建议
+    if mechanism == "Molecular Glue":
+        if ppi_result and ppi_result.get('interface_contacts', 0) < 8:
+            recommendations.append("💡 分子胶提示: 考虑进一步增强蛋白-蛋白界面")
+        if neo_epitope_result and neo_epitope_result.get('neo_epitope_count', 0) < 3:
+            recommendations.append("💡 分子胶提示: Neo-表位较少,考虑优化底物结合")
+    
+    return "\n  ".join(recommendations) if recommendations else "无特殊建议"
 
 
 def format_score_report(score_dict, mode="binary"):
@@ -345,24 +508,48 @@ def format_score_report(score_dict, mode="binary"):
         
     elif mode == "ternary":
         lines.append(f"\n三元复合物总结合能: {score_dict['total']:.2f} kcal/mol")
+        
+        # 机制判定
+        mechanism = score_dict.get('mechanism', 'Unknown')
+        if mechanism == "Molecular Glue":
+            lines.append("机制类型: ✨ 分子胶 (Molecular Glue)")
+        elif mechanism == "PROTAC":
+            lines.append("机制类型: 🔗 PROTAC (Linker-based)")
+        else:
+            lines.append("机制类型: ❓ 未确定")
+        
         lines.append(f"相互作用平衡度: {score_dict['balance_factor']:.3f}")
         lines.append(f"协同效应: {score_dict['cooperativity']:+.2f} kcal/mol")
         
+        # 协同效应分解（如果有）
+        if 'cooperativity_breakdown' in score_dict:
+            breakdown = score_dict['cooperativity_breakdown']
+            lines.append("\n协同效应分解:")
+            lines.append(f"  基础: {breakdown.get('base', 0):+.2f} kcal/mol")
+            if breakdown.get('ppi_bonus', 0) != 0:
+                lines.append(f"  PPI奖励: {breakdown['ppi_bonus']:+.2f} kcal/mol")
+            if breakdown.get('neo_epitope_bonus', 0) != 0:
+                lines.append(f"  Neo-表位奖励: {breakdown['neo_epitope_bonus']:+.2f} kcal/mol")
+            if breakdown.get('interface_strength', 0) != 0:
+                lines.append(f"  界面强度奖励: {breakdown['interface_strength']:+.2f} kcal/mol")
+            if breakdown.get('bsa_bonus', 0) != 0:
+                lines.append(f"  BSA奖励: {breakdown['bsa_bonus']:+.2f} kcal/mol")
+        
         lines.append("\n" + "-" * 60)
-        lines.append("Protein 1 - Ligand:")
+        lines.append("Protein 1 (E3 Ligase) - Ligand:")
         p1 = score_dict['protein1_score']
         lines.append(f"  总分: {p1['total']:.2f} kcal/mol  (接触数: {p1['contact_count']})")
         lines.append(f"  氢键: {p1['components']['hbond']:.2f}  盐桥: {p1['components']['ionic']:.2f}  疏水: {p1['components']['hydrophobic']:.2f}")
         
         lines.append("\n" + "-" * 60)
-        lines.append("Protein 2 - Ligand:")
+        lines.append("Protein 2 (Substrate) - Ligand:")
         p2 = score_dict['protein2_score']
         lines.append(f"  总分: {p2['total']:.2f} kcal/mol  (接触数: {p2['contact_count']})")
         lines.append(f"  氢键: {p2['components']['hbond']:.2f}  盐桥: {p2['components']['ionic']:.2f}  疏水: {p2['components']['hydrophobic']:.2f}")
         
         lines.append("\n" + "=" * 60)
         lines.append("设计建议:")
-        lines.append(score_dict['recommendation'])
+        lines.append("  " + score_dict['recommendation'])
     
     lines.append("\n" + "=" * 60)
     lines.append("⚠️ 注意: 此评分为快速估算,适合初步排序,不能替代精确计算")

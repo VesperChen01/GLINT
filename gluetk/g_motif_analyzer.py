@@ -237,3 +237,204 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         except Exception: pass
 
     return hits
+
+
+# ====== 5) Glue结合验证功能 ======
+def analyze_g_motif_glue_binding(obj_name,
+                                  g_motif_chain,
+                                  g_motif_resi_range,  # tuple: (start, end) or "start-end"
+                                  glue_resname,
+                                  crbn_chain,
+                                  distance_threshold=5.0):
+    """
+    验证检测到的 G-motif 是否真的是分子胶底物
+    
+    检测逻辑:
+    1. G-motif 与 CRBN 的距离
+    2. Glue 是否插入 G-motif 和 CRBN 之间
+    3. 关键残基（如 Gly6）是否参与相互作用
+    
+    参数:
+        obj_name: PyMOL对象名称
+        g_motif_chain: G-motif所在链 ID
+        g_motif_resi_range: G-motif残基范围 (start, end) 或 "start-end"
+        glue_resname: 分子胶名称
+        crbn_chain: CRBN链 ID
+        distance_threshold: 接触距离阈值（埃）
+    
+    返回:
+        dict: {
+            'is_glue_substrate': bool,  # 是否为分子胶底物
+            'binding_mode': str,  # "glue-induced" / "direct" / "no-binding"
+            'g_motif_crbn_distance': float,  # G-motif到CRBN最短距离
+            'glue_contacts_g_motif': int,  # Glue与G-motif接触数
+            'glue_contacts_crbn': int,  # Glue与CRBN接触数
+            'key_residues_engaged': list,  # 参与相互作用的关键残基
+            'confidence': float  # 置信度 [0-1]
+        }
+    """
+    if obj_name not in cmd.get_object_list():
+        print(f"[analyze_g_motif_glue_binding] Object '{obj_name}' not found")
+        return None
+    
+    # 解析残基范围
+    if isinstance(g_motif_resi_range, str):
+        parts = g_motif_resi_range.split('-')
+        start_resi = parts[0].strip()
+        end_resi = parts[1].strip() if len(parts) > 1 else start_resi
+    else:
+        start_resi, end_resi = g_motif_resi_range
+    
+    print(f"[G-motif Glue Binding] Analyzing: {g_motif_chain}:{start_resi}-{end_resi} with {glue_resname} and CRBN {crbn_chain}")
+    
+    # 获取原子坐标
+    g_motif_sel = f"{obj_name} and chain {g_motif_chain} and resi {start_resi}-{end_resi}"
+    crbn_sel = f"{obj_name} and chain {crbn_chain} and polymer.protein"
+    glue_sel = f"{obj_name} and resn {glue_resname}"
+    
+    # 检查Glue是否存在
+    glue_model = cmd.get_model(glue_sel)
+    if len(glue_model.atom) == 0:
+        print(f"[G-motif Glue Binding] ⚠️ Glue molecule '{glue_resname}' not found")
+        return None
+    
+    # 获取原子
+    g_motif_atoms = [(a.coord[0], a.coord[1], a.coord[2], a.resn, a.resi, a.name) for a in cmd.get_model(g_motif_sel).atom]
+    crbn_atoms = [(a.coord[0], a.coord[1], a.coord[2], a.resn, a.resi, a.name) for a in cmd.get_model(crbn_sel).atom]
+    glue_atoms = [(a.coord[0], a.coord[1], a.coord[2], a.resn, a.resi, a.name) for a in glue_model.atom]
+    
+    if not g_motif_atoms or not crbn_atoms:
+        print("[G-motif Glue Binding] ⚠️ Missing atoms for analysis")
+        return None
+    
+    # 1. 计算 G-motif 与 CRBN 的最短距离
+    min_g_crbn_dist = float('inf')
+    for g_atom in g_motif_atoms:
+        for c_atom in crbn_atoms:
+            d = _distance_3d(g_atom[:3], c_atom[:3])
+            min_g_crbn_dist = min(min_g_crbn_dist, d)
+    
+    # 2. 计算 Glue 与 G-motif 和 CRBN 的接触
+    glue_contacts_g_motif = 0
+    glue_contacts_crbn = 0
+    glue_g_contacts_list = []  # 记录具体接触
+    glue_c_contacts_list = []
+    
+    for glue_atom in glue_atoms:
+        # 与 G-motif 接触
+        for g_atom in g_motif_atoms:
+            d = _distance_3d(glue_atom[:3], g_atom[:3])
+            if d <= distance_threshold:
+                glue_contacts_g_motif += 1
+                glue_g_contacts_list.append((g_atom[3], g_atom[4], d))  # (resn, resi, dist)
+                break  # 每个Glue原子只计数一次
+        
+        # 与 CRBN 接触
+        for c_atom in crbn_atoms:
+            d = _distance_3d(glue_atom[:3], c_atom[:3])
+            if d <= distance_threshold:
+                glue_contacts_crbn += 1
+                glue_c_contacts_list.append((c_atom[3], c_atom[4], d))
+                break
+    
+    # 3. 分析关键残基（如 Gly6）
+    key_residues_engaged = []
+    # 获取 G-motif 序列位置
+    g_motif_residues = defaultdict(list)
+    for atom in g_motif_atoms:
+        res_key = (atom[3], atom[4])  # (resn, resi)
+        g_motif_residues[res_key].append(atom)
+    
+    # 按resi排序
+    sorted_residues = sorted(g_motif_residues.keys(), key=lambda x: _parse_resi(x[1]))
+    
+    # 检查第6位（Gly6）是否参与
+    if len(sorted_residues) >= 6:
+        gly6_key = sorted_residues[5]  # 0-indexed
+        gly6_atoms = g_motif_residues[gly6_key]
+        
+        # 检查Gly6是否与Glue或CRBN接触
+        gly6_contacts_glue = False
+        gly6_contacts_crbn = False
+        
+        for gly_atom in gly6_atoms:
+            for glue_atom in glue_atoms:
+                if _distance_3d(gly_atom[:3], glue_atom[:3]) <= distance_threshold:
+                    gly6_contacts_glue = True
+                    break
+            for c_atom in crbn_atoms:
+                if _distance_3d(gly_atom[:3], c_atom[:3]) <= distance_threshold:
+                    gly6_contacts_crbn = True
+                    break
+        
+        if gly6_contacts_glue or gly6_contacts_crbn:
+            key_residues_engaged.append({
+                'position': 6,
+                'residue': f"{gly6_key[0]} {gly6_key[1]}",
+                'contacts_glue': gly6_contacts_glue,
+                'contacts_crbn': gly6_contacts_crbn
+            })
+    
+    # 4. 判定结合模式
+    binding_mode = "no-binding"
+    is_glue_substrate = False
+    confidence = 0.0
+    
+    # 检测是否为Glue诱导结合
+    if glue_contacts_g_motif >= 2 and glue_contacts_crbn >= 2:
+        # Glue同时与G-motif和CRBN接触 → 分子胶机制
+        binding_mode = "glue-induced"
+        is_glue_substrate = True
+        confidence = min(1.0, (glue_contacts_g_motif + glue_contacts_crbn) / 10.0)
+        
+        # 如果关键残基参与，提高置信度
+        if key_residues_engaged:
+            confidence = min(1.0, confidence + 0.2)
+    
+    elif min_g_crbn_dist <= distance_threshold and glue_contacts_g_motif == 0:
+        # G-motif直接与CRBN接触，但Glue不参与 → 直接结合（非分子胶）
+        binding_mode = "direct"
+        is_glue_substrate = False
+        confidence = 0.3
+    
+    elif glue_contacts_g_motif >= 2 or glue_contacts_crbn >= 2:
+        # 部分接触
+        binding_mode = "partial"
+        is_glue_substrate = (glue_contacts_g_motif >= 2 and glue_contacts_crbn >= 1)
+        confidence = 0.5 if is_glue_substrate else 0.2
+    
+    result = {
+        'is_glue_substrate': is_glue_substrate,
+        'binding_mode': binding_mode,
+        'g_motif_crbn_distance': round(min_g_crbn_dist, 2) if min_g_crbn_dist != float('inf') else None,
+        'glue_contacts_g_motif': glue_contacts_g_motif,
+        'glue_contacts_crbn': glue_contacts_crbn,
+        'key_residues_engaged': key_residues_engaged,
+        'confidence': round(confidence, 2)
+    }
+    
+    # 打印结果
+    print("\n" + "=" * 60)
+    print("G-motif Glue结合验证 (G-motif Glue Binding Analysis)")
+    print("=" * 60)
+    print(f"G-motif 到 CRBN 距离: {result['g_motif_crbn_distance']} Å")
+    print(f"Glue - G-motif 接触数: {glue_contacts_g_motif}")
+    print(f"Glue - CRBN 接触数: {glue_contacts_crbn}")
+    print(f"结合模式: {binding_mode}")
+    print(f"是否为分子胶底物: {'\u2728 是' if is_glue_substrate else '\u26a0\ufe0f 否'}")
+    print(f"置信度: {confidence:.2f}")
+    
+    if key_residues_engaged:
+        print(f"\n关键残基参与:")
+        for res in key_residues_engaged:
+            print(f"  位置{res['position']}: {res['residue']} (Glue: {res['contacts_glue']}, CRBN: {res['contacts_crbn']})")
+    print("=" * 60)
+    
+    return result
+
+
+def _distance_3d(coord1, coord2):
+    """计算3D距离"""
+    return ((coord1[0] - coord2[0])**2 + 
+            (coord1[1] - coord2[1])**2 + 
+            (coord1[2] - coord2[2])**2)**0.5

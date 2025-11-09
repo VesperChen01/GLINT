@@ -40,28 +40,28 @@ try:
     from rdkit import Chem
     from rdkit.Chem import AllChem
     RDKIT_AVAILABLE = True
-    print("[MolStruct] ✅ RDKit loaded")
+    print("[GlueTK] ✅ RDKit loaded")
 except ImportError:
-    print("[MolStruct] ⚠️ RDKit not installed; some advanced features unavailable")
-    print("[MolStruct] 💡 Install manually: pip install rdkit")
+    print("[GlueTK] ⚠️ RDKit not installed; some advanced features unavailable")
+    print("[GlueTK] 💡 Install manually: pip install rdkit")
 
 try:
     import numpy as np
     NUMPY_AVAILABLE = True
 except ImportError:
-    print("[MolStruct] ⚠️ NumPy not installed")
+    print("[GlueTK] ⚠️ NumPy not installed")
 
 try:
     from scipy.spatial import cKDTree
     SCIPY_AVAILABLE = True
 except ImportError:
-    print("[MolStruct] ⚠️ SciPy not installed; spatial acceleration unavailable")
+    print("[GlueTK] ⚠️ SciPy not installed; spatial acceleration unavailable")
 
 try:
     import matplotlib.pyplot as plt
     MPL_AVAILABLE = True
 except ImportError:
-    print("[MolStruct] ⚠️ Matplotlib not installed; plotting unavailable")
+    print("[GlueTK] ⚠️ Matplotlib not installed; plotting unavailable")
 
 # ========== 相互作用参数（严格标准）==========
 # 符合发表要求的药物设计标准

@@ -1,4 +1,4 @@
-# MolStruct Plugin for PyMOL
+# GlueTK Plugin for PyMOL
 
 蛋白质相互作用分析与可视化插件
 
@@ -72,7 +72,7 @@ highlight_csv_residues('interactions.csv', obj='protein')
 
 ```python
 # 打开 GUI
-molstruct_gui
+gluetk_gui
 
 # 蛋白-配体专用 GUI
 protein_ligand_gui
@@ -228,10 +228,10 @@ analyze_protein_ligand_interactions(...)
 help(analyze_protein_ligand_interactions)
 
 # 查看所有命令
-help(molstruct_plugin)
+help(gluetk)
 
 # 打开 GUI
-molstruct_gui
+gluetk_gui
 ```
 
 ## 🎯 参数对比表
@@ -252,7 +252,7 @@ molstruct_gui
 如在研究中使用，请引用：
 
 ```
-MolStruct Plugin for PyMOL
+GlueTK Plugin for PyMOL
 蛋白-配体相互作用分析（支持 Schrödinger 标准）
 版本: 1.0.0
 ```

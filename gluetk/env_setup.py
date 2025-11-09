@@ -3,7 +3,7 @@
 env_setup.py
 环境依赖自动检测与静默安装模块
 
-用于确保 MolStruct 插件所需的所有依赖包在运行前已正确安装
+用于确保 GlueTK 插件所需的所有依赖包在运行前已正确安装
 """
 
 from __future__ import print_function
@@ -143,7 +143,7 @@ def get_dependency_status() -> dict:
 def print_dependency_report():
     """Print dependency status report"""
     print("\n" + "="*50)
-    print("MolStruct Dependency Status Report")
+    print("GlueTK Dependency Status Report")
     print("="*50)
     
     status = get_dependency_status()

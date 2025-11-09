@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 vina_scoring.py
-MolStruct插件的AutoDock Vina评分集成
+GlueTK插件的AutoDock Vina评分集成
 
 将Vina评分功能整合到PyMOL环境,提供更精确的结合能估算
 - 自动检测Vina安装
@@ -284,24 +284,24 @@ def compare_scoring_methods(protein_obj, ligand_resname):
     print("Scoring Method Comparison")
     print("=" * 60)
     
-    # 1. 经验评分(MolStruct内置)
+    # 1. 经验评分(GlueTK内置)
     try:
         from .binding_score import calculate_binary_score
         from .interaction_analyzer import analyze_protein_ligand_interactions
         
-        print("\n[1/2] Running MolStruct empirical scoring...")
+        print("\n[1/2] Running GlueTK empirical scoring...")
         result = analyze_protein_ligand_interactions(protein_obj, ligand_resname)
         empirical_score = calculate_binary_score(result)
         
         if empirical_score:
-            print(f"✅ MolStruct Score: {empirical_score['total']:.2f} kcal/mol")
+            print(f"✅ GlueTK Score: {empirical_score['total']:.2f} kcal/mol")
             print(f"   Components: H-bond={empirical_score['components']['hbond']:.2f}, "
                   f"Ionic={empirical_score['components']['ionic']:.2f}, "
                   f"Hydrophobic={empirical_score['components']['hydrophobic']:.2f}")
         else:
-            print("⚠️  MolStruct scoring failed")
+            print("⚠️  GlueTK scoring failed")
     except ImportError:
-        print("⚠️  MolStruct scoring module not available")
+        print("⚠️  GlueTK scoring module not available")
         empirical_score = None
     
     # 2. Vina评分
@@ -326,12 +326,12 @@ def compare_scoring_methods(protein_obj, ligand_resname):
     print("=" * 60)
     
     if empirical_score and vina_score:
-        print(f"MolStruct Empirical: {empirical_score['total']:>7.2f} kcal/mol  (Fast, ~0.1s)")
+        print(f"GlueTK Empirical: {empirical_score['total']:>7.2f} kcal/mol  (Fast, ~0.1s)")
         print(f"Vina Score:          {vina_score:>7.2f} kcal/mol  (Medium, ~1s)")
         print(f"\nDifference:          {abs(empirical_score['total'] - vina_score):>7.2f} kcal/mol")
         
         print("\n💡 Recommendations:")
-        print("   • Use MolStruct for quick screening (>1000 compounds)")
+        print("   • Use GlueTK for quick screening (>1000 compounds)")
         print("   • Use Vina for validation (top 10-50 hits)")
         print("   • Use full Vina docking for final candidates")
     
@@ -349,7 +349,7 @@ def batch_score_vina_results(results_dir):
     批量评分Vina对接结果,添加经验评分作为补充
     
     用法(在PyMOL外):
-        python -c "from molstruct_plugin.vina_scoring import batch_score_vina_results; batch_score_vina_results('./results')"
+        python -c "from gluetk.vina_scoring import batch_score_vina_results; batch_score_vina_results('./results')"
     
     参数:
         results_dir: Vina对接结果目录(包含*_out子目录)

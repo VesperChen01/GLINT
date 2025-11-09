@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-MolStruct 现代化样式表
+GlueTK 现代化样式表
 灵感来自 Warp Plus 设计 - 时尚感与科研风格并重
 """
 
@@ -138,12 +138,10 @@ def get_dark_theme():
         background: {COLORS['bg_main']};
         border: 1px solid {COLORS['border']};
         border-radius: 6px;
-        padding: 3px 8px;   /* 进一步减小垂直内边距 */
-        min-height: 24px;    /* 进一步减小最小高度 */
-        max-height: 24px;    /* 限制最大高度 */
+        padding: 6px 10px;
         color: {COLORS['text_primary']};
         selection-background-color: {COLORS['primary']};
-        font-size: 12px;     /* 减小字体 */
+        font-size: 13px;
     }}
     
     QLineEdit:focus {{
@@ -162,11 +160,9 @@ def get_dark_theme():
         color: {COLORS['text_primary']};
         border: 1px solid {COLORS['border']};
         border-radius: 8px;
-        padding: 4px 14px; /* 进一步减小按钮垂直内边距 */
-        min-height: 24px;    /* 限制按钮高度 */
-        max-height: 26px;
+        padding: 6px 14px;
         font-weight: 500;
-        font-size: 12px;     /* 减小字体 */
+        font-size: 13px;
     }}
     
     QPushButton:hover {{
@@ -265,17 +261,37 @@ def get_dark_theme():
     }}
     
     /* 浏览按钮 - 蓝色 */
-    QPushButton[text="Browse…"],
-    QPushButton[text="浏览…"] {{
+    QPushButton#browse_btn {{
         background: {COLORS['primary']};
         color: white;
         border: none;
         font-weight: 500;
+        padding: 6px 12px;
+        min-width: 70px;
+        min-height: 28px;
+        max-height: 32px;
     }}
     
-    QPushButton[text="Browse…"]:hover,
-    QPushButton[text="浏览…"]:hover {{
+    QPushButton#browse_btn:hover {{
         background: {COLORS['primary_hover']};
+    }}
+    
+    /* 刷新按钮 - 浅灰 */
+    QPushButton#refresh_btn {{
+        background: {COLORS['bg_hover']};
+        color: {COLORS['text_secondary']};
+        border: 1px solid {COLORS['border']};
+        padding: 6px 10px;
+        font-size: 12px;
+        min-width: 60px;
+        min-height: 28px;
+        max-height: 32px;
+    }}
+    
+    QPushButton#refresh_btn:hover {{
+        background: {COLORS['bg_main']};
+        border: 1px solid {COLORS['primary']};
+        color: {COLORS['text_primary']};
     }}
     
     /* 关闭按钮 - 红色 */
@@ -332,11 +348,9 @@ def get_dark_theme():
         background: {COLORS['bg_main']};
         border: 1px solid {COLORS['border']};
         border-radius: 6px;
-        padding: 3px 8px;   /* 进一步减小垂直内边距 */
-        min-height: 24px;    /* 进一步减小最小高度 */
-        max-height: 24px;    /* 限制最大高度 */
+        padding: 6px 10px;
         color: {COLORS['text_primary']};
-        font-size: 12px;     /* 减小字体 */
+        font-size: 13px;
         min-width: 120px;
     }}
     
@@ -731,7 +745,10 @@ def get_light_theme():
         color: white;
         border: none;
         font-weight: 500;
+        padding: 6px 12px;
         min-width: 70px;
+        min-height: 28px;
+        max-height: 32px;
     }}
     
     QPushButton#browse_btn:hover {{
@@ -744,8 +761,10 @@ def get_light_theme():
         color: #666;
         border: 1px solid #ddd;
         padding: 6px 10px;
-        font-size: 11px;
+        font-size: 12px;
         min-width: 60px;
+        min-height: 28px;
+        max-height: 32px;
     }}
     
     QPushButton#refresh_btn:hover {{
@@ -793,8 +812,7 @@ def get_light_theme():
         background: white;
         border: 1px solid {COLORS['border_light']};
         border-radius: 6px;
-        padding: 7px 12px;   /* 更紧凑的垂直内边距 */
-        min-height: 28px;    /* 更小的最小高度 */
+        padding: 6px 10px;
         color: {COLORS['text_dark']};
         font-size: 13px;
         min-width: 120px;

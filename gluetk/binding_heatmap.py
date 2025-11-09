@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 binding_heatmap.py
-MolStruct插件的批量结合能热图生成模块
+GlueTK插件的批量结合能热图生成模块
 
 功能:
 - 自动扫描多个 *_scores.csv 文件
