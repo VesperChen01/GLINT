@@ -338,9 +338,9 @@ class GlueTKDialog(QDialog):
         main_layout.setContentsMargins(15, 15, 15, 15)  # 恢复到舒适的外边距
         main_layout.setSpacing(12)  # 恢复到舒适的间距
 
-        # 水平分割：导航 | 内容 | 结果
+        # 水平分割：导航 | 内容（全屏）
         content_row = QHBoxLayout()
-        content_row.setSpacing(10)  # 减小间距
+        content_row.setSpacing(10)
 
         # ========== Left: Navigation List ==========
         nav_widget = QWidget()
@@ -436,51 +436,27 @@ class GlueTKDialog(QDialog):
         contact_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))
         nav_layout.addWidget(contact_btn)
 
-        # ========== 右侧：结果与日志 ==========
-        right_widget = QWidget()
-        right_layout = QVBoxLayout(right_widget)
-        right_layout.setSpacing(6)  # 减小间距
-        right_layout.setContentsMargins(0, 0, 0, 0)
-
-        grp = QGroupBox(t("right_results"))
-        grp_layout = QVBoxLayout(grp)
-        grp_layout.setSpacing(6)  # 减小间距
-
-        self.table = QTableWidget()
-        self.table.setColumnCount(6)
-        self.table.setHorizontalHeaderLabels(T["table_header"][get_lang()])
-        self.table.setSortingEnabled(True)
-        self.table.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
-        # 行距与可读性修复（按比例）
-        try:
-            self.table.setAlternatingRowColors(True)
-            vh = self.table.verticalHeader()
-            base = 28
-            scale = getattr(self, "_ui_scale", 1.0)
-            vh.setDefaultSectionSize(int(base * scale))
-            self.table.setWordWrap(False)
-        except Exception:
-            pass
-        grp_layout.addWidget(self.table)
-
+        # ========== 底部日志区域（必须先创建，因为某些 tab 会引用它）==========
+        log_grp = QGroupBox("📋 Console Log")
+        log_layout = QVBoxLayout(log_grp)
+        log_layout.setSpacing(4)
+        log_layout.setContentsMargins(8, 8, 8, 8)
+        
         self.log_edit = QTextEdit()
         self.log_edit.setReadOnly(True)
-        self.log_edit.setMinimumHeight(100)  # 减小日志框高度
-        grp_layout.addWidget(self.log_edit)
-
+        self.log_edit.setMaximumHeight(120)  # 限制日志高度
+        self.log_edit.setMinimumHeight(80)
+        log_layout.addWidget(self.log_edit)
+        
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
-        grp_layout.addWidget(self.progress_bar)
-
-        right_layout.addWidget(grp)
+        self.progress_bar.setMaximumHeight(20)
+        log_layout.addWidget(self.progress_bar)
         
-        # Store right widget reference for show/hide
-        self.right_widget = right_widget
-
-        # ========== 中间：内容堆栈 ==========
+        # ========== 内容区域 ==========
         self.content_stack = QStackedWidget()
 
-        # 创建各个页面
+        # 创建各个页面（log_edit 必须先创建）
         self.content_stack.addWidget(self.create_welcome_tab())         # 0: Welcome
         self.content_stack.addWidget(self.create_molecular_glue_tab())  # 1: POI Discovery (G-Motif + Ternary Complex)
         self.content_stack.addWidget(self.create_interaction_tab())     # 2: Interaction Analysis (Prot-Prot + Prot-Lig + Atom)
@@ -489,31 +465,19 @@ class GlueTKDialog(QDialog):
         self.content_stack.addWidget(self.create_readme_tab())          # 5: README
         self.content_stack.addWidget(self.create_contact_tab())         # 6: Contact
 
-        # ========== Assemble horizontal layout (wider nav, balanced center, narrow right) ==========
+        # ========== Assemble horizontal layout (nav + full content) ==========
         content_row.addWidget(nav_widget, 0)  # Left nav: auto-size to content
-        nav_widget.setMaximumWidth(240)  # Further increased max width for nav panel to show full text
-        nav_widget.setMinimumWidth(220)  # Further increased min width for nav panel
-        content_row.addWidget(self.content_stack, 4)  # Center content: 4 parts (reduced from 6)
-        content_row.addWidget(right_widget, 1)  # Right results: 1 part (窄结果栏)
-        right_widget.setMaximumWidth(320)  # Slightly increased for better readability
-        right_widget.setMinimumWidth(280)  # Adjusted min width
-
-        # ========== Bottom: Empty (no status bar needed) ==========
-        btn_layout = QHBoxLayout()
-        btn_layout.setSpacing(8)  # 减小间距
-        btn_layout.setContentsMargins(0, 6, 0, 0)  # 减小上边距
-        btn_layout.addStretch(1)
+        nav_widget.setMaximumWidth(240)
+        nav_widget.setMinimumWidth(220)
+        content_row.addWidget(self.content_stack, 1)  # Content: takes all remaining space
 
         # ========== 添加到主布局 ==========
-        main_layout.addLayout(content_row)
-        main_layout.addLayout(btn_layout)
+        main_layout.addLayout(content_row, 1)  # 内容区占大部分空间
+        main_layout.addWidget(log_grp, 0)  # 日志区固定高度
 
     def on_nav_changed(self, index):
         """导航切换"""
         self.content_stack.setCurrentIndex(index)
-        # Hide right panel (CSV/log) when on Welcome page (index 0)
-        if hasattr(self, 'right_widget'):
-            self.right_widget.setVisible(index != 0)
 
     def create_interaction_tab(self) -> QWidget:
         """创建整合的相互作用分析标签页（Protein-Protein + Protein-Ligand + Atom Pairs）"""
@@ -1277,181 +1241,508 @@ class GlueTKDialog(QDialog):
         return w
 
     def create_docking_scoring_tab(self) -> QWidget:
-        """创建 Docking & Scoring 标签页 - 优化版"""
+        """创建 Docking & Scoring 标签页 - 两栏布局"""
         w = QWidget()
         main_layout = QVBoxLayout(w)
-        main_layout.setSpacing(16)
-        main_layout.setContentsMargins(16, 16, 16, 16)
+        main_layout.setSpacing(8)
+        main_layout.setContentsMargins(8, 8, 8, 8)
         
-        # ========== 卡片纵向排列 ==========
-        cards_layout = QVBoxLayout()
-        cards_layout.setSpacing(16)
+        # ========== 两栏布局 ==========
+        two_col_layout = QHBoxLayout()
+        two_col_layout.setSpacing(8)
         
-        # --- 二元复合物卡片 ---
-        binary_card = self._create_binary_scoring_card()
-        cards_layout.addWidget(binary_card)
+        # 左栏
+        left_col = QVBoxLayout()
+        left_col.setSpacing(8)
         
-        # --- 三元复合物卡片 ---
-        ternary_card = self._create_ternary_scoring_card()
-        cards_layout.addWidget(ternary_card)
+        # 口袋检测
+        pocket_card = self._create_pocket_detection_card()
+        left_col.addWidget(pocket_card)
         
-        # --- 批量热图卡片 ---
-        heatmap_card = self._create_heatmap_card()
-        cards_layout.addWidget(heatmap_card)
+        # 快速评分
+        scoring_card = self._create_quick_scoring_card()
+        left_col.addWidget(scoring_card)
         
-        main_layout.addLayout(cards_layout)
+        left_col.addStretch(1)
+        
+        # 右栏
+        right_col = QVBoxLayout()
+        right_col.setSpacing(8)
+        
+        # Vina 对接
+        docking_card = self._create_vina_docking_card()
+        right_col.addWidget(docking_card)
+        
+        right_col.addStretch(1)
+        
+        two_col_layout.addLayout(left_col, 1)
+        two_col_layout.addLayout(right_col, 1)
+        
+        main_layout.addLayout(two_col_layout)
+        
+        # ========== 高级口袋分析（全宽） ==========
+        advanced_pocket_card = self._create_advanced_pocket_card()
+        main_layout.addWidget(advanced_pocket_card)
+        
         main_layout.addStretch(1)
         
-        # 结果将显示在右侧的全局日志和表格中
-        # Scoring results will be displayed in the global log and table on the right
-        self.score_result_text = self.log_edit # 重定向到主日志
+        # 结果显示在底部日志
+        self.score_result_text = self.log_edit
         
         return w
-    def _create_binary_scoring_card(self) -> QWidget:
-        """创建二元复合物评分卡片"""
-        card = QGroupBox("Protein-Ligand Complex")
-        card.setStyleSheet("""
-            QGroupBox {
-                background: #1e293b;
-                border: 2px solid #334155;
-                border-radius: 12px;
-                padding: 16px;
-            }
-        """)
-        
+    def _create_pocket_detection_card(self) -> QWidget:
+        """创建口袋检测与可视化卡片"""
+        card = QGroupBox("🔍 Pocket Detection & Visualization")
         layout = QVBoxLayout(card)
-        layout.setSpacing(12)
+        layout.setSpacing(8)
         
-        # Object
+        # Target object
         obj_row = QHBoxLayout()
         obj_row.setSpacing(8)
-        self.score_binary_obj = QComboBox()
-        self.score_binary_obj.setFixedHeight(36)
-        self.score_binary_refresh = QPushButton("Refresh")
-        self.score_binary_refresh.setObjectName("refresh_btn")
-        self.score_binary_refresh.setFixedHeight(36)
-        self.score_binary_refresh.setFixedWidth(80)
-        self.score_binary_refresh.clicked.connect(self.refresh_objects)
-        obj_row.addWidget(self.score_binary_obj, 1)
-        obj_row.addWidget(self.score_binary_refresh)
+        self.pocket_obj_combo = QComboBox()
+        self.pocket_obj_combo.setFixedHeight(32)
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setObjectName("refresh_btn")
+        refresh_btn.setFixedHeight(32)
+        refresh_btn.setFixedWidth(70)
+        refresh_btn.clicked.connect(self.refresh_objects)
+        obj_row.addWidget(QLabel("Target:"))
+        obj_row.addWidget(self.pocket_obj_combo, 1)
+        obj_row.addWidget(refresh_btn)
         layout.addLayout(obj_row)
         
-        # Ligand
-        self.score_binary_ligand = QLineEdit()
-        self.score_binary_ligand.setFixedHeight(36)
-        self.score_binary_ligand.setPlaceholderText("Ligand (e.g., LIG, MK1)")
-        layout.addWidget(self.score_binary_ligand)
+        # Parameters row
+        param_row = QHBoxLayout()
+        param_row.setSpacing(8)
         
-        # 按钮
+        self.pocket_grid_spacing = QLineEdit("0.6")
+        self.pocket_grid_spacing.setFixedHeight(32)
+        self.pocket_grid_spacing.setFixedWidth(50)
+        
+        self.pocket_min_volume = QLineEdit("20")
+        self.pocket_min_volume.setFixedHeight(32)
+        self.pocket_min_volume.setFixedWidth(50)
+        
+        param_row.addWidget(QLabel("Grid:"))
+        param_row.addWidget(self.pocket_grid_spacing)
+        param_row.addWidget(QLabel("Å"))
+        param_row.addWidget(QLabel("Min Vol:"))
+        param_row.addWidget(self.pocket_min_volume)
+        param_row.addWidget(QLabel("Ų"))
+        param_row.addStretch()
+        layout.addLayout(param_row)
+        
+        # Color by selection
+        color_row = QHBoxLayout()
+        color_row.setSpacing(8)
+        self.pocket_color_by = QComboBox()
+        self.pocket_color_by.addItems(["Volume", "Druggability", "Hydrophobicity", "Depth"])
+        self.pocket_color_by.setFixedHeight(32)
+        color_row.addWidget(QLabel("Color by:"))
+        color_row.addWidget(self.pocket_color_by, 1)
+        layout.addLayout(color_row)
+        
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        
+        detect_btn = QPushButton("Detect Pockets")
+        detect_btn.setObjectName("highlight_btn")
+        detect_btn.setFixedHeight(32)
+        detect_btn.clicked.connect(self.run_pocket_detection)
+        
+        viz_btn = QPushButton("Visualize")
+        viz_btn.setObjectName("refresh_btn")
+        viz_btn.setFixedHeight(32)
+        viz_btn.clicked.connect(self.run_pocket_visualization)
+        
+        btn_row.addWidget(detect_btn)
+        btn_row.addWidget(viz_btn)
+        layout.addLayout(btn_row)
+        
+        return card
+    
+    def _create_vina_docking_card(self) -> QWidget:
+        """创建 Vina 对接卡片（含配置编辑）"""
+        card = QGroupBox("⚙️ AutoDock Vina Docking")
+        layout = QVBoxLayout(card)
+        layout.setSpacing(8)
+        
+        # Receptor & Ligand
+        file_grid = QGridLayout()
+        file_grid.setSpacing(8)
+        
+        self.vina_receptor = QLineEdit()
+        self.vina_receptor.setPlaceholderText("Receptor PDB/PDBQT")
+        self.vina_receptor.setFixedHeight(32)
+        receptor_browse = QPushButton("Browse")
+        receptor_browse.setObjectName("refresh_btn")
+        receptor_browse.setFixedHeight(32)
+        receptor_browse.setFixedWidth(70)
+        receptor_browse.clicked.connect(self.browse_vina_receptor)
+        
+        self.vina_ligand = QLineEdit()
+        self.vina_ligand.setPlaceholderText("Ligand MOL2/SDF/PDBQT")
+        self.vina_ligand.setFixedHeight(32)
+        ligand_browse = QPushButton("Browse")
+        ligand_browse.setObjectName("refresh_btn")
+        ligand_browse.setFixedHeight(32)
+        ligand_browse.setFixedWidth(70)
+        ligand_browse.clicked.connect(self.browse_vina_ligand)
+        
+        file_grid.addWidget(QLabel("Receptor:"), 0, 0)
+        file_grid.addWidget(self.vina_receptor, 0, 1)
+        file_grid.addWidget(receptor_browse, 0, 2)
+        file_grid.addWidget(QLabel("Ligand:"), 1, 0)
+        file_grid.addWidget(self.vina_ligand, 1, 1)
+        file_grid.addWidget(ligand_browse, 1, 2)
+        layout.addLayout(file_grid)
+        
+        # Config file or auto-generate from pocket
+        config_label = QLabel("Config (optional - auto-generated if empty):")
+        layout.addWidget(config_label)
+        
+        self.vina_config_edit = QTextEdit()
+        self.vina_config_edit.setFixedHeight(120)
+        self.vina_config_edit.setPlaceholderText(
+            "# Leave empty to auto-generate from detected pockets\n"
+            "# Or paste Vina config here:\n"
+            "# center_x = 10.5\n"
+            "# center_y = 20.3\n"
+            "# center_z = 15.8\n"
+            "# size_x = 25\n"
+            "# size_y = 25\n"
+            "# size_z = 25\n"
+            "# exhaustiveness = 8"
+        )
+        layout.addWidget(self.vina_config_edit)
+        
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        
+        self.vina_dock_btn = QPushButton("Run Docking")
+        self.vina_dock_btn.setObjectName("highlight_btn")
+        self.vina_dock_btn.setFixedHeight(32)
+        self.vina_dock_btn.clicked.connect(self.run_vina_docking)
+        
+        self.vina_load_result_btn = QPushButton("Load Result")
+        self.vina_load_result_btn.setObjectName("refresh_btn")
+        self.vina_load_result_btn.setFixedHeight(32)
+        self.vina_load_result_btn.clicked.connect(self.load_vina_result)
+        
+        btn_row.addWidget(self.vina_dock_btn)
+        btn_row.addWidget(self.vina_load_result_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        
+        return card
+    
+    def _create_quick_scoring_card(self) -> QWidget:
+        """创建快速评分卡片（简化版）"""
+        card = QGroupBox("📊 Quick Binding Score")
+        layout = QVBoxLayout(card)
+        layout.setSpacing(8)
+        
+        # Object + Ligand in one row
+        input_row = QHBoxLayout()
+        input_row.setSpacing(8)
+        
+        self.score_obj = QComboBox()
+        self.score_obj.setFixedHeight(32)
+        
+        self.score_ligand = QLineEdit()
+        self.score_ligand.setPlaceholderText("Ligand (e.g., LIG)")
+        self.score_ligand.setFixedHeight(32)
+        
+        score_refresh = QPushButton("Refresh")
+        score_refresh.setObjectName("refresh_btn")
+        score_refresh.setFixedHeight(32)
+        score_refresh.setFixedWidth(70)
+        score_refresh.clicked.connect(self.refresh_objects)
+        
+        input_row.addWidget(self.score_obj, 2)
+        input_row.addWidget(QLabel("+"))
+        input_row.addWidget(self.score_ligand, 1)
+        input_row.addWidget(score_refresh)
+        layout.addLayout(input_row)
+        
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(8)
+        
+        self.score_quick_btn = QPushButton("Empirical Score")
+        self.score_quick_btn.setObjectName("highlight_btn")
+        self.score_quick_btn.setFixedHeight(32)
+        self.score_quick_btn.clicked.connect(self.run_quick_scoring)
+        
         self.score_vina_btn = QPushButton("Vina Score")
-        self.score_vina_btn.setObjectName("highlight_btn")
-        self.score_vina_btn.setToolTip("AutoDock Vina scoring (requires vina installed)")
+        self.score_vina_btn.setObjectName("refresh_btn")
+        self.score_vina_btn.setFixedHeight(32)
         self.score_vina_btn.clicked.connect(self.run_vina_scoring)
-        layout.addWidget(self.score_vina_btn)
+        
+        btn_row.addWidget(self.score_quick_btn)
+        btn_row.addWidget(self.score_vina_btn)
+        layout.addLayout(btn_row)
         
         return card
-    def _create_ternary_scoring_card(self) -> QWidget:
-        """创建三元复合物评分卡片"""
-        card = QGroupBox("Ternary Complex (PROTAC/Glue)")
-        card.setStyleSheet("""
-            QGroupBox {
-                background: #1e293b;
-                border: 2px solid #334155;
-                border-radius: 12px;
-                padding: 16px;
-            }
-        """)
-        
+    
+    def _create_advanced_pocket_card(self) -> QWidget:
+        """创建高级口袋分析卡片"""
+        card = QGroupBox("📊 Advanced Pocket Analysis")
         layout = QVBoxLayout(card)
-        layout.setSpacing(12)
+        layout.setSpacing(8)
+        
+        # 创建标签页
+        self.pocket_advanced_tabs = QTabWidget()
+        self.pocket_advanced_tabs.setFixedHeight(220)
+        
+        # Tab 1: 口袋对比
+        comparison_tab = self._create_pocket_comparison_tab()
+        self.pocket_advanced_tabs.addTab(comparison_tab, "🔄 Comparison")
+        
+        # Tab 2: 界面口袋
+        interface_tab = self._create_pocket_interface_tab()
+        self.pocket_advanced_tabs.addTab(interface_tab, "🔗 PPI Interface")
+        
+        # Tab 3: 口袋-相互作用关联
+        correlation_tab = self._create_pocket_correlation_tab()
+        self.pocket_advanced_tabs.addTab(correlation_tab, "🔍 Interactions")
+        
+        # Tab 4: G-motif 口袋
+        gmotif_pocket_tab = self._create_gmotif_pocket_tab()
+        self.pocket_advanced_tabs.addTab(gmotif_pocket_tab, "✨ G-motif")
+        
+        layout.addWidget(self.pocket_advanced_tabs)
+        
+        return card
+    
+    def _create_pocket_comparison_tab(self) -> QWidget:
+        """创建口袋对比标签页"""
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(6)
+        layout.setContentsMargins(6, 6, 6, 6)
+        
+        # Object A & B
+        obj_grid = QGridLayout()
+        obj_grid.setSpacing(6)
+        
+        self.pocket_comp_obj_a = QComboBox()
+        self.pocket_comp_obj_a.setFixedHeight(28)
+        self.pocket_comp_obj_b = QComboBox()
+        self.pocket_comp_obj_b.setFixedHeight(28)
+        
+        refresh_a = QPushButton("R")
+        refresh_a.setObjectName("refresh_btn")
+        refresh_a.setFixedSize(28, 28)
+        refresh_a.clicked.connect(self.refresh_objects)
+        
+        refresh_b = QPushButton("R")
+        refresh_b.setObjectName("refresh_btn")
+        refresh_b.setFixedSize(28, 28)
+        refresh_b.clicked.connect(self.refresh_objects)
+        
+        obj_grid.addWidget(QLabel("Object A:"), 0, 0)
+        obj_grid.addWidget(self.pocket_comp_obj_a, 0, 1)
+        obj_grid.addWidget(refresh_a, 0, 2)
+        obj_grid.addWidget(QLabel("Object B:"), 1, 0)
+        obj_grid.addWidget(self.pocket_comp_obj_b, 1, 1)
+        obj_grid.addWidget(refresh_b, 1, 2)
+        layout.addLayout(obj_grid)
+        
+        # Align checkbox
+        self.pocket_comp_align = QCheckBox("Align structures before comparison")
+        self.pocket_comp_align.setChecked(True)
+        layout.addWidget(self.pocket_comp_align)
+        
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+        
+        compare_btn = QPushButton("Compare Pockets")
+        compare_btn.setObjectName("highlight_btn")
+        compare_btn.setFixedHeight(28)
+        compare_btn.clicked.connect(self.run_pocket_comparison)
+        
+        viz_btn = QPushButton("Visualize")
+        viz_btn.setObjectName("refresh_btn")
+        viz_btn.setFixedHeight(28)
+        viz_btn.clicked.connect(self.visualize_pocket_comparison)
+        
+        btn_row.addWidget(compare_btn)
+        btn_row.addWidget(viz_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        
+        layout.addStretch()
+        return w
+    
+    def _create_pocket_interface_tab(self) -> QWidget:
+        """创建 PPI 界面口袋标签页"""
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(6)
+        layout.setContentsMargins(6, 6, 6, 6)
         
         # Object
         obj_row = QHBoxLayout()
-        obj_row.setSpacing(8)
-        self.score_ternary_obj = QComboBox()
-        self.score_ternary_obj.setFixedHeight(36)
-        self.score_ternary_refresh = QPushButton("Refresh")
-        self.score_ternary_refresh.setObjectName("refresh_btn")
-        self.score_ternary_refresh.setFixedHeight(36)
-        self.score_ternary_refresh.setFixedWidth(80)
-        self.score_ternary_refresh.clicked.connect(self.refresh_objects)
-        obj_row.addWidget(self.score_ternary_obj, 1)
-        obj_row.addWidget(self.score_ternary_refresh)
+        obj_row.setSpacing(6)
+        self.pocket_interface_obj = QComboBox()
+        self.pocket_interface_obj.setFixedHeight(28)
+        refresh_btn = QPushButton("R")
+        refresh_btn.setObjectName("refresh_btn")
+        refresh_btn.setFixedSize(28, 28)
+        refresh_btn.clicked.connect(self.refresh_objects)
+        obj_row.addWidget(QLabel("Object:"))
+        obj_row.addWidget(self.pocket_interface_obj, 1)
+        obj_row.addWidget(refresh_btn)
         layout.addLayout(obj_row)
         
-        # Ligand
-        self.score_ternary_ligand = QLineEdit()
-        self.score_ternary_ligand.setFixedHeight(36)
-        self.score_ternary_ligand.setPlaceholderText("Ligand (e.g., PROTAC)")
-        layout.addWidget(self.score_ternary_ligand)
+        # Chains
+        chain_row = QHBoxLayout()
+        chain_row.setSpacing(6)
+        self.pocket_interface_chain_a = QLineEdit()
+        self.pocket_interface_chain_a.setPlaceholderText("Chain A")
+        self.pocket_interface_chain_a.setFixedHeight(28)
+        self.pocket_interface_chain_a.setFixedWidth(60)
         
-        # Protein 1 & 2 (两栏)
-        protein_row = QHBoxLayout()
-        protein_row.setSpacing(8)
+        self.pocket_interface_chain_b = QLineEdit()
+        self.pocket_interface_chain_b.setPlaceholderText("Chain B")
+        self.pocket_interface_chain_b.setFixedHeight(28)
+        self.pocket_interface_chain_b.setFixedWidth(60)
         
-        self.score_ternary_p1 = QLineEdit()
-        self.score_ternary_p1.setFixedHeight(36)
-        self.score_ternary_p1.setPlaceholderText("Protein 1 (e.g. A)")
+        chain_row.addWidget(QLabel("Chains:"))
+        chain_row.addWidget(self.pocket_interface_chain_a)
+        chain_row.addWidget(QLabel("+"))
+        chain_row.addWidget(self.pocket_interface_chain_b)
+        chain_row.addStretch()
+        layout.addLayout(chain_row)
         
-        self.score_ternary_p2 = QLineEdit()
-        self.score_ternary_p2.setFixedHeight(36)
-        self.score_ternary_p2.setPlaceholderText("Protein 2 (e.g. B)")
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
         
-        protein_row.addWidget(self.score_ternary_p1)
-        protein_row.addWidget(self.score_ternary_p2)
-        layout.addLayout(protein_row)
+        analyze_btn = QPushButton("Analyze Interface Pockets")
+        analyze_btn.setObjectName("highlight_btn")
+        analyze_btn.setFixedHeight(28)
+        analyze_btn.clicked.connect(self.run_interface_pockets)
         
-        # 按钮
-        self.score_ternary_btn = QPushButton("Score Ternary Complex")
-        self.score_ternary_btn.setObjectName("highlight_btn")
-        self.score_ternary_btn.setToolTip("Calculate binding energy with cooperativity")
-        self.score_ternary_btn.clicked.connect(self.run_ternary_scoring)
-        layout.addWidget(self.score_ternary_btn)
+        btn_row.addWidget(analyze_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
         
-        return card
-    def _create_heatmap_card(self) -> QWidget:
-        """创建批量热图卡片"""
-        card = QGroupBox("Batch Heatmap")
-        card.setStyleSheet("""
-            QGroupBox {
-                background: #1e293b;
-                border: 2px solid #334155;
-                border-radius: 12px;
-                padding: 16px;
-            }
-        """)
+        layout.addStretch()
+        return w
+    
+    def _create_pocket_correlation_tab(self) -> QWidget:
+        """创建口袋-相互作用关联标签页"""
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(6)
+        layout.setContentsMargins(6, 6, 6, 6)
         
-        layout = QVBoxLayout(card)
-        layout.setSpacing(12)
+        # Info label
+        info_label = QLabel("⚠️ First detect pockets, then select interaction CSV")
+        info_label.setStyleSheet("color: #64748b; font-size: 11px;")
+        layout.addWidget(info_label)
         
-        # Folder
-        folder_row = QHBoxLayout()
-        folder_row.setSpacing(8)
-        self.heatmap_folder = QLineEdit()
-        self.heatmap_folder.setFixedHeight(36)
-        self.heatmap_folder.setPlaceholderText("Folder with CSV files")
-        self.heatmap_browse = QPushButton("Browse")
-        self.heatmap_browse.setObjectName("refresh_btn")
-        self.heatmap_browse.setFixedHeight(36)
-        self.heatmap_browse.setFixedWidth(80)
-        self.heatmap_browse.clicked.connect(self.browse_heatmap_folder)
-        folder_row.addWidget(self.heatmap_folder, 1)
-        folder_row.addWidget(self.heatmap_browse)
-        layout.addLayout(folder_row)
+        # Interaction CSV
+        csv_row = QHBoxLayout()
+        csv_row.setSpacing(6)
+        self.pocket_corr_csv = QLineEdit()
+        self.pocket_corr_csv.setPlaceholderText("Interaction CSV file")
+        self.pocket_corr_csv.setFixedHeight(28)
         
-        # Pattern
-        self.heatmap_pattern = QLineEdit("*_scores.csv")
-        self.heatmap_pattern.setFixedHeight(36)
-        layout.addWidget(self.heatmap_pattern)
+        csv_browse = QPushButton("Browse")
+        csv_browse.setObjectName("refresh_btn")
+        csv_browse.setFixedHeight(28)
+        csv_browse.setFixedWidth(70)
+        csv_browse.clicked.connect(self.browse_pocket_corr_csv)
         
-        # 按钮
-        self.heatmap_generate_btn = QPushButton("Generate Heatmap")
-        self.heatmap_generate_btn.setObjectName("highlight_btn")
-        self.heatmap_generate_btn.setToolTip("Generate binding energy heatmap from CSV files")
-        self.heatmap_generate_btn.clicked.connect(self.run_generate_heatmap)
-        layout.addWidget(self.heatmap_generate_btn)
+        csv_row.addWidget(self.pocket_corr_csv, 1)
+        csv_row.addWidget(csv_browse)
+        layout.addLayout(csv_row)
         
-        return card
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+        
+        correlate_btn = QPushButton("Correlate with Pockets")
+        correlate_btn.setObjectName("highlight_btn")
+        correlate_btn.setFixedHeight(28)
+        correlate_btn.clicked.connect(self.run_pocket_correlation)
+        
+        btn_row.addWidget(correlate_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        
+        layout.addStretch()
+        return w
+    
+    def _create_gmotif_pocket_tab(self) -> QWidget:
+        """创建 G-motif 口袋分析标签页"""
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.setSpacing(6)
+        layout.setContentsMargins(6, 6, 6, 6)
+        
+        # Object
+        obj_row = QHBoxLayout()
+        obj_row.setSpacing(6)
+        self.gmotif_pocket_obj = QComboBox()
+        self.gmotif_pocket_obj.setFixedHeight(28)
+        refresh_btn = QPushButton("R")
+        refresh_btn.setObjectName("refresh_btn")
+        refresh_btn.setFixedSize(28, 28)
+        refresh_btn.clicked.connect(self.refresh_objects)
+        obj_row.addWidget(QLabel("Object:"))
+        obj_row.addWidget(self.gmotif_pocket_obj, 1)
+        obj_row.addWidget(refresh_btn)
+        layout.addLayout(obj_row)
+        
+        # Chains
+        chain_grid = QGridLayout()
+        chain_grid.setSpacing(6)
+        
+        self.gmotif_pocket_e3 = QLineEdit()
+        self.gmotif_pocket_e3.setPlaceholderText("E3 (e.g., A)")
+        self.gmotif_pocket_e3.setFixedHeight(28)
+        self.gmotif_pocket_e3.setFixedWidth(70)
+        
+        self.gmotif_pocket_sub = QLineEdit()
+        self.gmotif_pocket_sub.setPlaceholderText("Substrate (e.g., B)")
+        self.gmotif_pocket_sub.setFixedHeight(28)
+        self.gmotif_pocket_sub.setFixedWidth(70)
+        
+        self.gmotif_pocket_glue = QLineEdit()
+        self.gmotif_pocket_glue.setPlaceholderText("Glue (optional)")
+        self.gmotif_pocket_glue.setFixedHeight(28)
+        self.gmotif_pocket_glue.setFixedWidth(70)
+        
+        chain_grid.addWidget(QLabel("E3:"), 0, 0)
+        chain_grid.addWidget(self.gmotif_pocket_e3, 0, 1)
+        chain_grid.addWidget(QLabel("Sub:"), 0, 2)
+        chain_grid.addWidget(self.gmotif_pocket_sub, 0, 3)
+        chain_grid.addWidget(QLabel("Glue:"), 1, 0)
+        chain_grid.addWidget(self.gmotif_pocket_glue, 1, 1)
+        layout.addLayout(chain_grid)
+        
+        # Buttons
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+        
+        analyze_btn = QPushButton("Comprehensive Analysis")
+        analyze_btn.setObjectName("highlight_btn")
+        analyze_btn.setFixedHeight(28)
+        analyze_btn.clicked.connect(self.run_gmotif_pocket_analysis)
+        
+        btn_row.addWidget(analyze_btn)
+        btn_row.addStretch()
+        layout.addLayout(btn_row)
+        
+        layout.addStretch()
+        return w
 
     def create_apbs_tab(self) -> QWidget:
         w = QWidget(); lay = QVBoxLayout(w); lay.setSpacing(10)
@@ -1522,8 +1813,12 @@ class GlueTKDialog(QDialog):
                    getattr(self, "pl_obj_combo", None),
                    getattr(self, "tc_obj_combo", None),
                    getattr(self, "ap_obj_combo", None),
-                   getattr(self, "score_binary_obj", None),
-                   getattr(self, "score_ternary_obj", None),
+                   getattr(self, "score_obj", None),
+                   getattr(self, "pocket_obj_combo", None),
+                   getattr(self, "pocket_comp_obj_a", None),
+                   getattr(self, "pocket_comp_obj_b", None),
+                   getattr(self, "pocket_interface_obj", None),
+                   getattr(self, "gmotif_pocket_obj", None),
                    getattr(self, "glue_obj_combo", None)):
             if cb is not None:
                 cb.blockSignals(True); cb.clear()
@@ -1754,22 +2049,19 @@ class GlueTKDialog(QDialog):
     # --- 线程回调 ---
     def on_finished_analysis(self, interactions: List[Dict[str, Any]]):
         self._interactions = interactions or []
-        if self._interactions:
-            self.fill_table_from_interactions(self._interactions)
-        elif self.out_csv.text().strip() and os.path.exists(self.out_csv.text().strip()):
-            self.fill_table_from_csv(self.out_csv.text().strip())
+        self.log(f"✅ Analysis complete: {len(interactions)} interactions found")
+        if self.out_csv.text().strip() and os.path.exists(self.out_csv.text().strip()):
+            self.log(f"   Saved to: {os.path.basename(self.out_csv.text().strip())}")
         self.progress_bar.setVisible(False); self.progress_bar.setRange(0, 1)
         self.analyze_btn.setEnabled(True)
 
     def on_finished_gmotif(self, hits: List[Tuple], out_csv_path: str):
         self._gmotif_hits = hits or []
         self._last_gmotif_csv = out_csv_path
+        self.log(f"✅ G-Motif detection complete: {len(hits)} hits found")
         if os.path.exists(out_csv_path):
-            self.fill_table_from_csv(out_csv_path)
             self.csv_path.setText(out_csv_path)
-            self.log(f"G-Motif → CSV → Table: {os.path.basename(out_csv_path)}")
-        else:
-            self.fill_table_from_gmotif_hits(self._gmotif_hits)
+            self.log(f"   Saved to: {os.path.basename(out_csv_path)}")
         self.progress_bar.setVisible(False); self.progress_bar.setRange(0, 1)
         self.gm_btn.setEnabled(True)
 
@@ -1780,115 +2072,6 @@ class GlueTKDialog(QDialog):
         for b in (getattr(self, "analyze_btn", None), getattr(self, "gm_btn", None), getattr(self, "gm_btn_render", None)):
             if b: b.setEnabled(True)
 
-    # --- 表格填充 ---
-    def fill_table_from_interactions(self, rows: List[Dict[str, Any]]):
-        headers = T["table_header"][get_lang()]
-        self.table.clearContents(); self.table.setRowCount(len(rows))
-        self.table.setHorizontalHeaderLabels(headers)
-        keys = ["Chain1", "Residue1", "Chain2", "Residue2", "Distance", "Interaction"]
-        for r, item in enumerate(rows):
-            values = [item.get(k, "") for k in keys]
-            for c, val in enumerate(values):
-                it = QTableWidgetItem(str(val) if val is not None else "")
-                if c == 4:
-                    it.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                self.table.setItem(r, c, it)
-        self.table.resizeColumnsToContents()
-
-    def fill_table_from_csv(self, csv_file: str):
-        """智能识别CSV格式并填充表格"""
-        data = []
-        csv_type = "interaction"  # 默认为相互作用格式
-
-        with open(csv_file, "r", encoding="utf-8", newline="") as f:
-            reader = csv.DictReader(f)
-
-            # 检测 CSV 类型 - 检查表头字段名
-            fieldnames = reader.fieldnames or []
-            
-            if ("Chain" in fieldnames and "Sequence" in fieldnames and "Start" in fieldnames) or \
-               ("链" in fieldnames and "序列" in fieldnames and "起始" in fieldnames):
-                csv_type = "gmotif"
-            elif "Protein_Atom" in fieldnames and "Ligand_Atom" in fieldnames:
-                # 高级分析格式 (RDKit)
-                csv_type = "advanced"
-
-            # 读取所有数据行
-            for row in reader:
-                if csv_type == "gmotif":
-                    data.append([
-                        row.get("Chain", row.get("链", "")),
-                        row.get("Sequence", row.get("序列", "")),
-                        row.get("Start", row.get("起始", "")),
-                        row.get("End", row.get("结束", "")),
-                        row.get("RMSD", row.get("RMSD (Å)", "")),
-                        row.get("Type", row.get("类型", "")),
-                    ])
-                elif csv_type == "advanced":
-                    # 高级分析格式：Type, Protein_Atom, Ligand_Atom, Distance, Protein_Residue, Extra_Info
-                    protein_residue = row.get("Protein_Residue", "")
-                    if protein_residue:
-                        protein_display = protein_residue
-                    else:
-                        protein_display = f"Atom {row.get('Protein_Atom', '')}"
-                    
-                    data.append([
-                        row.get("Type", ""),
-                        protein_display,
-                        f"Atom {row.get('Ligand_Atom', '')}",
-                        row.get("Distance", ""),
-                        row.get("Extra_Info", ""),
-                    ])
-                else:
-                    # 标准格式：Chain1, Residue1, Chain2, Residue2, Distance, Interaction
-                    data.append([
-                        row.get("Chain1", row.get("链1", "")),
-                        row.get("Residue1", row.get("残基1", "")),
-                        row.get("Chain2", row.get("链2", "")),
-                        row.get("Residue2", row.get("残基2", "")),
-                        row.get("Distance", row.get("距离", "")),
-                        row.get("Interaction", row.get("相互作用", "")),
-                    ])
-
-        # 根据 CSV 类型设置表头
-        if csv_type == "gmotif":
-            headers = T["table_header_gmotif"][get_lang()]
-        elif csv_type == "advanced":
-            headers = ["类型", "蛋白残基", "配体原子", "距离(Å)", "详细信息"] if get_lang() == "zh" else ["Type", "Protein Residue", "Ligand Atom", "Distance(Å)", "Details"]
-        else:
-            headers = T["table_header"][get_lang()]
-
-        # 设置表格列数和表头
-        self.table.setColumnCount(len(headers))
-        self.table.clearContents()
-        self.table.setRowCount(len(data))
-        self.table.setHorizontalHeaderLabels(headers)
-        
-        # 填充数据
-        for r, values in enumerate(data):
-            for c, val in enumerate(values):
-                it = QTableWidgetItem(str(val))
-                if c == 3 and csv_type == "advanced":  # Distance 列右对齐（高级格式）
-                    it.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                elif c == 4 and csv_type != "advanced":  # Distance 列右对齐（标准格式）
-                    it.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                self.table.setItem(r, c, it)
-        self.table.resizeColumnsToContents()
-
-    def fill_table_from_gmotif_hits(self, hits: List[Tuple]):
-        # 使用 G-Motif 专用表头
-        headers = T["table_header_gmotif"][get_lang()]
-        self.table.clearContents(); self.table.setRowCount(len(hits))
-        self.table.setHorizontalHeaderLabels(headers)
-        # hits 格式: (chain, start, end, seq8, rmsd)
-        for r, (ch, s, e, seq8, rmsd) in enumerate(hits):
-            values = [ch, seq8, str(s), str(e), f"{rmsd:.2f}", "G-Motif"]
-            for c, val in enumerate(values):
-                it = QTableWidgetItem(str(val))
-                if c == 4:  # RMSD 列右对齐
-                    it.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-                self.table.setItem(r, c, it)
-        self.table.resizeColumnsToContents()
 
     # --- APBS/Quick & 导出 ---
     def apbs_run_quick(self):
@@ -3369,6 +3552,9 @@ Thank you for your support! 🚀
             
             # 弹窗显示
             icon = QMessageBox.Icon.Information if "Glue" in final_mechanism else QMessageBox.Icon.Warning
+            glue_msg = '\u2728 This complex exhibits Molecular Glue characteristics!'
+            protac_msg = '🔗 This complex likely uses a PROTAC/linker mechanism.'
+            final_msg = glue_msg if 'Glue' in final_mechanism else protac_msg
             QMessageBox.information(self, "🎯 Molecular Glue Analysis Complete",
                 f"Classification: {final_mechanism}\n"
                 f"Confidence: {confidence:.0%}\n\n"
@@ -3376,7 +3562,7 @@ Thank you for your support! 🚀
                 f"  • PPI Contacts: {ppi_contacts}\n"
                 f"  • BSA: {round(bsa, 1) if bsa else 'N/A'} Ų\n"
                 f"  • Neo-Epitope: {neo_count} residues\n\n"
-                f"{'\u2728 This complex exhibits Molecular Glue characteristics!' if 'Glue' in final_mechanism else '🔗 This complex likely uses a PROTAC/linker mechanism.'}")
+                f"{final_msg}")
         
         except Exception as e:
             self.on_error(str(e))
@@ -3651,11 +3837,11 @@ Thank you for your support! 🚀
     # ==========================
     # Scoring Callbacks
     # ==========================
-    def run_binary_scoring(self):
-        """运行二元复合物经验评分"""
+    def run_quick_scoring(self):
+        """运行快速经验评分"""
         try:
-            obj = self.score_binary_obj.currentText().strip()
-            ligand = self.score_binary_ligand.text().strip()
+            obj = self.score_obj.currentText().strip()
+            ligand = self.score_ligand.text().strip()
             
             if not obj or obj == t("no_object"):
                 QMessageBox.warning(self, "Warning", "Please select an object")
@@ -3702,8 +3888,8 @@ Thank you for your support! 🚀
     def run_vina_scoring(self):
         """运行Vina评分（可选）"""
         try:
-            obj = self.score_binary_obj.currentText().strip()
-            ligand = self.score_binary_ligand.text().strip()
+            obj = self.score_obj.currentText().strip()
+            ligand = self.score_ligand.text().strip()
             
             if not obj or obj == t("no_object"):
                 QMessageBox.warning(self, "Warning", "Please select an object")
@@ -3756,6 +3942,493 @@ Affinity: {result['affinity']:.2f} kcal/mol
                 error_msg = result.get('error', 'Unknown error') if result else 'No result'
                 self.log(f"⚠️  Vina scoring failed: {error_msg}")
                 self.score_result_text.setPlainText(f"Vina scoring failed: {error_msg}")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    # ==========================
+    # Pocket & Docking Callbacks
+    # ==========================
+    def run_pocket_detection(self):
+        """运行口袋检测"""
+        try:
+            obj = self.pocket_obj_combo.currentText().strip()
+            if not obj or obj == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select an object")
+                return
+            
+            # Get parameters
+            try:
+                grid_spacing = float(self.pocket_grid_spacing.text().strip() or "0.6")
+                min_volume = float(self.pocket_min_volume.text().strip() or "20")
+            except ValueError:
+                QMessageBox.warning(self, "Warning", "Invalid parameter values")
+                return
+            
+            self.log(f"\n🔍 Detecting pockets in {obj}...")
+            self.log(f"   Grid spacing: {grid_spacing} Å")
+            self.log(f"   Min volume: {min_volume} Ų")
+            
+            # Import pocket detector
+            try:
+                from .pocket_detector import detect_pockets
+            except ImportError:
+                from pocket_detector import detect_pockets
+            
+            # Detect pockets
+            pockets = detect_pockets(
+                obj_name=obj,
+                grid_spacing=grid_spacing,
+                min_volume=min_volume,
+                use_schrodinger_standard=False
+            )
+            
+            if not pockets:
+                self.log("⚠️  No pockets detected")
+                QMessageBox.information(self, "Result", "No pockets detected with current parameters.\n\nTry adjusting grid spacing or min volume.")
+                return
+            
+            # Store pockets for later use
+            self._detected_pockets = pockets
+            
+            # Log results
+            self.log(f"\n✅ Detected {len(pockets)} pockets:")
+            for i, pocket in enumerate(pockets[:5], 1):  # Show top 5
+                self.log(f"   {i}. Volume: {pocket['volume']:.1f} Ų, "
+                        f"Druggability: {pocket['druggability_score']:.2f}, "
+                        f"Center: ({pocket['center'][0]:.1f}, {pocket['center'][1]:.1f}, {pocket['center'][2]:.1f})")
+            
+            if len(pockets) > 5:
+                self.log(f"   ... and {len(pockets) - 5} more")
+            
+            # Auto-visualize
+            self.run_pocket_visualization()
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def run_pocket_visualization(self):
+        """可视化检测到的口袋"""
+        try:
+            if not hasattr(self, '_detected_pockets') or not self._detected_pockets:
+                QMessageBox.warning(self, "Warning", "Please run pocket detection first")
+                return
+            
+            color_by_map = {
+                "Volume": "volume",
+                "Druggability": "druggability",
+                "Hydrophobicity": "hydrophobicity",
+                "Depth": "depth"
+            }
+            color_by = color_by_map.get(self.pocket_color_by.currentText(), "volume")
+            
+            self.log(f"\n🎨 Visualizing pockets (colored by {color_by})...")
+            
+            # Import visualizer
+            try:
+                from .pocket_visualizer import visualize_pockets
+            except ImportError:
+                from pocket_visualizer import visualize_pockets
+            
+            # Visualize
+            visualize_pockets(
+                self._detected_pockets,
+                obj_name='gluetk_pockets',
+                color_by=color_by,
+                show_spheres=True,
+                sphere_radius=1.5
+            )
+            
+            self.log("✅ Pockets visualized")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def browse_vina_receptor(self):
+        fn, _ = QFileDialog.getOpenFileName(self, "Select Receptor", "", "PDB/PDBQT (*.pdb *.pdbqt);;All Files (*)")
+        if fn:
+            self.vina_receptor.setText(fn)
+    
+    def browse_vina_ligand(self):
+        fn, _ = QFileDialog.getOpenFileName(self, "Select Ligand", "", "MOL2/SDF/PDBQT (*.mol2 *.sdf *.pdbqt);;All Files (*)")
+        if fn:
+            self.vina_ligand.setText(fn)
+    
+    def run_vina_docking(self):
+        """运行 Vina 对接"""
+        try:
+            receptor = self.vina_receptor.text().strip()
+            ligand = self.vina_ligand.text().strip()
+            config_text = self.vina_config_edit.toPlainText().strip()
+            
+            if not receptor or not os.path.exists(receptor):
+                QMessageBox.warning(self, "Warning", "Please select a valid receptor file")
+                return
+            if not ligand or not os.path.exists(ligand):
+                QMessageBox.warning(self, "Warning", "Please select a valid ligand file")
+                return
+            
+            self.log(f"\n⚙️ Starting Vina docking...")
+            self.log(f"   Receptor: {os.path.basename(receptor)}")
+            self.log(f"   Ligand: {os.path.basename(ligand)}")
+            
+            # Import docking module
+            try:
+                from .pocket_docking import pocket_based_docking
+            except ImportError:
+                from pocket_docking import pocket_based_docking
+            
+            # Create temp config if user provided one
+            custom_config = None
+            if config_text:
+                import tempfile
+                fd, custom_config = tempfile.mkstemp(suffix='_vina_config.txt', text=True)
+                with os.fdopen(fd, 'w') as f:
+                    f.write(config_text)
+                self.log("   Using custom config")
+            else:
+                self.log("   Will auto-generate config from pockets")
+            
+            # Run docking (this will auto-detect pockets if no config)
+            result = pocket_based_docking(
+                obj_name=self.pocket_obj_combo.currentText().strip(),
+                ligand_file=ligand,
+                custom_config=custom_config,
+                auto_detect_pockets=(not config_text),
+                max_pockets=3
+            )
+            
+            if result.get('success'):
+                self.log("✅ Docking complete!")
+                self.log(f"   Output directory: {result.get('output_dir')}")
+                
+                if 'results' in result:
+                    self.log(f"\n🎯 Top docking results:")
+                    sorted_results = sorted(
+                        [r for r in result['results'] if r.get('success')],
+                        key=lambda r: r.get('affinity', 0)
+                    )
+                    for i, r in enumerate(sorted_results[:3], 1):
+                        self.log(f"   {i}. Pocket {r['pocket_id']}: {r['affinity']:.2f} kcal/mol")
+                        self.log(f"      Output: {os.path.basename(r['output_pdbqt'])}")
+            else:
+                self.log(f"⚠️  Docking failed: {result.get('error')}")
+                QMessageBox.warning(self, "Error", f"Docking failed:\n{result.get('error')}")
+            
+            # Clean up temp config
+            if custom_config and os.path.exists(custom_config):
+                os.unlink(custom_config)
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def load_vina_result(self):
+        """加载 Vina 对接结果"""
+        fn, _ = QFileDialog.getOpenFileName(self, "Select Docking Result", "", "PDBQT (*.pdbqt);;All Files (*)")
+        if fn:
+            try:
+                from pymol import cmd
+                obj_name = os.path.splitext(os.path.basename(fn))[0]
+                cmd.load(fn, obj_name)
+                self.log(f"✅ Loaded docking result: {obj_name}")
+                self.refresh_objects()
+            except Exception as e:
+                self.on_error(str(e))
+    
+    # ==========================
+    # Advanced Pocket Analysis Callbacks
+    # ==========================
+    def run_pocket_comparison(self):
+        """运行口袋对比分析"""
+        try:
+            obj_a = self.pocket_comp_obj_a.currentText().strip()
+            obj_b = self.pocket_comp_obj_b.currentText().strip()
+            
+            if not obj_a or obj_a == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select Object A")
+                return
+            if not obj_b or obj_b == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select Object B")
+                return
+            
+            align = self.pocket_comp_align.isChecked()
+            
+            self.log(f"\n🔄 Comparing pockets: {obj_a} vs {obj_b}...")
+            if align:
+                self.log("   Aligning structures first...")
+            
+            # Import pocket modules
+            try:
+                from .pocket_detector import compare_pockets
+            except ImportError:
+                from pocket_detector import compare_pockets
+            
+            # Compare pockets
+            pockets_a, pockets_b, comparison = compare_pockets(
+                obj_a, obj_b, 
+                align=align,
+                grid_spacing=float(self.pocket_grid_spacing.text() or "0.6"),
+                min_volume=float(self.pocket_min_volume.text() or "20")
+            )
+            
+            # Store for visualization
+            self._comparison_pockets_a = pockets_a
+            self._comparison_pockets_b = pockets_b
+            self._comparison_result = comparison
+            
+            # Log results
+            self.log(f"\n✅ Comparison complete:")
+            self.log(f"   {obj_a}: {len(pockets_a)} pockets")
+            self.log(f"   {obj_b}: {len(pockets_b)} pockets")
+            
+            matched = sum(1 for c in comparison if c['match_type'] == 'matched')
+            new = sum(1 for c in comparison if c['match_type'] == 'new')
+            lost = sum(1 for c in comparison if c['match_type'] == 'lost')
+            
+            self.log(f"   Matched: {matched}")
+            self.log(f"   New in {obj_b}: {new}")
+            self.log(f"   Lost from {obj_a}: {lost}")
+            
+            # Show top changes
+            if matched > 0:
+                self.log(f"\n📈 Top volume changes:")
+                sorted_changes = sorted(
+                    [c for c in comparison if c['match_type'] == 'matched'],
+                    key=lambda c: abs(c['delta_volume']),
+                    reverse=True
+                )[:3]
+                for c in sorted_changes:
+                    delta = c['delta_volume']
+                    sign = "+" if delta > 0 else ""
+                    self.log(f"   Pocket {c['pocket_a_id']} → {c['pocket_b_id']}: {sign}{delta:.1f} Ų")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def visualize_pocket_comparison(self):
+        """可视化口袋对比结果"""
+        try:
+            if not hasattr(self, '_comparison_result') or not self._comparison_result:
+                QMessageBox.warning(self, "Warning", "Please run pocket comparison first")
+                return
+            
+            self.log(f"\n🎨 Visualizing pocket comparison...")
+            
+            # Import visualizer
+            try:
+                from .pocket_visualizer import visualize_pocket_comparison
+            except ImportError:
+                from pocket_visualizer import visualize_pocket_comparison
+            
+            # Visualize
+            visualize_pocket_comparison(
+                self._comparison_result,
+                self._comparison_pockets_a,
+                self._comparison_pockets_b,
+                self.pocket_comp_obj_a.currentText(),
+                self.pocket_comp_obj_b.currentText()
+            )
+            
+            self.log("✅ Comparison visualized")
+            self.log("   Colors: Blue=matched, Green=expanded, Yellow=shrank, Orange=new, Red=lost")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def run_interface_pockets(self):
+        """运行 PPI 界面口袋分析"""
+        try:
+            obj = self.pocket_interface_obj.currentText().strip()
+            chain_a = self.pocket_interface_chain_a.text().strip()
+            chain_b = self.pocket_interface_chain_b.text().strip()
+            
+            if not obj or obj == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select an object")
+                return
+            if not chain_a or not chain_b:
+                QMessageBox.warning(self, "Warning", "Please enter both chain IDs")
+                return
+            
+            self.log(f"\n🔗 Analyzing PPI interface pockets...")
+            self.log(f"   Object: {obj}")
+            self.log(f"   Interface: Chain {chain_a} + Chain {chain_b}")
+            
+            # Import pocket integration module
+            try:
+                from .pocket_glue_integration import analyze_pockets_in_ppi_interface
+            except ImportError:
+                from pocket_glue_integration import analyze_pockets_in_ppi_interface
+            
+            # Analyze
+            interface_pockets = analyze_pockets_in_ppi_interface(
+                obj, chain_a, chain_b,
+                visualize=True,
+                grid_spacing=float(self.pocket_grid_spacing.text() or "0.6"),
+                min_volume=float(self.pocket_min_volume.text() or "20")
+            )
+            
+            # Store for later use
+            self._interface_pockets = interface_pockets
+            
+            # Log results
+            self.log(f"\n✅ Found {len(interface_pockets)} interface pockets")
+            
+            if len(interface_pockets) > 0:
+                self.log(f"\n📊 Top interface pockets:")
+                sorted_pockets = sorted(
+                    interface_pockets,
+                    key=lambda p: p['interface_overlap'],
+                    reverse=True
+                )[:5]
+                
+                for p in sorted_pockets:
+                    self.log(f"   Pocket {p['id']}: "
+                            f"Vol={p['volume']:.1f} Ų, "
+                            f"Overlap={p['interface_overlap']:.1%}, "
+                            f"Drug={p['druggability_score']:.2f}")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def browse_pocket_corr_csv(self):
+        fn, _ = QFileDialog.getOpenFileName(self, "Select Interaction CSV", "", "CSV (*.csv);;All Files (*)")
+        if fn:
+            self.pocket_corr_csv.setText(fn)
+    
+    def run_pocket_correlation(self):
+        """运行口袋-相互作用关联分析"""
+        try:
+            csv_file = self.pocket_corr_csv.text().strip()
+            
+            if not csv_file or not os.path.exists(csv_file):
+                QMessageBox.warning(self, "Warning", "Please select a valid interaction CSV file")
+                return
+            
+            # Check if pockets are detected
+            if not hasattr(self, '_detected_pockets') or not self._detected_pockets:
+                QMessageBox.warning(self, "Warning", 
+                    "Please detect pockets first using the 'Pocket Detection' section above")
+                return
+            
+            self.log(f"\n🔍 Correlating pockets with interactions...")
+            self.log(f"   CSV: {os.path.basename(csv_file)}")
+            self.log(f"   Pockets: {len(self._detected_pockets)}")
+            
+            # Import correlation module
+            try:
+                from .pocket_glue_integration import correlate_pockets_with_interactions
+            except ImportError:
+                from pocket_glue_integration import correlate_pockets_with_interactions
+            
+            # Correlate
+            correlations = correlate_pockets_with_interactions(
+                self._detected_pockets,
+                csv_file
+            )
+            
+            # Log results
+            self.log(f"\n✅ Correlation complete")
+            
+            if len(correlations) > 0:
+                self.log(f"\n📈 Pocket-Interaction correlation:")
+                sorted_corr = sorted(
+                    correlations,
+                    key=lambda c: c['num_interactions'],
+                    reverse=True
+                )[:5]
+                
+                for corr in sorted_corr:
+                    types_str = ", ".join([f"{k}:{v}" for k, v in list(corr['interaction_types'].items())[:3]])
+                    self.log(f"   Pocket {corr['pocket_id']}: "
+                            f"{corr['num_interactions']} interactions "
+                            f"(density={corr['interaction_density']:.4f}/Ų)")
+                    self.log(f"      Types: {types_str}")
+            else:
+                self.log("⚠️  No interactions found in pockets")
+            
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback
+            traceback.print_exc()
+    
+    def run_gmotif_pocket_analysis(self):
+        """运行 G-motif 口袋综合分析"""
+        try:
+            obj = self.gmotif_pocket_obj.currentText().strip()
+            e3_chain = self.gmotif_pocket_e3.text().strip()
+            sub_chain = self.gmotif_pocket_sub.text().strip()
+            glue_chain = self.gmotif_pocket_glue.text().strip() or None
+            
+            if not obj or obj == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select an object")
+                return
+            if not e3_chain or not sub_chain:
+                QMessageBox.warning(self, "Warning", "Please enter E3 and Substrate chain IDs")
+                return
+            
+            self.log(f"\n✨ Starting comprehensive G-motif pocket analysis...")
+            self.log(f"   Object: {obj}")
+            self.log(f"   E3 chain: {e3_chain}")
+            self.log(f"   Substrate chain: {sub_chain}")
+            if glue_chain:
+                self.log(f"   Glue chain: {glue_chain}")
+            
+            self.log("\n⌛ This may take a few minutes...")
+            
+            # Import comprehensive analysis module
+            try:
+                from .pocket_glue_integration import comprehensive_gmotif_pocket_analysis
+            except ImportError:
+                from pocket_glue_integration import comprehensive_gmotif_pocket_analysis
+            
+            # Run comprehensive analysis
+            results = comprehensive_gmotif_pocket_analysis(
+                obj_name=obj,
+                e3_chain=e3_chain,
+                substrate_chain=sub_chain,
+                glue_chain=glue_chain,
+                output_dir='gmotif_pocket_analysis'
+            )
+            
+            # Log summary
+            self.log(f"\n✅ Comprehensive analysis complete!")
+            self.log(f"   Output directory: gmotif_pocket_analysis/")
+            
+            if results.get('gmotif'):
+                gmotif = results['gmotif'][0]
+                self.log(f"\n🧲 G-motif detected:")
+                self.log(f"   Position: {gmotif['start_resi']}-{gmotif['end_resi']}")
+                self.log(f"   RMSD: {gmotif['rmsd']:.2f} Å")
+            
+            if results.get('pockets'):
+                self.log(f"\n🔍 Pockets around G-motif: {len(results['pockets'])}")
+            
+            if results.get('main_binding_pocket'):
+                main = results['main_binding_pocket']
+                self.log(f"\n🎯 Main binding pocket:")
+                self.log(f"   Pocket ID: {main['pocket_id']}")
+                self.log(f"   Interactions: {main['num_interactions']}")
+                self.log(f"   Density: {main['interaction_density']:.4f}/Ų")
+                self.log(f"   Druggability: {main['druggability_score']:.3f}")
+            
+            if results.get('gmotif_interface_pockets'):
+                self.log(f"\n🔗 G-motif interface pockets: {len(results['gmotif_interface_pockets'])}")
+            
+            self.log("\n📄 Check the output directory for detailed reports and CSVs")
             
         except Exception as e:
             self.on_error(str(e))
@@ -4072,18 +4745,11 @@ Output:    {result['output_path']}
         return scale
 
     def apply_auto_scaling(self):
-        # 禁用自动缩放，保持固定高度
-        # s = self._ui_scale = float(self._compute_ui_scale())
-        self._ui_scale = 1.0  # 固定缩放比例为1.0
-        # 只更新表格行高，不改变控件高度
+        # 固定缩放比例
+        self._ui_scale = 1.0
+        # 主题切换按钮尺寸
         try:
-            vh = self.table.verticalHeader()
-            vh.setDefaultSectionSize(34)  # 固定行高
-        except Exception:
-            pass
-        # 只缩放主题切换按钮
-        try:
-            self.theme_toggle_btn.setFixedSize(28, 28)  # 固定尺寸
+            self.theme_toggle_btn.setFixedSize(28, 28)
         except Exception:
             pass
 

@@ -1,7 +1,10 @@
 # Figure Generation Guide for JCIM Manuscript
 
 **Target**: Journal of Chemical Information and Modeling (JCIM)  
-**Requirements**: 300 DPI minimum, TIFF or PNG format, color figures allowed
+**Requirements**: 300 DPI minimum, TIFF or PNG format, color figures allowed  
+**Last Updated**: 2025-11-11
+
+**Note**: This guide reflects GlueTK's current features including G-motif detection and pocket analysis.
 
 ---
 
@@ -128,10 +131,27 @@ generate_2d_interaction_diagram(
 )
 ```
 
-### Panel D: G-loop Structure with Glue Binding Mode
+### Panel D: G-loop Structure with Glue Binding Mode (Using GlueTK Commands)
 ```python
-# Zoom into G-loop region
-fetch 6H0F
+# Use GlueTK's G-motif detection
+find_crbn_g_motif(
+    obj_name='6H0F',
+    chain='B',
+    residue_range='60-67',  # GSPT1 G-loop
+    template_mode='builtin',  # Use known GSPT1 template
+    rmsd_cutoff=3.5
+)
+
+# Visualize G-motif with glue binding
+analyze_g_motif_glue_binding(
+    obj_name='6H0F',
+    substrate_chain='B',
+    g_loop_range='60-67',
+    glue_resname='CC885',
+    e3_chain='A'
+)
+
+# Manual PyMOL visualization for publication
 hide everything
 show cartoon, chain B and resi 55-75  # G-loop region
 color red, chain B
@@ -141,13 +161,18 @@ show sticks, resn CC885
 color yellow, resn CC885
 util.cnc  # Color by element
 
-# Show key interactions
+# Show key interactions (from GlueTK output)
 distance hb1, chain B and resi 60 and name N, resn CC885 and name O1
 distance hb2, chain B and resi 65 and name N, resn CC885 and name O2
 
-# Labels
+# Labels for G-motif residues
 label chain B and resi 60 and name CA, "Gly60"
+label chain B and resi 62 and name CA, "Val62"
 label chain B and resi 65 and name CA, "Gly65"
+
+# Add G-motif annotation
+pseudoatom g_motif_label, pos=[x, y, z]
+label g_motif_label, "G-motif (RMSD=2.1Å)"
 
 # Export
 ray 2400, 1800
@@ -294,23 +319,137 @@ plt.show()
 
 ---
 
+## Figure 6: Pocket Analysis and Glue-Pocket Correlation
+
+**Type**: Multi-panel pocket visualization  
+**Tool**: PyMOL + GlueTK pocket commands
+
+### Panel A: Pocket Detection at PPI Interface
+```python
+# Use GlueTK's pocket detection
+fetch 6H0F
+
+# Detect pockets at PPI interface
+detect_pockets(
+    obj_name='6H0F',
+    region='interface',  # Focus on PPI interface
+    chains=['A', 'B'],
+    output_prefix='6H0F_pockets'
+)
+
+# Visualize pockets with interactions
+visualize_pockets_with_interactions(
+    obj_name='6H0F',
+    pocket_data='6H0F_pockets.json',
+    show_glue=True,
+    glue_resname='CC885'
+)
+
+# Export
+ray 2400, 1800
+png manuscript/figures/fig6a_pockets.png
+```
+
+### Panel B: Glue-Pocket Correlation Heatmap
+```python
+import matplotlib.pyplot as plt
+import json
+
+# Load pocket-glue correlation data (from GlueTK output)
+with open('6H0F_pocket_glue_correlation.json', 'r') as f:
+    data = json.load(f)
+
+# Plot correlation
+pockets = [p['pocket_id'] for p in data['pockets']]
+distances = [p['distance_to_glue'] for p in data['pockets']]
+overlaps = [p['overlap_score'] for p in data['pockets']]
+
+fig, ax = plt.subplots(figsize=(8, 6))
+scatter = ax.scatter(distances, overlaps, s=200, c=range(len(pockets)), 
+                     cmap='viridis', alpha=0.7, edgecolors='black')
+ax.set_xlabel('Distance to Glue (Å)', fontsize=14)
+ax.set_ylabel('Glue-Pocket Overlap Score', fontsize=14)
+ax.set_title('Pocket-Glue Correlation Analysis', fontsize=16)
+
+# Annotate primary binding pocket
+primary_idx = overlaps.index(max(overlaps))
+ax.annotate('Primary Binding', xy=(distances[primary_idx], overlaps[primary_idx]),
+            xytext=(distances[primary_idx]+2, overlaps[primary_idx]+0.1),
+            arrowprops=dict(arrowstyle='->', lw=2))
+
+plt.colorbar(scatter, label='Pocket ID')
+plt.tight_layout()
+plt.savefig('manuscript/figures/fig6b_correlation.png', dpi=300)
+```
+
+### Panel C: Pocket Druggability Analysis
+```python
+# Generate druggability plot
+import pandas as pd
+import seaborn as sns
+
+df = pd.read_csv('6H0F_pocket_properties.csv')
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+
+# Volume
+axes[0].bar(df['pocket_id'], df['volume'])
+axes[0].set_xlabel('Pocket ID')
+axes[0].set_ylabel('Volume (Å³)')
+axes[0].set_title('Pocket Volume')
+
+# Depth
+axes[1].bar(df['pocket_id'], df['depth'])
+axes[1].set_xlabel('Pocket ID')
+axes[1].set_ylabel('Depth (Å)')
+axes[1].set_title('Pocket Depth')
+
+# Hydrophobicity
+axes[2].bar(df['pocket_id'], df['hydrophobicity'])
+axes[2].set_xlabel('Pocket ID')
+axes[2].set_ylabel('Hydrophobicity Score')
+axes[2].set_title('Hydrophobicity')
+
+plt.tight_layout()
+plt.savefig('manuscript/figures/fig6c_druggability.png', dpi=300)
+```
+
+---
+
 ## Supporting Information Figures
 
 ### SI Figure 1: Parameter Sensitivity Analysis
-- Test different BSA thresholds (600, 700, 800, 900, 1000Ų)
-- Plot accuracy vs threshold
-- Show optimal is 800Ų
+- Test different BSA thresholds (600, 700, 800, 900, 1000Å²)
+- Test different PPI contact cutoffs (5, 8, 10, 12, 15)
+- Plot accuracy vs threshold for both parameters
+- Show optimal is BSA=800Å², PPI contacts=10
 
 ### SI Figure 2: Runtime Benchmarking
 - Bar chart showing time breakdown:
   - PPI Analysis: 12.3s
   - Neo-Epitope: 8.7s
   - BSA Calc: 3.2s
+  - G-Motif Detection: 2.5s
+  - Pocket Analysis: 15.6s
   - Scoring: 0.8s
+  - **Total**: ~42s
 
-### SI Figure 3: GUI Screenshots
-- Screenshot of main GUI with all tabs
-- Annotate key features
+### SI Figure 3: G-Motif Template Comparison
+- Compare RMSD for different G-motif templates:
+  - Ideal β-hairpin
+  - GSPT1 (6H0F)
+  - CK1α (4CI3)
+  - VAV1 (custom)
+- Show which template best fits each substrate
+
+### SI Figure 4: GUI Screenshots
+- Screenshot of main GUI with all tabs:
+  - Tab 1: G-Motif Detection
+  - Tab 2: Interaction Analysis
+  - Tab 3: PPI & Neo-Epitope
+  - Tab 4: Pocket Analysis (NEW)
+  - Tab 5: Electrostatics
+- Annotate key features and workflow
 
 ---
 

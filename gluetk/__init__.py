@@ -59,7 +59,36 @@ def _register_commands():
         )
         from .g_motif_analyzer import (
             find_crbn_g_motif,
-            analyze_g_motif_glue_binding
+            analyze_g_motif_glue_binding,
+            validate_crbn_hbonds,
+            validate_g_motif_geometry
+        )
+        
+        # 分子胶设计分析（Ternary complex 建模）
+        from .glue_design_analyzer import (
+            align_gloop_for_modeling,
+            detect_clashes_at_interface,
+            identify_exit_vectors,
+            analyze_electrostatic_environment,
+            comprehensive_glue_design_analysis
+        )
+        
+        # 口袋检测与分析
+        from .pocket_detector import detect_pockets, compare_pockets
+        from .pocket_visualizer import (
+            visualize_pockets,
+            show_pocket_labels,
+            visualize_pocket_comparison,
+            overlay_pocket_electrostatics,
+            visualize_pockets_with_interactions
+        )
+        from .pocket_glue_integration import (
+            analyze_pockets_in_ppi_interface,
+            analyze_pockets_with_glue,
+            correlate_pockets_with_interactions,
+            integrate_pockets_with_electrostatics,
+            comprehensive_glue_pocket_analysis,
+            comprehensive_gmotif_pocket_analysis
         )
         
         # Vina评分(可选,需要安装Vina)
@@ -97,11 +126,45 @@ def _register_commands():
         cmd.extend("calculate_interface_bsa", calculate_interface_bsa)
         cmd.extend("find_crbn_g_motif", find_crbn_g_motif)
         cmd.extend("analyze_g_motif_glue_binding", analyze_g_motif_glue_binding)
+        cmd.extend("validate_crbn_hbonds", validate_crbn_hbonds)
+        cmd.extend("validate_g_motif_geometry", validate_g_motif_geometry)
+        
+        # 分子胶设计分析命令
+        cmd.extend("align_gloop_for_modeling", align_gloop_for_modeling)
+        cmd.extend("detect_clashes_at_interface", detect_clashes_at_interface)
+        cmd.extend("identify_exit_vectors", identify_exit_vectors)
+        cmd.extend("analyze_electrostatic_environment", analyze_electrostatic_environment)
+        cmd.extend("comprehensive_glue_design_analysis", comprehensive_glue_design_analysis)
+        
+        # 口袋检测命令
+        cmd.extend("detect_pockets", detect_pockets)
+        cmd.extend("compare_pockets", compare_pockets)
+        cmd.extend("visualize_pockets", visualize_pockets)
+        cmd.extend("show_pocket_labels", show_pocket_labels)
+        cmd.extend("visualize_pocket_comparison", visualize_pocket_comparison)
+        cmd.extend("overlay_pocket_electrostatics", overlay_pocket_electrostatics)
+        cmd.extend("visualize_pockets_with_interactions", visualize_pockets_with_interactions)
+        
+        # 口袋-分子胶联动命令
+        cmd.extend("analyze_pockets_in_ppi_interface", analyze_pockets_in_ppi_interface)
+        cmd.extend("analyze_pockets_with_glue", analyze_pockets_with_glue)
+        cmd.extend("correlate_pockets_with_interactions", correlate_pockets_with_interactions)
+        cmd.extend("integrate_pockets_with_electrostatics", integrate_pockets_with_electrostatics)
+        cmd.extend("comprehensive_glue_pocket_analysis", comprehensive_glue_pocket_analysis)
+        cmd.extend("comprehensive_gmotif_pocket_analysis", comprehensive_gmotif_pocket_analysis)
         
         # Vina评分命令(可选)
         if _vina_available:
             cmd.extend("vina_score_complex", vina_score_complex)
             cmd.extend("compare_scoring_methods", compare_scoring_methods)
+            
+            # 口袋对接命令
+            try:
+                from .pocket_docking import pocket_based_docking, visualize_docking_result
+                cmd.extend("pocket_based_docking", pocket_based_docking)
+                cmd.extend("visualize_docking_result", visualize_docking_result)
+            except ImportError:
+                pass
         
         _info("✅ 已注册命令：highlight_csv_residues / analyze_pdb_interactions / analyze_protein_ligand_interactions 等",
               "✅ Commands registered: highlight_csv_residues / analyze_pdb_interactions / analyze_protein_ligand_interactions etc.")
@@ -189,6 +252,18 @@ def __init_plugin__(app=None):
     print("    • analyze_g_motif_glue_binding - Validate G-motif as glue substrate")
     print("    • find_crbn_g_motif - Find CRBN G-motif/G-loop")
     print("")
+    print("  🔍 Pocket Detection & Analysis (NEW):")
+    print("    • detect_pockets - Detect and analyze protein pockets (volume, druggability, etc.)")
+    print("    • compare_pockets - Compare pockets between two structures (e.g., with/without glue)")
+    print("    • visualize_pockets - Visualize pockets with color-coded properties")
+    print("    • visualize_pockets_with_interactions - Show pockets with interaction overlay")
+    print("    • overlay_pocket_electrostatics - Overlay APBS electrostatics on pockets")
+    print("    • analyze_pockets_in_ppi_interface - Analyze pockets at PPI interface")
+    print("    • analyze_pockets_with_glue - Compare pockets with/without molecular glue")
+    print("    • correlate_pockets_with_interactions - Link pockets with interaction data")
+    print("    • comprehensive_glue_pocket_analysis - One-click comprehensive pocket analysis")
+    print("    • comprehensive_gmotif_pocket_analysis - G-motif + pocket integrated analysis")
+    print("")
     print("  ⚡ Binding Energy Scoring:")
     print("    • score_protein_ligand - Calculate binding energy for protein-ligand complex (empirical)")
     print("    • score_ternary_complex - Calculate binding energy for molecular glue/PROTAC (with cooperativity)")
@@ -198,6 +273,10 @@ def __init_plugin__(app=None):
         if check_vina_available():
             print("    • vina_score_complex - Calculate binding energy using AutoDock Vina (requires vina installed)")
             print("    • compare_scoring_methods - Compare empirical vs Vina scoring")
+            print("")
+            print("  🎯 Pocket-Based Docking (NEW):")
+            print("    • pocket_based_docking - Auto-detect pockets and dock ligand (auto-generates Vina config)")
+            print("    • visualize_docking_result - Visualize docking results with interactions")
     except:
         pass
     print("")

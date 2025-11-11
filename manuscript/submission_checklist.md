@@ -2,7 +2,9 @@
 
 **Target Journal**: Journal of Chemical Information and Modeling (JCIM)  
 **Submission Deadline**: TBD  
-**Expected Timeline**: 3-4 weeks preparation → Submit
+**Expected Timeline**: 6-8 weeks preparation → Submit  
+**Last Updated**: 2025-11-11  
+**Current Status**: ✅ Code complete, Validation in progress
 
 ---
 
@@ -16,10 +18,12 @@
   run validation/benchmark_analysis.py
   benchmark_all()
   ```
-  - [ ] Verify all 6-10 structures analyzed successfully
-  - [ ] Check accuracy > 85% (target: 90%)
-  - [ ] Save results CSV
+  - [ ] Verify all 6 structures analyzed successfully (4 glues + 2 PROTACs)
+  - [ ] Current structures: CC-885, CC-90009, Lenalidomide, Thalidomide, dBET1, MZ1
+  - [ ] Target accuracy: 100% (small dataset, high specificity)
+  - [ ] Save results to `validation/results/benchmark_summary.csv`
   - [ ] Screenshot terminal output for SI
+  - [ ] Generate individual analysis reports for each structure
 
 - [ ] **Collect Performance Metrics**
   - [ ] Runtime for each analysis step
@@ -34,18 +38,24 @@
 ### Week 3-4: Figure Generation
 
 - [ ] **Figure 1: Architecture** (Draw.io/BioRender)
-  - [ ] Create flowchart
+  - [ ] Create flowchart showing all modules:
+    - PPI Analyzer
+    - Neo-Epitope Detector
+    - G-Motif Recognition
+    - Pocket Detector
+    - Scoring Engine
   - [ ] Export 300 DPI PNG
-  - [ ] Write legend (100 words)
+  - [ ] Write legend (150 words)
 
 - [ ] **Figure 2: CC-885 Case Study** (PyMOL)
-  - [ ] Panel A: PPI interface
-  - [ ] Panel B: Neo-epitope highlighting
-  - [ ] Panel C: 2D interaction diagram
-  - [ ] Panel D: G-loop detail
+  - [ ] Panel A: PPI interface with BSA visualization
+  - [ ] Panel B: Neo-epitope highlighting (magenta spheres)
+  - [ ] Panel C: 2D interaction diagram (use generate_2d_diagram)
+  - [ ] Panel D: G-loop detail with G-motif annotation
+  - [ ] Use GlueTK commands for analysis: ppi_analyze, neo_epitope_find, find_crbn_g_motif
   - [ ] Assemble in Photoshop/GIMP
   - [ ] Add scale bars and labels
-  - [ ] Write legend (200 words)
+  - [ ] Write legend (250 words, include G-motif RMSD)
 
 - [ ] **Figure 3: dBET1 PROTAC** (PyMOL)
   - [ ] Panel A: Weak PPI
@@ -60,8 +70,16 @@
 
 - [ ] **Figure 5: PPI Metrics** (Python)
   - [ ] Scatter plot (PPI contacts vs BSA)
-  - [ ] Decision boundaries
+  - [ ] Decision boundaries (BSA=800Å², PPI=10)
+  - [ ] Color by mechanism (green=Glue, red=PROTAC)
   - [ ] Write legend (100 words)
+
+- [ ] **Figure 6: Pocket Analysis** (PyMOL + Python)
+  - [ ] Panel A: Pocket detection at PPI interface
+  - [ ] Panel B: Glue-pocket correlation scatter plot
+  - [ ] Panel C: Pocket druggability metrics (volume, depth, hydrophobicity)
+  - [ ] Use GlueTK commands: detect_pockets, visualize_pockets_with_interactions
+  - [ ] Write legend (200 words)
 
 - [ ] **Graphical Abstract (TOC)**
   - [ ] Design simple, clear summary graphic

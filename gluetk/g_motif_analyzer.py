@@ -239,20 +239,291 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
     return hits
 
 
-# ====== 5) Glue结合验证功能 ======
+# ====== 5) G-motif 内部几何验证 ======
+def validate_g_motif_geometry(obj_name, g_motif_chain, g_motif_resi_range,
+                               max_internal_hbond=3.5, reference_rmsd_threshold=1.0):
+    """
+    验证 G-motif 内部几何特征（α-turn）：
+    1. 必需氢键：G₋₄ backbone O → G₀ backbone N (α-turn 定义)
+    2. 可选氢键：G₋₄ backbone O → G₊₁ backbone N
+    3. 中心 Gly (G₀) 必须是 GLY
+    4. RMSD 与 GSPT1 G-loop 的相似度
+    
+    返回:
+        dict: {
+            'has_alpha_turn_hbond': bool,  # G₋₄→G₀
+            'alpha_turn_distance': float,
+            'has_secondary_hbond': bool,   # G₋₄→G₊₁
+            'secondary_hbond_distance': float,
+            'central_gly_confirmed': bool,
+            'rmsd_to_gspt1': float,
+            'is_valid_geometry': bool
+        }
+    """
+    import numpy as np
+    
+    # 解析范围
+    if isinstance(g_motif_resi_range, str):
+        parts = g_motif_resi_range.split('-')
+        start_resi = parts[0].strip()
+        end_resi = parts[1].strip() if len(parts) > 1 else start_resi
+    else:
+        start_resi, end_resi = g_motif_resi_range
+    
+    g_sel = f"{obj_name} and chain {g_motif_chain} and resi {start_resi}-{end_resi}"
+    
+    # 获取 8 个残基的 backbone 原子
+    g_model = cmd.get_model(g_sel)
+    g_residues = {}
+    for a in g_model.atom:
+        resi = (a.resi or '').strip()
+        sort_key = _parse_resi(resi)
+        if resi not in g_residues:
+            g_residues[resi] = {'sort': sort_key, 'atoms': {}, 'resn': (a.resn or '').strip().upper()}
+        aname = (a.name or '').strip().upper()
+        if aname in ('N', 'CA', 'C', 'O'):
+            g_residues[resi]['atoms'][aname] = np.array([a.coord[0], a.coord[1], a.coord[2]])
+    
+    sorted_resis = sorted(g_residues.keys(), key=lambda r: (g_residues[r]['sort'][0], g_residues[r]['sort'][1]))
+    if len(sorted_resis) < 8:
+        print(f"[G-motif Geometry] ⚠️ Only {len(sorted_resis)} residues, expected 8")
+        return None
+    
+    # 映射位置：索引 0-7 对应 G₋₅ 到 G₊₂
+    # G₋₄ = index 1, G₀ = index 5, G₊₁ = index 6
+    result = {
+        'has_alpha_turn_hbond': False,
+        'alpha_turn_distance': None,
+        'has_secondary_hbond': False,
+        'secondary_hbond_distance': None,
+        'central_gly_confirmed': False,
+        'rmsd_to_gspt1': None,
+        'is_valid_geometry': False
+    }
+    
+    # 1. 检查中心 Gly (G₀, index 5)
+    central_resn = g_residues[sorted_resis[5]]['resn']
+    result['central_gly_confirmed'] = (central_resn in ('GLY', 'G'))
+    
+    # 2. 必需氢键：G₋₄ O → G₀ N (index 1 → 5)
+    if 'O' in g_residues[sorted_resis[1]]['atoms'] and 'N' in g_residues[sorted_resis[5]]['atoms']:
+        o_g4 = g_residues[sorted_resis[1]]['atoms']['O']
+        n_g0 = g_residues[sorted_resis[5]]['atoms']['N']
+        dist = np.linalg.norm(o_g4 - n_g0)
+        result['alpha_turn_distance'] = round(float(dist), 2)
+        result['has_alpha_turn_hbond'] = (dist <= max_internal_hbond)
+    
+    # 3. 可选氢键：G₋₄ O → G₊₁ N (index 1 → 6)
+    if 'O' in g_residues[sorted_resis[1]]['atoms'] and 'N' in g_residues[sorted_resis[6]]['atoms']:
+        o_g4 = g_residues[sorted_resis[1]]['atoms']['O']
+        n_g1 = g_residues[sorted_resis[6]]['atoms']['N']
+        dist = np.linalg.norm(o_g4 - n_g1)
+        result['secondary_hbond_distance'] = round(float(dist), 2)
+        result['has_secondary_hbond'] = (dist <= max_internal_hbond)
+    
+    # 4. RMSD 与 GSPT1 G-loop 比较（使用 Cα）
+    ca_coords = []
+    for resi in sorted_resis[:8]:
+        if 'CA' in g_residues[resi]['atoms']:
+            ca_coords.append(g_residues[resi]['atoms']['CA'])
+    
+    if len(ca_coords) == 8:
+        # GSPT1 G-loop Cα 坐标（来自 6H0G，近似理想化）
+        gspt1_template = _ideal_beta_hairpin_template()  # 可用真实坐标替换
+        try:
+            rmsd = _kabsch_rmsd(np.array(ca_coords), np.array(gspt1_template))
+            result['rmsd_to_gspt1'] = round(rmsd, 3)
+        except Exception:
+            pass
+    
+    # 5. 综合判定
+    result['is_valid_geometry'] = (
+        result['central_gly_confirmed'] and
+        result['has_alpha_turn_hbond'] and
+        (result['rmsd_to_gspt1'] is None or result['rmsd_to_gspt1'] < reference_rmsd_threshold)
+    )
+    
+    # 打印结果
+    print("\n" + "=" * 70)
+    print("G-motif 内部几何验证 (G-motif Internal Geometry Validation)")
+    print("=" * 70)
+    gly_status = "✅" if result['central_gly_confirmed'] else "❌"
+    print(f"{gly_status} 中心 Gly (G₀):  {central_resn}")
+    
+    alpha_status = "✅" if result['has_alpha_turn_hbond'] else "❌"
+    alpha_dist = f"{result['alpha_turn_distance']} Å" if result['alpha_turn_distance'] else "N/A"
+    print(f"{alpha_status} α-turn 氢键 (G₋₄→G₀):  {alpha_dist}")
+    
+    if result['secondary_hbond_distance']:
+        sec_status = "✅" if result['has_secondary_hbond'] else "➖"
+        sec_dist = f"{result['secondary_hbond_distance']} Å"
+        print(f"{sec_status} 次级氢键 (G₋₄→G₊₁):  {sec_dist}")
+    
+    if result['rmsd_to_gspt1']:
+        rmsd_status = "✅" if result['rmsd_to_gspt1'] < reference_rmsd_threshold else "⚠️"
+        print(f"{rmsd_status} RMSD vs GSPT1:  {result['rmsd_to_gspt1']} Å")
+    
+    valid_status = "✅ 是" if result['is_valid_geometry'] else "❌ 否"
+    print(f"\n有效 α-turn 几何: {valid_status}")
+    print("=" * 70 + "\n")
+    
+    return result
+
+
+# ====== 6) CRBN关键残基氢键验证 ======
+def validate_crbn_hbonds(obj_name, g_motif_chain, g_motif_resi_range, crbn_chain,
+                         max_hbond_dist=3.5, min_donor_angle=120.0):
+    """
+    验证 G-loop 与 CRBN 的 3 个关键氢键（基于 Schrödinger 标准）：
+    - G-3 backbone O → CRBN Asn351 (sidechain NH2)
+    - G-2 backbone O → CRBN His357 (sidechain)
+    - G-1 backbone O → CRBN Trp400 (sidechain NH)
+    
+    返回:
+        dict: {
+            'N351_hbond': {'found': bool, 'distance': float, 'g_pos': int},
+            'H357_hbond': {'found': bool, 'distance': float, 'g_pos': int},
+            'W400_hbond': {'found': bool, 'distance': float, 'g_pos': int},
+            'total_hbonds': int,
+            'is_canonical_gloop': bool
+        }
+    """
+    import numpy as np
+    
+    # 解析 G-motif 范围
+    if isinstance(g_motif_resi_range, str):
+        parts = g_motif_resi_range.split('-')
+        start_resi = parts[0].strip()
+        end_resi = parts[1].strip() if len(parts) > 1 else start_resi
+    else:
+        start_resi, end_resi = g_motif_resi_range
+    
+    g_sel = f"{obj_name} and chain {g_motif_chain} and resi {start_resi}-{end_resi}"
+    crbn_sel = f"{obj_name} and chain {crbn_chain} and polymer.protein"
+    
+    # 获取 G-loop 8 个残基的 backbone O
+    g_model = cmd.get_model(g_sel)
+    g_residues = {}
+    for a in g_model.atom:
+        resi = (a.resi or '').strip()
+        sort_key = _parse_resi(resi)
+        if resi not in g_residues:
+            g_residues[resi] = {'sort': sort_key, 'atoms': []}
+        g_residues[resi]['atoms'].append(a)
+    
+    sorted_resis = sorted(g_residues.keys(), key=lambda r: (g_residues[r]['sort'][0], g_residues[r]['sort'][1]))
+    if len(sorted_resis) < 8:
+        print(f"[CRBN H-bond] ⚠️ G-loop has only {len(sorted_resis)} residues, expected 8")
+        return None
+    
+    # 定位 G-3, G-2, G-1 的 backbone O (对应位置 5, 6, 7 in 0-indexed)
+    g_positions = {}
+    for i, resi in enumerate(sorted_resis[:8]):
+        backbone_o = None
+        for atom in g_residues[resi]['atoms']:
+            if atom.name.strip().upper() == 'O':  # backbone carbonyl
+                backbone_o = np.array([atom.coord[0], atom.coord[1], atom.coord[2]])
+                break
+        g_positions[i] = {'resi': resi, 'O': backbone_o}
+    
+    # 获取 CRBN 关键残基的侧链原子
+    crbn_model = cmd.get_model(crbn_sel)
+    crbn_key_atoms = {'N351': [], 'H357': [], 'W400': []}
+    
+    for a in crbn_model.atom:
+        resi_str = (a.resi or '').strip()
+        resn = (a.resn or '').strip().upper()
+        aname = (a.name or '').strip().upper()
+        coord = np.array([a.coord[0], a.coord[1], a.coord[2]])
+        
+        # Asn351 sidechain (ND2, OD1)
+        if resn == 'ASN' and '351' in resi_str:
+            if aname in ('ND2', 'OD1'):
+                crbn_key_atoms['N351'].append(('ASN351', aname, coord))
+        # His357 sidechain (ND1, NE2)
+        elif resn == 'HIS' and '357' in resi_str:
+            if aname in ('ND1', 'NE2'):
+                crbn_key_atoms['H357'].append(('HIS357', aname, coord))
+        # Trp400 sidechain (NE1)
+        elif resn == 'TRP' and '400' in resi_str:
+            if aname == 'NE1':
+                crbn_key_atoms['W400'].append(('TRP400', aname, coord))
+    
+    # 检查 3 个氢键
+    result = {
+        'N351_hbond': {'found': False, 'distance': None, 'g_pos': -3},
+        'H357_hbond': {'found': False, 'distance': None, 'g_pos': -2},
+        'W400_hbond': {'found': False, 'distance': None, 'g_pos': -1},
+        'total_hbonds': 0,
+        'is_canonical_gloop': False
+    }
+    
+    # G-3 (index 5) → N351
+    if 5 in g_positions and g_positions[5]['O'] is not None:
+        for crbn_atom in crbn_key_atoms['N351']:
+            dist = np.linalg.norm(g_positions[5]['O'] - crbn_atom[2])
+            if dist <= max_hbond_dist:
+                result['N351_hbond'] = {'found': True, 'distance': round(float(dist), 2), 'g_pos': -3}
+                result['total_hbonds'] += 1
+                break
+    
+    # G-2 (index 6) → H357
+    if 6 in g_positions and g_positions[6]['O'] is not None:
+        for crbn_atom in crbn_key_atoms['H357']:
+            dist = np.linalg.norm(g_positions[6]['O'] - crbn_atom[2])
+            if dist <= max_hbond_dist:
+                result['H357_hbond'] = {'found': True, 'distance': round(float(dist), 2), 'g_pos': -2}
+                result['total_hbonds'] += 1
+                break
+    
+    # G-1 (index 7) → W400
+    if 7 in g_positions and g_positions[7]['O'] is not None:
+        for crbn_atom in crbn_key_atoms['W400']:
+            dist = np.linalg.norm(g_positions[7]['O'] - crbn_atom[2])
+            if dist <= max_hbond_dist:
+                result['W400_hbond'] = {'found': True, 'distance': round(float(dist), 2), 'g_pos': -1}
+                result['total_hbonds'] += 1
+                break
+    
+    # 判定是否为标准 G-loop (至少 2/3 氢键)
+    result['is_canonical_gloop'] = result['total_hbonds'] >= 2
+    
+    # 打印结果
+    print("\n" + "=" * 70)
+    print("CRBN G-loop 氢键验证 (CRBN-G-loop H-bond Validation)")
+    print("=" * 70)
+    for key, label in [('N351_hbond', 'G-3 → Asn351'),
+                        ('H357_hbond', 'G-2 → His357'),
+                        ('W400_hbond', 'G-1 → Trp400')]:
+        hb = result[key]
+        status = "✅" if hb['found'] else "❌"
+        dist_str = f"{hb['distance']} Å" if hb['distance'] else "N/A"
+        print(f"{status} {label:20s}  距离: {dist_str}")
+    print(f"\n总氢键数: {result['total_hbonds']}/3")
+    canonical = "✅ 是" if result['is_canonical_gloop'] else "⚠️ 否"
+    print(f"标准 G-loop: {canonical}")
+    print("=" * 70 + "\n")
+    
+    return result
+
+
+# ====== 7) Glue结合验证功能（改进版）======
 def analyze_g_motif_glue_binding(obj_name,
                                   g_motif_chain,
                                   g_motif_resi_range,  # tuple: (start, end) or "start-end"
                                   glue_resname,
                                   crbn_chain,
-                                  distance_threshold=5.0):
+                                  distance_threshold=5.0,
+                                  validate_hbonds=True,
+                                  validate_geometry=True):
     """
-    验证检测到的 G-motif 是否真的是分子胶底物
+    验证检测到的 G-motif 是否真的是分子胶底物（基于 Annual Review 2023）
     
     检测逻辑:
-    1. G-motif 与 CRBN 的距离
-    2. Glue 是否插入 G-motif 和 CRBN 之间
-    3. 关键残基（如 Gly6）是否参与相互作用
+    1. 内部几何验证：α-turn 氢键 (G₋₄→G₀)
+    2. CRBN 关键氢键验证 (N351, H357, W400)
+    3. Glue 是否插入 G-motif 和 CRBN 之间
+    4. 关键残基（如 Gly₀）与 MGD 的 vdW 接触
     
     参数:
         obj_name: PyMOL对象名称
@@ -286,6 +557,20 @@ def analyze_g_motif_glue_binding(obj_name,
         start_resi, end_resi = g_motif_resi_range
     
     print(f"[G-motif Glue Binding] Analyzing: {g_motif_chain}:{start_resi}-{end_resi} with {glue_resname} and CRBN {crbn_chain}")
+    
+    # 1. 验证内部几何（如果启用）
+    geometry_result = None
+    if validate_geometry:
+        geometry_result = validate_g_motif_geometry(obj_name, g_motif_chain, g_motif_resi_range)
+        if geometry_result and not geometry_result['is_valid_geometry']:
+            print("⚠️ 警告: α-turn 几何不符合，可能不是有效 G-motif\n")
+    
+    # 2. 验证 CRBN 氢键（如果启用）
+    hbond_result = None
+    if validate_hbonds:
+        hbond_result = validate_crbn_hbonds(obj_name, g_motif_chain, g_motif_resi_range, crbn_chain)
+        if hbond_result and not hbond_result['is_canonical_gloop']:
+            print("⚠️ 警告: CRBN 关键氢键不足，可能不是标准 G-loop\n")
     
     # 获取原子坐标
     g_motif_sel = f"{obj_name} and chain {g_motif_chain} and resi {start_resi}-{end_resi}"
@@ -337,7 +622,7 @@ def analyze_g_motif_glue_binding(obj_name,
                 glue_c_contacts_list.append((c_atom[3], c_atom[4], d))
                 break
     
-    # 3. 分析关键残基（如 Gly6）
+    # 3. 分析关键残基（Gly6 及侧链位点 G-4, G-3, G-2, G+1）
     key_residues_engaged = []
     # 获取 G-motif 序列位置
     g_motif_residues = defaultdict(list)
@@ -348,31 +633,62 @@ def analyze_g_motif_glue_binding(obj_name,
     # 按resi排序
     sorted_residues = sorted(g_motif_residues.keys(), key=lambda x: _parse_resi(x[1]))
     
-    # 检查第6位（Gly6）是否参与
+    # 检查第6位（Gly，G位）与 MGD 的 vdW 接触
+    vdw_threshold = 4.5  # vdW 接触阈值
     if len(sorted_residues) >= 6:
-        gly6_key = sorted_residues[5]  # 0-indexed
+        gly6_key = sorted_residues[5]  # 0-indexed, 对应 G 位
         gly6_atoms = g_motif_residues[gly6_key]
         
-        # 检查Gly6是否与Glue或CRBN接触
-        gly6_contacts_glue = False
-        gly6_contacts_crbn = False
+        # 检查Gly（G位）是否与Glue有 vdW 接触（文献指出保守Gly面向MGD）
+        gly_vdw_glue = False
+        gly_close_glue = False
+        gly_min_dist = float('inf')
         
         for gly_atom in gly6_atoms:
             for glue_atom in glue_atoms:
-                if _distance_3d(gly_atom[:3], glue_atom[:3]) <= distance_threshold:
-                    gly6_contacts_glue = True
-                    break
-            for c_atom in crbn_atoms:
-                if _distance_3d(gly_atom[:3], c_atom[:3]) <= distance_threshold:
-                    gly6_contacts_crbn = True
-                    break
+                d = _distance_3d(gly_atom[:3], glue_atom[:3])
+                gly_min_dist = min(gly_min_dist, d)
+                if d <= vdw_threshold:
+                    gly_vdw_glue = True
+                if d <= distance_threshold:
+                    gly_close_glue = True
         
-        if gly6_contacts_glue or gly6_contacts_crbn:
+        if gly_vdw_glue:
             key_residues_engaged.append({
-                'position': 6,
+                'position': 'G (pos 6)',
                 'residue': f"{gly6_key[0]} {gly6_key[1]}",
-                'contacts_glue': gly6_contacts_glue,
-                'contacts_crbn': gly6_contacts_crbn
+                'contacts_glue_vdw': True,
+                'min_distance': round(gly_min_dist, 2),
+                'note': '保守Gly面向MGD'
+            })
+    
+    # 检查侧链位点 (G-4, G-3, G-2, G+1) 与 CRBN 的接触
+    sidechain_positions = [1, 2, 3, 6]  # 0-indexed: G-4, G-3, G-2, G+1
+    for idx in sidechain_positions:
+        if idx >= len(sorted_residues):
+            continue
+        res_key = sorted_residues[idx]
+        res_atoms = g_motif_residues[res_key]
+        
+        contacts_crbn = False
+        for res_atom in res_atoms:
+            # 排除 backbone atoms
+            if res_atom[5].strip().upper() in ('N', 'CA', 'C', 'O'):
+                continue
+            for c_atom in crbn_atoms:
+                if _distance_3d(res_atom[:3], c_atom[:3]) <= distance_threshold:
+                    contacts_crbn = True
+                    break
+            if contacts_crbn:
+                break
+        
+        if contacts_crbn:
+            g_pos_label = ['G-4', 'G-3', 'G-2', 'G+1'][sidechain_positions.index(idx)]
+            key_residues_engaged.append({
+                'position': g_pos_label,
+                'residue': f"{res_key[0]} {res_key[1]}",
+                'contacts_crbn_sidechain': True,
+                'note': '侧链与CRBN接触'
             })
     
     # 4. 判定结合模式
@@ -410,7 +726,9 @@ def analyze_g_motif_glue_binding(obj_name,
         'glue_contacts_g_motif': glue_contacts_g_motif,
         'glue_contacts_crbn': glue_contacts_crbn,
         'key_residues_engaged': key_residues_engaged,
-        'confidence': round(confidence, 2)
+        'confidence': round(confidence, 2),
+        'geometry_validation': geometry_result,  # 添加几何验证结果
+        'crbn_hbond_validation': hbond_result     # 添加氢键验证结果
     }
     
     # 打印结果
@@ -421,13 +739,27 @@ def analyze_g_motif_glue_binding(obj_name,
     print(f"Glue - G-motif 接触数: {glue_contacts_g_motif}")
     print(f"Glue - CRBN 接触数: {glue_contacts_crbn}")
     print(f"结合模式: {binding_mode}")
-    print(f"是否为分子胶底物: {'\u2728 是' if is_glue_substrate else '\u26a0\ufe0f 否'}")
+    status_text = "✨ 是" if is_glue_substrate else "⚠️ 否"
+    print(f"是否为分子胶底物: {status_text}")
     print(f"置信度: {confidence:.2f}")
     
     if key_residues_engaged:
         print(f"\n关键残基参与:")
         for res in key_residues_engaged:
-            print(f"  位置{res['position']}: {res['residue']} (Glue: {res['contacts_glue']}, CRBN: {res['contacts_crbn']})")
+            pos = res['position']
+            residue = res['residue']
+            if 'contacts_glue_vdw' in res:
+                print(f"  {pos}: {residue} - vdW接触Glue (距离: {res['min_distance']} Å) - {res['note']}")
+            elif 'contacts_crbn_sidechain' in res:
+                print(f"  {pos}: {residue} - {res['note']}")
+    
+    if geometry_result:
+        print(f"\nα-turn 几何: {'✅ 有效' if geometry_result['is_valid_geometry'] else '❌ 无效'}")
+        if geometry_result['alpha_turn_distance']:
+            print(f"  G₋₄→G₀: {geometry_result['alpha_turn_distance']} Å")
+    
+    if hbond_result:
+        print(f"CRBN氢键: {hbond_result['total_hbonds']}/3 (标准G-loop: {'是' if hbond_result['is_canonical_gloop'] else '否'})")
     print("=" * 60)
     
     return result

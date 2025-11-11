@@ -17,24 +17,24 @@ This is a PyMOL plugin. Installation is manual:
 1. Copy `gluetk/` directory to PyMOL's plugin directory
 2. Or use PyMOL's Plugin Manager to install the ZIP file
 
-### Dependencies
-```bash
-# Required: PyMOL (host application)
-# Optional but recommended for advanced features:
-pip install rdkit scipy matplotlib pillow numpy
-```
-
-### Testing
-**Note**: This codebase does not have automated tests. All testing is done manually within PyMOL.
-
-To test the plugin:
-1. Launch PyMOL
-2. Load a PDB structure: `fetch 1hsg`
-3. Test basic commands:
-   ```python
-   analyze_protein_ligand_interactions('1hsg', 'MK1')
-   gluetk_gui
-   ```
+### Environment setup (recommended)
+- One-shot guided setup (creates Conda env `gluetk`, installs deps, verifies GUI):
+  ```bash
+  bash gluetk/check_env.sh
+  ```
+- Manual setup with Conda:
+  ```bash
+  conda create -n gluetk python=3.9 -y
+  conda activate gluetk
+  conda install -c conda-forge rdkit scipy matplotlib pillow numpy pyqt autodock-vina openbabel -y
+  # Optional (headless dev without system PyMOL):
+  pip install pymol-open-source
+  ```
+- Diagnose/auto-fix in current shell:
+  ```bash
+  python gluetk/env_checker.py            # report only
+  python gluetk/env_checker.py --auto-install  # try to install missing pieces
+  ```
 
 ### Running in PyMOL
 ```python
@@ -45,6 +45,34 @@ run /path/to/gluetk/__init__.py
 # Plugin → Plugin Manager → Install New Plugin
 ```
 
+### Testing and validation
+- There are no automated unit tests; testing is performed inside PyMOL.
+- Quick smoke test:
+  ```python
+  fetch 1hsg
+  analyze_protein_ligand_interactions('1hsg', 'MK1', use_schrodinger_standard=True)
+  gluetk_gui
+  ```
+- Benchmark set used for manuscript validation:
+  ```python
+  run validation/benchmark_analysis.py
+  benchmark_all()
+  ```
+
+### Packaging for distribution
+```bash
+zip -r gluetk.zip gluetk
+```
+
+### Hot-reload during development (in PyMOL)
+```python
+import sys
+mods = [m for m in list(sys.modules) if 'gluetk' in m.lower()]
+for m in mods:
+    sys.modules.pop(m)
+run /path/to/gluetk/__init__.py
+```
+
 ## Architecture Overview
 
 ### Module Structure
@@ -53,15 +81,19 @@ The plugin follows a **modular architecture** with clear separation of concerns:
 
 ```
 gluetk/
-├── __init__.py              # Plugin entry point, command registration
-├── interaction_analyzer.py   # Core interaction detection engine
-├── highlight_residues.py     # Visualization and highlighting
-├── g_motif_analyzer.py       # CRBN G-motif/G-loop detection
-├── interaction_2d_plot.py    # 2D interaction diagram generation
-├── unified_gui.py            # Qt-based GUI (non-modal)
-├── modern_style.py           # GUI styling
-├── pymol_crbn_tools.py       # CRBN-specific analysis tools
-└── README.md                 # User documentation (Chinese)
+├── __init__.py              # Plugin entry, command registration, GUI hooks
+├── interaction_analyzer.py  # Core interaction engine (strict criteria)
+├── highlight_residues.py    # Visualization and CSV parsing utilities
+├── g_motif_analyzer.py      # CRBN G-motif/G-loop detection
+├── ppi_analyzer.py          # PPI interface + neo-epitope (Glue-specific)
+├── binding_score.py         # Empirical binding-energy scoring (binary/ternary)
+├── binding_heatmap.py       # Batch heatmap from *_scores.csv
+├── vina_scoring.py          # AutoDock Vina integration (optional)
+├── interaction_2d_plot.py   # 2D interaction diagrams
+├── unified_gui.py           # Qt GUI (non-modal)
+├── modern_style.py          # GUI styling
+├── env_setup.py, env_checker.py  # Dependency detection/auto-install
+└── README.md                # User documentation (Chinese)
 ```
 
 ### Key Design Patterns
@@ -114,8 +146,9 @@ The plugin implements **strict, publication-quality interaction criteria**:
 
 **Location**: `g_motif_analyzer.py`
 
-Specialized module for CRBN G-loop/G-motif identification:
+Specialized module for CRBN G-loop/G-motif identification with **publication-quality validation** based on Annual Review of Pharmacology and Toxicology 2023:
 
+#### Core Detection
 - **Template Modes**: 
   - `ideal`: Theoretical β-hairpin geometry
   - `builtin`: Real PDB templates (GSPT1, CK1α, VAV1)
@@ -123,6 +156,32 @@ Specialized module for CRBN G-loop/G-motif identification:
 - **RMSD-based matching** with Kabsch alignment
 - Supports insertion codes and altlocs correctly
 - Default RMSD cutoff: 3.5Å, optional Gly requirement at position 6
+
+#### CRBN H-bond Validation (NEW)
+**Function**: `validate_crbn_hbonds()`
+
+Verifies the **3 canonical backbone H-bonds** between G-loop and CRBN:
+1. **G-3 carbonyl O** ↔ **CRBN Asn351** sidechain (NH2)
+2. **G-2 carbonyl O** ↔ **CRBN His357** sidechain (ND1/NE2)
+3. **G-1 carbonyl O** ↔ **CRBN Trp400** sidechain (NE1)
+
+**Criteria for canonical G-loop**: ≥2/3 H-bonds (default threshold 3.5Å)
+
+**Literature basis**:
+- Deep mutational scanning identified N351, H357, W400 as resistance hotspots
+- CRBN N351D mutant (loss of H-bond donor) abolishes GSPT1 degradation
+- Matches Schrödinger Maestro H-bond standards
+
+#### Enhanced Glue Binding Analysis
+**Function**: `analyze_g_motif_glue_binding()` - now includes:
+- CRBN H-bond validation (via `validate_hbonds=True`)
+- **Gly vdW contact** with MGD (conserved Gly faces drug, threshold 4.5Å)
+- **Sidechain contacts** at G-4, G-3, G-2, G+1 positions with CRBN
+- Neosubstrate classification (glue-induced vs direct binding)
+
+**Validation**: Tested on known structures (GSPT1/6H0G, CK1α/5FQD, IKZF3/6H0F)
+
+See `G_LOOP_VALIDATION_GUIDE.md` for detailed usage and `test_gloop_validation.py` for test suite.
 
 ### GUI Architecture
 
@@ -146,15 +205,17 @@ cmd.extend("command_name", function_name)
 ```
 
 Commands available in PyMOL:
-- `analyze_protein_ligand_interactions`
-- `analyze_pdb_interactions`
-- `highlight_csv_residues`
-- `gluetk_gui`
-- `visualize_protein_ligand_3d`
-- `generate_interaction_network_plot`
-- `generate_2d_diagram`
-- `analyze_ternary_complex`
-- `analyze_atom_pair_interactions`
+- Core analysis and viz:
+  - `analyze_protein_ligand_interactions`, `analyze_pdb_interactions`, `analyze_ternary_complex`, `analyze_atom_pair_interactions`
+  - `visualize_protein_ligand_3d`, `generate_interaction_network_plot`, `generate_2d_diagram`, `highlight_csv_residues`
+- Molecular glue–specific:
+  - `ppi_analyze`, `analyze_protein_protein_interface`, `identify_neo_epitope`, `calculate_interface_bsa`
+  - `find_crbn_g_motif`, `analyze_g_motif_glue_binding`, `validate_crbn_hbonds`, `validate_g_motif_geometry`
+- Scoring and batch plots:
+  - `score_protein_ligand`, `score_ternary_complex`, `plot_binding_heatmap`
+  - If Vina available: `vina_score_complex`, `compare_scoring_methods`
+- GUI:
+  - `gluetk_gui` (preferred), `molstruct_gui` (legacy alias)
 
 ### CSV Format Standard
 All interaction CSVs follow this schema:
@@ -276,5 +337,5 @@ Reference: Schrödinger Maestro documentation standards
 
 ---
 
-**Last Updated**: 2025-11-06  
+**Last Updated**: 2025-11-10  
 **Maintained by**: Vesper
