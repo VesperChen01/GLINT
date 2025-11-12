@@ -33,8 +33,12 @@ def _info(cn, en):
     # Force English output for all prompts
     print(en)
 
+# Global flag for Vina availability
+_vina_available = False
+
 # ---- 命令注册（与 GUI 解耦）----
 def _register_commands():
+    global _vina_available
     try:
         from .highlight_residues import highlight_csv_residues
         from .interaction_analyzer import (

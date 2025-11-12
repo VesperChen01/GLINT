@@ -334,7 +334,6 @@ def comprehensive_gmotif_pocket_analysis(obj_name, e3_chain, substrate_chain,
     pockets_gmotif = detect_pockets(
         obj_name=obj_name,
         selection=f'byres ((chain {substrate_chain} and resi {gmotif_range}) around 15)',
-        min_volume=15.0,
         output_csv=os.path.join(output_dir, 'gmotif_pockets.csv')
     )
     results['pockets'] = pockets_gmotif

@@ -63,10 +63,10 @@ def _info(cn, en):
 
 
 class PocketDetector:
-    """口袋检测器"""
+    """口袋检测器（严格标准参数）"""
     
-    def __init__(self, grid_spacing=0.6, probe_radius=1.4, 
-                 min_volume=20.0, min_depth=2.0, max_solvent_access=0.3):
+    def __init__(self, grid_spacing=0.5, probe_radius=1.4, 
+                 min_volume=30.0, min_depth=2.5, max_solvent_access=0.2):
         """
         参数：
             grid_spacing: 网格间距 (Å)
@@ -437,31 +437,25 @@ class PocketAnalyzer:
 
 
 def detect_pockets(obj_name=None, pdb_file=None, selection='all',
-                   grid_spacing=0.6, probe_radius=1.4,
-                   min_volume=20.0, min_depth=2.0, max_solvent_access=0.3,
-                   output_csv=None, use_schrodinger_standard=False):
+                   grid_spacing=0.5, probe_radius=1.4,
+                   min_volume=30.0, min_depth=2.5, max_solvent_access=0.2,
+                   output_csv=None):
     """
-    检测蛋白口袋
+    检测蛋白口袋（严格标准参数）
     
     参数：
         obj_name: PyMOL 对象名
         pdb_file: PDB 文件路径
         selection: PyMOL 选择语法
-        grid_spacing: 网格间距 (Å)
-        probe_radius: 探针半径 (Å)
-        min_volume: 最小口袋体积 (ų)
-        min_depth: 最小埋藏深度 (Å)
-        max_solvent_access: 最大溶剂可及度
+        grid_spacing: 网格间距 (Å, 默认 0.5 高精度)
+        probe_radius: 探针半径 (Å, 1.4 模拟水分子)
+        min_volume: 最小口袋体积 (Å³, 默认 30)
+        min_depth: 最小埋藏深度 (Å, 默认 2.5)
+        max_solvent_access: 最大溶剂可及度 (0-1, 默认 0.2 高选择性)
         output_csv: 输出 CSV 文件路径
-        use_schrodinger_standard: 使用 Schrödinger 标准参数
     
     返回：口袋列表
     """
-    if use_schrodinger_standard:
-        grid_spacing = 0.5
-        min_volume = 30.0
-        min_depth = 2.5
-        max_solvent_access = 0.2
     
     # 检测
     detector = PocketDetector(

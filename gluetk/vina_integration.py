@@ -548,7 +548,7 @@ def pocket_based_docking(obj_name: str, ligand_file: str, output_dir: Optional[s
     
     # 检测口袋
     print(f"[pocket_based_docking] Detecting pockets...")
-    pockets = detect_pockets(obj_name=obj_name, min_volume=20.0)
+    pockets = detect_pockets(obj_name=obj_name)
     
     if not pockets:
         return {'success': False, 'error': 'No pockets found'}
@@ -587,6 +587,98 @@ def pocket_based_docking(obj_name: str, ligand_file: str, output_dir: Optional[s
     return {'success': True, 'results': results, 'output_dir': output_dir}
 
 
+def manual_box_docking(obj_name: str, ligand_file: str, box_params: Dict[str, float],
+                       output_dir: Optional[str] = None, exhaustiveness: int = 8) -> Dict[str, Any]:
+    """
+    使用自定义对接盒参数进行 Vina 对接（不做口袋检测）
+
+    参数:
+        obj_name: 受体的 PyMOL 对象名
+        ligand_file: 配体文件 (MOL2/SDF/PDBQT)
+        box_params: {'center_x','center_y','center_z','size_x','size_y','size_z'}
+        output_dir: 输出目录
+        exhaustiveness: Vina 搜索精度
+    返回:
+        {'success': bool, 'output_dir': str, 'result': dict}
+    """
+    if not check_vina_available():
+        return {'success': False, 'error': 'Vina not available'}
+
+    if obj_name not in cmd.get_object_list():
+        return {'success': False, 'error': f"Object '{obj_name}' not found"}
+
+    if output_dir is None:
+        output_dir = f"{obj_name}_manual_docking_{os.path.splitext(os.path.basename(ligand_file))[0]}"
+    os.makedirs(output_dir, exist_ok=True)
+
+    # 导出受体 PDBQT
+    receptor_pdbqt = os.path.join(output_dir, f"{obj_name}_receptor.pdbqt")
+    if not export_to_pdbqt(obj_name, obj_name, receptor_pdbqt, is_receptor=True):
+        return {'success': False, 'error': 'Receptor export failed'}
+
+    # 导出配体 PDBQT
+    ligand_pdbqt = os.path.join(output_dir, "ligand.pdbqt")
+    ligand_obj = "temp_ligand"
+    cmd.load(ligand_file, ligand_obj)
+    if not export_to_pdbqt(ligand_obj, ligand_obj, ligand_pdbqt, is_receptor=False):
+        cmd.delete(ligand_obj)
+        return {'success': False, 'error': 'Ligand export failed'}
+    cmd.delete(ligand_obj)
+
+    # 生成配置并运行对接
+    ligand_basename = os.path.splitext(os.path.basename(ligand_pdbqt))[0]
+    output_pdbqt = os.path.join(output_dir, f"{ligand_basename}_manual_out.pdbqt")
+    log_file = os.path.join(output_dir, f"{ligand_basename}_manual.log")
+
+    config_path = os.path.join(output_dir, f"manual_config.txt")
+    generate_vina_config(
+        receptor_pdbqt=receptor_pdbqt,
+        ligand_pdbqt=ligand_pdbqt,
+        box_params=box_params,
+        output_pdbqt=output_pdbqt,
+        config_path=config_path,
+        exhaustiveness=exhaustiveness
+    )
+
+    vina_bin = find_vina_executable()
+    cmd_args = [vina_bin, '--config', config_path, '--log', log_file]
+    try:
+        subprocess.run(cmd_args, capture_output=True, text=True, timeout=600)
+    except subprocess.TimeoutExpired:
+        return {'success': False, 'error': 'Docking timeout (>10 min)'}
+    except Exception as e:
+        return {'success': False, 'error': str(e)}
+
+    # 解析打分
+    affinity = None
+    if os.path.exists(log_file):
+        with open(log_file, 'r') as f:
+            for line in f:
+                if line.strip().startswith('1 '):
+                    parts = line.split()
+                    try:
+                        affinity = float(parts[1])
+                        break
+                    except (ValueError, IndexError):
+                        pass
+
+    if affinity is None:
+        return {'success': False, 'error': 'Could not parse docking result'}
+
+    return {
+        'success': True,
+        'output_dir': output_dir,
+        'results': [{
+            'success': True,
+            'output_pdbqt': output_pdbqt,
+            'config_file': config_path,
+            'log_file': log_file,
+            'affinity': affinity,
+            'pocket_id': 'manual'
+        }]
+    }
+
+
 if __name__ == "__main__":
     print("[vina_integration] This is a PyMOL plugin module")
-    print("Commands: vina_score_complex, compare_scoring_methods, pocket_based_docking")
+    print("Commands: vina_score_complex, compare_scoring_methods, pocket_based_docking, manual_box_docking")

@@ -28,7 +28,7 @@ try:
         QLineEdit, QPushButton, QCheckBox, QComboBox, QFileDialog, QGroupBox,
         QFormLayout, QMessageBox, QTextEdit, QProgressBar, QFrame, QTabWidget,
         QTableWidget, QTableWidgetItem, QSizePolicy, QGridLayout, QListWidget, QStackedWidget,
-        QSpinBox
+        QSpinBox, QScrollArea
     )
     QT_LIB = "PyQt5"
 except Exception:
@@ -39,7 +39,7 @@ except Exception:
             QLineEdit, QPushButton, QCheckBox, QComboBox, QFileDialog, QGroupBox,
             QFormLayout, QMessageBox, QTextEdit, QProgressBar, QFrame, QTabWidget,
             QTableWidget, QTableWidgetItem, QSizePolicy, QGridLayout, QListWidget, QStackedWidget,
-            QSpinBox
+            QSpinBox, QScrollArea
         )
         QT_LIB = "PyQt6"
     except Exception as e:
@@ -285,10 +285,10 @@ class GlueTKDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(t("title"))
-        # 固定窗口尺寸（锁定大小，不可调整）
-        fixed_w = 1280
-        fixed_h = 720
-        self.setFixedSize(fixed_w, fixed_h)  # 锁定窗口大小
+        # 设置窗口最小尺寸（允许用户调整大小）
+        min_w, min_h = 1280, 720
+        self.setMinimumSize(min_w, min_h)  # 允许调整大小
+        self.resize(min_w, min_h)  # 初始大小
         
         # 居中显示
         try:
@@ -302,8 +302,8 @@ class GlueTKDialog(QDialog):
             scr = _QGA.primaryScreen()
             if scr:
                 geom = scr.availableGeometry()
-                x = (geom.width() - fixed_w) // 2
-                y = (geom.height() - fixed_h) // 2
+                x = (geom.width() - min_w) // 2
+                y = (geom.height() - min_h) // 2
                 self.move(x, y)
 
         self.analysis_thread: AnalysisWorker | None = None
@@ -316,13 +316,22 @@ class GlueTKDialog(QDialog):
         self._dark_mode: bool = True  # 默认深色主题
         self._ui_scale: float = 1.0   # 自动缩放比例
 
+        # 预先创建log_edit和progress_bar（在build_ui之前）
+        # Log面板已移除，但保留不可见的控件以兼容日志API
+        # Create invisible log_edit to prevent errors
+        self.log_edit = QTextEdit()
+        self.log_edit.setVisible(False)
+        
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+
         # 检查并安装依赖
         _check_and_install_deps()
         
         self.build_ui()
         self.setup_style()
-        # 初始化主题图标
-        self.theme_toggle_btn.setText("🌙" if self._dark_mode else "☀️")
+        # 初始化主题图标 - 使用太阳/月亮表情符号
+        self.theme_toggle_btn.setText("☀️" if not self._dark_mode else "🌙")
         # 禁用自动缩放以保持固定高度
         # self.apply_auto_scaling()
 
@@ -332,6 +341,66 @@ class GlueTKDialog(QDialog):
         self.update_enablement()
         self.update_modules_button_style()  # Initialize Modules button color
         self.log(t("log_ready"))
+
+    # 统一调整所有布局的间距与边距，减少拥挤、提升一致性
+    def _tune_layouts(self, widget: QWidget):
+        def _tune_layout_obj(lay):
+            if lay is None:
+                return
+            try:
+                if isinstance(lay, (QVBoxLayout, QHBoxLayout)):
+                    lay.setSpacing(12)
+                    lay.setContentsMargins(12, 12, 12, 12)
+                elif isinstance(lay, QGridLayout):
+                    lay.setHorizontalSpacing(12)
+                    lay.setVerticalSpacing(10)
+                    lay.setContentsMargins(12, 12, 12, 12)
+                elif isinstance(lay, QFormLayout):
+                    try:
+                        lay.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+                        lay.setFormAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+                    except Exception:
+                        # PyQt5 enum names
+                        lay.setLabelAlignment(Qt.AlignRight)
+                        lay.setFormAlignment(Qt.AlignLeft | Qt.AlignTop)
+                    try:
+                        lay.setRowWrapPolicy(QFormLayout.RowWrapPolicy.DontWrapRows)
+                        lay.setFieldGrowthPolicy(QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow)
+                    except Exception:
+                        pass
+                    lay.setHorizontalSpacing(12)
+                    lay.setVerticalSpacing(10)
+                    lay.setContentsMargins(12, 12, 12, 12)
+            except Exception:
+                pass
+
+        layout = widget.layout()
+        if layout:
+            _tune_layout_obj(layout)
+
+            # 遍历子项，递归调优（对子布局直接设置，对子控件深入其内部布局）
+            for i in range(layout.count()):
+                item = layout.itemAt(i)
+                if not item:
+                    continue
+                try:
+                    sub_layout = item.layout()
+                except Exception:
+                    sub_layout = None
+                if sub_layout is not None:
+                    _tune_layout_obj(sub_layout)
+                    # 继续深入子布局的子项
+                    try:
+                        for j in range(sub_layout.count()):
+                            sub_item = sub_layout.itemAt(j)
+                            if sub_item and sub_item.widget():
+                                self._tune_layouts(sub_item.widget())
+                    except Exception:
+                        pass
+                # 子控件（可能内部还有布局）
+                w = item.widget()
+                if w is not None:
+                    self._tune_layouts(w)
 
     # --- UI 结构 ---
     def build_ui(self):
@@ -346,16 +415,17 @@ class GlueTKDialog(QDialog):
 
         # ========== Left: Navigation List ==========
         nav_widget = QWidget()
+        nav_widget.setObjectName("nav_widget")
         nav_layout = QVBoxLayout(nav_widget)
-        nav_layout.setSpacing(6)  # 减小间距
-        nav_layout.setContentsMargins(0, 0, 0, 0)
+        nav_layout.setSpacing(10)
+        nav_layout.setContentsMargins(8, 8, 8, 8)
 
         # Header: Theme icon + Modules label (centered)
         nav_header = QHBoxLayout()
-        nav_header.setSpacing(4)
+        nav_header.setSpacing(6)
         
         # Theme toggle icon (sun/moon) - no border
-        self.theme_toggle_btn = QPushButton("🌙")  # Moon icon for dark mode by default
+        self.theme_toggle_btn = QPushButton("")  # Empty text for theme toggle
         self.theme_toggle_btn.setObjectName("theme_icon_btn")
         self.theme_toggle_btn.setFlat(True)
         self.theme_toggle_btn.setFixedSize(28, 28)
@@ -407,11 +477,11 @@ class GlueTKDialog(QDialog):
         
         # Bottom items (Check Environment, README and Contact)
         from PyQt5.QtWidgets import QFrame
-        separator = QFrame()
-        separator.setFrameShape(QFrame.Shape.HLine)
-        separator.setFrameShadow(QFrame.Shadow.Sunken)
-        separator.setStyleSheet("background-color: #e2e8f0; margin: 8px 0;")
-        nav_layout.addWidget(separator)
+        self.nav_separator = QFrame()
+        self.nav_separator.setFrameShape(QFrame.Shape.HLine)
+        self.nav_separator.setFrameShadow(QFrame.Shadow.Sunken)
+        self.nav_separator.setStyleSheet("background-color: #e2e8f0; margin: 8px 0;")
+        nav_layout.addWidget(self.nav_separator)
         
         # Check Environment button
         check_env_btn = QPushButton("Check Env")
@@ -438,22 +508,7 @@ class GlueTKDialog(QDialog):
         contact_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))
         nav_layout.addWidget(contact_btn)
 
-        # ========== 底部日志区域（必须先创建，因为某些 tab 会引用它）==========
-        log_grp = QGroupBox("📋 Console Log")
-        log_layout = QVBoxLayout(log_grp)
-        log_layout.setSpacing(4)
-        log_layout.setContentsMargins(8, 8, 8, 8)
-        
-        self.log_edit = QTextEdit()
-        self.log_edit.setReadOnly(True)
-        self.log_edit.setMaximumHeight(120)  # 限制日志高度
-        self.log_edit.setMinimumHeight(80)
-        log_layout.addWidget(self.log_edit)
-        
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setVisible(False)
-        self.progress_bar.setMaximumHeight(20)
-        log_layout.addWidget(self.progress_bar)
+        # log_edit已在__init__中创建，这里不需要再设置
         
         # ========== 内容区域 ==========
         self.content_stack = QStackedWidget()
@@ -473,9 +528,13 @@ class GlueTKDialog(QDialog):
         nav_widget.setMinimumWidth(220)
         content_row.addWidget(self.content_stack, 1)  # Content: takes all remaining space
 
-        # ========== 添加到主布局 ==========
-        main_layout.addLayout(content_row, 1)  # 内容区占大部分空间
-        main_layout.addWidget(log_grp, 0)  # 日志区固定高度
+        main_layout.addLayout(content_row, 1)  # 内容区占全部空间
+
+        # 全局布局调优，统一控件间距与外边距，避免拥挤
+        try:
+            self._tune_layouts(self)
+        except Exception:
+            pass
 
     def on_nav_changed(self, index):
         """导航切换"""
@@ -483,224 +542,231 @@ class GlueTKDialog(QDialog):
 
     def create_interaction_tab(self) -> QWidget:
         """创建整合的相互作用分析标签页（Protein-Protein + Protein-Ligand + Atom Pairs）"""
-        w = QWidget()
-        main_layout = QVBoxLayout(w)
-        main_layout.setSpacing(6)  # 大幅减小间距
-        main_layout.setContentsMargins(6, 6, 6, 6)  # 减小边距
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        
+        # 创建内容容器
+        content_widget = QWidget()
+        main_layout = QVBoxLayout(content_widget)
+        main_layout.setSpacing(14)
+        main_layout.setContentsMargins(12, 12, 12, 12)
         
         # ========== 1. Protein-Protein Interaction ==========
         grp_pp = QGroupBox("Protein-Protein Interaction Analysis")
-        # 使用网格布局实现两栏式
-        pp_grid = QGridLayout(grp_pp)
-        pp_grid.setColumnStretch(0, 0)
-        pp_grid.setColumnStretch(1, 1)
-        pp_grid.setColumnStretch(2, 0)
-        pp_grid.setColumnStretch(3, 1)
-        pp_grid.setHorizontalSpacing(8)  # 恢复水平间距
-        pp_grid.setVerticalSpacing(8)  # 恢复垂直间距
+        pp_layout = QVBoxLayout(grp_pp)
+        pp_layout.setSpacing(12)
+        pp_layout.setContentsMargins(12, 12, 12, 12)
         
-        # 第一行: Target Object | [combo + refresh] | PDB File | [input + browse]
-        pp_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        # Row 1: Target Object
+        row1 = QHBoxLayout()
+        row1.addWidget(QLabel("Target Object:"), 0)
         self.obj_combo_analysis = QComboBox()
-        self.obj_combo_analysis.setMinimumHeight(26)
+        self.obj_combo_analysis.setMinimumHeight(36)
         self.refresh_obj_analysis = QPushButton(t("refresh"))
         self.refresh_obj_analysis.setObjectName("refresh_btn")
-        self.refresh_obj_analysis.setMinimumHeight(26)
+        self.refresh_obj_analysis.setMinimumHeight(36)
         self.refresh_obj_analysis.clicked.connect(self.refresh_objects)
-        row0_container = QWidget()
-        row0 = QHBoxLayout(row0_container)
-        row0.setContentsMargins(0, 0, 0, 0)
-        row0.addWidget(self.obj_combo_analysis, 1)
-        row0.addWidget(self.refresh_obj_analysis)
-        pp_grid.addWidget(row0_container, 0, 1)
+        row1.addWidget(self.obj_combo_analysis, 1)
+        row1.addWidget(self.refresh_obj_analysis, 0)
+        pp_layout.addLayout(row1)
         
-        pp_grid.addWidget(QLabel("PDB File (optional)"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        # Row 2: PDB File
+        row2 = QHBoxLayout()
+        row2.addWidget(QLabel("PDB File (optional):"), 0)
         self.pdb_path = QLineEdit()
-        self.pdb_path.setMinimumHeight(26)
+        self.pdb_path.setMinimumHeight(36)
         self.pdb_browse = QPushButton(t("browse"))
-        self.pdb_browse.setMinimumHeight(26)
+        self.pdb_browse.setMinimumHeight(36)
         self.pdb_browse.setObjectName("browse_btn")
         self.pdb_browse.clicked.connect(self.browse_pdb)
-        row1_container = QWidget()
-        row1 = QHBoxLayout(row1_container)
-        row1.setContentsMargins(0, 0, 0, 0)
-        row1.addWidget(self.pdb_path, 1)
-        row1.addWidget(self.pdb_browse)
-        pp_grid.addWidget(row1_container, 0, 3)
+        row2.addWidget(self.pdb_path, 1)
+        row2.addWidget(self.pdb_browse, 0)
+        pp_layout.addLayout(row2)
         
-        # 第二行: Only between chains | [checkbox] | Output CSV | [input + browse]
-        pp_grid.addWidget(QLabel(""), 1, 0)  # 空位
+        # Row 3: Only between chains
         self.chk_between = QCheckBox(t("between_chains"))
-        pp_grid.addWidget(self.chk_between, 1, 1)
+        self.chk_between.setMinimumHeight(36)
+        pp_layout.addWidget(self.chk_between)
         
-        pp_grid.addWidget(QLabel("Output CSV (optional)"), 1, 2, Qt.AlignmentFlag.AlignRight)
+        # Row 4: Output CSV
+        row4 = QHBoxLayout()
+        row4.addWidget(QLabel("Output CSV (optional):"), 0)
         self.out_csv = QLineEdit()
-        self.out_csv.setMinimumHeight(26)
+        self.out_csv.setMinimumHeight(36)
         self.out_browse = QPushButton(t("browse"))
-        self.out_browse.setMinimumHeight(26)
+        self.out_browse.setMinimumHeight(36)
         self.out_browse.setObjectName("save_btn")
         self.out_browse.clicked.connect(self.browse_out_csv)
-        row2_container = QWidget()
-        row2 = QHBoxLayout(row2_container)
-        row2.setContentsMargins(0, 0, 0, 0)
-        row2.addWidget(self.out_csv, 1)
-        row2.addWidget(self.out_browse)
-        pp_grid.addWidget(row2_container, 1, 3)
+        row4.addWidget(self.out_csv, 1)
+        row4.addWidget(self.out_browse, 0)
+        pp_layout.addLayout(row4)
         
         btn_pp_row = QHBoxLayout()
         self.analyze_btn = QPushButton("Analyze")
         self.analyze_btn.setObjectName("highlight_btn")
+        self.analyze_btn.setMinimumHeight(36)
         self.analyze_btn.clicked.connect(self.start_analysis)
         
         self.render_interact_btn = QPushButton("Render (Analyze + Beautify + PNG)")
         self.render_interact_btn.setObjectName("highlight_btn")
+        self.render_interact_btn.setMinimumHeight(36)
         self.render_interact_btn.clicked.connect(self.render_interactions_beautifully_clicked)
         
         btn_pp_row.addWidget(self.analyze_btn)
         btn_pp_row.addWidget(self.render_interact_btn)
         btn_pp_row.addStretch(1)
+        pp_layout.addLayout(btn_pp_row)
         
         main_layout.addWidget(grp_pp)
-        main_layout.addLayout(btn_pp_row)
         
         # ========== 2. Protein-Ligand Interaction ==========
         grp_pl = QGroupBox("Protein-Ligand Interaction Analysis")
-        # 使用网格布局实现两栏式
-        pl_grid = QGridLayout(grp_pl)
-        pl_grid.setColumnStretch(0, 0)
-        pl_grid.setColumnStretch(1, 1)
-        pl_grid.setColumnStretch(2, 0)
-        pl_grid.setColumnStretch(3, 1)
-        pl_grid.setHorizontalSpacing(8)  # 恢复水平间距
-        pl_grid.setVerticalSpacing(8)  # 恢复垂直间距
+        pl_layout = QVBoxLayout(grp_pl)
+        pl_layout.setSpacing(12)
+        pl_layout.setContentsMargins(12, 12, 12, 12)
         
-        # 第一行: Target Object | [combo + refresh] | Ligand Resname | [input]
-        pl_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        # Row 1: Target Object
+        pl_row1 = QHBoxLayout()
+        pl_row1.addWidget(QLabel("Target Object:"), 0)
         self.pl_obj_combo = QComboBox()
-        self.pl_obj_combo.setMinimumHeight(26)
+        self.pl_obj_combo.setMinimumHeight(36)
         self.pl_refresh_btn = QPushButton(t("refresh"))
         self.pl_refresh_btn.setObjectName("refresh_btn")
-        self.pl_refresh_btn.setMinimumHeight(26)
+        self.pl_refresh_btn.setMinimumHeight(36)
         self.pl_refresh_btn.clicked.connect(self.refresh_objects)
-        pl_obj_row_container = QWidget()
-        pl_obj_row = QHBoxLayout(pl_obj_row_container)
-        pl_obj_row.setContentsMargins(0, 0, 0, 0)
-        pl_obj_row.addWidget(self.pl_obj_combo, 1)
-        pl_obj_row.addWidget(self.pl_refresh_btn)
-        pl_grid.addWidget(pl_obj_row_container, 0, 1)
+        pl_row1.addWidget(self.pl_obj_combo, 1)
+        pl_row1.addWidget(self.pl_refresh_btn, 0)
+        pl_layout.addLayout(pl_row1)
         
-        pl_grid.addWidget(QLabel("Ligand Resname:"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        # Row 2: Ligand Resname
+        pl_row2 = QHBoxLayout()
+        pl_row2.addWidget(QLabel("Ligand Resname:"), 0)
         self.pl_ligand_name = QLineEdit()
-        self.pl_ligand_name.setMinimumHeight(26)
+        self.pl_ligand_name.setMinimumHeight(36)
         self.pl_ligand_name.setPlaceholderText("Auto-detect if blank")
-        pl_grid.addWidget(self.pl_ligand_name, 0, 3)
+        pl_row2.addWidget(self.pl_ligand_name, 1)
+        pl_layout.addLayout(pl_row2)
         
-        # 第二行: Protein Chains | [input] | Distance cutoff | [input]
-        pl_grid.addWidget(QLabel("Protein Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight)
+        # Row 3: Protein Chains
+        pl_row3 = QHBoxLayout()
+        pl_row3.addWidget(QLabel("Protein Chains:"), 0)
         self.pl_protein_chains = QLineEdit()
-        self.pl_protein_chains.setMinimumHeight(26)
+        self.pl_protein_chains.setMinimumHeight(36)
         self.pl_protein_chains.setPlaceholderText("Auto-detect if blank")
-        pl_grid.addWidget(self.pl_protein_chains, 1, 1)
+        pl_row3.addWidget(self.pl_protein_chains, 1)
+        pl_layout.addLayout(pl_row3)
         
-        pl_grid.addWidget(QLabel("Distance cutoff (Å):"), 1, 2, Qt.AlignmentFlag.AlignRight)
+        # Row 4: Distance cutoff
+        pl_row4 = QHBoxLayout()
+        pl_row4.addWidget(QLabel("Distance cutoff (Å):"), 0)
         self.pl_distance = QLineEdit("4.5")
-        self.pl_distance.setMinimumHeight(26)
-        pl_grid.addWidget(self.pl_distance, 1, 3)
+        self.pl_distance.setMinimumHeight(36)
+        pl_row4.addWidget(self.pl_distance, 1)
+        pl_layout.addLayout(pl_row4)
         
-        # 第三行: Output CSV | [input + browse] (跨两列)
-        pl_grid.addWidget(QLabel("Output CSV (optional)"), 2, 0, Qt.AlignmentFlag.AlignRight)
+        # Row 5: Output CSV
+        pl_row5 = QHBoxLayout()
+        pl_row5.addWidget(QLabel("Output CSV (optional):"), 0)
         self.pl_csv = QLineEdit()
-        self.pl_csv.setMinimumHeight(26)
+        self.pl_csv.setMinimumHeight(36)
         self.pl_csv.setPlaceholderText("Optional")
         self.pl_csv_btn = QPushButton(t("browse"))
-        self.pl_csv_btn.setMinimumHeight(26)
+        self.pl_csv_btn.setMinimumHeight(36)
         self.pl_csv_btn.setObjectName("browse_btn")
         self.pl_csv_btn.clicked.connect(lambda: self._browse_save_file(self.pl_csv, "CSV (*.csv)"))
-        pl_csv_row = QHBoxLayout()
-        pl_csv_row.addWidget(self.pl_csv, 1)
-        pl_csv_row.addWidget(self.pl_csv_btn)
-        pl_grid.addLayout(pl_csv_row, 2, 1, 1, 3)  # 跨三列
+        pl_row5.addWidget(self.pl_csv, 1)
+        pl_row5.addWidget(self.pl_csv_btn, 0)
+        pl_layout.addLayout(pl_row5)
         
         btn_pl_row = QHBoxLayout()
         self.pl_analyze_btn = QPushButton("Analyze")
         self.pl_analyze_btn.setObjectName("highlight_btn")
+        self.pl_analyze_btn.setMinimumHeight(36)
         self.pl_analyze_btn.clicked.connect(self.run_pl_analysis)
         
         self.pl_visualize_btn = QPushButton("3D Visualize")
         self.pl_visualize_btn.setObjectName("highlight_btn")
+        self.pl_visualize_btn.setMinimumHeight(36)
         self.pl_visualize_btn.clicked.connect(self.run_pl_visualize)
         
         self.pl_network_btn = QPushButton("Network Plot")
         self.pl_network_btn.setObjectName("highlight_btn")
+        self.pl_network_btn.setMinimumHeight(36)
         self.pl_network_btn.clicked.connect(self.run_pl_network)
         
         btn_pl_row.addWidget(self.pl_analyze_btn)
         btn_pl_row.addWidget(self.pl_visualize_btn)
         btn_pl_row.addWidget(self.pl_network_btn)
         btn_pl_row.addStretch(1)
+        pl_layout.addLayout(btn_pl_row)
         
         main_layout.addWidget(grp_pl)
-        main_layout.addLayout(btn_pl_row)
         
         # ========== 3. Atom Pair Analysis ==========
         grp_ap = QGroupBox("Atom Pair Analysis (Atomic-Level Precision)")
-        # 使用网格布局实现两栏式
-        ap_grid = QGridLayout(grp_ap)
-        ap_grid.setColumnStretch(0, 0)
-        ap_grid.setColumnStretch(1, 1)
-        ap_grid.setColumnStretch(2, 0)
-        ap_grid.setColumnStretch(3, 1)
-        ap_grid.setHorizontalSpacing(8)  # 恢复水平间距
-        ap_grid.setVerticalSpacing(8)  # 恢复垂直间距
+        ap_layout = QVBoxLayout(grp_ap)
+        ap_layout.setSpacing(12)
+        ap_layout.setContentsMargins(12, 12, 12, 12)
         
-        # 第一行: Target Object | [combo + refresh] | Atom1 Selection | [input]
-        ap_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        # Row 1: Target Object
+        ap_row1 = QHBoxLayout()
+        ap_row1.addWidget(QLabel("Target Object:"), 0)
         self.ap_obj_combo = QComboBox()
-        self.ap_obj_combo.setMinimumHeight(26)
+        self.ap_obj_combo.setMinimumHeight(36)
         self.ap_refresh_btn = QPushButton(t("refresh"))
         self.ap_refresh_btn.setObjectName("refresh_btn")
-        self.ap_refresh_btn.setMinimumHeight(26)
+        self.ap_refresh_btn.setMinimumHeight(36)
         self.ap_refresh_btn.clicked.connect(self.refresh_objects)
-        ap_obj_row_container = QWidget()
-        ap_obj_row = QHBoxLayout(ap_obj_row_container)
-        ap_obj_row.setContentsMargins(0, 0, 0, 0)
-        ap_obj_row.addWidget(self.ap_obj_combo, 1)
-        ap_obj_row.addWidget(self.ap_refresh_btn)
-        ap_grid.addWidget(ap_obj_row_container, 0, 1)
+        ap_row1.addWidget(self.ap_obj_combo, 1)
+        ap_row1.addWidget(self.ap_refresh_btn, 0)
+        ap_layout.addLayout(ap_row1)
         
-        ap_grid.addWidget(QLabel("Atom1 Selection:"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        # Row 2: Atom1 Selection
+        ap_row2 = QHBoxLayout()
+        ap_row2.addWidget(QLabel("Atom1 Selection:"), 0)
         self.ap_atom1 = QLineEdit()
-        self.ap_atom1.setMinimumHeight(26)
+        self.ap_atom1.setMinimumHeight(36)
         self.ap_atom1.setPlaceholderText('e.g.: "resn LIG and name N1"')
-        ap_grid.addWidget(self.ap_atom1, 0, 3)
+        ap_row2.addWidget(self.ap_atom1, 1)
+        ap_layout.addLayout(ap_row2)
         
-        # 第二行: Atom2 Selection | [input] | Distance cutoff | [input]
-        ap_grid.addWidget(QLabel("Atom2 Selection:"), 1, 0, Qt.AlignmentFlag.AlignRight)
+        # Row 3: Atom2 Selection
+        ap_row3 = QHBoxLayout()
+        ap_row3.addWidget(QLabel("Atom2 Selection:"), 0)
         self.ap_atom2 = QLineEdit()
-        self.ap_atom2.setMinimumHeight(26)
+        self.ap_atom2.setMinimumHeight(36)
         self.ap_atom2.setPlaceholderText('e.g.: "elem O"')
-        ap_grid.addWidget(self.ap_atom2, 1, 1)
+        ap_row3.addWidget(self.ap_atom2, 1)
+        ap_layout.addLayout(ap_row3)
         
-        ap_grid.addWidget(QLabel("Distance cutoff (Å):"), 1, 2, Qt.AlignmentFlag.AlignRight)
+        # Row 4: Distance cutoff
+        ap_row4 = QHBoxLayout()
+        ap_row4.addWidget(QLabel("Distance cutoff (Å):"), 0)
         self.ap_distance = QLineEdit("5.0")
-        self.ap_distance.setMinimumHeight(26)
-        ap_grid.addWidget(self.ap_distance, 1, 3)
+        self.ap_distance.setMinimumHeight(36)
+        ap_row4.addWidget(self.ap_distance, 1)
+        ap_layout.addLayout(ap_row4)
         
-        # 第三行: Output CSV | [input + browse] (跨两列)
-        ap_grid.addWidget(QLabel("Output CSV (optional)"), 2, 0, Qt.AlignmentFlag.AlignRight)
+        # Row 5: Output CSV
+        ap_row5 = QHBoxLayout()
+        ap_row5.addWidget(QLabel("Output CSV (optional):"), 0)
         self.ap_csv = QLineEdit()
-        self.ap_csv.setMinimumHeight(26)
+        self.ap_csv.setMinimumHeight(36)
         self.ap_csv.setPlaceholderText("Optional")
         self.ap_csv_btn = QPushButton(t("browse"))
-        self.ap_csv_btn.setMinimumHeight(26)
+        self.ap_csv_btn.setMinimumHeight(36)
         self.ap_csv_btn.setObjectName("browse_btn")
         self.ap_csv_btn.clicked.connect(lambda: self._browse_save_file(self.ap_csv, "CSV (*.csv)"))
-        ap_csv_row = QHBoxLayout()
-        ap_csv_row.addWidget(self.ap_csv, 1)
-        ap_csv_row.addWidget(self.ap_csv_btn)
-        ap_grid.addLayout(ap_csv_row, 2, 1, 1, 3)  # 跨三列
+        ap_row5.addWidget(self.ap_csv, 1)
+        ap_row5.addWidget(self.ap_csv_btn, 0)
+        ap_layout.addLayout(ap_row5)
+        
+        main_layout.addWidget(grp_ap)
         
         # Quick templates - 确保所有按钮在一行显示
+        main_layout.addWidget(QLabel("Quick Templates:"))
         template_row = QHBoxLayout()
         templates = [
             ("N-O H-bonds", '"elem N"', '"elem O"', "3.5"),
@@ -711,38 +777,46 @@ class GlueTKDialog(QDialog):
         ]
         for label, atom1, atom2, dist in templates:
             btn = QPushButton(label)
-            btn.setObjectName("browse_btn") # 使用一个比较紧凑的样式
-            btn.setMinimumHeight(28)
+            btn.setObjectName("browse_btn")
+            btn.setMinimumHeight(36)
             btn.clicked.connect(lambda checked, a1=atom1, a2=atom2, d=dist: self.apply_ap_template(a1, a2, d))
             template_row.addWidget(btn)
         template_row.addStretch(1)
+        main_layout.addLayout(template_row)
         
         btn_ap_row = QHBoxLayout()
         self.ap_analyze_btn = QPushButton("Analyze Pairs")
         self.ap_analyze_btn.setObjectName("highlight_btn")
+        self.ap_analyze_btn.setMinimumHeight(36)
         self.ap_analyze_btn.clicked.connect(self.run_ap_analysis)
         
         self.ap_visualize_btn = QPushButton("Visualize")
         self.ap_visualize_btn.setObjectName("highlight_btn")
+        self.ap_visualize_btn.setMinimumHeight(36)
         self.ap_visualize_btn.clicked.connect(self.run_ap_visualize)
         
         btn_ap_row.addWidget(self.ap_analyze_btn)
         btn_ap_row.addWidget(self.ap_visualize_btn)
         btn_ap_row.addStretch(1)
-        
-        main_layout.addWidget(grp_ap)
-        main_layout.addWidget(QLabel("Quick Templates:"))
-        main_layout.addLayout(template_row)
         main_layout.addLayout(btn_ap_row)
         
         main_layout.addStretch(1)
-        return w
+        
+        # 将内容设置到滚动区域
+        scroll_area.setWidget(content_widget)
+        
+        # 返回包裹的滚动区域
+        wrapper = QWidget()
+        wrapper_layout = QVBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.addWidget(scroll_area)
+        return wrapper
     
     def create_analysis_tab(self) -> QWidget:
-        w = QWidget(); lay = QVBoxLayout(w); lay.setSpacing(8)
+        w = QWidget(); lay = QVBoxLayout(w); lay.setSpacing(10)
 
         # ===== 相互作用分析组 =====
-        grp = QGroupBox(t("grp_analysis")); form = QFormLayout(grp); form.setLabelAlignment(Qt.AlignmentFlag.AlignRight); form.setSpacing(10)
+        grp = QGroupBox(t("grp_analysis")); form = QFormLayout(grp); form.setLabelAlignment(Qt.AlignmentFlag.AlignRight); form.setSpacing(12)
         row0 = QHBoxLayout()
         self.obj_combo_analysis = QComboBox()
         self.refresh_obj_analysis = QPushButton(t("refresh")); self.refresh_obj_analysis.setObjectName("refresh_btn"); self.refresh_obj_analysis.clicked.connect(self.refresh_objects)
@@ -773,7 +847,7 @@ class GlueTKDialog(QDialog):
         btn_row.addStretch(1)
 
         # ===== CSV 高亮组 =====
-        grp_csv = QGroupBox(t("grp_csv")); form_csv = QFormLayout(grp_csv); form_csv.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+        grp_csv = QGroupBox(t("grp_csv")); form_csv = QFormLayout(grp_csv); form_csv.setLabelAlignment(Qt.AlignmentFlag.AlignRight); form_csv.setSpacing(12)
         row_csv = QHBoxLayout()
         self.csv_path = QLineEdit()
         self.csv_browse = QPushButton(t("browse")); self.csv_browse.setObjectName("browse_btn"); self.csv_browse.clicked.connect(self.browse_csv)
@@ -797,8 +871,8 @@ class GlueTKDialog(QDialog):
         """Create welcome page with molecular glue introduction"""
         w = QWidget()
         layout = QVBoxLayout(w)
-        layout.setSpacing(20)
-        layout.setContentsMargins(50, 30, 50, 30)
+        layout.setSpacing(14)
+        layout.setContentsMargins(20, 16, 20, 16)
         
         # Welcome title
         title_label = QLabel("GlueTK - Molecular Glue Analyzer")
@@ -831,8 +905,14 @@ class GlueTKDialog(QDialog):
 
     def create_molecular_glue_tab(self) -> QWidget:
         """创建分子胶设计模块 - POI Discovery"""
-        w = QWidget()
-        main_layout = QVBoxLayout(w)
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
+        
+        # 创建内容容器
+        content_widget = QWidget()
+        main_layout = QVBoxLayout(content_widget)
         main_layout.setSpacing(12) # 恢复间距
         main_layout.setContentsMargins(10, 10, 10, 10) # 恢复边距
         
@@ -844,16 +924,16 @@ class GlueTKDialog(QDialog):
         gm_grid.setColumnStretch(1, 1)
         gm_grid.setColumnStretch(2, 0)
         gm_grid.setColumnStretch(3, 1)
-        gm_grid.setHorizontalSpacing(8)  # 恢复水平间距
-        gm_grid.setVerticalSpacing(16)  # 再次增加此页面的垂直间距以解决重叠
+        gm_grid.setHorizontalSpacing(8)
+        gm_grid.setVerticalSpacing(10)  # 减少垂直间距以节省空间
         
         # 第一行： Target Object | [combo + refresh] | PDB File | [input + browse]
         gm_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
         self.obj_combo_gm = QComboBox()
-        self.obj_combo_gm.setMinimumHeight(24)
+        self.obj_combo_gm.setMinimumHeight(32)
         self.refresh_obj_gm = QPushButton(t("refresh"))
         self.refresh_obj_gm.setObjectName("refresh_btn")
-        self.refresh_obj_gm.setMinimumHeight(24)
+        self.refresh_obj_gm.setMinimumHeight(32)
         self.refresh_obj_gm.clicked.connect(self.refresh_objects)
         obj_row_container = QWidget()
         obj_row = QHBoxLayout(obj_row_container)
@@ -864,9 +944,9 @@ class GlueTKDialog(QDialog):
         
         gm_grid.addWidget(QLabel("PDB File (optional)"), 0, 2, Qt.AlignmentFlag.AlignRight)
         self.gm_pdb = QLineEdit()
-        self.gm_pdb.setMinimumHeight(24)
+        self.gm_pdb.setMinimumHeight(32)
         self.gm_pdb_browse = QPushButton(t("browse"))
-        self.gm_pdb_browse.setMinimumHeight(24)
+        self.gm_pdb_browse.setMinimumHeight(32)
         self.gm_pdb_browse.setObjectName("browse_btn")
         self.gm_pdb_browse.clicked.connect(self.browse_gm_pdb)
         pdb_row_container = QWidget()
@@ -879,7 +959,7 @@ class GlueTKDialog(QDialog):
         # 第二行： RMSD cutoff | [input] | Require Gly | [checkbox]
         gm_grid.addWidget(QLabel("RMSD cutoff (Å)"), 1, 0, Qt.AlignmentFlag.AlignRight)
         self.gm_rmsd = QLineEdit("3.5")
-        self.gm_rmsd.setMinimumHeight(24)
+        self.gm_rmsd.setMinimumHeight(32)
         gm_grid.addWidget(self.gm_rmsd, 1, 1)
         
         gm_grid.addWidget(QLabel(""), 1, 2)  # 空位
@@ -890,7 +970,7 @@ class GlueTKDialog(QDialog):
         # 第三行： Template Source | [combo] | Template Selection | [input + button]
         gm_grid.addWidget(QLabel("Template Source"), 2, 0, Qt.AlignmentFlag.AlignRight)
         self.gm_template_mode = QComboBox()
-        self.gm_template_mode.setMinimumHeight(24)
+        self.gm_template_mode.setMinimumHeight(32)
         self.gm_template_mode.addItems([
             "Idealized (8×Cα)",
             "Built-in: GSPT1 (6H0G A:60-67)",
@@ -902,10 +982,10 @@ class GlueTKDialog(QDialog):
         
         gm_grid.addWidget(QLabel("Template Selection"), 2, 2, Qt.AlignmentFlag.AlignRight)
         self.gm_template_sel = QLineEdit()
-        self.gm_template_sel.setMinimumHeight(24)
+        self.gm_template_sel.setMinimumHeight(32)
         self.gm_template_sel.setPlaceholderText("Enter selection, e.g., sele")
         self.gm_template_pick = QPushButton("Get Current (sele)")
-        self.gm_template_pick.setMinimumHeight(24)
+        self.gm_template_pick.setMinimumHeight(32)
         self.gm_template_pick.setObjectName("refresh_btn")
         self.gm_template_pick.clicked.connect(lambda: self.gm_template_sel.setText("sele"))
         temp_row_container = QWidget()
@@ -925,10 +1005,10 @@ class GlueTKDialog(QDialog):
         # 第四行： Output CSV | [input + browse] (跨两列)
         gm_grid.addWidget(QLabel("Output CSV (optional)"), 3, 0, Qt.AlignmentFlag.AlignRight)
         self.gm_out_csv = QLineEdit()
-        self.gm_out_csv.setMinimumHeight(24)
+        self.gm_out_csv.setMinimumHeight(36)
         self.gm_out_csv.setPlaceholderText("Optional - leave blank for temp CSV")
         self.gm_out_browse = QPushButton(t("browse"))
-        self.gm_out_browse.setMinimumHeight(24)
+        self.gm_out_browse.setMinimumHeight(36)
         self.gm_out_browse.setObjectName("save_btn")
         self.gm_out_browse.clicked.connect(self.browse_gm_out_csv)
         out_row_container = QWidget()
@@ -960,16 +1040,16 @@ class GlueTKDialog(QDialog):
         ternary_grid.setColumnStretch(1, 1)
         ternary_grid.setColumnStretch(2, 0)
         ternary_grid.setColumnStretch(3, 1)
-        ternary_grid.setHorizontalSpacing(8)  # 恢复水平间距
-        ternary_grid.setVerticalSpacing(16)  # 再次增加此页面的垂直间距以解决重叠
+        ternary_grid.setHorizontalSpacing(8)
+        ternary_grid.setVerticalSpacing(10)  # 减少垂直间距以节省空间
         
         # 第一行: Target Object | [combo + refresh] | Ligand Resname | [input]
         ternary_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
         self.tc_obj_combo = QComboBox()
-        self.tc_obj_combo.setMinimumHeight(24)
+        self.tc_obj_combo.setMinimumHeight(36)
         self.tc_refresh_btn = QPushButton(t("refresh"))
         self.tc_refresh_btn.setObjectName("refresh_btn")
-        self.tc_refresh_btn.setMinimumHeight(24)
+        self.tc_refresh_btn.setMinimumHeight(36)
         self.tc_refresh_btn.clicked.connect(self.refresh_objects)
         tc_obj_row_container = QWidget()
         tc_obj_row = QHBoxLayout(tc_obj_row_container)
@@ -980,35 +1060,35 @@ class GlueTKDialog(QDialog):
         
         ternary_grid.addWidget(QLabel("Ligand Resname:"), 0, 2, Qt.AlignmentFlag.AlignRight)
         self.tc_ligand_name = QLineEdit()
-        self.tc_ligand_name.setMinimumHeight(24)
+        self.tc_ligand_name.setMinimumHeight(36)
         self.tc_ligand_name.setPlaceholderText("PROTAC/Glue name, auto-detect if blank")
         ternary_grid.addWidget(self.tc_ligand_name, 0, 3)
         
         # 第二行: E3 Chains (CRBN/VHL) | [input] | POI Chains | [input]
         ternary_grid.addWidget(QLabel("E3 Ligase Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight)
         self.tc_protein1_chains = QLineEdit()
-        self.tc_protein1_chains.setMinimumHeight(24)
+        self.tc_protein1_chains.setMinimumHeight(36)
         self.tc_protein1_chains.setPlaceholderText("e.g.: A (CRBN/VHL/IAP)")
         ternary_grid.addWidget(self.tc_protein1_chains, 1, 1)
         
         ternary_grid.addWidget(QLabel("POI Chains:"), 1, 2, Qt.AlignmentFlag.AlignRight)
         self.tc_protein2_chains = QLineEdit()
-        self.tc_protein2_chains.setMinimumHeight(24)
+        self.tc_protein2_chains.setMinimumHeight(36)
         self.tc_protein2_chains.setPlaceholderText("e.g.: B (Target Protein)")
         ternary_grid.addWidget(self.tc_protein2_chains, 1, 3)
         
         # 第三行: Interface cutoff | [input] | Output CSV | [input + browse]
         ternary_grid.addWidget(QLabel("Interface cutoff (Å):"), 2, 0, Qt.AlignmentFlag.AlignRight)
         self.tc_distance = QLineEdit("4.5")
-        self.tc_distance.setMinimumHeight(24)
+        self.tc_distance.setMinimumHeight(36)
         ternary_grid.addWidget(self.tc_distance, 2, 1)
         
         ternary_grid.addWidget(QLabel("Output CSV (optional)"), 2, 2, Qt.AlignmentFlag.AlignRight)
         self.tc_csv = QLineEdit()
-        self.tc_csv.setMinimumHeight(24)
+        self.tc_csv.setMinimumHeight(36)
         self.tc_csv.setPlaceholderText("Optional")
         self.tc_csv_btn = QPushButton(t("browse"))
-        self.tc_csv_btn.setMinimumHeight(24)
+        self.tc_csv_btn.setMinimumHeight(36)
         self.tc_csv_btn.setObjectName("browse_btn")
         self.tc_csv_btn.clicked.connect(lambda: self._browse_save_file(self.tc_csv, "CSV (*.csv)"))
         tc_csv_row = QHBoxLayout()
@@ -1053,22 +1133,22 @@ class GlueTKDialog(QDialog):
         main_layout.addLayout(tc_btn_row)
         
         # ========== 新增: Molecular Glue-Specific Analysis ==========
-        grp_glue = QGroupBox("✨ Molecular Glue Analysis (PPI + Neo-Epitope Detection)")
+        grp_glue = QGroupBox("Molecular Glue Analysis (PPI + Neo-Epitope Detection)")
         glue_grid = QGridLayout(grp_glue)
         glue_grid.setColumnStretch(0, 0)
         glue_grid.setColumnStretch(1, 1)
         glue_grid.setColumnStretch(2, 0)
         glue_grid.setColumnStretch(3, 1)
         glue_grid.setHorizontalSpacing(8)
-        glue_grid.setVerticalSpacing(16)
+        glue_grid.setVerticalSpacing(10)  # 减少垂直间距以节省空间
         
         # 第一行: Target Object | [combo + refresh] | Glue Residue Name | [input]
         glue_grid.addWidget(QLabel("Target Object"), 0, 0, Qt.AlignmentFlag.AlignRight)
         self.glue_obj_combo = QComboBox()
-        self.glue_obj_combo.setMinimumHeight(24)
+        self.glue_obj_combo.setMinimumHeight(36)
         self.glue_refresh_btn = QPushButton(t("refresh"))
         self.glue_refresh_btn.setObjectName("refresh_btn")
-        self.glue_refresh_btn.setMinimumHeight(24)
+        self.glue_refresh_btn.setMinimumHeight(36)
         self.glue_refresh_btn.clicked.connect(self.refresh_objects)
         glue_obj_row_container = QWidget()
         glue_obj_row = QHBoxLayout(glue_obj_row_container)
@@ -1079,41 +1159,41 @@ class GlueTKDialog(QDialog):
         
         glue_grid.addWidget(QLabel("Glue Residue Name:"), 0, 2, Qt.AlignmentFlag.AlignRight)
         self.glue_resname = QLineEdit()
-        self.glue_resname.setMinimumHeight(24)
+        self.glue_resname.setMinimumHeight(36)
         self.glue_resname.setPlaceholderText("e.g., CC885, 1N6 (Lenalidomide)")
         glue_grid.addWidget(self.glue_resname, 0, 3)
         
         # 第二行: E3 Chains | [input] | Substrate Chains | [input]
         glue_grid.addWidget(QLabel("E3 Ligase Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight)
         self.glue_e3_chains = QLineEdit()
-        self.glue_e3_chains.setMinimumHeight(24)
+        self.glue_e3_chains.setMinimumHeight(36)
         self.glue_e3_chains.setPlaceholderText("e.g., A (CRBN)")
         glue_grid.addWidget(self.glue_e3_chains, 1, 1)
         
         glue_grid.addWidget(QLabel("Substrate Chains:"), 1, 2, Qt.AlignmentFlag.AlignRight)
         self.glue_sub_chains = QLineEdit()
-        self.glue_sub_chains.setMinimumHeight(24)
+        self.glue_sub_chains.setMinimumHeight(36)
         self.glue_sub_chains.setPlaceholderText("e.g., B (Substrate)")
         glue_grid.addWidget(self.glue_sub_chains, 1, 3)
         
         # 第三行: Interface Distance | [input] | Neo-Epitope Distance | [input]
         glue_grid.addWidget(QLabel("Interface Distance (Å):"), 2, 0, Qt.AlignmentFlag.AlignRight)
         self.glue_interface_dist = QLineEdit("4.5")
-        self.glue_interface_dist.setMinimumHeight(24)
+        self.glue_interface_dist.setMinimumHeight(36)
         glue_grid.addWidget(self.glue_interface_dist, 2, 1)
         
         glue_grid.addWidget(QLabel("Neo-Epitope Dist (Å):"), 2, 2, Qt.AlignmentFlag.AlignRight)
         self.glue_neo_dist = QLineEdit("5.0")
-        self.glue_neo_dist.setMinimumHeight(24)
+        self.glue_neo_dist.setMinimumHeight(36)
         glue_grid.addWidget(self.glue_neo_dist, 2, 3)
         
         # 第四行: Output PPI CSV | [input + browse]
         glue_grid.addWidget(QLabel("Output PPI CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight)
         self.glue_ppi_csv = QLineEdit()
-        self.glue_ppi_csv.setMinimumHeight(24)
+        self.glue_ppi_csv.setMinimumHeight(36)
         self.glue_ppi_csv.setPlaceholderText("Optional")
         self.glue_ppi_browse = QPushButton(t("browse"))
-        self.glue_ppi_browse.setMinimumHeight(24)
+        self.glue_ppi_browse.setMinimumHeight(36)
         self.glue_ppi_browse.setObjectName("save_btn")
         self.glue_ppi_browse.clicked.connect(lambda: self._browse_save_file(self.glue_ppi_csv, "CSV (*.csv)"))
         ppi_csv_row_container = QWidget()
@@ -1126,10 +1206,10 @@ class GlueTKDialog(QDialog):
         # 第四行右侧: Output Neo-Epitope CSV | [input + browse]
         glue_grid.addWidget(QLabel("Output Neo-Epitope CSV:"), 3, 2, Qt.AlignmentFlag.AlignRight)
         self.glue_neo_csv = QLineEdit()
-        self.glue_neo_csv.setMinimumHeight(24)
+        self.glue_neo_csv.setMinimumHeight(36)
         self.glue_neo_csv.setPlaceholderText("Optional")
         self.glue_neo_browse = QPushButton(t("browse"))
-        self.glue_neo_browse.setMinimumHeight(24)
+        self.glue_neo_browse.setMinimumHeight(36)
         self.glue_neo_browse.setObjectName("save_btn")
         self.glue_neo_browse.clicked.connect(lambda: self._browse_save_file(self.glue_neo_csv, "CSV (*.csv)"))
         neo_csv_row_container = QWidget()
@@ -1141,17 +1221,17 @@ class GlueTKDialog(QDialog):
         
         # Molecular Glue 按钮行
         glue_btn_row = QHBoxLayout()
-        self.glue_ppi_btn = QPushButton("🔗 Analyze PPI Interface")
+        self.glue_ppi_btn = QPushButton("Analyze PPI Interface")
         self.glue_ppi_btn.setObjectName("highlight_btn")
         self.glue_ppi_btn.setToolTip("Detect protein-protein interface (key for glue vs PROTAC)")
         self.glue_ppi_btn.clicked.connect(self.run_glue_ppi_analysis)
         
-        self.glue_neo_btn = QPushButton("✨ Detect Neo-Epitope")
+        self.glue_neo_btn = QPushButton("Detect Neo-Epitope")
         self.glue_neo_btn.setObjectName("highlight_btn")
         self.glue_neo_btn.setToolTip("Identify neo-substrate epitope residues")
         self.glue_neo_btn.clicked.connect(self.run_glue_neo_epitope)
         
-        self.glue_full_btn = QPushButton("🚀 Full Glue Analysis")
+        self.glue_full_btn = QPushButton("Full Glue Analysis")
         self.glue_full_btn.setObjectName("highlight_btn")
         self.glue_full_btn.setToolTip("PPI + Neo-Epitope + Scoring + Classification")
         self.glue_full_btn.clicked.connect(self.run_glue_full_analysis)
@@ -1165,7 +1245,16 @@ class GlueTKDialog(QDialog):
         main_layout.addLayout(glue_btn_row)
         
         main_layout.addStretch(1)
-        return w
+        
+        # 将内容设置到滚动区域
+        scroll_area.setWidget(content_widget)
+        
+        # 返回包裹的滚动区域
+        wrapper = QWidget()
+        wrapper_layout = QVBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.addWidget(scroll_area)
+        return wrapper
     
     def create_gmotif_tab(self) -> QWidget:
         w = QWidget(); lay = QVBoxLayout(w); lay.setSpacing(10)
@@ -1243,44 +1332,31 @@ class GlueTKDialog(QDialog):
         return w
 
     def create_docking_scoring_tab(self) -> QWidget:
-        """创建 Docking & Scoring 标签页 - 两栏布局"""
-        w = QWidget()
-        main_layout = QVBoxLayout(w)
-        main_layout.setSpacing(8)
-        main_layout.setContentsMargins(8, 8, 8, 8)
+        """创建 Docking & Scoring 标签页 - 优化布局"""
+        # 创建滚动区域
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         
-        # ========== 两栏布局 ==========
-        two_col_layout = QHBoxLayout()
-        two_col_layout.setSpacing(8)
+        # 创建内容容器
+        content_widget = QWidget()
+        main_layout = QVBoxLayout(content_widget)
+        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(12, 12, 12, 12)
         
-        # 左栏
-        left_col = QVBoxLayout()
-        left_col.setSpacing(8)
+        # ========== 口袋检测与对接（并排） ==========
+        docking_row = QHBoxLayout()
+        docking_row.setSpacing(12)
         
         # 口袋检测
         pocket_card = self._create_pocket_detection_card()
-        left_col.addWidget(pocket_card)
-        
-        # 快速评分
-        scoring_card = self._create_quick_scoring_card()
-        left_col.addWidget(scoring_card)
-        
-        left_col.addStretch(1)
-        
-        # 右栏
-        right_col = QVBoxLayout()
-        right_col.setSpacing(8)
+        docking_row.addWidget(pocket_card, 1)
         
         # Vina 对接
         docking_card = self._create_vina_docking_card()
-        right_col.addWidget(docking_card)
+        docking_row.addWidget(docking_card, 1)
         
-        right_col.addStretch(1)
-        
-        two_col_layout.addLayout(left_col, 1)
-        two_col_layout.addLayout(right_col, 1)
-        
-        main_layout.addLayout(two_col_layout)
+        main_layout.addLayout(docking_row)
         
         # ========== 高级口袋分析（全宽） ==========
         advanced_pocket_card = self._create_advanced_pocket_card()
@@ -1291,22 +1367,31 @@ class GlueTKDialog(QDialog):
         # 结果显示在底部日志
         self.score_result_text = self.log_edit
         
-        return w
+        # 将内容设置到滚动区域
+        scroll_area.setWidget(content_widget)
+        
+        # 返回包裹的滚动区域
+        wrapper = QWidget()
+        wrapper_layout = QVBoxLayout(wrapper)
+        wrapper_layout.setContentsMargins(0, 0, 0, 0)
+        wrapper_layout.addWidget(scroll_area)
+        return wrapper
     def _create_pocket_detection_card(self) -> QWidget:
         """创建口袋检测与可视化卡片"""
-        card = QGroupBox("🔍 Pocket Detection & Visualization")
+        card = QGroupBox("Pocket Detection")
         layout = QVBoxLayout(card)
-        layout.setSpacing(8)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 20, 16, 16)
         
         # Target object
         obj_row = QHBoxLayout()
         obj_row.setSpacing(8)
         self.pocket_obj_combo = QComboBox()
-        self.pocket_obj_combo.setFixedHeight(32)
+        self.pocket_obj_combo.setMinimumHeight(36)
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setObjectName("refresh_btn")
-        refresh_btn.setFixedHeight(32)
-        refresh_btn.setFixedWidth(70)
+        refresh_btn.setMinimumHeight(36)
+        refresh_btn.setToolTip("Refresh objects")
         refresh_btn.clicked.connect(self.refresh_objects)
         obj_row.addWidget(QLabel("Target:"))
         obj_row.addWidget(self.pocket_obj_combo, 1)
@@ -1314,48 +1399,43 @@ class GlueTKDialog(QDialog):
         layout.addLayout(obj_row)
         
         # Parameters row
-        param_row = QHBoxLayout()
-        param_row.setSpacing(8)
+        param_row = QGridLayout()
+        param_row.setSpacing(10)
         
-        self.pocket_grid_spacing = QLineEdit("0.6")
-        self.pocket_grid_spacing.setFixedHeight(32)
-        self.pocket_grid_spacing.setFixedWidth(50)
+        param_row.addWidget(QLabel("Grid Spacing:"), 0, 0)
+        self.pocket_grid_spacing = QLineEdit("0.5")
+        self.pocket_grid_spacing.setMinimumHeight(36)
+        self.pocket_grid_spacing.setMaximumWidth(80)
+        param_row.addWidget(self.pocket_grid_spacing, 0, 1)
+        param_row.addWidget(QLabel("Å"), 0, 2)
         
-        self.pocket_min_volume = QLineEdit("20")
-        self.pocket_min_volume.setFixedHeight(32)
-        self.pocket_min_volume.setFixedWidth(50)
+        param_row.addWidget(QLabel("Min Volume:"), 0, 3)
+        self.pocket_min_volume = QLineEdit("30")
+        self.pocket_min_volume.setMinimumHeight(36)
+        self.pocket_min_volume.setMaximumWidth(80)
+        param_row.addWidget(self.pocket_min_volume, 0, 4)
+        param_row.addWidget(QLabel("Ų"), 0, 5)
         
-        param_row.addWidget(QLabel("Grid:"))
-        param_row.addWidget(self.pocket_grid_spacing)
-        param_row.addWidget(QLabel("Å"))
-        param_row.addWidget(QLabel("Min Vol:"))
-        param_row.addWidget(self.pocket_min_volume)
-        param_row.addWidget(QLabel("Ų"))
-        param_row.addStretch()
-        layout.addLayout(param_row)
-        
-        # Color by selection
-        color_row = QHBoxLayout()
-        color_row.setSpacing(8)
+        param_row.addWidget(QLabel("Color by:"), 1, 0)
         self.pocket_color_by = QComboBox()
         self.pocket_color_by.addItems(["Volume", "Druggability", "Hydrophobicity", "Depth"])
-        self.pocket_color_by.setFixedHeight(32)
-        color_row.addWidget(QLabel("Color by:"))
-        color_row.addWidget(self.pocket_color_by, 1)
-        layout.addLayout(color_row)
+        self.pocket_color_by.setMinimumHeight(36)
+        param_row.addWidget(self.pocket_color_by, 1, 1, 1, 5)
+        
+        layout.addLayout(param_row)
         
         # Buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
         
         detect_btn = QPushButton("Detect Pockets")
-        detect_btn.setObjectName("highlight_btn")
-        detect_btn.setFixedHeight(32)
+        detect_btn.setObjectName("primary_btn")
+        detect_btn.setMinimumHeight(36)
         detect_btn.clicked.connect(self.run_pocket_detection)
         
         viz_btn = QPushButton("Visualize")
-        viz_btn.setObjectName("refresh_btn")
-        viz_btn.setFixedHeight(32)
+        viz_btn.setObjectName("secondary_btn")
+        viz_btn.setMinimumHeight(36)
         viz_btn.clicked.connect(self.run_pocket_visualization)
         
         btn_row.addWidget(detect_btn)
@@ -1365,25 +1445,11 @@ class GlueTKDialog(QDialog):
         return card
     
     def _create_vina_docking_card(self) -> QWidget:
-        """创建 Vina 对接卡片（简化版）"""
-        card = QGroupBox("⚙️ AutoDock Vina Docking")
+        """创建 Vina 对接卡片（支持自定义盒子）"""
+        card = QGroupBox("AutoDock Vina")
         layout = QVBoxLayout(card)
-        layout.setSpacing(8)
-        
-        # 说明文本
-        info_label = QLabel("Auto-detects pockets and docks ligand to top 3 pockets")
-        info_label.setStyleSheet("color: #666; font-size: 11px;")
-        layout.addWidget(info_label)
-        
-        # Receptor (使用 PyMOL 对象，与 Pocket 标签页共享)
-        receptor_layout = QHBoxLayout()
-        receptor_layout.setSpacing(8)
-        receptor_layout.addWidget(QLabel("Receptor:"))
-        receptor_note = QLabel("(Uses object from Pocket tab)")
-        receptor_note.setStyleSheet("color: #888; font-size: 11px;")
-        receptor_layout.addWidget(receptor_note)
-        receptor_layout.addStretch()
-        layout.addLayout(receptor_layout)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 20, 16, 16)
         
         # Ligand file
         ligand_layout = QHBoxLayout()
@@ -1391,115 +1457,101 @@ class GlueTKDialog(QDialog):
         
         self.vina_ligand = QLineEdit()
         self.vina_ligand.setPlaceholderText("Select ligand file (MOL2/SDF/PDBQT)")
-        self.vina_ligand.setFixedHeight(32)
+        self.vina_ligand.setMinimumHeight(36)
         
         ligand_browse = QPushButton("Browse")
-        ligand_browse.setObjectName("refresh_btn")
-        ligand_browse.setFixedHeight(32)
-        ligand_browse.setFixedWidth(80)
+        ligand_browse.setObjectName("browse_btn")
+        ligand_browse.setMinimumHeight(36)
+        ligand_browse.setToolTip("Browse ligand file")
         ligand_browse.clicked.connect(self.browse_vina_ligand)
         
-        ligand_layout.addWidget(QLabel("Ligand:"))
-        ligand_layout.addWidget(self.vina_ligand)
+        ligand_layout.addWidget(QLabel("Ligand File:"))
+        ligand_layout.addWidget(self.vina_ligand, 1)
         ligand_layout.addWidget(ligand_browse)
         layout.addLayout(ligand_layout)
         
-        # 参数设置（简化）
-        param_layout = QHBoxLayout()
-        param_layout.setSpacing(12)
+        # 参数设置
+        param_layout = QGridLayout()
+        param_layout.setSpacing(10)
         
-        param_layout.addWidget(QLabel("Max Pockets:"))
+        param_layout.addWidget(QLabel("Max Pockets:"), 0, 0)
         self.vina_max_pockets = QSpinBox()
         self.vina_max_pockets.setRange(1, 10)
         self.vina_max_pockets.setValue(3)
-        self.vina_max_pockets.setFixedWidth(60)
-        self.vina_max_pockets.setFixedHeight(28)
-        param_layout.addWidget(self.vina_max_pockets)
+        self.vina_max_pockets.setMinimumHeight(36)
+        self.vina_max_pockets.setMaximumWidth(80)
+        param_layout.addWidget(self.vina_max_pockets, 0, 1)
         
-        param_layout.addWidget(QLabel("Exhaustiveness:"))
+        param_layout.addWidget(QLabel("Exhaustiveness:"), 0, 2)
         self.vina_exhaustiveness = QSpinBox()
         self.vina_exhaustiveness.setRange(1, 32)
         self.vina_exhaustiveness.setValue(8)
-        self.vina_exhaustiveness.setFixedWidth(60)
-        self.vina_exhaustiveness.setFixedHeight(28)
-        param_layout.addWidget(self.vina_exhaustiveness)
+        self.vina_exhaustiveness.setMinimumHeight(36)
+        self.vina_exhaustiveness.setMaximumWidth(80)
+        param_layout.addWidget(self.vina_exhaustiveness, 0, 3)
         
-        param_layout.addStretch()
         layout.addLayout(param_layout)
+        
+        # 自定义盒子选项
+        self.vina_use_custom_box = QCheckBox("Use custom box (skip pocket detection)")
+        layout.addWidget(self.vina_use_custom_box)
+        
+        box_grid = QGridLayout()
+        box_grid.setSpacing(8)
+        
+        # Center
+        box_grid.addWidget(QLabel("center_x"), 0, 0)
+        self.vina_cx = QLineEdit(); self.vina_cx.setPlaceholderText("e.g. 10.0"); self.vina_cx.setEnabled(False)
+        box_grid.addWidget(self.vina_cx, 0, 1)
+        box_grid.addWidget(QLabel("center_y"), 0, 2)
+        self.vina_cy = QLineEdit(); self.vina_cy.setPlaceholderText("e.g. 20.0"); self.vina_cy.setEnabled(False)
+        box_grid.addWidget(self.vina_cy, 0, 3)
+        box_grid.addWidget(QLabel("center_z"), 0, 4)
+        self.vina_cz = QLineEdit(); self.vina_cz.setPlaceholderText("e.g. 30.0"); self.vina_cz.setEnabled(False)
+        box_grid.addWidget(self.vina_cz, 0, 5)
+        
+        # Size
+        box_grid.addWidget(QLabel("size_x"), 1, 0)
+        self.vina_sx = QLineEdit(); self.vina_sx.setPlaceholderText("e.g. 20.0"); self.vina_sx.setEnabled(False)
+        box_grid.addWidget(self.vina_sx, 1, 1)
+        box_grid.addWidget(QLabel("size_y"), 1, 2)
+        self.vina_sy = QLineEdit(); self.vina_sy.setPlaceholderText("e.g. 20.0"); self.vina_sy.setEnabled(False)
+        box_grid.addWidget(self.vina_sy, 1, 3)
+        box_grid.addWidget(QLabel("size_z"), 1, 4)
+        self.vina_sz = QLineEdit(); self.vina_sz.setPlaceholderText("e.g. 20.0"); self.vina_sz.setEnabled(False)
+        box_grid.addWidget(self.vina_sz, 1, 5)
+        
+        layout.addLayout(box_grid)
+        
+        def _toggle_box_fields(checked: bool):
+            for w in (self.vina_cx, self.vina_cy, self.vina_cz, self.vina_sx, self.vina_sy, self.vina_sz):
+                w.setEnabled(checked)
+        self.vina_use_custom_box.toggled.connect(_toggle_box_fields)
         
         # Buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
         
-        self.vina_dock_btn = QPushButton("🚀 Run Docking")
-        self.vina_dock_btn.setObjectName("highlight_btn")
-        self.vina_dock_btn.setFixedHeight(36)
+        self.vina_dock_btn = QPushButton("Run Docking")
+        self.vina_dock_btn.setObjectName("primary_btn")
+        self.vina_dock_btn.setMinimumHeight(36)
         self.vina_dock_btn.clicked.connect(self.run_vina_docking)
         
-        self.vina_load_result_btn = QPushButton("📂 Load Result")
-        self.vina_load_result_btn.setObjectName("refresh_btn")
-        self.vina_load_result_btn.setFixedHeight(36)
+        self.vina_load_result_btn = QPushButton("Load Result")
+        self.vina_load_result_btn.setObjectName("secondary_btn")
+        self.vina_load_result_btn.setMinimumHeight(36)
         self.vina_load_result_btn.clicked.connect(self.load_vina_result)
         
         btn_row.addWidget(self.vina_dock_btn)
         btn_row.addWidget(self.vina_load_result_btn)
-        btn_row.addStretch()
         layout.addLayout(btn_row)
         
         return card
     
-    def _create_quick_scoring_card(self) -> QWidget:
-        """创建快速评分卡片（简化版）"""
-        card = QGroupBox("📊 Quick Binding Score")
-        layout = QVBoxLayout(card)
-        layout.setSpacing(8)
-        
-        # Object + Ligand in one row
-        input_row = QHBoxLayout()
-        input_row.setSpacing(8)
-        
-        self.score_obj = QComboBox()
-        self.score_obj.setFixedHeight(32)
-        
-        self.score_ligand = QLineEdit()
-        self.score_ligand.setPlaceholderText("Ligand (e.g., LIG)")
-        self.score_ligand.setFixedHeight(32)
-        
-        score_refresh = QPushButton("Refresh")
-        score_refresh.setObjectName("refresh_btn")
-        score_refresh.setFixedHeight(32)
-        score_refresh.setFixedWidth(70)
-        score_refresh.clicked.connect(self.refresh_objects)
-        
-        input_row.addWidget(self.score_obj, 2)
-        input_row.addWidget(QLabel("+"))
-        input_row.addWidget(self.score_ligand, 1)
-        input_row.addWidget(score_refresh)
-        layout.addLayout(input_row)
-        
-        # Buttons
-        btn_row = QHBoxLayout()
-        btn_row.setSpacing(8)
-        
-        self.score_quick_btn = QPushButton("Empirical Score")
-        self.score_quick_btn.setObjectName("highlight_btn")
-        self.score_quick_btn.setFixedHeight(32)
-        self.score_quick_btn.clicked.connect(self.run_quick_scoring)
-        
-        self.score_vina_btn = QPushButton("Vina Score")
-        self.score_vina_btn.setObjectName("refresh_btn")
-        self.score_vina_btn.setFixedHeight(32)
-        self.score_vina_btn.clicked.connect(self.run_vina_scoring)
-        
-        btn_row.addWidget(self.score_quick_btn)
-        btn_row.addWidget(self.score_vina_btn)
-        layout.addLayout(btn_row)
-        
-        return card
     
     def _create_advanced_pocket_card(self) -> QWidget:
         """创建高级口袋分析卡片"""
-        card = QGroupBox("📊 Advanced Pocket Analysis")
+        card = QGroupBox("Advanced Pocket Analysis")
         layout = QVBoxLayout(card)
         layout.setSpacing(8)
         
@@ -1509,19 +1561,19 @@ class GlueTKDialog(QDialog):
         
         # Tab 1: 口袋对比
         comparison_tab = self._create_pocket_comparison_tab()
-        self.pocket_advanced_tabs.addTab(comparison_tab, "🔄 Comparison")
+        self.pocket_advanced_tabs.addTab(comparison_tab, "Comparison")
         
         # Tab 2: 界面口袋
         interface_tab = self._create_pocket_interface_tab()
-        self.pocket_advanced_tabs.addTab(interface_tab, "🔗 PPI Interface")
+        self.pocket_advanced_tabs.addTab(interface_tab, "PPI Interface")
         
         # Tab 3: 口袋-相互作用关联
         correlation_tab = self._create_pocket_correlation_tab()
-        self.pocket_advanced_tabs.addTab(correlation_tab, "🔍 Interactions")
+        self.pocket_advanced_tabs.addTab(correlation_tab, "Interactions")
         
         # Tab 4: G-motif 口袋
         gmotif_pocket_tab = self._create_gmotif_pocket_tab()
-        self.pocket_advanced_tabs.addTab(gmotif_pocket_tab, "✨ G-motif")
+        self.pocket_advanced_tabs.addTab(gmotif_pocket_tab, "G-motif")
         
         layout.addWidget(self.pocket_advanced_tabs)
         
@@ -1543,14 +1595,14 @@ class GlueTKDialog(QDialog):
         self.pocket_comp_obj_b = QComboBox()
         self.pocket_comp_obj_b.setFixedHeight(28)
         
-        refresh_a = QPushButton("R")
+        refresh_a = QPushButton("Refresh")
         refresh_a.setObjectName("refresh_btn")
-        refresh_a.setFixedSize(28, 28)
+        refresh_a.setMinimumHeight(28)
         refresh_a.clicked.connect(self.refresh_objects)
         
-        refresh_b = QPushButton("R")
+        refresh_b = QPushButton("Refresh")
         refresh_b.setObjectName("refresh_btn")
-        refresh_b.setFixedSize(28, 28)
+        refresh_b.setMinimumHeight(28)
         refresh_b.clicked.connect(self.refresh_objects)
         
         obj_grid.addWidget(QLabel("Object A:"), 0, 0)
@@ -1571,13 +1623,13 @@ class GlueTKDialog(QDialog):
         btn_row.setSpacing(6)
         
         compare_btn = QPushButton("Compare Pockets")
-        compare_btn.setObjectName("highlight_btn")
-        compare_btn.setFixedHeight(28)
+        compare_btn.setObjectName("primary_btn")
+        compare_btn.setMinimumHeight(32)
         compare_btn.clicked.connect(self.run_pocket_comparison)
         
         viz_btn = QPushButton("Visualize")
-        viz_btn.setObjectName("refresh_btn")
-        viz_btn.setFixedHeight(28)
+        viz_btn.setObjectName("secondary_btn")
+        viz_btn.setMinimumHeight(32)
         viz_btn.clicked.connect(self.visualize_pocket_comparison)
         
         btn_row.addWidget(compare_btn)
@@ -1600,9 +1652,9 @@ class GlueTKDialog(QDialog):
         obj_row.setSpacing(6)
         self.pocket_interface_obj = QComboBox()
         self.pocket_interface_obj.setFixedHeight(28)
-        refresh_btn = QPushButton("R")
+        refresh_btn = QPushButton("Refresh")
         refresh_btn.setObjectName("refresh_btn")
-        refresh_btn.setFixedSize(28, 28)
+        refresh_btn.setMinimumHeight(28)
         refresh_btn.clicked.connect(self.refresh_objects)
         obj_row.addWidget(QLabel("Object:"))
         obj_row.addWidget(self.pocket_interface_obj, 1)
@@ -1634,8 +1686,8 @@ class GlueTKDialog(QDialog):
         btn_row.setSpacing(6)
         
         analyze_btn = QPushButton("Analyze Interface Pockets")
-        analyze_btn.setObjectName("highlight_btn")
-        analyze_btn.setFixedHeight(28)
+        analyze_btn.setObjectName("primary_btn")
+        analyze_btn.setMinimumHeight(32)
         analyze_btn.clicked.connect(self.run_interface_pockets)
         
         btn_row.addWidget(analyze_btn)
@@ -1653,7 +1705,7 @@ class GlueTKDialog(QDialog):
         layout.setContentsMargins(6, 6, 6, 6)
         
         # Info label
-        info_label = QLabel("⚠️ First detect pockets, then select interaction CSV")
+        info_label = QLabel("First detect pockets, then select interaction CSV")
         info_label.setStyleSheet("color: #64748b; font-size: 11px;")
         layout.addWidget(info_label)
         
@@ -1665,9 +1717,8 @@ class GlueTKDialog(QDialog):
         self.pocket_corr_csv.setFixedHeight(28)
         
         csv_browse = QPushButton("Browse")
-        csv_browse.setObjectName("refresh_btn")
-        csv_browse.setFixedHeight(28)
-        csv_browse.setFixedWidth(70)
+        csv_browse.setObjectName("browse_btn")
+        csv_browse.setMinimumHeight(28)
         csv_browse.clicked.connect(self.browse_pocket_corr_csv)
         
         csv_row.addWidget(self.pocket_corr_csv, 1)
@@ -1679,8 +1730,8 @@ class GlueTKDialog(QDialog):
         btn_row.setSpacing(6)
         
         correlate_btn = QPushButton("Correlate with Pockets")
-        correlate_btn.setObjectName("highlight_btn")
-        correlate_btn.setFixedHeight(28)
+        correlate_btn.setObjectName("primary_btn")
+        correlate_btn.setMinimumHeight(32)
         correlate_btn.clicked.connect(self.run_pocket_correlation)
         
         btn_row.addWidget(correlate_btn)
@@ -3360,7 +3411,7 @@ Thank you for your support! 🚀
             interface_dist = float(self.glue_interface_dist.text())
             ppi_csv = self.glue_ppi_csv.text().strip() or None
             
-            self.log("\n🔗 Analyzing Protein-Protein Interface...")
+            self.log("\nAnalyzing Protein-Protein Interface...")
             self.log(f"   E3 Chains: {e3_chains}")
             self.log(f"   Substrate Chains: {sub_chains}")
             
@@ -3382,26 +3433,26 @@ Thank you for your support! 🚀
                 is_strong = result.get('is_strong_interface', False)
                 strength = result.get('interface_strength', 0)
                 
-                self.log(f"\n✅ PPI Analysis Complete:")
+                self.log(f"\nPPI Analysis Complete:")
                 self.log(f"   Interface Contacts: {contacts}")
                 if bsa:
                     self.log(f"   BSA: {bsa:.1f} Ų")
                 self.log(f"   Interface Strength: {strength:.1f}/10")
-                self.log(f"   Classification: {'🌟 Strong Interface' if is_strong else '⚠️ Weak Interface'}")
+                self.log(f"   Classification: {'Strong Interface' if is_strong else 'Weak Interface'}")
                 
                 # 判断机制
                 if is_strong or contacts >= 10:
-                    self.log(f"   💡 Likely: Molecular Glue (strong PPI)")
+                    self.log(f"   Likely: Molecular Glue (strong PPI)")
                 elif contacts < 3:
-                    self.log(f"   💡 Likely: PROTAC (weak PPI)")
+                    self.log(f"   Likely: PROTAC (weak PPI)")
                 
                 QMessageBox.information(self, "PPI Analysis Complete",
                     f"Interface Contacts: {contacts}\n"
                     f"{'BSA: ' + str(round(bsa, 1)) + ' Ų' if bsa else 'BSA: N/A'}\n"
                     f"Interface Strength: {strength:.1f}/10\n\n"
-                    f"{'✨ Strong Interface (likely Molecular Glue)' if is_strong else '⚠️ Weak Interface (likely PROTAC)'}")
+                    f"{'Strong Interface (likely Molecular Glue)' if is_strong else 'Weak Interface (likely PROTAC)'}")
             else:
-                self.log("⚠️ PPI analysis failed")
+                self.log("PPI analysis failed")
         
         except Exception as e:
             self.on_error(str(e))
@@ -3430,7 +3481,7 @@ Thank you for your support! 🚀
             neo_dist = float(self.glue_neo_dist.text())
             neo_csv = self.glue_neo_csv.text().strip() or None
             
-            self.log("\n✨ Detecting Neo-Substrate Epitope...")
+            self.log("\nDetecting Neo-Substrate Epitope...")
             self.log(f"   Glue: {glue_resname}")
             self.log(f"   E3: {e3_chains} → Substrate: {sub_chains}")
             
@@ -3453,11 +3504,11 @@ Thank you for your support! 🚀
                 is_glue = result.get('is_molecular_glue', False)
                 confidence = result.get('confidence', 0)
                 
-                self.log(f"\n✅ Neo-Epitope Detection Complete:")
+                self.log(f"\nNeo-Epitope Detection Complete:")
                 self.log(f"   Bridging Glue Atoms: {bridging_atoms}")
                 self.log(f"   Neo-Epitope Residues: {neo_count}")
                 self.log(f"   Confidence: {confidence:.2f}")
-                self.log(f"   Classification: {'✨ Molecular Glue' if is_glue else '⚠️ Not Typical Glue'}")
+                self.log(f"   Classification: {'Molecular Glue' if is_glue else 'Not Typical Glue'}")
                 
                 # 列出Neo-表位残基
                 if result.get('neo_substrate_residues'):
@@ -3469,9 +3520,9 @@ Thank you for your support! 🚀
                     f"Bridging Glue Atoms: {bridging_atoms}\n"
                     f"Neo-Epitope Residues: {neo_count}\n"
                     f"Confidence: {confidence:.2f}\n\n"
-                    f"{'✨ Classified as Molecular Glue' if is_glue else '⚠️ Not typical Glue mechanism'}")
+                    f"{'Classified as Molecular Glue' if is_glue else 'Not typical Glue mechanism'}")
             else:
-                self.log("⚠️ Neo-epitope detection failed")
+                self.log("Neo-epitope detection failed")
         
         except Exception as e:
             self.on_error(str(e))
@@ -3494,7 +3545,7 @@ Thank you for your support! 🚀
                 return
             
             self.log("\n" + "="*60)
-            self.log("🚀 Starting Full Molecular Glue Analysis")
+            self.log("Starting Full Molecular Glue Analysis")
             self.log("="*60)
             
             # Step 1: PPI Analysis
@@ -3502,7 +3553,7 @@ Thank you for your support! 🚀
             self.run_glue_ppi_analysis()
             
             if not hasattr(self, 'current_glue_ppi_result'):
-                self.log("⚠️ PPI analysis failed, aborting")
+                self.log("PPI analysis failed, aborting")
                 return
             
             # Step 2: Neo-Epitope Detection
@@ -3510,7 +3561,7 @@ Thank you for your support! 🚀
             self.run_glue_neo_epitope()
             
             if not hasattr(self, 'current_glue_neo_result'):
-                self.log("⚠️ Neo-epitope detection failed, continuing...")
+                self.log("Neo-epitope detection failed, continuing...")
             
             # Step 3: Integrated Analysis & Classification
             self.log("\n[3/3] Integrated Mechanism Classification...")
@@ -3548,7 +3599,7 @@ Thank you for your support! 🚀
             
             # 输出最终报告
             self.log("\n" + "="*60)
-            self.log("🎯 FINAL CLASSIFICATION")
+            self.log("FINAL CLASSIFICATION")
             self.log("="*60)
             self.log(f"   Mechanism: {final_mechanism}")
             self.log(f"   Confidence: {confidence:.0%}")
@@ -3562,10 +3613,10 @@ Thank you for your support! 🚀
             
             # 弹窗显示
             icon = QMessageBox.Icon.Information if "Glue" in final_mechanism else QMessageBox.Icon.Warning
-            glue_msg = '\u2728 This complex exhibits Molecular Glue characteristics!'
-            protac_msg = '🔗 This complex likely uses a PROTAC/linker mechanism.'
+            glue_msg = 'This complex exhibits Molecular Glue characteristics!'
+            protac_msg = 'This complex likely uses a PROTAC/linker mechanism.'
             final_msg = glue_msg if 'Glue' in final_mechanism else protac_msg
-            QMessageBox.information(self, "🎯 Molecular Glue Analysis Complete",
+            QMessageBox.information(self, "Molecular Glue Analysis Complete",
                 f"Classification: {final_mechanism}\n"
                 f"Confidence: {confidence:.0%}\n\n"
                 f"Evidence:\n"
@@ -3659,7 +3710,7 @@ Thank you for your support! 🚀
             has_csv = csv_path and os.path.exists(csv_path)
 
             if not has_csv or not self._interactions:
-                self.log("📊 开始相互作用分析...")
+                self.log("开始相互作用分析...")
                 pdb = self.pdb_path.text().strip() or None
                 only_between = self.chk_between.isChecked()
 
@@ -3751,44 +3802,44 @@ Thank you for your support! 🚀
             auto_install = (reply == QMessageBox.StandardButton.Yes)
             
             if auto_install:
-                self.log("🚀 自动安装模式已启用" if get_lang() == "zh" else "🚀 Auto-install mode enabled")
+                self.log("自动安装模式已启用" if get_lang() == "zh" else "Auto-install mode enabled")
             
             # 运行完整检查，并将日志输出到 GUI
             result = check_environment(log_callback=self.log, auto_install=auto_install)
             
             # 检查 FoldX (额外的工具)
-            self.log("\n🛠️  额外工具:" if get_lang() == "zh" else "\n🛠️  Additional Tools:")
+            self.log("\n额外工具:" if get_lang() == "zh" else "\nAdditional Tools:")
             try:
                 self._ensure_crbn_tools_loaded()
                 from pymol import cmd
                 ok = cmd.crbn_tools_doctor(verbose=0)
                 if ok:
-                    self.log("  ✅ FoldX: 已检测到")
+                    self.log("  FoldX: Detected")
                 else:
-                    self.log("  ❌ FoldX: 未检测到 (可选)")
-                    self.log("     💡 下载: https://foldxsuite.crg.eu/")
-                    self.log("     💡 设置: export FOLDX=/path/to/foldx")
+                    self.log("  FoldX: Not detected (optional)")
+                    self.log("     Download: https://foldxsuite.crg.eu/")
+                    self.log("     Setup: export FOLDX=/path/to/foldx")
             except Exception as e:
-                self.log(f"  ⚠️  FoldX 检查跳过: {e}")
+                self.log(f"  FoldX check skipped: {e}")
             
             # PyMOL 版本
             try:
                 from pymol import cmd
                 version = cmd.get_version()[0]
-                self.log(f"\n🐍 PyMOL: {version}")
+                self.log(f"\nPyMOL: {version}")
             except Exception:
                 pass
             
             self.log("\n" + "=" * 60)
             if result.get("all_ok"):
-                self.log("🎉 环境检查完成！所有功能可用" if get_lang() == "zh" else "🎉 Environment check complete! All features available")
+                self.log("环境检查完成！所有功能可用" if get_lang() == "zh" else "Environment check complete! All features available")
             else:
-                self.log("⚠️  环境检查完成，请根据上述提示安装缺失的依赖" if get_lang() == "zh" else "⚠️  Check complete. Please install missing dependencies as instructed above")
+                self.log("环境检查完成，请根据上述提示安装缺失的依赖" if get_lang() == "zh" else "Check complete. Please install missing dependencies as instructed above")
             self.log("=" * 60)
             
         except ImportError:
             # 如果 env_checker 不可用，使用简单版本
-            self.log("⚠️  无法加载环境检测模块，使用简单检查...")
+            self.log("无法加载环境检测模块，使用简单检查...")
             self._check_environment_simple()
         except Exception as e:
             self.log(f"❌ 检查失败: {e}")
@@ -3798,7 +3849,7 @@ Thank you for your support! 🚀
     def _check_environment_simple(self):
         """简单版环境检查（备用）"""
         self.log(f"\n{'='*50}")
-        self.log("⚡ 检查环境和依赖 (简单模式)" if get_lang() == "zh" else "⚡ Checking Environment (Simple Mode)")
+        self.log("检查环境和依赖 (简单模式)" if get_lang() == "zh" else "Checking Environment (Simple Mode)")
         self.log(f"{'='*50}\n")
         
         # 检查 Python 依赖
@@ -3806,22 +3857,22 @@ Thank you for your support! 🚀
             from .env_setup import get_dependency_status
             status = get_dependency_status()
             
-            self.log("📦 Python 依赖:" if get_lang() == "zh" else "📦 Python Dependencies:")
+            self.log("Python 依赖:" if get_lang() == "zh" else "Python Dependencies:")
             for pkg, available in status.items():
-                symbol = "✅" if available else "❌"
+                symbol = "[OK]" if available else "[MISS]" 
                 self.log(f"  {symbol} {pkg:20} {'已安装' if available else '未安装'}")
             
             missing = [pkg for pkg, avail in status.items() if not avail]
             if missing:
-                self.log(f"\n⚠️  缺失依赖: {', '.join(missing)}")
-                self.log("💡 安装命令: pip install " + " ".join(missing))
+                self.log(f"\n缺失依赖: {', '.join(missing)}")
+                self.log("安装命令: pip install " + " ".join(missing))
             else:
-                self.log("\n✅ 所有 Python 依赖已满足" if get_lang() == "zh" else "\n✅ All Python dependencies satisfied")
+                self.log("\n所有 Python 依赖已满足" if get_lang() == "zh" else "\nAll Python dependencies satisfied")
         except Exception as e:
-            self.log(f"⚠️  无法检查 Python 依赖: {e}")
+            self.log(f"无法检查 Python 依赖: {e}")
         
         self.log(f"\n{'='*50}")
-        self.log("✅ 环境检查完成" if get_lang() == "zh" else "✅ Environment check complete")
+        self.log("环境检查完成" if get_lang() == "zh" else "Environment check complete")
         self.log(f"{'='*50}\n")
     
     def run_crbn_doctor(self):
@@ -3903,8 +3954,7 @@ Thank you for your support! 🚀
             pockets = detect_pockets(
                 obj_name=obj,
                 grid_spacing=grid_spacing,
-                min_volume=min_volume,
-                use_schrodinger_standard=False
+                min_volume=min_volume
             )
             
             if not pockets:
@@ -3948,7 +3998,7 @@ Thank you for your support! 🚀
             }
             color_by = color_by_map.get(self.pocket_color_by.currentText(), "volume")
             
-            self.log(f"\n🎨 Visualizing pockets (colored by {color_by})...")
+            self.log(f"\nVisualizing pockets (colored by {color_by})...")
             
             # Import visualizer
             try:
@@ -3965,7 +4015,7 @@ Thank you for your support! 🚀
                 sphere_radius=1.5
             )
             
-            self.log("✅ Pockets visualized")
+            self.log("Pockets visualized")
             
         except Exception as e:
             self.on_error(str(e))
@@ -4002,17 +4052,16 @@ Thank you for your support! 🚀
             max_pockets = self.vina_max_pockets.value()
             exhaustiveness = self.vina_exhaustiveness.value()
             
-            self.log(f"\n⚙️ Starting Vina docking...")
+            self.log(f"\nStarting Vina docking...")
             self.log(f"   Receptor: {receptor_obj}")
             self.log(f"   Ligand: {os.path.basename(ligand)}")
-            self.log(f"   Max pockets: {max_pockets}")
             self.log(f"   Exhaustiveness: {exhaustiveness}")
             
             # 导入 vina_integration
             try:
-                from .vina_integration import pocket_based_docking, check_vina_available
+                from .vina_integration import pocket_based_docking, manual_box_docking, check_vina_available
             except ImportError:
-                from vina_integration import pocket_based_docking, check_vina_available
+                from vina_integration import pocket_based_docking, manual_box_docking, check_vina_available
             
             # 检查 Vina 可用性
             if not check_vina_available():
@@ -4027,22 +4076,45 @@ Thank you for your support! 🚀
                 )
                 return
             
-            self.log("   Auto-detecting pockets for docking...")
-            
-            # 运行基于口袋的对接
-            result = pocket_based_docking(
-                obj_name=receptor_obj,
-                ligand_file=ligand,
-                max_pockets=max_pockets,
-                exhaustiveness=exhaustiveness
-            )
+            # 自定义盒子模式
+            if self.vina_use_custom_box.isChecked():
+                try:
+                    cx = float(self.vina_cx.text().strip())
+                    cy = float(self.vina_cy.text().strip())
+                    cz = float(self.vina_cz.text().strip())
+                    sx = float(self.vina_sx.text().strip())
+                    sy = float(self.vina_sy.text().strip())
+                    sz = float(self.vina_sz.text().strip())
+                except ValueError:
+                    QMessageBox.warning(self, "Warning", "Invalid custom box parameters")
+                    return
+                box = {
+                    'center_x': cx, 'center_y': cy, 'center_z': cz,
+                    'size_x': sx, 'size_y': sy, 'size_z': sz
+                }
+                self.log("   Using custom docking box (skip pocket detection)")
+                result = manual_box_docking(
+                    obj_name=receptor_obj,
+                    ligand_file=ligand,
+                    box_params=box,
+                    exhaustiveness=exhaustiveness
+                )
+            else:
+                self.log(f"   Max pockets: {max_pockets}")
+                self.log("   Auto-detecting pockets for docking...")
+                result = pocket_based_docking(
+                    obj_name=receptor_obj,
+                    ligand_file=ligand,
+                    max_pockets=max_pockets,
+                    exhaustiveness=exhaustiveness
+                )
             
             if result.get('success'):
-                self.log("✅ Docking complete!")
+                self.log("Docking complete!")
                 self.log(f"   Output directory: {result.get('output_dir')}")
                 
                 if 'results' in result:
-                    self.log(f"\n🎯 Top docking results:")
+                    self.log(f"\nTop docking results:")
                     sorted_results = sorted(
                         [r for r in result['results'] if r.get('success')],
                         key=lambda r: r.get('affinity', 0)
@@ -4058,7 +4130,7 @@ Thank you for your support! 🚀
                     f"Results saved to:\n{result.get('output_dir')}"
                 )
             else:
-                self.log(f"⚠️  Docking failed: {result.get('error')}")
+                self.log(f"Docking failed: {result.get('error')}")
                 QMessageBox.warning(self, "Error", f"Docking failed:\n{result.get('error')}")
             
         except Exception as e:
@@ -4074,7 +4146,7 @@ Thank you for your support! 🚀
                 from pymol import cmd
                 obj_name = os.path.splitext(os.path.basename(fn))[0]
                 cmd.load(fn, obj_name)
-                self.log(f"✅ Loaded docking result: {obj_name}")
+                self.log(f"Loaded docking result: {obj_name}")
                 self.refresh_objects()
             except Exception as e:
                 self.on_error(str(e))
@@ -4097,7 +4169,7 @@ Thank you for your support! 🚀
             
             align = self.pocket_comp_align.isChecked()
             
-            self.log(f"\n🔄 Comparing pockets: {obj_a} vs {obj_b}...")
+            self.log(f"\nComparing pockets: {obj_a} vs {obj_b}...")
             if align:
                 self.log("   Aligning structures first...")
             
@@ -4121,7 +4193,7 @@ Thank you for your support! 🚀
             self._comparison_result = comparison
             
             # Log results
-            self.log(f"\n✅ Comparison complete:")
+            self.log(f"\nComparison complete:")
             self.log(f"   {obj_a}: {len(pockets_a)} pockets")
             self.log(f"   {obj_b}: {len(pockets_b)} pockets")
             
@@ -4135,7 +4207,7 @@ Thank you for your support! 🚀
             
             # Show top changes
             if matched > 0:
-                self.log(f"\n📈 Top volume changes:")
+                self.log(f"\nTop volume changes:")
                 sorted_changes = sorted(
                     [c for c in comparison if c['match_type'] == 'matched'],
                     key=lambda c: abs(c['delta_volume']),
@@ -4158,7 +4230,7 @@ Thank you for your support! 🚀
                 QMessageBox.warning(self, "Warning", "Please run pocket comparison first")
                 return
             
-            self.log(f"\n🎨 Visualizing pocket comparison...")
+            self.log(f"\nVisualizing pocket comparison...")
             
             # Import visualizer
             try:
@@ -4294,7 +4366,7 @@ Thank you for your support! 🚀
                             f"(density={corr['interaction_density']:.4f}/Ų)")
                     self.log(f"      Types: {types_str}")
             else:
-                self.log("⚠️  No interactions found in pockets")
+                self.log("No interactions found in pockets")
             
         except Exception as e:
             self.on_error(str(e))
@@ -4316,14 +4388,14 @@ Thank you for your support! 🚀
                 QMessageBox.warning(self, "Warning", "Please enter E3 and Substrate chain IDs")
                 return
             
-            self.log(f"\n✨ Starting comprehensive G-motif pocket analysis...")
+            self.log(f"\nStarting comprehensive G-motif pocket analysis...")
             self.log(f"   Object: {obj}")
             self.log(f"   E3 chain: {e3_chain}")
             self.log(f"   Substrate chain: {sub_chain}")
             if glue_chain:
                 self.log(f"   Glue chain: {glue_chain}")
             
-            self.log("\n⌛ This may take a few minutes...")
+            self.log("\nThis may take a few minutes...")
             
             # Import comprehensive analysis module
             try:
@@ -4341,30 +4413,30 @@ Thank you for your support! 🚀
             )
             
             # Log summary
-            self.log(f"\n✅ Comprehensive analysis complete!")
+            self.log(f"\nComprehensive analysis complete!")
             self.log(f"   Output directory: gmotif_pocket_analysis/")
             
             if results.get('gmotif'):
                 gmotif = results['gmotif'][0]
-                self.log(f"\n🧲 G-motif detected:")
+                self.log(f"\nG-motif detected:")
                 self.log(f"   Position: {gmotif['start_resi']}-{gmotif['end_resi']}")
                 self.log(f"   RMSD: {gmotif['rmsd']:.2f} Å")
             
             if results.get('pockets'):
-                self.log(f"\n🔍 Pockets around G-motif: {len(results['pockets'])}")
+                self.log(f"\nPockets around G-motif: {len(results['pockets'])}")
             
             if results.get('main_binding_pocket'):
                 main = results['main_binding_pocket']
-                self.log(f"\n🎯 Main binding pocket:")
+                self.log(f"\nMain binding pocket:")
                 self.log(f"   Pocket ID: {main['pocket_id']}")
                 self.log(f"   Interactions: {main['num_interactions']}")
                 self.log(f"   Density: {main['interaction_density']:.4f}/Ų")
                 self.log(f"   Druggability: {main['druggability_score']:.3f}")
             
             if results.get('gmotif_interface_pockets'):
-                self.log(f"\n🔗 G-motif interface pockets: {len(results['gmotif_interface_pockets'])}")
+                self.log(f"\nG-motif interface pockets: {len(results['gmotif_interface_pockets'])}")
             
-            self.log("\n📄 Check the output directory for detailed reports and CSVs")
+            self.log("\nCheck the output directory for detailed reports and CSVs")
             
         except Exception as e:
             self.on_error(str(e))
@@ -4381,7 +4453,7 @@ Thank you for your support! 🚀
             "• Docking tab for AutoDock Vina scoring\n"
             "• Interaction Analysis tab for interaction details"
         )
-        self.log("⚠️ Scoring comparison feature has been removed")
+        self.log("Scoring comparison feature has been removed")
     
     def run_ternary_scoring(self):
         """运行三元复合物评分 - DEPRECATED"""
@@ -4392,7 +4464,7 @@ Thank you for your support! 🚀
             "Please use:\n"
             "• Molecular Glue tab → Ternary Complex Analysis for interaction analysis"
         )
-        self.log("⚠️ Ternary scoring feature has been removed")
+        self.log("Ternary scoring feature has been removed")
     
     def browse_heatmap_folder(self):
         """浏览选择热图 CSV 文件夹"""
@@ -4415,7 +4487,7 @@ Thank you for your support! 🚀
                 QMessageBox.warning(self, "Warning", f"Folder does not exist: {folder}")
                 return
             
-            self.log(f"\n🔥 Generating heatmap from: {folder}")
+            self.log(f"\nGenerating heatmap from: {folder}")
             self.log(f"   Pattern: {pattern}")
             self.score_result_text.clear()
             self.score_result_text.setPlainText("Generating heatmap...\nThis may take a few seconds...")
@@ -4438,11 +4510,11 @@ Receptors: {result['n_receptors']}
 Ligands:   {result['n_ligands']}
 Output:    {result['output_path']}
 {'='*60}
-✅ Heatmap saved successfully!
+Heatmap saved successfully!
 {'='*60}
                 """
                 self.score_result_text.setPlainText(report)
-                self.log(f"✅ Heatmap saved: {result['output_path']}")
+                self.log(f"Heatmap saved: {result['output_path']}")
                 
                 # 询问是否打开图片
                 reply = QMessageBox.question(
@@ -4463,7 +4535,7 @@ Output:    {result['output_path']}
                         subprocess.run(['xdg-open', result['output_path']])
             else:
                 error_msg = result.get('error', 'Unknown error')
-                self.log(f"⚠️  Heatmap generation failed: {error_msg}")
+                self.log(f"Heatmap generation failed: {error_msg}")
                 self.score_result_text.setPlainText(f"Failed to generate heatmap:\n{error_msg}")
                 QMessageBox.warning(self, "Error", f"Failed to generate heatmap:\n{error_msg}")
             
@@ -4531,13 +4603,26 @@ Output:    {result['output_path']}
     def toggle_theme(self):
         """Toggle theme (dark/light)"""
         self._dark_mode = not self._dark_mode
+        # 先清空样式再重新应用，避免残留规则
+        try:
+            self.setStyleSheet("")
+        except Exception:
+            pass
         self.setup_style()
         # Update theme icon (sun/moon)
         self.theme_toggle_btn.setText("🌙" if self._dark_mode else "☀️")
         # Update Modules button color (easter egg effect)
         self.update_modules_button_style()
+        # Update separator color based on theme
+        if hasattr(self, 'nav_separator'):
+            sep_color = "#30363d" if self._dark_mode else "#e2e8f0"
+            self.nav_separator.setStyleSheet(f"background-color: {sep_color}; margin: 8px 0;")
         # 主题变化后重新应用自动缩放，以确保字体与行距匹配
         self.apply_auto_scaling()
+        try:
+            self.update()
+        except Exception:
+            pass
         theme_name_en = "Dark Theme" if self._dark_mode else "Light Theme"
         self.log(f"Switched to {theme_name_en}")
     
@@ -4595,319 +4680,891 @@ Output:    {result['output_path']}
             pass
 
     def setup_style(self):
-        # 现代化样式 - 使用内置样式（modern_style.py已移除）
+        # 现代化样式 - 根据深色/浅色主题应用不同的样式
         # Mac兼容性优先
-        self.setStyleSheet("""
+        if self._dark_mode:
+            # 深色主题 - 优化版（更现代，更舒适）
+            self.setStyleSheet("""
 QDialog {
-    background-color: #f5f7fa;
+    background-color: #0d1117;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
     font-size: 11px;
-    color: #222;
+    color: #e6edf3;
 }
 
+/* 导航区域 - 透明背景 */
+QWidget#nav_widget {
+    background-color: transparent;
+}
+
+/* 导航列表 - 更现代的深色 */
 QListWidget {
-    background-color: white;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    padding: 6px;
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 8px;
     outline: none;
 }
 QListWidget::item {
-    padding: 10px 12px;
-    margin: 2px 0;
-    border-radius: 4px;
-    color: #333;
+    padding: 11px 14px;
+    margin: 3px 0;
+    border-radius: 6px;
+    color: #c9d1d9;
+    font-size: 13px;
 }
 QListWidget::item:hover {
-    background-color: #f0f0f0;
+    background-color: #21262d;
+    color: #e6edf3;
 }
 QListWidget::item:selected {
-    background-color: #2563eb;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #3b82f6, stop:1 #2563eb);
     color: white;
-    font-weight: bold;
+    font-weight: 600;
 }
 
+/* 分组框 - 更清晰的边框和背景 */
 QGroupBox {
-    font-weight: bold;
-    font-size: 12px;
-    border: 1px solid #ddd;
-    border-radius: 6px;
-    margin-top: 10px;
-    padding: 18px 12px 10px 12px;
-    background-color: white;
-    color: #111;
+    font-weight: 600;
+    font-size: 14px;
+    border: 1px solid #30363d;
+    border-radius: 10px;
+    margin-top: 12px;
+    padding: 20px 14px 12px 14px;
+    background-color: #161b22;
+    color: #e6edf3;
 }
 QGroupBox::title {
     subcontrol-origin: margin;
-    left: 10px;
-    padding: 0 4px;
-    background-color: white;
+    left: 12px;
+    padding: 0 6px;
+    background-color: #161b22;
+    color: #58a6ff;
 }
 
+/* 标签 - 更好的对比度 */
 QLabel {
-    color: #333;
-    font-size: 12px;     /* 适中的字体大小 */
-    padding: 2px 0;      /* 适中的垂直间距 */
-    min-height: 20px;    /* 适中的最小高度 */
+    color: #c9d1d9;
+    font-size: 12px;
+    padding: 2px 0;
+    min-height: 20px;
 }
 
+/* 输入框和下拉框 - 更清晰的视觉效果 */
 QLineEdit, QComboBox {
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 6px 8px;      /* 更紧凑的垂直内边距 */
-    background-color: white;
-    min-height: 26px;      /* 更小的最小高度 */
-    color: #222;
-    font-size: 12px;       /* 适中的字体大小 */
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 9px 12px;
+    background-color: #0d1117;
+    color: #e6edf3;
+    font-size: 12px;
+    selection-background-color: #3b82f6;
 }
 QLineEdit:focus, QComboBox:focus {
-    border: 2px solid #2563eb;
+    border: 2px solid #58a6ff;
+    background-color: #161b22;
 }
 QLineEdit:hover, QComboBox:hover {
-    border-color: #999;
+    border-color: #58a6ff;
+    background-color: #161b22;
 }
 QComboBox::drop-down {
     border: none;
-    padding-right: 4px;
+    padding-right: 6px;
+}
+QComboBox::down-arrow {
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #8b949e;
+    margin-right: 6px;
 }
 
+/* 普通按钮 - 更现代的样式 */
 QPushButton {
-    border: 1px solid #ccc;
-    border-radius: 4px;
-    padding: 8px 14px;
-    background-color: #f5f5f5;
-    color: #222;
-    font-weight: bold;
-    min-height: 28px;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 8px 16px;
+    background-color: #21262d;
+    color: #c9d1d9;
+    font-weight: 600;
     font-size: 11px;
 }
 QPushButton:hover {
-    background-color: #e8e8e8;
-    border-color: #999;
+    background-color: #30363d;
+    border-color: #58a6ff;
+    color: #e6edf3;
 }
 QPushButton:pressed {
-    background-color: #d0d0d0;
+    background-color: #161b22;
 }
 QPushButton:disabled {
-    background-color: #f5f5f5;
-    color: #999;
-    border-color: #ddd;
+    background-color: #161b22;
+    color: #484f58;
+    border-color: #21262d;
 }
 
-QPushButton#highlight_btn {
-    background-color: #f97316;
+/* 主操作按钮 - 更鲜艳的蓝色渐变 */
+QPushButton#primary_btn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #3b82f6, stop:1 #2563eb);
     color: white;
     border: none;
-    font-weight: bold;
-    font-size: 11px;
-    padding: 9px 16px;
-    min-height: 32px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 10px 18px;
 }
-QPushButton#highlight_btn:hover {
-    background-color: #ea580c;
+QPushButton#primary_btn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #60a5fa, stop:1 #3b82f6);
 }
-QPushButton#highlight_btn:pressed {
-    background-color: #c2410c;
+QPushButton#primary_btn:pressed {
+    background: #1d4ed8;
+}
+QPushButton#primary_btn:disabled {
+    background-color: #30363d;
+    color: #6e7681;
 }
 
+/* 次要按钮 */
+QPushButton#secondary_btn {
+    background-color: #30363d;
+    color: #c9d1d9;
+    border: 1px solid #484f58;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 10px 18px;
+}
+QPushButton#secondary_btn:hover {
+    background-color: #484f58;
+    border-color: #6e7681;
+    color: #e6edf3;
+}
+QPushButton#secondary_btn:pressed {
+    background-color: #21262d;
+}
+
+/* 图标按钮 */
+QPushButton#icon_btn {
+    background-color: #21262d;
+    color: #8b949e;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    font-size: 16px;
+    padding: 6px;
+}
+QPushButton#icon_btn:hover {
+    background-color: #30363d;
+    border-color: #58a6ff;
+    color: #c9d1d9;
+}
+QPushButton#icon_btn:pressed {
+    background-color: #161b22;
+}
+
+/* Highlight 按钮 */
+QPushButton#highlight_btn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #3b82f6, stop:1 #2563eb);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 11px;
+    padding: 9px 16px;
+}
+QPushButton#highlight_btn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #60a5fa, stop:1 #3b82f6);
+}
+QPushButton#highlight_btn:pressed {
+    background: #1d4ed8;
+}
+
+/* 刷新按钮 */
 QPushButton#refresh_btn {
-    background-color: #f5f5f5;
-    color: #666;
-    border: 1px solid #ddd;
-    padding: 6px 10px;
+    background-color: #21262d;
+    color: #8b949e;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 8px 12px;
     font-size: 10px;
     min-width: 60px;
 }
 QPushButton#refresh_btn:hover {
-    background-color: #e8e8e8;
+    background-color: #30363d;
+    color: #c9d1d9;
 }
 
+/* 主题切换按钮 */
 QPushButton#theme_toggle_btn_small {
-    background-color: #f5f5f5;
-    color: #666;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 2px;
+    background-color: #21262d;
+    color: #8b949e;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 4px;
     font-size: 16px;
     font-weight: normal;
 }
 QPushButton#theme_toggle_btn_small:hover {
-    background-color: #e8e8e8;
-    border-color: #999;
+    background-color: #30363d;
+    border-color: #58a6ff;
+    color: #c9d1d9;
 }
 QPushButton#theme_toggle_btn_small:pressed {
-    background-color: #d0d0d0;
+    background-color: #161b22;
 }
 
+/* 底部导航按钮 */
 QPushButton#bottom_nav_btn {
     background-color: transparent;
-    color: #666;
+    color: #8b949e;
     border: none;
     text-align: left;
-    padding: 8px 12px;
+    padding: 10px 14px;
     font-size: 12px;
     font-weight: 500;
+    border-radius: 6px;
 }
 QPushButton#bottom_nav_btn:hover {
-    background-color: #f1f5f9;
-    color: #3b82f6;
+    background-color: #21262d;
+    color: #58a6ff;
 }
 
+/* 浏览按钮 */
 QPushButton#browse_btn {
-    background-color: #2563eb;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #3b82f6, stop:1 #2563eb);
     color: white;
     border: none;
-    font-weight: bold;
+    border-radius: 6px;
+    font-weight: 600;
     min-width: 70px;
-    padding: 6px 12px;
-    font-size: 10px;
+    padding: 8px 14px;
+    font-size: 11px;
 }
 QPushButton#browse_btn:hover {
-    background-color: #1d4ed8;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #60a5fa, stop:1 #3b82f6);
 }
 
+/* 保存按钮 - 绿色 */
 QPushButton#save_btn {
-    background-color: #059669;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #10b981, stop:1 #059669);
     color: white;
     border: none;
-    font-weight: bold;
+    border-radius: 6px;
+    font-weight: 600;
     min-width: 70px;
-    padding: 6px 12px;
-    font-size: 10px;
+    padding: 8px 14px;
+    font-size: 11px;
 }
 QPushButton#save_btn:hover {
-    background-color: #047857;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #34d399, stop:1 #10b981);
 }
 
+/* 清除按钮 */
 QPushButton#clear_btn {
-    background-color: #666;
+    background-color: #484f58;
     color: white;
     border: none;
-    font-weight: bold;
-    padding: 8px 14px;
+    border-radius: 6px;
+    font-weight: 600;
+    padding: 8px 16px;
 }
 QPushButton#clear_btn:hover {
-    background-color: #555;
+    background-color: #6e7681;
 }
 
+/* 关闭按钮 - 红色 */
 QPushButton#close_btn {
-    background-color: #dc2626;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #ef4444, stop:1 #dc2626);
     color: white;
     border: none;
-    font-weight: bold;
+    border-radius: 6px;
+    font-weight: 600;
     min-width: 90px;
-    padding: 8px 14px;
+    padding: 8px 16px;
 }
 QPushButton#close_btn:hover {
-    background-color: #b91c1c;
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #f87171, stop:1 #ef4444);
 }
 
+/* 文本编辑器 - 代码风格 */
 QTextEdit {
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    padding: 8px;
-    background-color: #fafafa;
-    font-family: Menlo, Monaco, 'Courier New', monospace;
-    font-size: 10px;
-    color: #222;
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 10px;
+    background-color: #0d1117;
+    font-family: 'SF Mono', Menlo, Monaco, 'Courier New', monospace;
+    font-size: 11px;
+    color: #c9d1d9;
+    selection-background-color: #3b82f6;
 }
 
+/* 表格 - 更现代的设计 */
 QTableWidget {
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background-color: white;
-    gridline-color: #eee;
-    selection-background-color: #2563eb;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    background-color: #0d1117;
+    gridline-color: #21262d;
+    selection-background-color: #3b82f6;
     selection-color: white;
 }
 QHeaderView::section {
-    background-color: #f0f0f0;
-    color: #222;
-    padding: 6px;
+    background-color: #161b22;
+    color: #e6edf3;
+    padding: 8px;
     border: none;
-    border-bottom: 1px solid #ddd;
-    font-weight: bold;
+    border-bottom: 2px solid #30363d;
+    font-weight: 600;
     font-size: 11px;
 }
 QTableWidget::item {
-    padding: 8px 6px;   /* 适中的垂直内边距 */
-    min-height: 32px;   /* 适中的最小行高 */
-    border-bottom: 1px solid #eee;
+    padding: 10px 8px;
+    min-height: 36px;
+    border-bottom: 1px solid #21262d;
+    color: #c9d1d9;
+}
+QTableWidget::item:hover {
+    background-color: #161b22;
 }
 QTableWidget::item:selected {
-    background-color: #2563eb;
+    background-color: #3b82f6;
     color: white;
 }
 QTableWidget QTableCornerButton::section {
-    background-color: #f0f0f0;
+    background-color: #161b22;
     border: none;
-    border-bottom: 1px solid #ddd;
+    border-bottom: 2px solid #30363d;
 }
 
+/* 复选框 */
 QCheckBox {
-    color: #333;
-    spacing: 6px;
-    font-size: 11px;
-    padding: 3px 0;
+    color: #c9d1d9;
+    spacing: 8px;
+    font-size: 12px;
+    padding: 4px 0;
 }
 QCheckBox::indicator {
-    width: 14px;
-    height: 14px;
-    border: 1px solid #999;
-    border-radius: 3px;
-    background-color: white;
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid #30363d;
+    border-radius: 4px;
+    background-color: #0d1117;
 }
 QCheckBox::indicator:hover {
-    border-color: #2563eb;
+    border-color: #58a6ff;
+    background-color: #161b22;
 }
 QCheckBox::indicator:checked {
-    background-color: #2563eb;
-    border-color: #2563eb;
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+    image: none;
+}
+QCheckBox::indicator:checked:after {
+    content: "✓";
+    color: white;
 }
 
+/* 进度条 */
 QProgressBar {
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    border: 1px solid #30363d;
+    border-radius: 6px;
     text-align: center;
-    background-color: white;
-    height: 22px;
-    color: #222;
-    font-size: 10px;
+    background-color: #161b22;
+    height: 24px;
+    color: #c9d1d9;
+    font-size: 11px;
+    font-weight: 500;
 }
 QProgressBar::chunk {
-    background-color: #2563eb;
-    border-radius: 2px;
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #3b82f6, stop:1 #2563eb);
+    border-radius: 4px;
 }
 
+/* 滚动条 - 更精致 */
 QScrollBar:vertical {
     border: none;
-    background: #f5f5f5;
-    width: 10px;
-    border-radius: 5px;
+    background: #0d1117;
+    width: 12px;
+    border-radius: 6px;
+    margin: 2px;
 }
 QScrollBar::handle:vertical {
-    background: #999;
-    border-radius: 5px;
-    min-height: 20px;
+    background: #30363d;
+    border-radius: 6px;
+    min-height: 30px;
 }
 QScrollBar::handle:vertical:hover {
-    background: #666;
+    background: #484f58;
 }
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
     height: 0;
 }
 QScrollBar:horizontal {
     border: none;
-    background: #f5f5f5;
-    height: 10px;
+    background: #0d1117;
+    height: 12px;
+    border-radius: 6px;
+    margin: 2px;
 }
 QScrollBar::handle:horizontal {
-    background: #999;
-    border-radius: 5px;
-    min-width: 20px;
+    background: #30363d;
+    border-radius: 6px;
+    min-width: 30px;
 }
 QScrollBar::handle:horizontal:hover {
-    background: #666;
+    background: #484f58;
+}
+QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
+    width: 0;
+}
+""")
+        else:
+            # 浅色主题 - 优化版（更现代，与深色主题一致）
+            self.setStyleSheet("""
+QDialog {
+    background-color: #f8fafc;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+    font-size: 11px;
+    color: #1e293b;
+}
+
+/* 导航区域 - 透明背景 */
+QWidget#nav_widget {
+    background-color: transparent;
+}
+
+/* 导航列表 - 更清爭的白色卡片 */
+QListWidget {
+    background-color: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 8px;
+    outline: none;
+}
+QListWidget::item {
+    padding: 11px 14px;
+    margin: 3px 0;
+    border-radius: 6px;
+    color: #475569;
+    font-size: 13px;
+}
+QListWidget::item:hover {
+    background-color: #f1f5f9;
+    color: #1e293b;
+}
+QListWidget::item:selected {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #3b82f6, stop:1 #2563eb);
+    color: white;
+    font-weight: 600;
+}
+
+/* 分组框 - 更清晰的卡片风格 */
+QGroupBox {
+    font-weight: 600;
+    font-size: 14px;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    margin-top: 12px;
+    padding: 20px 14px 12px 14px;
+    background-color: white;
+    color: #0f172a;
+}
+QGroupBox::title {
+    subcontrol-origin: margin;
+    left: 12px;
+    padding: 0 6px;
+    background-color: white;
+    color: #3b82f6;
+}
+
+/* 标签 - 更好的对比度 */
+QLabel {
+    color: #475569;
+    font-size: 12px;
+    padding: 2px 0;
+    min-height: 20px;
+}
+
+/* 输入框和下拉框 - 纯白背景 */
+QLineEdit, QComboBox {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 9px 12px;
+    background-color: white;
+    color: #1e293b;
+    font-size: 12px;
+    selection-background-color: #3b82f6;
+}
+QLineEdit:focus, QComboBox:focus {
+    border: 2px solid #3b82f6;
+    background-color: white;
+}
+QLineEdit:hover, QComboBox:hover {
+    border-color: #3b82f6;
+    background-color: white;
+}
+QComboBox::drop-down {
+    border: none;
+    padding-right: 6px;
+}
+QComboBox::down-arrow {
+    image: none;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid #64748b;
+    margin-right: 6px;
+}
+
+/* 普通按钮 - 更现代的样式 */
+QPushButton {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 8px 16px;
+    background-color: white;
+    color: #475569;
+    font-weight: 600;
+    font-size: 11px;
+}
+QPushButton:hover {
+    background-color: #f1f5f9;
+    border-color: #3b82f6;
+    color: #1e293b;
+}
+QPushButton:pressed {
+    background-color: #e2e8f0;
+}
+QPushButton:disabled {
+    background-color: #f8fafc;
+    color: #cbd5e1;
+    border-color: #e2e8f0;
+}
+
+/* 主操作按钮 - 蓝色渐变 */
+QPushButton#primary_btn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #3b82f6, stop:1 #2563eb);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 10px 18px;
+}
+QPushButton#primary_btn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #60a5fa, stop:1 #3b82f6);
+}
+QPushButton#primary_btn:pressed {
+    background: #1d4ed8;
+}
+QPushButton#primary_btn:disabled {
+    background-color: #e2e8f0;
+    color: #94a3b8;
+}
+
+/* 次要按钮 */
+QPushButton#secondary_btn {
+    background-color: #f1f5f9;
+    color: #475569;
+    border: 1px solid #cbd5e1;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 12px;
+    padding: 10px 18px;
+}
+QPushButton#secondary_btn:hover {
+    background-color: #e2e8f0;
+    border-color: #94a3b8;
+    color: #1e293b;
+}
+QPushButton#secondary_btn:pressed {
+    background-color: #cbd5e1;
+}
+
+/* 图标按钮 */
+QPushButton#icon_btn {
+    background-color: white;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    font-size: 16px;
+    padding: 6px;
+}
+QPushButton#icon_btn:hover {
+    background-color: #f1f5f9;
+    border-color: #3b82f6;
+    color: #1e293b;
+}
+QPushButton#icon_btn:pressed {
+    background-color: #e2e8f0;
+}
+
+/* Highlight 按钮 */
+QPushButton#highlight_btn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #3b82f6, stop:1 #2563eb);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 11px;
+    padding: 9px 16px;
+}
+QPushButton#highlight_btn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #60a5fa, stop:1 #3b82f6);
+}
+QPushButton#highlight_btn:pressed {
+    background: #1d4ed8;
+}
+
+/* 刷新按钮 */
+QPushButton#refresh_btn {
+    background-color: white;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    font-size: 10px;
+    min-width: 60px;
+}
+QPushButton#refresh_btn:hover {
+    background-color: #f1f5f9;
+    color: #1e293b;
+}
+
+/* 主题切换按钮 */
+QPushButton#theme_toggle_btn_small {
+    background-color: white;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 4px;
+    font-size: 16px;
+    font-weight: normal;
+}
+QPushButton#theme_toggle_btn_small:hover {
+    background-color: #f1f5f9;
+    border-color: #3b82f6;
+    color: #1e293b;
+}
+QPushButton#theme_toggle_btn_small:pressed {
+    background-color: #e2e8f0;
+}
+
+/* 底部导航按钮 */
+QPushButton#bottom_nav_btn {
+    background-color: transparent;
+    color: #64748b;
+    border: none;
+    text-align: left;
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 500;
+    border-radius: 6px;
+}
+QPushButton#bottom_nav_btn:hover {
+    background-color: #f1f5f9;
+    color: #3b82f6;
+}
+
+/* 浏览按钮 */
+QPushButton#browse_btn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #3b82f6, stop:1 #2563eb);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    min-width: 70px;
+    padding: 8px 14px;
+    font-size: 11px;
+}
+QPushButton#browse_btn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #60a5fa, stop:1 #3b82f6);
+}
+
+/* 保存按钮 - 绿色 */
+QPushButton#save_btn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #10b981, stop:1 #059669);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    min-width: 70px;
+    padding: 8px 14px;
+    font-size: 11px;
+}
+QPushButton#save_btn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #34d399, stop:1 #10b981);
+}
+
+/* 清除按钮 */
+QPushButton#clear_btn {
+    background-color: #64748b;
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    padding: 8px 16px;
+}
+QPushButton#clear_btn:hover {
+    background-color: #475569;
+}
+
+/* 关闭按钮 - 红色 */
+QPushButton#close_btn {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #ef4444, stop:1 #dc2626);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    min-width: 90px;
+    padding: 8px 16px;
+}
+QPushButton#close_btn:hover {
+    background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
+                                stop:0 #f87171, stop:1 #ef4444);
+}
+
+/* 文本编辑器 - 纯白背景 */
+QTextEdit {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 10px;
+    background-color: white;
+    font-family: 'SF Mono', Menlo, Monaco, 'Courier New', monospace;
+    font-size: 11px;
+    color: #1e293b;
+    selection-background-color: #3b82f6;
+}
+
+/* 表格 - 更现代的设计 */
+QTableWidget {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    background-color: white;
+    gridline-color: #f1f5f9;
+    selection-background-color: #3b82f6;
+    selection-color: white;
+}
+QHeaderView::section {
+    background-color: #f8fafc;
+    color: #1e293b;
+    padding: 8px;
+    border: none;
+    border-bottom: 2px solid #e2e8f0;
+    font-weight: 600;
+    font-size: 11px;
+}
+QTableWidget::item {
+    padding: 10px 8px;
+    min-height: 36px;
+    border-bottom: 1px solid #f1f5f9;
+    color: #475569;
+}
+QTableWidget::item:hover {
+    background-color: #f8fafc;
+}
+QTableWidget::item:selected {
+    background-color: #3b82f6;
+    color: white;
+}
+QTableWidget QTableCornerButton::section {
+    background-color: #f8fafc;
+    border: none;
+    border-bottom: 2px solid #e2e8f0;
+}
+
+/* 复选框 */
+QCheckBox {
+    color: #475569;
+    spacing: 8px;
+    font-size: 12px;
+    padding: 4px 0;
+}
+QCheckBox::indicator {
+    width: 16px;
+    height: 16px;
+    border: 1.5px solid #cbd5e1;
+    border-radius: 4px;
+    background-color: white;
+}
+QCheckBox::indicator:hover {
+    border-color: #3b82f6;
+    background-color: #f8fafc;
+}
+QCheckBox::indicator:checked {
+    background-color: #3b82f6;
+    border-color: #3b82f6;
+    image: none;
+}
+
+/* 进度条 */
+QProgressBar {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    text-align: center;
+    background-color: #f8fafc;
+    height: 24px;
+    color: #475569;
+    font-size: 11px;
+    font-weight: 500;
+}
+QProgressBar::chunk {
+    background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
+                                stop:0 #3b82f6, stop:1 #2563eb);
+    border-radius: 4px;
+}
+
+/* 滚动条 - 更精致 */
+QScrollBar:vertical {
+    border: none;
+    background: #f8fafc;
+    width: 12px;
+    border-radius: 6px;
+    margin: 2px;
+}
+QScrollBar::handle:vertical {
+    background: #cbd5e1;
+    border-radius: 6px;
+    min-height: 30px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #94a3b8;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0;
+}
+QScrollBar:horizontal {
+    border: none;
+    background: #f8fafc;
+    height: 12px;
+    border-radius: 6px;
+    margin: 2px;
+}
+QScrollBar::handle:horizontal {
+    background: #cbd5e1;
+    border-radius: 6px;
+    min-width: 30px;
+}
+QScrollBar::handle:horizontal:hover {
+    background: #94a3b8;
 }
 QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {
     width: 0;
