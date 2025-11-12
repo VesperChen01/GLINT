@@ -46,7 +46,6 @@ def _register_commands():
             generate_interaction_network_plot
         )
         from .interaction_2d_plot import generate_2d_interaction_diagram
-        from .binding_score import score_protein_ligand, score_ternary_complex
         from .binding_heatmap import plot_binding_heatmap
         
         # 新增: 分子胶特异功能 (PPI 分析 & Neo-表位)
@@ -91,9 +90,13 @@ def _register_commands():
             comprehensive_gmotif_pocket_analysis
         )
         
-        # Vina评分(可选,需要安装Vina)
+        # Vina集成(可选,需要安装Vina)
         try:
-            from .vina_scoring import vina_score_complex, compare_scoring_methods
+            from .vina_integration import (
+                vina_score_complex,
+                compare_scoring_methods,
+                pocket_based_docking
+            )
             _vina_available = True
         except ImportError:
             _vina_available = False
@@ -114,8 +117,6 @@ def _register_commands():
         cmd.extend("visualize_protein_ligand_3d", visualize_protein_ligand_3d)
         cmd.extend("generate_interaction_network_plot", generate_interaction_network_plot)
         cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
-        cmd.extend("score_protein_ligand", score_protein_ligand)
-        cmd.extend("score_ternary_complex", score_ternary_complex)
         cmd.extend("plot_binding_heatmap", plot_binding_heatmap)
         
         # 分子胶特异命令
@@ -153,18 +154,11 @@ def _register_commands():
         cmd.extend("comprehensive_glue_pocket_analysis", comprehensive_glue_pocket_analysis)
         cmd.extend("comprehensive_gmotif_pocket_analysis", comprehensive_gmotif_pocket_analysis)
         
-        # Vina评分命令(可选)
+        # Vina集成命令(可选)
         if _vina_available:
             cmd.extend("vina_score_complex", vina_score_complex)
             cmd.extend("compare_scoring_methods", compare_scoring_methods)
-            
-            # 口袋对接命令
-            try:
-                from .pocket_docking import pocket_based_docking, visualize_docking_result
-                cmd.extend("pocket_based_docking", pocket_based_docking)
-                cmd.extend("visualize_docking_result", visualize_docking_result)
-            except ImportError:
-                pass
+            cmd.extend("pocket_based_docking", pocket_based_docking)
         
         _info("✅ 已注册命令：highlight_csv_residues / analyze_pdb_interactions / analyze_protein_ligand_interactions 等",
               "✅ Commands registered: highlight_csv_residues / analyze_pdb_interactions / analyze_protein_ligand_interactions etc.")
@@ -226,7 +220,6 @@ def __init_plugin__(app=None):
     try:
         from pymol import cmd
         cmd.extend("gluetk_gui", gluetk_gui)
-        cmd.extend("molstruct_gui", molstruct_gui)  # Legacy alias
     except Exception as e:
         print(f"Warning: Failed to register GUI command: {e}")
     
@@ -241,53 +234,30 @@ def __init_plugin__(app=None):
     print("📋 Commands:")
     print("")
     print("  🔬 Interaction Analysis:")
-    print("    • analyze_pdb_interactions - Analyze interactions in a PDB structure (strict standards)")
-    print("    • analyze_protein_ligand_interactions - Analyze protein-ligand interactions (strict standards)")
+    print("    • analyze_pdb_interactions - Analyze interactions in a PDB structure")
+    print("    • analyze_protein_ligand_interactions - Analyze protein-ligand interactions")
     print("    • analyze_ternary_complex - Analyze ternary complex")
-    print("    • analyze_atom_pair_interactions - Analyze atom pair interactions")
     print("")
-    print("  ✨ Molecular Glue Analysis (NEW):")
+    print("  ✨ Molecular Glue Analysis:")
     print("    • ppi_analyze - Analyze protein-protein interface (PPI)")
     print("    • neo_epitope_find - Identify neo-substrate epitope")
     print("    • analyze_g_motif_glue_binding - Validate G-motif as glue substrate")
     print("    • find_crbn_g_motif - Find CRBN G-motif/G-loop")
     print("")
-    print("  🔍 Pocket Detection & Analysis (NEW):")
-    print("    • detect_pockets - Detect and analyze protein pockets (volume, druggability, etc.)")
-    print("    • compare_pockets - Compare pockets between two structures (e.g., with/without glue)")
+    print("  🔍 Pocket Detection & Docking:")
+    print("    • detect_pockets - Detect and analyze protein pockets")
+    print("    • compare_pockets - Compare pockets between structures")
     print("    • visualize_pockets - Visualize pockets with color-coded properties")
-    print("    • visualize_pockets_with_interactions - Show pockets with interaction overlay")
-    print("    • overlay_pocket_electrostatics - Overlay APBS electrostatics on pockets")
     print("    • analyze_pockets_in_ppi_interface - Analyze pockets at PPI interface")
-    print("    • analyze_pockets_with_glue - Compare pockets with/without molecular glue")
-    print("    • correlate_pockets_with_interactions - Link pockets with interaction data")
-    print("    • comprehensive_glue_pocket_analysis - One-click comprehensive pocket analysis")
-    print("    • comprehensive_gmotif_pocket_analysis - G-motif + pocket integrated analysis")
-    print("")
-    print("  ⚡ Binding Energy Scoring:")
-    print("    • score_protein_ligand - Calculate binding energy for protein-ligand complex (empirical)")
-    print("    • score_ternary_complex - Calculate binding energy for molecular glue/PROTAC (with cooperativity)")
-    print("    • plot_binding_heatmap - Generate batch binding energy heatmap from CSV files")
-    try:
-        from .vina_scoring import check_vina_available
-        if check_vina_available():
-            print("    • vina_score_complex - Calculate binding energy using AutoDock Vina (requires vina installed)")
-            print("    • compare_scoring_methods - Compare empirical vs Vina scoring")
-            print("")
-            print("  🎯 Pocket-Based Docking (NEW):")
-            print("    • pocket_based_docking - Auto-detect pockets and dock ligand (auto-generates Vina config)")
-            print("    • visualize_docking_result - Visualize docking results with interactions")
-    except:
-        pass
+    print("    • comprehensive_glue_pocket_analysis - One-click comprehensive analysis")
+    if _vina_available:
+        print("    • pocket_based_docking - Auto-detect pockets and dock ligand")
     print("")
     print("  🎨 Visualization:")
     print("    • highlight_csv_residues - Highlight residue interactions from CSV")
-    print("    • visualize_protein_ligand_3d - 3D visualization of protein-ligand interactions")
-    print("    • generate_interaction_network_plot - Generate interaction network plot")
+    print("    • visualize_protein_ligand_3d - 3D visualization of interactions")
     print("")
     print("  🖥️  GUI:")
-    print("    • gluetk_gui - Open GlueTK unified analysis GUI (all features)")
-    print("    • molstruct_gui - Legacy alias for gluetk_gui (for backward compatibility)")
+    print("    • gluetk_gui - Open GlueTK unified analysis GUI")
     print("")
     print("💡 Use help(command_name) for details")
-    print("⭐ Using strict standards: H-bond ≤2.8Å, Salt bridge ≤4.0Å, suitable for publication")

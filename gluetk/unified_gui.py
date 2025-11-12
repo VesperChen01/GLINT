@@ -27,7 +27,8 @@ try:
         QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QTextEdit, QLabel,
         QLineEdit, QPushButton, QCheckBox, QComboBox, QFileDialog, QGroupBox,
         QFormLayout, QMessageBox, QTextEdit, QProgressBar, QFrame, QTabWidget,
-        QTableWidget, QTableWidgetItem, QSizePolicy, QGridLayout, QListWidget, QStackedWidget
+        QTableWidget, QTableWidgetItem, QSizePolicy, QGridLayout, QListWidget, QStackedWidget,
+        QSpinBox
     )
     QT_LIB = "PyQt5"
 except Exception:
@@ -37,7 +38,8 @@ except Exception:
             QApplication, QDialog, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
             QLineEdit, QPushButton, QCheckBox, QComboBox, QFileDialog, QGroupBox,
             QFormLayout, QMessageBox, QTextEdit, QProgressBar, QFrame, QTabWidget,
-            QTableWidget, QTableWidgetItem, QSizePolicy, QGridLayout, QListWidget, QStackedWidget
+            QTableWidget, QTableWidgetItem, QSizePolicy, QGridLayout, QListWidget, QStackedWidget,
+            QSpinBox
         )
         QT_LIB = "PyQt6"
     except Exception as e:
@@ -1363,72 +1365,80 @@ class GlueTKDialog(QDialog):
         return card
     
     def _create_vina_docking_card(self) -> QWidget:
-        """创建 Vina 对接卡片（含配置编辑）"""
+        """创建 Vina 对接卡片（简化版）"""
         card = QGroupBox("⚙️ AutoDock Vina Docking")
         layout = QVBoxLayout(card)
         layout.setSpacing(8)
         
-        # Receptor & Ligand
-        file_grid = QGridLayout()
-        file_grid.setSpacing(8)
+        # 说明文本
+        info_label = QLabel("Auto-detects pockets and docks ligand to top 3 pockets")
+        info_label.setStyleSheet("color: #666; font-size: 11px;")
+        layout.addWidget(info_label)
         
-        self.vina_receptor = QLineEdit()
-        self.vina_receptor.setPlaceholderText("Receptor PDB/PDBQT")
-        self.vina_receptor.setFixedHeight(32)
-        receptor_browse = QPushButton("Browse")
-        receptor_browse.setObjectName("refresh_btn")
-        receptor_browse.setFixedHeight(32)
-        receptor_browse.setFixedWidth(70)
-        receptor_browse.clicked.connect(self.browse_vina_receptor)
+        # Receptor (使用 PyMOL 对象，与 Pocket 标签页共享)
+        receptor_layout = QHBoxLayout()
+        receptor_layout.setSpacing(8)
+        receptor_layout.addWidget(QLabel("Receptor:"))
+        receptor_note = QLabel("(Uses object from Pocket tab)")
+        receptor_note.setStyleSheet("color: #888; font-size: 11px;")
+        receptor_layout.addWidget(receptor_note)
+        receptor_layout.addStretch()
+        layout.addLayout(receptor_layout)
+        
+        # Ligand file
+        ligand_layout = QHBoxLayout()
+        ligand_layout.setSpacing(8)
         
         self.vina_ligand = QLineEdit()
-        self.vina_ligand.setPlaceholderText("Ligand MOL2/SDF/PDBQT")
+        self.vina_ligand.setPlaceholderText("Select ligand file (MOL2/SDF/PDBQT)")
         self.vina_ligand.setFixedHeight(32)
+        
         ligand_browse = QPushButton("Browse")
         ligand_browse.setObjectName("refresh_btn")
         ligand_browse.setFixedHeight(32)
-        ligand_browse.setFixedWidth(70)
+        ligand_browse.setFixedWidth(80)
         ligand_browse.clicked.connect(self.browse_vina_ligand)
         
-        file_grid.addWidget(QLabel("Receptor:"), 0, 0)
-        file_grid.addWidget(self.vina_receptor, 0, 1)
-        file_grid.addWidget(receptor_browse, 0, 2)
-        file_grid.addWidget(QLabel("Ligand:"), 1, 0)
-        file_grid.addWidget(self.vina_ligand, 1, 1)
-        file_grid.addWidget(ligand_browse, 1, 2)
-        layout.addLayout(file_grid)
+        ligand_layout.addWidget(QLabel("Ligand:"))
+        ligand_layout.addWidget(self.vina_ligand)
+        ligand_layout.addWidget(ligand_browse)
+        layout.addLayout(ligand_layout)
         
-        # Config file or auto-generate from pocket
-        config_label = QLabel("Config (optional - auto-generated if empty):")
-        layout.addWidget(config_label)
+        # 参数设置（简化）
+        param_layout = QHBoxLayout()
+        param_layout.setSpacing(12)
         
-        self.vina_config_edit = QTextEdit()
-        self.vina_config_edit.setFixedHeight(120)
-        self.vina_config_edit.setPlaceholderText(
-            "# Leave empty to auto-generate from detected pockets\n"
-            "# Or paste Vina config here:\n"
-            "# center_x = 10.5\n"
-            "# center_y = 20.3\n"
-            "# center_z = 15.8\n"
-            "# size_x = 25\n"
-            "# size_y = 25\n"
-            "# size_z = 25\n"
-            "# exhaustiveness = 8"
-        )
-        layout.addWidget(self.vina_config_edit)
+        param_layout.addWidget(QLabel("Max Pockets:"))
+        self.vina_max_pockets = QSpinBox()
+        self.vina_max_pockets.setRange(1, 10)
+        self.vina_max_pockets.setValue(3)
+        self.vina_max_pockets.setFixedWidth(60)
+        self.vina_max_pockets.setFixedHeight(28)
+        param_layout.addWidget(self.vina_max_pockets)
+        
+        param_layout.addWidget(QLabel("Exhaustiveness:"))
+        self.vina_exhaustiveness = QSpinBox()
+        self.vina_exhaustiveness.setRange(1, 32)
+        self.vina_exhaustiveness.setValue(8)
+        self.vina_exhaustiveness.setFixedWidth(60)
+        self.vina_exhaustiveness.setFixedHeight(28)
+        param_layout.addWidget(self.vina_exhaustiveness)
+        
+        param_layout.addStretch()
+        layout.addLayout(param_layout)
         
         # Buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
         
-        self.vina_dock_btn = QPushButton("Run Docking")
+        self.vina_dock_btn = QPushButton("🚀 Run Docking")
         self.vina_dock_btn.setObjectName("highlight_btn")
-        self.vina_dock_btn.setFixedHeight(32)
+        self.vina_dock_btn.setFixedHeight(36)
         self.vina_dock_btn.clicked.connect(self.run_vina_docking)
         
-        self.vina_load_result_btn = QPushButton("Load Result")
+        self.vina_load_result_btn = QPushButton("📂 Load Result")
         self.vina_load_result_btn.setObjectName("refresh_btn")
-        self.vina_load_result_btn.setFixedHeight(32)
+        self.vina_load_result_btn.setFixedHeight(36)
         self.vina_load_result_btn.clicked.connect(self.load_vina_result)
         
         btn_row.addWidget(self.vina_dock_btn)
@@ -3838,115 +3848,27 @@ Thank you for your support! 🚀
     # Scoring Callbacks
     # ==========================
     def run_quick_scoring(self):
-        """运行快速经验评分"""
-        try:
-            obj = self.score_obj.currentText().strip()
-            ligand = self.score_ligand.text().strip()
-            
-            if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select an object")
-                return
-            if not ligand:
-                QMessageBox.warning(self, "Warning", "Please enter ligand residue name")
-                return
-            
-            self.log(f"\n📋 Scoring: {obj} + {ligand} (Empirical)...")
-            self.score_result_text.clear()
-            
-            # Import scoring modules
-            try:
-                from .binding_score import calculate_binary_score, format_score_report
-                from .interaction_analyzer import analyze_protein_ligand_interactions
-            except ImportError:
-                from binding_score import calculate_binary_score, format_score_report
-                from interaction_analyzer import analyze_protein_ligand_interactions
-            
-            # Analyze interactions
-            result = analyze_protein_ligand_interactions(obj, ligand)
-            if not result:
-                self.log("⚠️  Analysis failed")
-                self.score_result_text.setPlainText("Analysis failed. Check if ligand exists.")
-                return
-            
-            # Calculate score
-            score = calculate_binary_score(result)
-            if not score:
-                self.log("⚠️  Scoring failed")
-                return
-            
-            # Format and display
-            report = format_score_report(score, mode="binary")
-            self.score_result_text.setPlainText(report)
-            
-            self.log(f"✅ Score: {score['total']:.2f} kcal/mol")
-            
-        except Exception as e:
-            self.on_error(str(e))
-            import traceback
-            traceback.print_exc()
+        """运行快速经验评分 - DEPRECATED"""
+        QMessageBox.information(
+            self, 
+            "Feature Removed", 
+            "Empirical scoring has been removed.\n\n"
+            "Please use:\n"
+            "• Interaction Analysis tab for interaction analysis\n"
+            "• Docking tab for AutoDock Vina scoring"
+        )
+        self.log("⚠️ Empirical scoring feature has been removed")
     
     def run_vina_scoring(self):
-        """运行Vina评分（可选）"""
-        try:
-            obj = self.score_obj.currentText().strip()
-            ligand = self.score_ligand.text().strip()
-            
-            if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select an object")
-                return
-            if not ligand:
-                QMessageBox.warning(self, "Warning", "Please enter ligand residue name")
-                return
-            
-            self.log(f"\n⚙️  Scoring: {obj} + {ligand} (Vina)...")
-            self.score_result_text.clear()
-            
-            # Check if Vina is available
-            try:
-                from .vina_scoring import vina_score_complex, check_vina_available
-            except ImportError:
-                from vina_scoring import vina_score_complex, check_vina_available
-            
-            if not check_vina_available():
-                msg = (
-                    "Vina is not installed or not found in PATH.\n\n"
-                    "To install Vina:\n"
-                    "  conda install -c conda-forge vina\n\n"
-                    "Or download from:\n"
-                    "  https://github.com/ccsb-scripps/AutoDock-Vina/releases"
-                )
-                QMessageBox.information(self, "Vina Not Available", msg)
-                self.log("⚠️  Vina not available")
-                return
-            
-            # Run Vina scoring
-            result = vina_score_complex(obj, f"resn {ligand}", mode='score_only', show_report=False)
-            
-            if result and result['success']:
-                report = f"""
-{'='*60}
-Vina Scoring Report
-{'='*60}
-Protein: {obj}
-Ligand:  {ligand}
-
-Affinity: {result['affinity']:.2f} kcal/mol
-{'='*60}
-⚠️  Note: This is Vina's empirical scoring function
-    For publication, use full flexible docking workflow
-{'='*60}
-                """
-                self.score_result_text.setPlainText(report)
-                self.log(f"✅ Vina Score: {result['affinity']:.2f} kcal/mol")
-            else:
-                error_msg = result.get('error', 'Unknown error') if result else 'No result'
-                self.log(f"⚠️  Vina scoring failed: {error_msg}")
-                self.score_result_text.setPlainText(f"Vina scoring failed: {error_msg}")
-            
-        except Exception as e:
-            self.on_error(str(e))
-            import traceback
-            traceback.print_exc()
+        """运行Vina评分 - DEPRECATED"""
+        QMessageBox.information(
+            self,
+            "Feature Moved",
+            "Vina scoring has been integrated into the Docking tab.\n\n"
+            "Please use:\n"
+            "• Docking tab → Pocket-Based Docking for full workflow"
+        )
+        self.log("⚠️ Please use Docking tab for Vina scoring")
     
     # ==========================
     # Pocket & Docking Callbacks
@@ -4050,11 +3972,6 @@ Affinity: {result['affinity']:.2f} kcal/mol
             import traceback
             traceback.print_exc()
     
-    def browse_vina_receptor(self):
-        fn, _ = QFileDialog.getOpenFileName(self, "Select Receptor", "", "PDB/PDBQT (*.pdb *.pdbqt);;All Files (*)")
-        if fn:
-            self.vina_receptor.setText(fn)
-    
     def browse_vina_ligand(self):
         fn, _ = QFileDialog.getOpenFileName(self, "Select Ligand", "", "MOL2/SDF/PDBQT (*.mol2 *.sdf *.pdbqt);;All Files (*)")
         if fn:
@@ -4063,45 +3980,61 @@ Affinity: {result['affinity']:.2f} kcal/mol
     def run_vina_docking(self):
         """运行 Vina 对接"""
         try:
-            receptor = self.vina_receptor.text().strip()
-            ligand = self.vina_ligand.text().strip()
-            config_text = self.vina_config_edit.toPlainText().strip()
+            from pymol import cmd
             
-            if not receptor or not os.path.exists(receptor):
-                QMessageBox.warning(self, "Warning", "Please select a valid receptor file")
+            # 获取受体对象（从 PyMOL）
+            receptor_obj = self.pocket_obj_combo.currentText().strip()
+            if not receptor_obj or receptor_obj == t("no_object"):
+                QMessageBox.warning(self, "Warning", "Please select a receptor object from Pocket tab")
                 return
+            
+            if receptor_obj not in cmd.get_object_list():
+                QMessageBox.warning(self, "Warning", f"Object '{receptor_obj}' not found in PyMOL")
+                return
+            
+            # 获取配体文件
+            ligand = self.vina_ligand.text().strip()
             if not ligand or not os.path.exists(ligand):
                 QMessageBox.warning(self, "Warning", "Please select a valid ligand file")
                 return
             
+            # 获取参数
+            max_pockets = self.vina_max_pockets.value()
+            exhaustiveness = self.vina_exhaustiveness.value()
+            
             self.log(f"\n⚙️ Starting Vina docking...")
-            self.log(f"   Receptor: {os.path.basename(receptor)}")
+            self.log(f"   Receptor: {receptor_obj}")
             self.log(f"   Ligand: {os.path.basename(ligand)}")
+            self.log(f"   Max pockets: {max_pockets}")
+            self.log(f"   Exhaustiveness: {exhaustiveness}")
             
-            # Import docking module
+            # 导入 vina_integration
             try:
-                from .pocket_docking import pocket_based_docking
+                from .vina_integration import pocket_based_docking, check_vina_available
             except ImportError:
-                from pocket_docking import pocket_based_docking
+                from vina_integration import pocket_based_docking, check_vina_available
             
-            # Create temp config if user provided one
-            custom_config = None
-            if config_text:
-                import tempfile
-                fd, custom_config = tempfile.mkstemp(suffix='_vina_config.txt', text=True)
-                with os.fdopen(fd, 'w') as f:
-                    f.write(config_text)
-                self.log("   Using custom config")
-            else:
-                self.log("   Will auto-generate config from pockets")
+            # 检查 Vina 可用性
+            if not check_vina_available():
+                QMessageBox.warning(
+                    self, 
+                    "Vina Not Found",
+                    "AutoDock Vina is not installed.\n\n"
+                    "Please run:\n"
+                    "  python gluetk/env_checker.py --auto-install\n\n"
+                    "Or install manually:\n"
+                    "  conda install -c conda-forge vina"
+                )
+                return
             
-            # Run docking (this will auto-detect pockets if no config)
+            self.log("   Auto-detecting pockets for docking...")
+            
+            # 运行基于口袋的对接
             result = pocket_based_docking(
-                obj_name=self.pocket_obj_combo.currentText().strip(),
+                obj_name=receptor_obj,
                 ligand_file=ligand,
-                custom_config=custom_config,
-                auto_detect_pockets=(not config_text),
-                max_pockets=3
+                max_pockets=max_pockets,
+                exhaustiveness=exhaustiveness
             )
             
             if result.get('success'):
@@ -4117,13 +4050,16 @@ Affinity: {result['affinity']:.2f} kcal/mol
                     for i, r in enumerate(sorted_results[:3], 1):
                         self.log(f"   {i}. Pocket {r['pocket_id']}: {r['affinity']:.2f} kcal/mol")
                         self.log(f"      Output: {os.path.basename(r['output_pdbqt'])}")
+                
+                QMessageBox.information(
+                    self,
+                    "Success",
+                    f"Docking completed successfully!\n\n"
+                    f"Results saved to:\n{result.get('output_dir')}"
+                )
             else:
                 self.log(f"⚠️  Docking failed: {result.get('error')}")
                 QMessageBox.warning(self, "Error", f"Docking failed:\n{result.get('error')}")
-            
-            # Clean up temp config
-            if custom_config and os.path.exists(custom_config):
-                os.unlink(custom_config)
             
         except Exception as e:
             self.on_error(str(e))
@@ -4436,122 +4372,27 @@ Affinity: {result['affinity']:.2f} kcal/mol
             traceback.print_exc()
     
     def run_compare_scoring(self):
-        """对比经验评分 vs Vina评分"""
-        try:
-            obj = self.score_binary_obj.currentText().strip()
-            ligand = self.score_binary_ligand.text().strip()
-            
-            if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select an object")
-                return
-            if not ligand:
-                QMessageBox.warning(self, "Warning", "Please enter ligand residue name")
-                return
-            
-            self.log(f"\n🔍 Comparing scoring methods: {obj} + {ligand}...")
-            self.score_result_text.clear()
-            self.score_result_text.setPlainText("Running comparison...\nThis may take a few seconds...")
-            
-            # Check if Vina comparison is available
-            try:
-                from .vina_scoring import compare_scoring_methods
-            except ImportError:
-                from vina_scoring import compare_scoring_methods
-            
-            # Capture output
-            import io
-            import sys
-            captured_output = io.StringIO()
-            old_stdout = sys.stdout
-            sys.stdout = captured_output
-            
-            try:
-                result = compare_scoring_methods(obj, ligand)
-            finally:
-                sys.stdout = old_stdout
-            
-            output = captured_output.getvalue()
-            self.score_result_text.setPlainText(output)
-            self.log("✅ Comparison complete")
-            
-        except Exception as e:
-            self.on_error(str(e))
-            import traceback
-            traceback.print_exc()
+        """对比评分方法 - DEPRECATED"""
+        QMessageBox.information(
+            self,
+            "Feature Removed",
+            "Scoring comparison has been removed.\n\n"
+            "Please use:\n"
+            "• Docking tab for AutoDock Vina scoring\n"
+            "• Interaction Analysis tab for interaction details"
+        )
+        self.log("⚠️ Scoring comparison feature has been removed")
     
     def run_ternary_scoring(self):
-        """运行三元复合物评分（含协同效应）"""
-        try:
-            obj = self.score_ternary_obj.currentText().strip()
-            ligand = self.score_ternary_ligand.text().strip()
-            p1_str = self.score_ternary_p1.text().strip()
-            p2_str = self.score_ternary_p2.text().strip()
-            
-            if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select an object")
-                return
-            if not ligand:
-                QMessageBox.warning(self, "Warning", "Please enter ligand residue name")
-                return
-            
-            # Parse chains
-            p1_chains = [p1_str] if p1_str else None
-            p2_chains = [p2_str] if p2_str else None
-            
-            self.log(f"\n🎯 Scoring ternary complex: {obj} + {ligand}...")
-            if p1_chains:
-                self.log(f"   Protein 1 chains: {p1_chains}")
-            if p2_chains:
-                self.log(f"   Protein 2 chains: {p2_chains}")
-            
-            self.score_result_text.clear()
-            self.score_result_text.setPlainText("Analyzing ternary complex...\nThis may take a few seconds...")
-            
-            # Import modules
-            try:
-                from .binding_score import calculate_ternary_score, format_score_report
-                from .interaction_analyzer import analyze_ternary_complex
-            except ImportError:
-                from binding_score import calculate_ternary_score, format_score_report
-                from interaction_analyzer import analyze_ternary_complex
-            
-            # Analyze ternary complex
-            result = analyze_ternary_complex(
-                obj_name=obj,
-                ligand_resname=ligand,
-                protein1_chains=p1_chains,
-                protein2_chains=p2_chains
-            )
-            
-            if not result:
-                self.log("⚠️  Ternary analysis failed")
-                self.score_result_text.setPlainText("Analysis failed. Check parameters.")
-                return
-            
-            # Prepare input for scoring
-            ternary_input = {
-                'protein1_result': {'interactions': result.get('protein1_interactions', [])},
-                'protein2_result': {'interactions': result.get('protein2_interactions', [])}
-            }
-            
-            # Calculate score
-            score = calculate_ternary_score(ternary_input)
-            if not score:
-                self.log("⚠️  Scoring failed")
-                return
-            
-            # Format and display
-            report = format_score_report(score, mode="ternary")
-            self.score_result_text.setPlainText(report)
-            
-            self.log(f"✅ Total Score: {score['total']:.2f} kcal/mol")
-            self.log(f"   Cooperativity: {score['cooperativity']:+.2f} kcal/mol")
-            self.log(f"   Balance: {score['balance_factor']:.3f}")
-            
-        except Exception as e:
-            self.on_error(str(e))
-            import traceback
-            traceback.print_exc()
+        """运行三元复合物评分 - DEPRECATED"""
+        QMessageBox.information(
+            self,
+            "Feature Removed",
+            "Ternary complex scoring has been removed.\n\n"
+            "Please use:\n"
+            "• Molecular Glue tab → Ternary Complex Analysis for interaction analysis"
+        )
+        self.log("⚠️ Ternary scoring feature has been removed")
     
     def browse_heatmap_folder(self):
         """浏览选择热图 CSV 文件夹"""
@@ -4754,17 +4595,8 @@ Output:    {result['output_path']}
             pass
 
     def setup_style(self):
-        # 现代化样式 - 科技感与专业性并重
-        try:
-            from .modern_style import get_modern_stylesheet
-            # 使用实例变量控制主题
-            self.setStyleSheet(get_modern_stylesheet(dark_mode=self._dark_mode))
-            return
-        except Exception as e:
-            # 回退到内置样式
-            print(f"Modern style not available: {e}")
-        
-        # 回退样式 - Mac兼容性优先
+        # 现代化样式 - 使用内置样式（modern_style.py已移除）
+        # Mac兼容性优先
         self.setStyleSheet("""
 QDialog {
     background-color: #f5f7fa;

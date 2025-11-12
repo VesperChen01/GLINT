@@ -22,7 +22,8 @@ from pymol import cmd
 # Ensure commands are available
 try:
     from gluetk.ppi_analyzer import analyze_protein_protein_interface, identify_neo_epitope
-    from gluetk.binding_score import calculate_ternary_score, format_score_report
+    # Note: binding_score module has been removed
+    # from gluetk.binding_score import calculate_ternary_score, format_score_report
     from gluetk.interaction_analyzer import analyze_ternary_complex
 except ImportError:
     print("[Benchmark] Import from package failed, trying direct import...")
@@ -30,7 +31,7 @@ except ImportError:
     plugin_dir = os.path.join(os.path.dirname(__file__), '..', 'gluetk')
     sys.path.insert(0, plugin_dir)
     from ppi_analyzer import analyze_protein_protein_interface, identify_neo_epitope
-    from binding_score import calculate_ternary_score, format_score_report
+    # from binding_score import calculate_ternary_score, format_score_report
     from interaction_analyzer import analyze_ternary_complex
 
 # ========== Benchmark Dataset ==========
