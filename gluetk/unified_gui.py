@@ -161,7 +161,6 @@ T = {
     "btn_clear": {"zh": "清空高亮", "en": "Clear"},
     "grp_analysis": {"zh": "相互作用分析", "en": "Interaction Analysis"},
     "pdb_file": {"zh": "PDB 文件（可选）", "en": "PDB File (optional)"},
-    "between_chains": {"zh": "仅不同链之间", "en": "Only between chains"},
     "output_csv": {"zh": "输出 CSV（可选）", "en": "Output CSV (optional)"},
     "btn_analyze": {"zh": "开始分析", "en": "Start"},
     "btn_render_interactions": {"zh": "一键渲染（分析+美化+PNG）", "en": "Render (Analyze + Beautify + PNG)"},
@@ -224,11 +223,10 @@ class AnalysisWorker(QThread):
     progress = pyqtSignal(str)
     finished = pyqtSignal(list)
     error = pyqtSignal(str)
-    def __init__(self, obj_name: str, pdb_file: str | None, only_between_chains: bool, output_csv: str | None):
+    def __init__(self, obj_name: str, pdb_file: str | None, output_csv: str | None):
         super().__init__()
         self.obj_name = obj_name
         self.pdb_file = pdb_file
-        self.only_between_chains = only_between_chains
         self.output_csv = output_csv
     def run(self):
         try:
@@ -236,9 +234,9 @@ class AnalysisWorker(QThread):
             interactions = analyze_pdb_interactions(
                 obj_name=self.obj_name,
                 pdb_file=self.pdb_file,
-                only_between_chains=self.only_between_chains,
+                only_between_chains=True,  # 默认启用链间分析
                 output_csv=self.output_csv,
-                auto_highlight=False,
+                auto_highlight=True,  # 启用自动高亮
             )
             self.progress.emit(t("log_done").format(n=len(interactions)))
             self.finished.emit(interactions)
@@ -330,8 +328,8 @@ class GlueTKDialog(QDialog):
         
         self.build_ui()
         self.setup_style()
-        # 初始化主题图标 - 使用太阳/月亮表情符号
-        self.theme_toggle_btn.setText("☀️" if not self._dark_mode else "🌙")
+        # 初始化主题图标 - 使用 Unicode 符号
+        self.theme_toggle_btn.setText("☾" if self._dark_mode else "☀")
         # 禁用自动缩放以保持固定高度
         # self.apply_auto_scaling()
 
@@ -424,13 +422,13 @@ class GlueTKDialog(QDialog):
         nav_header = QHBoxLayout()
         nav_header.setSpacing(6)
         
-        # Theme toggle icon (sun/moon) - no border
-        self.theme_toggle_btn = QPushButton("")  # Empty text for theme toggle
-        self.theme_toggle_btn.setObjectName("theme_icon_btn")
+        # Theme toggle button - sun/moon icon
+        self.theme_toggle_btn = QPushButton("")  # Icon set after setup_style
+        self.theme_toggle_btn.setObjectName("theme_toggle_btn")
         self.theme_toggle_btn.setFlat(True)
-        self.theme_toggle_btn.setFixedSize(28, 28)
+        self.theme_toggle_btn.setFixedSize(32, 32)
         self.theme_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.theme_toggle_btn.setToolTip("Toggle theme")
+        self.theme_toggle_btn.setToolTip("Toggle theme (Light/Dark)")
         self.theme_toggle_btn.clicked.connect(self.toggle_theme)
         
         # Modules label (centered, borderless)
@@ -549,6 +547,11 @@ class GlueTKDialog(QDialog):
         
         # 创建内容容器
         content_widget = QWidget()
+        content_widget.setObjectName("scroll_content")
+        self._interaction_scroll_content = content_widget  # 保存引用以便主题切换
+        # 强制设置背景色（macOS 兼容性）
+        bg_color = "#0d1117" if self._dark_mode else "#f8fafc"
+        content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
         main_layout = QVBoxLayout(content_widget)
         main_layout.setSpacing(14)
         main_layout.setContentsMargins(12, 12, 12, 12)
@@ -585,12 +588,7 @@ class GlueTKDialog(QDialog):
         row2.addWidget(self.pdb_browse, 0)
         pp_layout.addLayout(row2)
         
-        # Row 3: Only between chains
-        self.chk_between = QCheckBox(t("between_chains"))
-        self.chk_between.setMinimumHeight(36)
-        pp_layout.addWidget(self.chk_between)
-        
-        # Row 4: Output CSV
+        # Row 3: Output CSV
         row4 = QHBoxLayout()
         row4.addWidget(QLabel("Output CSV (optional):"), 0)
         self.out_csv = QLineEdit()
@@ -609,13 +607,7 @@ class GlueTKDialog(QDialog):
         self.analyze_btn.setMinimumHeight(36)
         self.analyze_btn.clicked.connect(self.start_analysis)
         
-        self.render_interact_btn = QPushButton("Render (Analyze + Beautify + PNG)")
-        self.render_interact_btn.setObjectName("highlight_btn")
-        self.render_interact_btn.setMinimumHeight(36)
-        self.render_interact_btn.clicked.connect(self.render_interactions_beautifully_clicked)
-        
         btn_pp_row.addWidget(self.analyze_btn)
-        btn_pp_row.addWidget(self.render_interact_btn)
         btn_pp_row.addStretch(1)
         pp_layout.addLayout(btn_pp_row)
         
@@ -680,6 +672,29 @@ class GlueTKDialog(QDialog):
         pl_row5.addWidget(self.pl_csv_btn, 0)
         pl_layout.addLayout(pl_row5)
         
+        # Row 6: Plot Style
+        pl_row6 = QHBoxLayout()
+        pl_row6.addWidget(QLabel("🎨 Plot Style:"), 0)
+        self.pl_plot_style = QComboBox()
+        self.pl_plot_style.setMinimumHeight(36)
+        self.pl_plot_style.addItems([
+            "Professional (Default)",
+            "Hand-drawn (xkcd)",
+            "Minimalist",
+            "Publication",
+            "Colorful"
+        ])
+        self.pl_plot_style.setToolTip(
+            "Choose the visual style for network plots:\n"
+            "- Professional: Clean and modern\n"
+            "- Hand-drawn: Casual xkcd style\n"
+            "- Minimalist: Simple and elegant\n"
+            "- Publication: High-quality for papers\n"
+            "- Colorful: Vibrant and eye-catching"
+        )
+        pl_row6.addWidget(self.pl_plot_style, 1)
+        pl_layout.addLayout(pl_row6)
+        
         btn_pl_row = QHBoxLayout()
         self.pl_analyze_btn = QPushButton("Analyze")
         self.pl_analyze_btn.setObjectName("highlight_btn")
@@ -704,101 +719,101 @@ class GlueTKDialog(QDialog):
         
         main_layout.addWidget(grp_pl)
         
-        # ========== 3. Atom Pair Analysis ==========
-        grp_ap = QGroupBox("Atom Pair Analysis (Atomic-Level Precision)")
-        ap_layout = QVBoxLayout(grp_ap)
-        ap_layout.setSpacing(12)
-        ap_layout.setContentsMargins(12, 12, 12, 12)
+        # ========== 3. Atom Pair Analysis ========== (DISABLED - 高级功能,一般用户不需要)
+        # grp_ap = QGroupBox("Atom Pair Analysis (Atomic-Level Precision)")
+        # ap_layout = QVBoxLayout(grp_ap)
+        # ap_layout.setSpacing(12)
+        # ap_layout.setContentsMargins(12, 12, 12, 12)
         
-        # Row 1: Target Object
-        ap_row1 = QHBoxLayout()
-        ap_row1.addWidget(QLabel("Target Object:"), 0)
-        self.ap_obj_combo = QComboBox()
-        self.ap_obj_combo.setMinimumHeight(36)
-        self.ap_refresh_btn = QPushButton(t("refresh"))
-        self.ap_refresh_btn.setObjectName("refresh_btn")
-        self.ap_refresh_btn.setMinimumHeight(36)
-        self.ap_refresh_btn.clicked.connect(self.refresh_objects)
-        ap_row1.addWidget(self.ap_obj_combo, 1)
-        ap_row1.addWidget(self.ap_refresh_btn, 0)
-        ap_layout.addLayout(ap_row1)
-        
-        # Row 2: Atom1 Selection
-        ap_row2 = QHBoxLayout()
-        ap_row2.addWidget(QLabel("Atom1 Selection:"), 0)
-        self.ap_atom1 = QLineEdit()
-        self.ap_atom1.setMinimumHeight(36)
-        self.ap_atom1.setPlaceholderText('e.g.: "resn LIG and name N1"')
-        ap_row2.addWidget(self.ap_atom1, 1)
-        ap_layout.addLayout(ap_row2)
-        
-        # Row 3: Atom2 Selection
-        ap_row3 = QHBoxLayout()
-        ap_row3.addWidget(QLabel("Atom2 Selection:"), 0)
-        self.ap_atom2 = QLineEdit()
-        self.ap_atom2.setMinimumHeight(36)
-        self.ap_atom2.setPlaceholderText('e.g.: "elem O"')
-        ap_row3.addWidget(self.ap_atom2, 1)
-        ap_layout.addLayout(ap_row3)
-        
-        # Row 4: Distance cutoff
-        ap_row4 = QHBoxLayout()
-        ap_row4.addWidget(QLabel("Distance cutoff (Å):"), 0)
-        self.ap_distance = QLineEdit("5.0")
-        self.ap_distance.setMinimumHeight(36)
-        ap_row4.addWidget(self.ap_distance, 1)
-        ap_layout.addLayout(ap_row4)
-        
-        # Row 5: Output CSV
-        ap_row5 = QHBoxLayout()
-        ap_row5.addWidget(QLabel("Output CSV (optional):"), 0)
-        self.ap_csv = QLineEdit()
-        self.ap_csv.setMinimumHeight(36)
-        self.ap_csv.setPlaceholderText("Optional")
-        self.ap_csv_btn = QPushButton(t("browse"))
-        self.ap_csv_btn.setMinimumHeight(36)
-        self.ap_csv_btn.setObjectName("browse_btn")
-        self.ap_csv_btn.clicked.connect(lambda: self._browse_save_file(self.ap_csv, "CSV (*.csv)"))
-        ap_row5.addWidget(self.ap_csv, 1)
-        ap_row5.addWidget(self.ap_csv_btn, 0)
-        ap_layout.addLayout(ap_row5)
-        
-        main_layout.addWidget(grp_ap)
-        
-        # Quick templates - 确保所有按钮在一行显示
-        main_layout.addWidget(QLabel("Quick Templates:"))
-        template_row = QHBoxLayout()
-        templates = [
-            ("N-O H-bonds", '"elem N"', '"elem O"', "3.5"),
-            ("Lig-SER", '"resn LIG"', '"resn SER"', "4.5"),
-            ("S-S", '"name SG"', '"name SG"', "2.5"),
-            ("π-Stacking", '"aromatic"', '"aromatic"', "4.5"),
-            ("π-Cation", '"aromatic"', '"basic"', "4.0"),
-        ]
-        for label, atom1, atom2, dist in templates:
-            btn = QPushButton(label)
-            btn.setObjectName("browse_btn")
-            btn.setMinimumHeight(36)
-            btn.clicked.connect(lambda checked, a1=atom1, a2=atom2, d=dist: self.apply_ap_template(a1, a2, d))
-            template_row.addWidget(btn)
-        template_row.addStretch(1)
-        main_layout.addLayout(template_row)
-        
-        btn_ap_row = QHBoxLayout()
-        self.ap_analyze_btn = QPushButton("Analyze Pairs")
-        self.ap_analyze_btn.setObjectName("highlight_btn")
-        self.ap_analyze_btn.setMinimumHeight(36)
-        self.ap_analyze_btn.clicked.connect(self.run_ap_analysis)
-        
-        self.ap_visualize_btn = QPushButton("Visualize")
-        self.ap_visualize_btn.setObjectName("highlight_btn")
-        self.ap_visualize_btn.setMinimumHeight(36)
-        self.ap_visualize_btn.clicked.connect(self.run_ap_visualize)
-        
-        btn_ap_row.addWidget(self.ap_analyze_btn)
-        btn_ap_row.addWidget(self.ap_visualize_btn)
-        btn_ap_row.addStretch(1)
-        main_layout.addLayout(btn_ap_row)
+        # # Row 1: Target Object
+        # ap_row1 = QHBoxLayout()
+        # ap_row1.addWidget(QLabel("Target Object:"), 0)
+        # self.ap_obj_combo = QComboBox()
+        # self.ap_obj_combo.setMinimumHeight(36)
+        # self.ap_refresh_btn = QPushButton(t("refresh"))
+        # self.ap_refresh_btn.setObjectName("refresh_btn")
+        # self.ap_refresh_btn.setMinimumHeight(36)
+        # self.ap_refresh_btn.clicked.connect(self.refresh_objects)
+        # ap_row1.addWidget(self.ap_obj_combo, 1)
+        # ap_row1.addWidget(self.ap_refresh_btn, 0)
+        # ap_layout.addLayout(ap_row1)
+        # 
+        # # Row 2: Atom1 Selection
+        # ap_row2 = QHBoxLayout()
+        # ap_row2.addWidget(QLabel("Atom1 Selection:"), 0)
+        # self.ap_atom1 = QLineEdit()
+        # self.ap_atom1.setMinimumHeight(36)
+        # self.ap_atom1.setPlaceholderText('e.g.: "resn LIG and name N1"')
+        # ap_row2.addWidget(self.ap_atom1, 1)
+        # ap_layout.addLayout(ap_row2)
+        # 
+        # # Row 3: Atom2 Selection
+        # ap_row3 = QHBoxLayout()
+        # ap_row3.addWidget(QLabel("Atom2 Selection:"), 0)
+        # self.ap_atom2 = QLineEdit()
+        # self.ap_atom2.setMinimumHeight(36)
+        # self.ap_atom2.setPlaceholderText('e.g.: "elem O"')
+        # ap_row3.addWidget(self.ap_atom2, 1)
+        # ap_layout.addLayout(ap_row3)
+        # 
+        # # Row 4: Distance cutoff
+        # ap_row4 = QHBoxLayout()
+        # ap_row4.addWidget(QLabel("Distance cutoff (Å):"), 0)
+        # self.ap_distance = QLineEdit("5.0")
+        # self.ap_distance.setMinimumHeight(36)
+        # ap_row4.addWidget(self.ap_distance, 1)
+        # ap_layout.addLayout(ap_row4)
+        # 
+        # # Row 5: Output CSV
+        # ap_row5 = QHBoxLayout()
+        # ap_row5.addWidget(QLabel("Output CSV (optional):"), 0)
+        # self.ap_csv = QLineEdit()
+        # self.ap_csv.setMinimumHeight(36)
+        # self.ap_csv.setPlaceholderText("Optional")
+        # self.ap_csv_btn = QPushButton(t("browse"))
+        # self.ap_csv_btn.setMinimumHeight(36)
+        # self.ap_csv_btn.setObjectName("browse_btn")
+        # self.ap_csv_btn.clicked.connect(lambda: self._browse_save_file(self.ap_csv, "CSV (*.csv)"))
+        # ap_row5.addWidget(self.ap_csv, 1)
+        # ap_row5.addWidget(self.ap_csv_btn, 0)
+        # ap_layout.addLayout(ap_row5)
+        # 
+        # main_layout.addWidget(grp_ap)
+        # 
+        # # Quick templates - 确保所有按钮在一行显示
+        # main_layout.addWidget(QLabel("Quick Templates:"))
+        # template_row = QHBoxLayout()
+        # templates = [
+        #     ("N-O H-bonds", '"elem N"', '"elem O"', "3.5"),
+        #     ("Lig-SER", '"resn LIG"', '"resn SER"', "4.5"),
+        #     ("S-S", '"name SG"', '"name SG"', "2.5"),
+        #     ("π-Stacking", '"aromatic"', '"aromatic"', "4.5"),
+        #     ("π-Cation", '"aromatic"', '"basic"', "4.0"),
+        # ]
+        # for label, atom1, atom2, dist in templates:
+        #     btn = QPushButton(label)
+        #     btn.setObjectName("browse_btn")
+        #     btn.setMinimumHeight(36)
+        #     btn.clicked.connect(lambda checked, a1=atom1, a2=atom2, d=dist: self.apply_ap_template(a1, a2, d))
+        #     template_row.addWidget(btn)
+        # template_row.addStretch(1)
+        # main_layout.addLayout(template_row)
+        # 
+        # btn_ap_row = QHBoxLayout()
+        # self.ap_analyze_btn = QPushButton("Analyze Pairs")
+        # self.ap_analyze_btn.setObjectName("highlight_btn")
+        # self.ap_analyze_btn.setMinimumHeight(36)
+        # self.ap_analyze_btn.clicked.connect(self.run_ap_analysis)
+        # 
+        # self.ap_visualize_btn = QPushButton("Visualize")
+        # self.ap_visualize_btn.setObjectName("highlight_btn")
+        # self.ap_visualize_btn.setMinimumHeight(36)
+        # self.ap_visualize_btn.clicked.connect(self.run_ap_visualize)
+        # 
+        # btn_ap_row.addWidget(self.ap_analyze_btn)
+        # btn_ap_row.addWidget(self.ap_visualize_btn)
+        # btn_ap_row.addStretch(1)
+        # main_layout.addLayout(btn_ap_row)
         
         main_layout.addStretch(1)
         
@@ -827,7 +842,7 @@ class GlueTKDialog(QDialog):
         self.pdb_browse = QPushButton(t("browse")); self.pdb_browse.setObjectName("browse_btn"); self.pdb_browse.clicked.connect(self.browse_pdb)
         row1.addWidget(self.pdb_path, 1); row1.addWidget(self.pdb_browse)
         form.addRow(QLabel(t("pdb_file")), row1)
-        self.chk_between = QCheckBox(t("between_chains")); form.addRow(QLabel(""), self.chk_between)
+        # Removed checkbox - default to only_between_chains=True
         row2 = QHBoxLayout()
         self.out_csv = QLineEdit()
         self.out_browse = QPushButton(t("browse")); self.out_browse.setObjectName("save_btn"); self.out_browse.clicked.connect(self.browse_out_csv)
@@ -912,6 +927,11 @@ class GlueTKDialog(QDialog):
         
         # 创建内容容器
         content_widget = QWidget()
+        content_widget.setObjectName("scroll_content")
+        self._molecular_glue_scroll_content = content_widget  # 保存引用以便主题切换
+        # 强制设置背景色（macOS 兼容性）
+        bg_color = "#0d1117" if self._dark_mode else "#f8fafc"
+        content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
         main_layout = QVBoxLayout(content_widget)
         main_layout.setSpacing(12) # 恢复间距
         main_layout.setContentsMargins(10, 10, 10, 10) # 恢复边距
@@ -1340,6 +1360,11 @@ class GlueTKDialog(QDialog):
         
         # 创建内容容器
         content_widget = QWidget()
+        content_widget.setObjectName("scroll_content")
+        self._docking_scroll_content = content_widget  # 保存引用以便主题切换
+        # 强制设置背景色（macOS 兼容性）
+        bg_color = "#0d1117" if self._dark_mode else "#f8fafc"
+        content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
         main_layout = QVBoxLayout(content_widget)
         main_layout.setSpacing(12)
         main_layout.setContentsMargins(12, 12, 12, 12)
@@ -1575,6 +1600,14 @@ class GlueTKDialog(QDialog):
         gmotif_pocket_tab = self._create_gmotif_pocket_tab()
         self.pocket_advanced_tabs.addTab(gmotif_pocket_tab, "G-motif")
         
+        # 强制设置所有 tab 的背景色（macOS Qt 兼容性）
+        bg_color = "#161b22" if self._dark_mode else "white"
+        for i in range(self.pocket_advanced_tabs.count()):
+            tab_widget = self.pocket_advanced_tabs.widget(i)
+            if tab_widget:
+                tab_widget.setObjectName("tab_content")
+                tab_widget.setStyleSheet(f"#tab_content {{ background-color: {bg_color}; }}")
+        
         layout.addWidget(self.pocket_advanced_tabs)
         
         return card
@@ -1582,6 +1615,8 @@ class GlueTKDialog(QDialog):
     def _create_pocket_comparison_tab(self) -> QWidget:
         """创建口袋对比标签页"""
         w = QWidget()
+        w.setObjectName("tab_content")
+        w.setAutoFillBackground(True)
         layout = QVBoxLayout(w)
         layout.setSpacing(6)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -1643,6 +1678,8 @@ class GlueTKDialog(QDialog):
     def _create_pocket_interface_tab(self) -> QWidget:
         """创建 PPI 界面口袋标签页"""
         w = QWidget()
+        w.setObjectName("tab_content")
+        w.setAutoFillBackground(True)
         layout = QVBoxLayout(w)
         layout.setSpacing(6)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -1700,6 +1737,8 @@ class GlueTKDialog(QDialog):
     def _create_pocket_correlation_tab(self) -> QWidget:
         """创建口袋-相互作用关联标签页"""
         w = QWidget()
+        w.setObjectName("tab_content")
+        w.setAutoFillBackground(True)
         layout = QVBoxLayout(w)
         layout.setSpacing(6)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -1744,6 +1783,8 @@ class GlueTKDialog(QDialog):
     def _create_gmotif_pocket_tab(self) -> QWidget:
         """创建 G-motif 口袋分析标签页"""
         w = QWidget()
+        w.setObjectName("tab_content")
+        w.setAutoFillBackground(True)
         layout = QVBoxLayout(w)
         layout.setSpacing(6)
         layout.setContentsMargins(6, 6, 6, 6)
@@ -1940,13 +1981,12 @@ class GlueTKDialog(QDialog):
     def start_analysis(self):
         obj = self.obj_combo_analysis.currentText().strip()
         pdb = self.pdb_path.text().strip() or None
-        outcsv = self.out_csv.text().strip() or None
-        only_between = self.chk_between.isChecked()
+        out_csv = self.out_csv.text().strip() or None
         if not obj or obj == t("no_object"):
             QMessageBox.warning(self, t("title"), t("no_object")); return
         self.analyze_btn.setEnabled(False)
         self.progress_bar.setVisible(True); self.progress_bar.setRange(0, 0)
-        self.analysis_thread = AnalysisWorker(obj, pdb, only_between, outcsv)
+        self.analysis_thread = AnalysisWorker(obj, pdb, out_csv)
         self.analysis_thread.progress.connect(self.log)
         self.analysis_thread.error.connect(self.on_error)
         self.analysis_thread.finished.connect(self.on_finished_analysis)
@@ -2805,13 +2845,13 @@ Thank you for your support! 🚀
         if fn:
             line_edit.setText(fn)
 
-    def apply_ap_template(self, atom1, atom2, dist):
-        """应用原子对模板"""
-        self.ap_atom1.setText(atom1)
-        self.ap_atom2.setText(atom2)
-        self.ap_distance.setText(dist)
-        msg = f"已应用模板: {atom1} - {atom2}" if get_lang() == "zh" else f"Template applied: {atom1} - {atom2}"
-        self.log(msg)
+    # def apply_ap_template(self, atom1, atom2, dist):
+    #     """应用原子对模板"""
+    #     self.ap_atom1.setText(atom1)
+    #     self.ap_atom2.setText(atom2)
+    #     self.ap_distance.setText(dist)
+    #     msg = f"已应用模板: {atom1} - {atom2}" if get_lang() == "zh" else f"Template applied: {atom1} - {atom2}"
+    #     self.log(msg)
 
     def _export_pymol_to_pdb_sdf(self, obj_name, ligand_resname=None):
         """
@@ -3021,11 +3061,8 @@ Thank you for your support! 🚀
                 distance_cutoff = 4.5
                 self.log(f"距离参数无效，使用默认值 4.5 Å")
 
-            self.log(f"\n{'开始蛋白-配体分析...' if get_lang() == 'zh' else 'Starting Protein-Ligand analysis...'}")
-            self.log(f"   对象: {obj_name}")
-            self.log(f"   配体: {ligand_resname or ('自动检测' if get_lang() == 'zh' else 'auto-detect')}")
-            self.log(f"   蛋白链: {protein_chains or '自动检测'}")
-            self.log(f"   距离截断: {distance_cutoff} Å")
+            lig_txt = ligand_resname or ('自动' if get_lang() == 'zh' else 'auto')
+            self.log(f"\n▶ {obj_name} | Lig: {lig_txt} | Cutoff: {distance_cutoff}Å")
 
             result = analyze_protein_ligand_interactions(
                 obj_name=obj_name,
@@ -3045,10 +3082,8 @@ Thank you for your support! 🚀
                     # 高级分析模式（如果有定制advanced模块）
                     advanced_results = result.get("advanced_results", {})
                     total = sum(len(v) for v in advanced_results.values())
-                    self.log(f"\n分析完成 ({mode_text}): 总计 {total} 个相互作用")
-                    for itype, interactions in advanced_results.items():
-                        if interactions:
-                            self.log(f"   - {itype}: {len(interactions)}")
+                    details = ', '.join([f"{k}:{len(v)}" for k,v in advanced_results.items() if v])
+                    self.log(f"✓ {total} total ({details})")
                     
                     # 保存结果供可视化使用
                     self.current_pl_result_advanced = advanced_results
@@ -3059,7 +3094,7 @@ Thank you for your support! 🚀
                 else:
                     # 严格标准模式
                     n_interactions = len(result["interactions"])
-                    self.log(f"\n分析完成 ({mode_text}): 发现 {n_interactions} 个关键相互作用")
+                    self.log(f"✓ {n_interactions} key interactions")
                     self.current_pl_result = result
                     if hasattr(self, 'current_pl_result_advanced'):
                         delattr(self, 'current_pl_result_advanced')
@@ -3070,9 +3105,8 @@ Thank you for your support! 🚀
                 if output_csv and os.path.exists(output_csv):
                     try:
                         self.fill_table_from_csv(output_csv)
-                        self.log(f"结果已显示在表格中")
                     except Exception as e:
-                        self.log(f"无法显示表格: {e}")
+                        self.log(f"✗ Table error: {e}")
                 
                 # 显示结果对话框
                 QMessageBox.information(self, "完成" if get_lang() == "zh" else "Done", result_msg)
@@ -3097,14 +3131,14 @@ Thank you for your support! 🚀
             # 获取CSV路径（如果有的话）
             csv_path = self.pl_csv.text().strip() or None
 
-            self.log(f"\n{'生成3D可视化...' if get_lang() == 'zh' else 'Generating 3D visualization...'}")
+            # 静默生成,仅显示结果
             
             # 检查是否使用了高级分析模式
             if hasattr(self, 'current_pl_result_advanced'):
                 # 高级分析模式 - 使用专用的可视化函数
                 from .interaction_analyzer_advanced import visualize_advanced_interactions
                 visualize_advanced_interactions(obj_name=obj_name, csv_path=csv_path, ligand_resname=ligand_resname)
-                self.log("3D可视化完成（高级分析模式）" if get_lang() == "zh" else "3D visualization done (advanced mode)")
+                self.log("✓")
             else:
                 # 标准分析模式
                 from .interaction_analyzer import visualize_protein_ligand_3d
@@ -3123,7 +3157,7 @@ Thank you for your support! 🚀
                 else:
                     self.log("没有可用的相互作用数据" if get_lang() == "zh" else "No interaction data available")
                     return
-                self.log("3D可视化完成" if get_lang() == "zh" else "3D visualization done")
+                self.log("✓")
 
         except Exception as e:
             self.log(f"错误: {e}")
@@ -3144,13 +3178,16 @@ Thank you for your support! 🚀
             if not fn:
                 return
 
-            self.log(f"\n{'生成交互网络图...' if get_lang() == 'zh' else 'Generating network plot...'}")
+            # 静默生成
             
             # 优先使用CSV文件（支持两种模式）
             csv_path = self.pl_csv.text().strip() or None
             ligand_sdf = getattr(self, 'current_pl_ligand_sdf', None)
             obj_name = self.pl_obj_combo.currentText()
             ligand_resname = self.pl_ligand_name.text().strip() or None
+            
+            # 获取绘图样式
+            plot_style = self.pl_plot_style.currentText().split(" (")[0].lower()
             
             if csv_path and os.path.exists(csv_path):
                 output_path = generate_interaction_network_plot(
@@ -3159,7 +3196,8 @@ Thank you for your support! 🚀
                     show_plot=False,
                     ligand_sdf=ligand_sdf,
                     obj_name=obj_name,
-                    ligand_resname=ligand_resname
+                    ligand_resname=ligand_resname,
+                    plot_style=plot_style
                 )
             elif hasattr(self, 'current_pl_result'):
                 output_path = generate_interaction_network_plot(
@@ -3168,16 +3206,17 @@ Thank you for your support! 🚀
                     show_plot=False,
                     ligand_sdf=ligand_sdf,
                     obj_name=obj_name,
-                    ligand_resname=ligand_resname
+                    ligand_resname=ligand_resname,
+                    plot_style=plot_style
                 )
             else:
                 self.log("没有可用的数据生成网络图" if get_lang() == "zh" else "No data for network plot")
                 return
 
             if output_path:
-                self.log(f"网络图已保存: {output_path}")
+                self.log(f"✓ {os.path.basename(output_path)}")
             else:
-                self.log(f"网络图生成失败" if get_lang() == "zh" else "Network plot failed")
+                self.log(f"✗ Failed" if get_lang() == "zh" else "✗ Failed")
 
         except Exception as e:
             self.log(f"错误: {e}")
@@ -3201,7 +3240,7 @@ Thank you for your support! 🚀
             distance_cutoff = float(self.tc_distance.text())
             output_csv = self.tc_csv.text().strip() or None
 
-            self.log(f"\n{'开始三元复合体分析...' if get_lang() == 'zh' else 'Starting ternary complex analysis...'}")
+            self.log(f"\n▶ Ternary: {obj_name}")
 
             result = analyze_ternary_complex(
                 obj_name=obj_name,
@@ -3214,13 +3253,11 @@ Thank you for your support! 🚀
 
             if result:
                 stats = result["bridging_analysis"]
-                self.log(f"分析完成:" if get_lang() == "zh" else "Done:")
-                self.log(f"   蛋白1: {stats['protein1_interactions_count']} 个相互作用")
-                self.log(f"   蛋白2: {stats['protein2_interactions_count']} 个相互作用")
+                self.log(f"✓ P1: {stats['protein1_interactions_count']} | P2: {stats['protein2_interactions_count']}")
                 self.current_tc_result = result
-                QMessageBox.information(self, "完成" if get_lang() == "zh" else "Done",
-                    f"三元复合体分析完成\n\n蛋白1: {stats['protein1_interactions_count']} 个相互作用\n蛋白2: {stats['protein2_interactions_count']} 个相互作用" if get_lang() == "zh" else
-                    f"Ternary analysis done\n\nProtein1: {stats['protein1_interactions_count']}\nProtein2: {stats['protein2_interactions_count']}")
+                QMessageBox.information(self, "✓" if get_lang() == "zh" else "✓",
+                    f"P1: {stats['protein1_interactions_count']}  P2: {stats['protein2_interactions_count']}" if get_lang() == "zh" else
+                    f"P1: {stats['protein1_interactions_count']}  P2: {stats['protein2_interactions_count']}")
             else:
                 self.log("分析失败" if get_lang() == "zh" else "Analysis failed")
 
@@ -3243,7 +3280,7 @@ Thank you for your support! 🚀
             if not fn:
                 return
 
-            self.log(f"\n{'生成三元复合体网络图...' if get_lang() == 'zh' else 'Generating ternary network...'}")
+            # 静默生成
             output_path = generate_interaction_network_plot(
                 interactions_result=self.current_tc_result,
                 output_path=fn,
@@ -3251,7 +3288,7 @@ Thank you for your support! 🚀
             )
 
             if output_path:
-                self.log(f"网络图已保存: {output_path}")
+                self.log(f"✓ {os.path.basename(output_path)}")
 
         except Exception as e:
             self.log(f"错误: {e}")
@@ -3276,7 +3313,7 @@ Thank you for your support! 🚀
                 
             cutoff = float(self.tc_distance.text())
             
-            self.log(f"\n{'分析蛋白-蛋白界面...' if get_lang() == 'zh' else 'Analyzing protein-protein interface...'}")
+            self.log(f"\n▶ PPI: E3[{p1_chains}] - POI[{p2_chains}]")
             
             # 创建界面选择
             interface_sel = f"interface_{obj_name}"
@@ -3297,9 +3334,7 @@ Thank you for your support! 🚀
             n_e3_residues = cmd.count_atoms(f"{interface_sel} and chain {p1_chains} and name CA")
             n_poi_residues = cmd.count_atoms(f"{interface_sel} and chain {p2_chains} and name CA")
             
-            self.log(f"界面分析完成:")
-            self.log(f"  E3侧: {n_e3_residues} 个残基")
-            self.log(f"  POI侧: {n_poi_residues} 个残基")
+            self.log(f"✓ E3: {n_e3_residues} res | POI: {n_poi_residues} res")
             
             # 如果选中了计算ΔΔG
             if hasattr(self, 'tc_include_ddg') and self.tc_include_ddg.isChecked():
@@ -3325,7 +3360,7 @@ Thank you for your support! 🚀
                 QMessageBox.warning(self, t("title"), "请先加载PDB结构" if get_lang() == "zh" else "Load PDB first")
                 return
                 
-            self.log(f"\n{'渲染三元复合体...' if get_lang() == 'zh' else 'Rendering ternary complex...'}")
+            self.log(f"\n▶ Rendering {obj_name}")
             
             # 先运行分析（如果还没有）
             if not hasattr(self, 'current_tc_result'):
@@ -3382,7 +3417,7 @@ Thank you for your support! 🚀
             output_path = os.path.join(os.getcwd(), f"ternary_complex_{obj_name}.png")
             cmd.png(output_path, width=2400, height=2400, dpi=300, ray=1)
             
-            self.log(f"渲染完成，已保存至: {output_path}")
+            self.log(f"✓ {os.path.basename(output_path)}")
             
         except Exception as e:
             self.log(f"错误: {e}")
@@ -3411,9 +3446,7 @@ Thank you for your support! 🚀
             interface_dist = float(self.glue_interface_dist.text())
             ppi_csv = self.glue_ppi_csv.text().strip() or None
             
-            self.log("\nAnalyzing Protein-Protein Interface...")
-            self.log(f"   E3 Chains: {e3_chains}")
-            self.log(f"   Substrate Chains: {sub_chains}")
+            self.log(f"\n▶ PPI: E3{e3_chains} - Sub{sub_chains}")
             
             result = analyze_protein_protein_interface(
                 obj_name=obj_name,
@@ -3481,8 +3514,7 @@ Thank you for your support! 🚀
             neo_dist = float(self.glue_neo_dist.text())
             neo_csv = self.glue_neo_csv.text().strip() or None
             
-            self.log("\nDetecting Neo-Substrate Epitope...")
-            self.log(f"   Glue: {glue_resname}")
+            self.log(f"\n▶ Neo-Epitope: Glue={glue_resname}")
             self.log(f"   E3: {e3_chains} → Substrate: {sub_chains}")
             
             result = identify_neo_epitope(
@@ -3549,7 +3581,7 @@ Thank you for your support! 🚀
             self.log("="*60)
             
             # Step 1: PPI Analysis
-            self.log("\n[1/3] Analyzing Protein-Protein Interface...")
+            self.log("\n▶ [1/3] PPI Analysis...")
             self.run_glue_ppi_analysis()
             
             if not hasattr(self, 'current_glue_ppi_result'):
@@ -3557,7 +3589,7 @@ Thank you for your support! 🚀
                 return
             
             # Step 2: Neo-Epitope Detection
-            self.log("\n[2/3] Detecting Neo-Substrate Epitope...")
+            self.log("\n▶ [2/3] Neo-Epitope...")
             self.run_glue_neo_epitope()
             
             if not hasattr(self, 'current_glue_neo_result'):
@@ -3629,73 +3661,14 @@ Thank you for your support! 🚀
             self.on_error(str(e))
             import traceback; traceback.print_exc()
 
-    def run_ap_analysis(self):
-        """运行原子对分析"""
-        try:
-            from .interaction_analyzer import analyze_atom_pair_interactions
-
-            obj_name = self.ap_obj_combo.currentText()
-            if obj_name == t("no_object"):
-                QMessageBox.warning(self, t("title"), "请先加载PDB结构" if get_lang() == "zh" else "Load PDB first")
-                return
-
-            atom1_sel = self.ap_atom1.text().strip()
-            atom2_sel = self.ap_atom2.text().strip()
-
-            if not atom1_sel or not atom2_sel:
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
-                    "请输入原子选择条件" if get_lang() == "zh" else "Enter atom selections")
-                return
-
-            distance_cutoff = float(self.ap_distance.text())
-            output_csv = self.ap_csv.text().strip() or None
-
-            self.log(f"\n{'开始原子对分析...' if get_lang() == 'zh' else 'Starting atom pair analysis...'}")
-            self.log(f"   原子1: {atom1_sel}")
-            self.log(f"   原子2: {atom2_sel}")
-
-            result = analyze_atom_pair_interactions(
-                obj_name=obj_name,
-                atom1_selection=atom1_sel,
-                atom2_selection=atom2_sel,
-                distance_cutoff=distance_cutoff,
-                output_csv=output_csv
-            )
-
-            if result:
-                msg = f"分析完成: 发现 {len(result)} 个原子对相互作用" if get_lang() == "zh" else f"Done: {len(result)} atom pairs"
-                self.log(msg)
-                self.current_ap_result = result
-                QMessageBox.information(self, "完成" if get_lang() == "zh" else "Done",
-                    f"发现 {len(result)} 个原子对相互作用" if get_lang() == "zh" else f"Found {len(result)} atom pairs")
-            else:
-                self.log("未找到符合条件的原子对" if get_lang() == "zh" else "No atom pairs found")
-
-        except Exception as e:
-            self.log(f"错误: {e}")
-            import traceback; traceback.print_exc()
-
-    def run_ap_visualize(self):
-        """可视化原子对"""
-        try:
-            from .interaction_analyzer import visualize_atom_pairs
-
-            if not hasattr(self, 'current_ap_result'):
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
-                    "请先运行原子对分析" if get_lang() == "zh" else "Run atom pair analysis first")
-                return
-
-            obj_name = self.ap_obj_combo.currentText()
-
-            self.log(f"\n{'可视化原子对...' if get_lang() == 'zh' else 'Visualizing atom pairs...'}")
-            visualize_atom_pairs(
-                obj_name=obj_name,
-                interactions_result=self.current_ap_result
-            )
-            self.log("可视化完成" if get_lang() == "zh" else "Visualization done")
-
-        except Exception as e:
-            self.log(f"错误: {e}")
+    # DISABLED - Atom Pair Analysis functions (not needed for general users)
+    # def run_ap_analysis(self):
+    #     """运行原子对分析"""
+    #     pass
+    # 
+    # def run_ap_visualize(self):
+    #     """可视化原子对"""
+    #     pass
 
     # --- 杂项 ---
     def render_interactions_beautifully_clicked(self):
@@ -3710,9 +3683,9 @@ Thank you for your support! 🚀
             has_csv = csv_path and os.path.exists(csv_path)
 
             if not has_csv or not self._interactions:
-                self.log("开始相互作用分析...")
+                self.log("▶ Analyzing interactions...")
                 pdb = self.pdb_path.text().strip() or None
-                only_between = self.chk_between.isChecked()
+                only_between = True  # 默认只分析链间相互作用
 
                 # 直接调用分析函数（不使用线程，避免UI卡顿）
                 interactions = analyze_pdb_interactions(
@@ -3726,7 +3699,7 @@ Thank you for your support! 🚀
                 self._interactions = interactions
                 if csv_path:
                     has_csv = True
-                    self.log(f"分析完成，发现 {len(interactions)} 个相互作用")
+                    self.log(f"✓ {len(interactions)} interactions")
                     # 填充表格
                     self.fill_table_from_interactions(interactions)
                 else:
@@ -3745,23 +3718,23 @@ Thank you for your support! 🚀
                                 inter["Distance"], inter["Interaction"]
                             ])
                     has_csv = True
-                    self.log(f"分析完成，发现 {len(interactions)} 个相互作用（临时CSV）")
+                    self.log(f"✓ {len(interactions)} interactions")
                     self.fill_table_from_csv(csv_path)
 
             # 步骤2: 先高亮相互作用残基
             if has_csv:
-                self.log("高亮相互作用残基...")
+                # 静默高亮
                 try:
                     highlight_csv_residues(csv_path, obj=obj, show_labels=1,
                                          stick_by_element=1, clear_old=1)
-                    self.log("残基高亮完成")
+                    # 静默完成
                 except Exception as e:
                     self.log(f"高亮失败: {e}")
 
             # 步骤3: 美化渲染（不再重复高亮）
-            self.log("应用美化渲染...")
+            # 静默渲染
             render_interactions_beautifully(obj, csv_path=None)  # 不传csv_path，避免重复高亮
-            self.log("渲染完成")
+            self.log("✓ Done")
 
             # 步骤4: 导出 PNG
             self._export_png_for_object(obj)
@@ -4609,14 +4582,28 @@ Heatmap saved successfully!
         except Exception:
             pass
         self.setup_style()
-        # Update theme icon (sun/moon)
-        self.theme_toggle_btn.setText("🌙" if self._dark_mode else "☀️")
+        # Update theme icon
+        self.theme_toggle_btn.setText("☾" if self._dark_mode else "☀")
         # Update Modules button color (easter egg effect)
         self.update_modules_button_style()
         # Update separator color based on theme
         if hasattr(self, 'nav_separator'):
             sep_color = "#30363d" if self._dark_mode else "#e2e8f0"
             self.nav_separator.setStyleSheet(f"background-color: {sep_color}; margin: 8px 0;")
+        # Update tab widget backgrounds (macOS compatibility)
+        if hasattr(self, 'pocket_advanced_tabs'):
+            bg_color = "#161b22" if self._dark_mode else "white"
+            for i in range(self.pocket_advanced_tabs.count()):
+                tab_widget = self.pocket_advanced_tabs.widget(i)
+                if tab_widget:
+                    tab_widget.setStyleSheet(f"#tab_content {{ background-color: {bg_color}; }}")
+        # Update scroll area content backgrounds
+        scroll_bg = "#0d1117" if self._dark_mode else "#f8fafc"
+        for attr in ('_interaction_scroll_content', '_molecular_glue_scroll_content', '_docking_scroll_content'):
+            if hasattr(self, attr):
+                widget = getattr(self, attr)
+                if widget:
+                    widget.setStyleSheet(f"#scroll_content {{ background-color: {scroll_bg}; }}")
         # 主题变化后重新应用自动缩放，以确保字体与行距匹配
         self.apply_auto_scaling()
         try:
@@ -4780,6 +4767,90 @@ QComboBox::down-arrow {
     margin-right: 6px;
 }
 
+/* 数值输入框 */
+QSpinBox {
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 9px 12px;
+    background-color: #0d1117;
+    color: #e6edf3;
+    font-size: 12px;
+    selection-background-color: #3b82f6;
+}
+QSpinBox:focus {
+    border: 2px solid #58a6ff;
+    background-color: #161b22;
+}
+QSpinBox:hover {
+    border-color: #58a6ff;
+    background-color: #161b22;
+}
+QSpinBox::up-button, QSpinBox::down-button {
+    background-color: #21262d;
+    border: none;
+    width: 16px;
+    border-radius: 3px;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: #30363d;
+}
+QSpinBox::up-arrow {
+    image: none;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-bottom: 4px solid #8b949e;
+    margin-top: 2px;
+}
+QSpinBox::down-arrow {
+    image: none;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-top: 4px solid #8b949e;
+    margin-bottom: 2px;
+}
+
+/* 普通按钮 - 更现代的样式 */
+QPushButton {
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    padding: 9px 12px;
+    background-color: #0d1117;
+    color: #e6edf3;
+    font-size: 12px;
+    selection-background-color: #3b82f6;
+}
+QSpinBox:focus {
+    border: 2px solid #58a6ff;
+    background-color: #161b22;
+}
+QSpinBox:hover {
+    border-color: #58a6ff;
+    background-color: #161b22;
+}
+QSpinBox::up-button, QSpinBox::down-button {
+    background-color: #21262d;
+    border: none;
+    width: 16px;
+    border-radius: 3px;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: #30363d;
+}
+QSpinBox::up-arrow {
+    image: none;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-bottom: 4px solid #8b949e;
+    margin-top: 2px;
+}
+QSpinBox::down-arrow {
+    image: none;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-top: 4px solid #8b949e;
+    margin-bottom: 2px;
+}
+
 /* 普通按钮 - 更现代的样式 */
 QPushButton {
     border: 1px solid #30363d;
@@ -4899,21 +4970,21 @@ QPushButton#refresh_btn:hover {
 }
 
 /* 主题切换按钮 */
-QPushButton#theme_toggle_btn_small {
+QPushButton#theme_toggle_btn {
     background-color: #21262d;
-    color: #8b949e;
+    color: #f39c12;
     border: 1px solid #30363d;
     border-radius: 6px;
     padding: 4px;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: normal;
 }
-QPushButton#theme_toggle_btn_small:hover {
+QPushButton#theme_toggle_btn:hover {
     background-color: #30363d;
     border-color: #58a6ff;
-    color: #c9d1d9;
+    color: #f1c40f;
 }
-QPushButton#theme_toggle_btn_small:pressed {
+QPushButton#theme_toggle_btn:pressed {
     background-color: #161b22;
 }
 
@@ -5090,6 +5161,39 @@ QProgressBar::chunk {
     border-radius: 4px;
 }
 
+/* 标签页 - QTabWidget */
+QTabWidget::pane {
+    border: 1px solid #30363d;
+    border-radius: 6px;
+    background-color: #161b22;
+    top: -1px;
+}
+QTabWidget > QWidget {
+    background-color: #161b22;
+}
+QTabBar::tab {
+    background-color: #0d1117;
+    color: #8b949e;
+    border: 1px solid #30363d;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    padding: 8px 16px;
+    margin-right: 2px;
+    font-size: 11px;
+    font-weight: 500;
+}
+QTabBar::tab:selected {
+    background-color: #161b22;
+    color: #e6edf3;
+    font-weight: 600;
+    border-bottom: 2px solid #3b82f6;
+}
+QTabBar::tab:hover {
+    background-color: #21262d;
+    color: #c9d1d9;
+}
+
 /* 滚动条 - 更精致 */
 QScrollBar:vertical {
     border: none;
@@ -5226,6 +5330,90 @@ QComboBox::down-arrow {
     margin-right: 6px;
 }
 
+/* 数值输入框 */
+QSpinBox {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 9px 12px;
+    background-color: white;
+    color: #1e293b;
+    font-size: 12px;
+    selection-background-color: #3b82f6;
+}
+QSpinBox:focus {
+    border: 2px solid #3b82f6;
+    background-color: white;
+}
+QSpinBox:hover {
+    border-color: #3b82f6;
+    background-color: white;
+}
+QSpinBox::up-button, QSpinBox::down-button {
+    background-color: #f1f5f9;
+    border: none;
+    width: 16px;
+    border-radius: 3px;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: #e2e8f0;
+}
+QSpinBox::up-arrow {
+    image: none;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-bottom: 4px solid #64748b;
+    margin-top: 2px;
+}
+QSpinBox::down-arrow {
+    image: none;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-top: 4px solid #64748b;
+    margin-bottom: 2px;
+}
+
+/* 普通按钮 - 更现代的样式 */
+QPushButton {
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 9px 12px;
+    background-color: white;
+    color: #1e293b;
+    font-size: 12px;
+    selection-background-color: #3b82f6;
+}
+QSpinBox:focus {
+    border: 2px solid #3b82f6;
+    background-color: white;
+}
+QSpinBox:hover {
+    border-color: #3b82f6;
+    background-color: white;
+}
+QSpinBox::up-button, QSpinBox::down-button {
+    background-color: #f1f5f9;
+    border: none;
+    width: 16px;
+    border-radius: 3px;
+}
+QSpinBox::up-button:hover, QSpinBox::down-button:hover {
+    background-color: #e2e8f0;
+}
+QSpinBox::up-arrow {
+    image: none;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-bottom: 4px solid #64748b;
+    margin-top: 2px;
+}
+QSpinBox::down-arrow {
+    image: none;
+    border-left: 3px solid transparent;
+    border-right: 3px solid transparent;
+    border-top: 4px solid #64748b;
+    margin-bottom: 2px;
+}
+
 /* 普通按钮 - 更现代的样式 */
 QPushButton {
     border: 1px solid #cbd5e1;
@@ -5345,21 +5533,21 @@ QPushButton#refresh_btn:hover {
 }
 
 /* 主题切换按钮 */
-QPushButton#theme_toggle_btn_small {
+QPushButton#theme_toggle_btn {
     background-color: white;
-    color: #64748b;
+    color: #f39c12;
     border: 1px solid #e2e8f0;
     border-radius: 6px;
     padding: 4px;
-    font-size: 16px;
+    font-size: 18px;
     font-weight: normal;
 }
-QPushButton#theme_toggle_btn_small:hover {
+QPushButton#theme_toggle_btn:hover {
     background-color: #f1f5f9;
     border-color: #3b82f6;
-    color: #1e293b;
+    color: #f1c40f;
 }
-QPushButton#theme_toggle_btn_small:pressed {
+QPushButton#theme_toggle_btn:pressed {
     background-color: #e2e8f0;
 }
 
@@ -5530,6 +5718,39 @@ QProgressBar::chunk {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
                                 stop:0 #3b82f6, stop:1 #2563eb);
     border-radius: 4px;
+}
+
+/* 标签页 - QTabWidget */
+QTabWidget::pane {
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    background-color: white;
+    top: -1px;
+}
+QTabWidget > QWidget {
+    background-color: white;
+}
+QTabBar::tab {
+    background-color: #f8fafc;
+    color: #64748b;
+    border: 1px solid #e2e8f0;
+    border-bottom: none;
+    border-top-left-radius: 6px;
+    border-top-right-radius: 6px;
+    padding: 8px 16px;
+    margin-right: 2px;
+    font-size: 11px;
+    font-weight: 500;
+}
+QTabBar::tab:selected {
+    background-color: white;
+    color: #1e293b;
+    font-weight: 600;
+    border-bottom: 2px solid #3b82f6;
+}
+QTabBar::tab:hover {
+    background-color: #f1f5f9;
+    color: #475569;
 }
 
 /* 滚动条 - 更精致 */

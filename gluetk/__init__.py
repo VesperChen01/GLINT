@@ -57,6 +57,8 @@ def _register_commands():
             analyze_protein_protein_interface,
             identify_neo_epitope,
             calculate_interface_bsa,
+            visualize_ppi_interface,
+            visualize_neo_epitope,
             ppi_analyze,
             neo_epitope_find
         )
@@ -106,8 +108,8 @@ def _register_commands():
             _vina_available = False
     except Exception as e:
         _info(
-            f"⚠️ 无法导入命令模块：{e}\n请确认 highlight_residues.py 与 interaction_analyzer.py 在插件目录。",
-            f"⚠️ Failed to import command modules: {e}\nEnsure highlight_residues.py and interaction_analyzer.py exist."
+            f"⚠️ 插件加载失败：{e}",
+            f"⚠️ Plugin load failed: {e}"
         )
         return
     
@@ -129,6 +131,8 @@ def _register_commands():
         cmd.extend("analyze_protein_protein_interface", analyze_protein_protein_interface)
         cmd.extend("identify_neo_epitope", identify_neo_epitope)
         cmd.extend("calculate_interface_bsa", calculate_interface_bsa)
+        cmd.extend("visualize_ppi_interface", visualize_ppi_interface)
+        cmd.extend("visualize_neo_epitope", visualize_neo_epitope)
         cmd.extend("find_crbn_g_motif", find_crbn_g_motif)
         cmd.extend("analyze_g_motif_glue_binding", analyze_g_motif_glue_binding)
         cmd.extend("validate_crbn_hbonds", validate_crbn_hbonds)
@@ -164,8 +168,8 @@ def _register_commands():
             cmd.extend("compare_scoring_methods", compare_scoring_methods)
             cmd.extend("pocket_based_docking", pocket_based_docking)
         
-        _info("✅ 已注册命令：highlight_csv_residues / analyze_pdb_interactions / analyze_protein_ligand_interactions 等",
-              "✅ Commands registered: highlight_csv_residues / analyze_pdb_interactions / analyze_protein_ligand_interactions etc.")
+        # 静默注册,避免终端输出过多
+        # _info("✅ 已注册命令", "✅ Commands registered")
     except Exception as e:
         _info(f"⚠️ 无法注册到 PyMOL 命令空间：{e}",
               f"⚠️ Failed to register commands to PyMOL: {e}")
@@ -176,7 +180,7 @@ _dlg = None
 def gluetk_gui():
     """启动 GlueTK 统一 GUI 窗口（非模态，不阻塞事件循环）"""
     global _dlg
-    _info("[GlueTK] 正在启动统一GUI界面...", "[GlueTK] Launching unified GUI...")
+    # 静默启动,仅在失败时输出
     try:
         from .unified_gui import GlueTKDialog
     except Exception as e:
@@ -199,7 +203,7 @@ def gluetk_gui():
         _dlg.show()
         _dlg.raise_()
         _dlg.activateWindow()
-        _info("[GlueTK] GUI 已打开（非模态）", "[GlueTK] GUI opened (non-modal)")
+        # GUI成功打开,无需提示
     except Exception as e:
         _info(f"GUI 启动失败: {e}", f"GUI start failed: {e}")
         import traceback; traceback.print_exc()
@@ -217,7 +221,7 @@ def _print_cli_fallback():
 
 # ---- 插件入口 ----
 def __init_plugin__(app=None):
-    _info("🧬 GlueTK 插件已加载", "🧬 GlueTK plugin loaded")
+    # 静默加载插件
     _register_commands()
     
     # Register GUI commands
@@ -230,38 +234,17 @@ def __init_plugin__(app=None):
     try:
         from pymol.plugins import addmenuitemqt
         addmenuitemqt('GlueTK - Molecular Glue Analyzer', gluetk_gui)
-        _info("✅ GUI 菜单已启用：Plugins → GlueTK", "✅ GUI menu enabled: Plugins → GlueTK")
+        # 菜单已启用,无需提示
     except Exception as e:
         _info(f"⚠️ 无法添加 GUI 菜单（命令行仍可用）：{e}",
               f"⚠️ Unable to add GUI menu (CLI still available): {e}")
 
-    print("📋 Commands:")
-    print("")
-    print("  🔬 Interaction Analysis:")
-    print("    • analyze_pdb_interactions - Analyze interactions in a PDB structure")
-    print("    • analyze_protein_ligand_interactions - Analyze protein-ligand interactions")
-    print("    • analyze_ternary_complex - Analyze ternary complex")
-    print("")
-    print("  ✨ Molecular Glue Analysis:")
-    print("    • ppi_analyze - Analyze protein-protein interface (PPI)")
-    print("    • neo_epitope_find - Identify neo-substrate epitope")
-    print("    • analyze_g_motif_glue_binding - Validate G-motif as glue substrate")
-    print("    • find_crbn_g_motif - Find CRBN G-motif/G-loop")
-    print("")
-    print("  🔍 Pocket Detection & Docking:")
-    print("    • detect_pockets - Detect and analyze protein pockets")
-    print("    • compare_pockets - Compare pockets between structures")
-    print("    • visualize_pockets - Visualize pockets with color-coded properties")
-    print("    • analyze_pockets_in_ppi_interface - Analyze pockets at PPI interface")
-    print("    • comprehensive_glue_pocket_analysis - One-click comprehensive analysis")
-    if _vina_available:
-        print("    • pocket_based_docking - Auto-detect pockets and dock ligand")
-    print("")
-    print("  🎨 Visualization:")
-    print("    • highlight_csv_residues - Highlight residue interactions from CSV")
-    print("    • visualize_protein_ligand_3d - 3D visualization of interactions")
-    print("")
-    print("  🖥️  GUI:")
-    print("    • gluetk_gui - Open GlueTK unified analysis GUI")
-    print("")
-    print("💡 Use help(command_name) for details")
+    # 简洁的欢迎信息
+    print("\n🧬 GlueTK - Molecular Glue Analyzer v1.0.0")
+    print("┌" + "─" * 48 + "┐")
+    print("│  Quick Start:                                   │")
+    print("│    • gluetk_gui            - Launch GUI          │")
+    print("│    • help(gluetk_gui)       - Show help         │")
+    print("│    • Plugins → GlueTK       - Menu access       │")
+    print("└" + "─" * 48 + "┘")
+    print("📚 Full command list: help('gluetk') or see README.md\n")

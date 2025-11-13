@@ -60,7 +60,10 @@ def analyze_protein_protein_interface(obj_name=None,
                                       protein2_chains=None,
                                       interface_distance=4.5,
                                       output_csv=None,
-                                      pdb_file=None):
+                                      pdb_file=None,
+                                      visualize=True,
+                                      protein1_color="cyan",
+                                      protein2_color="magenta"):
     """
     检测两个蛋白质之间的直接相互作用（分子胶机制的核心特征）
     
@@ -75,6 +78,9 @@ def analyze_protein_protein_interface(obj_name=None,
         interface_distance: 界面残基判定距离（埃）
         output_csv: 输出CSV文件路径
         pdb_file: PDB文件路径（可选）
+        visualize: 是否在PyMOL中可视化界面（默认True）
+        protein1_color: 蛋白质1的显示颜色（默认cyan）
+        protein2_color: 蛋白质2的显示颜色（默认magenta）
     
     返回:
         dict: {
@@ -211,6 +217,13 @@ def analyze_protein_protein_interface(obj_name=None,
         print(f"  {inter_type}: {count}")
     print("=" * 60)
     
+    # 在PyMOL中可视化界面（如果启用）
+    if visualize and obj_name and obj_name in cmd.get_object_list():
+        try:
+            visualize_ppi_interface(obj_name, result, protein1_color, protein2_color)
+        except Exception as e:
+            print(f"[PPI] 可视化失败: {e}")
+    
     return result
 
 
@@ -342,6 +355,154 @@ def _export_ppi_csv(csv_path, interface_residues, interactions, bsa, strength):
         print(f"[PPI] Failed to save CSV: {e}")
 
 
+def visualize_ppi_interface(obj_name, ppi_result, 
+                            protein1_color="cyan", 
+                            protein2_color="magenta",
+                            show_labels=True,
+                            clear_old=True):
+    """
+    在PyMOL中可视化蛋白-蛋白界面
+    
+    参数:
+        obj_name: PyMOL对象名称
+        ppi_result: analyze_protein_protein_interface()的返回结果
+        protein1_color: 蛋白质1界面残基的颜色
+        protein2_color: 蛋白质2界面残基的颜色
+        show_labels: 是否显示残基标签
+        clear_old: 是否清除旧的高亮
+    """
+    # 三字母到单字母氨基酸代码转换
+    AA_3TO1 = {
+        'ALA': 'A', 'CYS': 'C', 'ASP': 'D', 'GLU': 'E', 'PHE': 'F',
+        'GLY': 'G', 'HIS': 'H', 'ILE': 'I', 'LYS': 'K', 'LEU': 'L',
+        'MET': 'M', 'ASN': 'N', 'PRO': 'P', 'GLN': 'Q', 'ARG': 'R',
+        'SER': 'S', 'THR': 'T', 'VAL': 'V', 'TRP': 'W', 'TYR': 'Y'
+    }
+    
+    # 定义多种颜色用于不同的chain
+    CHAIN_COLORS = [
+        "cyan", "magenta", "yellow", "salmon", "lime", 
+        "orange", "purple", "green", "blue", "red",
+        "pink", "brown", "gray", "lightblue", "lightorange"
+    ]
+    
+    if not ppi_result or "interface_residues" not in ppi_result:
+        print("[visualize_ppi_interface] Invalid PPI result")
+        return
+    
+    if obj_name not in cmd.get_object_list():
+        print(f"[visualize_ppi_interface] Object '{obj_name}' not found")
+        return
+    
+    # 清除旧的可视化对象
+    if clear_old:
+        for name in cmd.get_names("objects"):
+            if name.startswith("ppi_"):
+                cmd.delete(name)
+    
+    interface_residues = ppi_result["interface_residues"]
+    protein1_chains = ppi_result.get("protein1_chains", [])
+    protein2_chains = ppi_result.get("protein2_chains", [])
+    all_chains = list(set(protein1_chains + protein2_chains))
+    
+    if not interface_residues:
+        print("[visualize_ppi_interface] No interface residues to visualize")
+        return
+    
+    print(f"[visualize_ppi_interface] Visualizing {len(interface_residues)} interface residue pairs...")
+    
+    # 为每条链分配颜色
+    chain_color_map = {}
+    for idx, chain in enumerate(all_chains):
+        chain_color_map[chain] = CHAIN_COLORS[idx % len(CHAIN_COLORS)]
+    
+    # 收集所有界面残基(去重),按chain分组
+    interface_by_chain = {}  # {chain: {(resid, resname): True}}
+    
+    for res in interface_residues:
+        chain1, resid1, resname1 = res["chain1"], res["resid1"], res["resname1"]
+        chain2, resid2, resname2 = res["chain2"], res["resid2"], res["resname2"]
+        
+        if chain1 not in interface_by_chain:
+            interface_by_chain[chain1] = {}
+        interface_by_chain[chain1][(resid1, resname1)] = True
+        
+        if chain2 not in interface_by_chain:
+            interface_by_chain[chain2] = {}
+        interface_by_chain[chain2][(resid2, resname2)] = True
+    
+    # 可视化每条链的界面残基
+    visualized_selections = []
+    global_idx = 0
+    
+    for chain in sorted(interface_by_chain.keys()):
+        residues = interface_by_chain[chain]
+        chain_color = chain_color_map[chain]
+        
+        print(f"[visualize_ppi_interface] Chain {chain}: {len(residues)} unique interface residues (color: {chain_color})")
+        
+        for (resid, resname) in sorted(residues.keys()):
+            global_idx += 1
+            sel_name = f"ppi_{chain}_{resid}"
+            sel_expr = f"{obj_name} and chain {chain} and resi {resid}"
+            
+            # 创建选择并显示为sticks
+            cmd.select(sel_name, sel_expr)
+            cmd.show("sticks", sel_name)
+            cmd.color(chain_color, sel_name)
+            visualized_selections.append(sel_name)
+            
+            # 添加标签(使用单字母大写氨基酸代码)
+            if show_labels:
+                label_name = f"ppi_label_{chain}_{resid}"
+                ca_sel = f"{sel_expr} and name CA"
+                try:
+                    coords = cmd.get_atom_coords(ca_sel)
+                    if coords:
+                        # 转换为单字母大写代码
+                        aa_code = AA_3TO1.get(resname.upper(), resname[0].upper())
+                        label_text = f"{aa_code}{resid}"
+                        
+                        cmd.pseudoatom(label_name, pos=coords, label=label_text)
+                        cmd.set("label_size", 16, label_name)
+                        cmd.set("label_color", chain_color, label_name)
+                except:
+                    pass
+    
+    # 绘制界面接触线(距离线) - 只显示前20条,避免过于拥挤
+    for idx, res in enumerate(interface_residues[:20], start=1):
+        distance_name = f"ppi_dist{idx}"
+        sel1 = f"{obj_name} and chain {res['chain1']} and resi {res['resid1']} and name CA"
+        sel2 = f"{obj_name} and chain {res['chain2']} and resi {res['resid2']} and name CA"
+        
+        try:
+            cmd.distance(distance_name, sel1, sel2)
+            cmd.set("dash_color", "yellow", distance_name)
+            cmd.set("dash_width", 2.0, distance_name)
+            cmd.hide("labels", distance_name)  # 隐藏距离标签
+        except:
+            pass
+    
+    # 显示整体蛋白链(cartoon),按chain着色
+    for chain in all_chains:
+        chain_color = chain_color_map[chain]
+        cmd.show("cartoon", f"{obj_name} and chain {chain}")
+        cmd.color(chain_color, f"{obj_name} and chain {chain}")
+    
+    # 缩放到界面区域
+    if visualized_selections:
+        cmd.zoom(" or ".join(visualized_selections), buffer=8.0, complete=1)
+    
+    # 刷新视图
+    cmd.refresh()
+    cmd.rebuild()
+    
+    total_residues = sum(len(residues) for residues in interface_by_chain.values())
+    print(f"[visualize_ppi_interface] ✅ Visualized {total_residues} unique interface residues")
+    for chain, color in chain_color_map.items():
+        print(f"  Chain {chain}: {color}")
+
+
 def calculate_interface_bsa(obj_name, chain1, chain2):
     """
     计算两个链之间的埋藏表面积 (Buried Surface Area)
@@ -384,7 +545,10 @@ def identify_neo_epitope(obj_name=None,
                         glue_resname=None,
                         distance_threshold=5.0,
                         output_csv=None,
-                        pdb_file=None):
+                        pdb_file=None,
+                        visualize=True,
+                        neo_color="yellow",
+                        glue_color="orange"):
     """
     识别分子胶诱导的新表位 (Neo-Substrate Epitope)
     
@@ -405,6 +569,9 @@ def identify_neo_epitope(obj_name=None,
         distance_threshold: 接触距离阈值（埃）
         output_csv: 输出CSV文件路径
         pdb_file: PDB文件路径（可选）
+        visualize: 是否在PyMOL中可视化（默认True）
+        neo_color: Neo-表位残基的颜色（默认yellow）
+        glue_color: 分子胶的颜色（默认orange）
     
     返回:
         dict: {
@@ -559,6 +726,13 @@ def identify_neo_epitope(obj_name=None,
             print(f"  {res['chain']}:{res['resname']} {res['resid']} (Glue: {res['distance_to_glue']}Å, E3: {res['distance_to_e3']}Å)")
     print("=" * 60)
     
+    # 在PyMOL中可视化Neo-表位（如果启用）
+    if visualize and obj_name and obj_name in cmd.get_object_list():
+        try:
+            visualize_neo_epitope(obj_name, result, neo_color, glue_color)
+        except Exception as e:
+            print(f"[Neo-Epitope] 可视化失败: {e}")
+    
     return result
 
 
@@ -589,6 +763,136 @@ def _export_neo_epitope_csv(csv_path, neo_residues, bridging_atoms_count, is_glu
         print(f"[Neo-Epitope] Results saved to: {csv_path}")
     except Exception as e:
         print(f"[Neo-Epitope] Failed to save CSV: {e}")
+
+
+def visualize_neo_epitope(obj_name, neo_result, neo_color="yellow", glue_color="orange", clear_old=True):
+    """
+    在PyMOL中可视化Neo-表位分析结果
+    
+    参数:
+        obj_name: PyMOL对象名称
+        neo_result: identify_neo_epitope()的返回结果
+        neo_color: Neo-表位残基的颜色
+        glue_color: 分子胶的颜色
+        clear_old: 是否清除旧的高亮
+    """
+    # 三字母到单字母氨基酸代码转换
+    AA_3TO1 = {
+        'ALA': 'A', 'CYS': 'C', 'ASP': 'D', 'GLU': 'E', 'PHE': 'F',
+        'GLY': 'G', 'HIS': 'H', 'ILE': 'I', 'LYS': 'K', 'LEU': 'L',
+        'MET': 'M', 'ASN': 'N', 'PRO': 'P', 'GLN': 'Q', 'ARG': 'R',
+        'SER': 'S', 'THR': 'T', 'VAL': 'V', 'TRP': 'W', 'TYR': 'Y'
+    }
+    
+    # 定义多种颜色用于不同的chain
+    CHAIN_COLORS = [
+        "cyan", "magenta", "yellow", "salmon", "lime", 
+        "orange", "purple", "green", "blue", "red",
+        "pink", "brown", "gray", "lightblue", "lightorange"
+    ]
+    
+    if not neo_result or "neo_substrate_residues" not in neo_result:
+        print("[visualize_neo_epitope] Invalid neo-epitope result")
+        return
+    
+    if obj_name not in cmd.get_object_list():
+        print(f"[visualize_neo_epitope] Object '{obj_name}' not found")
+        return
+    
+    # 清除旧的可视化对象
+    if clear_old:
+        for name in cmd.get_names("objects"):
+            if name.startswith("neo_"):
+                cmd.delete(name)
+    
+    neo_residues = neo_result["neo_substrate_residues"]
+    glue_resname = neo_result.get("glue_resname", "")
+    e3_chains = neo_result.get("e3_ligase_chains", [])
+    substrate_chains = neo_result.get("substrate_chains", [])
+    all_chains = list(set(e3_chains + substrate_chains))
+    
+    # 为每条链分配颜色
+    chain_color_map = {}
+    for idx, chain in enumerate(all_chains):
+        chain_color_map[chain] = CHAIN_COLORS[idx % len(CHAIN_COLORS)]
+    
+    if not neo_residues:
+        print("[visualize_neo_epitope] No neo-epitope residues to visualize")
+        return
+    
+    print(f"[visualize_neo_epitope] Visualizing {len(neo_residues)} neo-epitope residues...")
+    
+    # 按chain分组Neo-表位残基(去重)
+    neo_by_chain = {}  # {chain: {resid: resname}}
+    for res in neo_residues:
+        chain = res['chain']
+        resid = res['resid']
+        resname = res['resname']
+        
+        if chain not in neo_by_chain:
+            neo_by_chain[chain] = {}
+        neo_by_chain[chain][resid] = resname
+    
+    # 可视化Neo-表位残基
+    visualized_selections = []
+    for chain in sorted(neo_by_chain.keys()):
+        residues = neo_by_chain[chain]
+        # Neo-表位使用指定颜色,不按chain区分
+        
+        for resid, resname in sorted(residues.items()):
+            sel_name = f"neo_{chain}_{resid}"
+            sel_expr = f"{obj_name} and chain {chain} and resi {resid}"
+            
+            cmd.select(sel_name, sel_expr)
+            cmd.show("sticks", sel_name)
+            cmd.color(neo_color, sel_name)
+            visualized_selections.append(sel_name)
+            
+            # 添加标签(使用单字母大写氨基酸代码)
+            label_name = f"neo_label_{chain}_{resid}"
+            ca_sel = f"{sel_expr} and name CA"
+            try:
+                coords = cmd.get_atom_coords(ca_sel)
+                if coords:
+                    aa_code = AA_3TO1.get(resname.upper(), resname[0].upper())
+                    label_text = f"{aa_code}{resid}"
+                    
+                    cmd.pseudoatom(label_name, pos=coords, label=label_text)
+                    cmd.set("label_size", 16, label_name)
+                    cmd.set("label_color", neo_color, label_name)
+            except:
+                pass
+    
+    # 可视化分子胶
+    if glue_resname:
+        glue_sel = f"{obj_name} and resn {glue_resname}"
+        cmd.select("neo_glue", glue_sel)
+        cmd.show("sticks", "neo_glue")
+        cmd.color(glue_color, "neo_glue")
+        cmd.show("spheres", "neo_glue")
+        cmd.set("sphere_scale", 0.3, "neo_glue")
+        visualized_selections.append("neo_glue")
+    
+    # 显示蛋白链的cartoon,按chain着色
+    for chain in all_chains:
+        chain_color = chain_color_map[chain]
+        cmd.show("cartoon", f"{obj_name} and chain {chain}")
+        cmd.color(chain_color, f"{obj_name} and chain {chain}")
+    
+    # 缩放到Neo-表位区域
+    if visualized_selections:
+        cmd.zoom(" or ".join(visualized_selections), buffer=8.0, complete=1)
+    
+    # 刷新视图
+    cmd.refresh()
+    cmd.rebuild()
+    
+    total_neo = sum(len(residues) for residues in neo_by_chain.values())
+    print(f"[visualize_neo_epitope] ✅ Visualized {total_neo} unique neo-epitope residues")
+    print(f"[visualize_neo_epitope] Neo-epitope color: {neo_color}")
+    print(f"[visualize_neo_epitope] Glue color: {glue_color}")
+    for chain, color in chain_color_map.items():
+        print(f"  Chain {chain}: {color}")
 
 
 # ========== PyMOL命令封装 ==========
