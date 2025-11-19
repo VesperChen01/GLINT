@@ -44,6 +44,7 @@ def _register_commands():
         from .interaction_analyzer import (
             analyze_pdb_interactions,
             analyze_protein_ligand_interactions,
+            analyze_protein_nucleic_interactions,
             analyze_ternary_complex,
             analyze_atom_pair_interactions,
             visualize_protein_ligand_3d,
@@ -124,6 +125,7 @@ def _register_commands():
         cmd.extend("highlight_csv_residues", highlight_csv_residues)
         cmd.extend("analyze_pdb_interactions", analyze_pdb_interactions)
         cmd.extend("analyze_protein_ligand_interactions", analyze_protein_ligand_interactions)
+        cmd.extend("analyze_protein_nucleic_interactions", analyze_protein_nucleic_interactions)
         cmd.extend("analyze_ternary_complex", analyze_ternary_complex)
         cmd.extend("analyze_atom_pair_interactions", analyze_atom_pair_interactions)
         cmd.extend("visualize_protein_ligand_3d", visualize_protein_ligand_3d)

@@ -68,7 +68,8 @@ def _import_helpers():
             analyze_pdb_interactions, render_interactions_beautifully,
             analyze_protein_ligand_interactions, visualize_protein_ligand_3d,
             generate_interaction_network_plot, analyze_ternary_complex,
-            analyze_atom_pair_interactions, visualize_atom_pairs
+            analyze_atom_pair_interactions, visualize_atom_pairs,
+            analyze_protein_nucleic_interactions
         )
         from .interaction_2d_plot import generate_2d_interaction_diagram  # type: ignore
         try:
@@ -99,7 +100,8 @@ def _import_helpers():
             analyze_pdb_interactions, render_interactions_beautifully,
             analyze_protein_ligand_interactions, visualize_protein_ligand_3d,
             generate_interaction_network_plot, analyze_ternary_complex,
-            analyze_atom_pair_interactions, visualize_atom_pairs
+            analyze_atom_pair_interactions, visualize_atom_pairs,
+            analyze_protein_nucleic_interactions
         )
         from interaction_2d_plot import generate_2d_interaction_diagram  # type: ignore
         try:
@@ -120,9 +122,9 @@ def _import_helpers():
             find_crbn_g_motif = _dynamic_load_by_filenames(
                 ["g_motif_analyzer.py", "g_motif.py", "g-motif.py"], "find_crbn_g_motif"
             )
-    return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions
+    return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions
 
-highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions = _import_helpers()
+highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions = _import_helpers()
 
 # -------- 依赖检查 --------
 def _check_and_install_deps():
@@ -249,6 +251,34 @@ class AnalysisWorker(QThread):
                 auto_highlight=True,  # 启用自动高亮
             )
             self.progress.emit(t("log_done").format(n=len(interactions)))
+            self.finished.emit(interactions)
+        except Exception as e:
+            self.error.emit(str(e))
+
+class PNAnalysisWorker(QThread):
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(list)
+    error = pyqtSignal(str)
+    def __init__(self, obj_name, nucleic_chains, protein_chains, output_csv, distance_cutoff):
+        super().__init__()
+        self.obj_name = obj_name
+        self.nucleic_chains = nucleic_chains
+        self.protein_chains = protein_chains
+        self.output_csv = output_csv
+        self.distance_cutoff = distance_cutoff
+        
+    def run(self):
+        try:
+            self.progress.emit("Starting Protein-Nucleic Acid Analysis...")
+            result = analyze_protein_nucleic_interactions(
+                obj_name=self.obj_name,
+                nucleic_chains=self.nucleic_chains,
+                protein_chains=self.protein_chains,
+                output_csv=self.output_csv,
+                distance_cutoff=self.distance_cutoff
+            )
+            interactions = result.get("interactions", [])
+            self.progress.emit(f"Analysis complete. Found {len(interactions)} interactions.")
             self.finished.emit(interactions)
         except Exception as e:
             self.error.emit(str(e))
@@ -813,6 +843,76 @@ class GlueTKDialog(QDialog):
         ll_layout.addLayout(ll_row4)
         
         main_layout.addWidget(grp_ll)
+        
+        # ========== 4. Protein-Nucleic Acid Interaction ==========
+        grp_pn = QGroupBox("Protein-Nucleic Acid Interaction Analysis")
+        pn_layout = QVBoxLayout(grp_pn)
+        pn_layout.setSpacing(12)
+        pn_layout.setContentsMargins(12, 12, 12, 12)
+        
+        # Row 1: Target Object
+        pn_row1 = QHBoxLayout()
+        pn_row1.addWidget(QLabel("Target Object:"), 0)
+        self.pn_obj_combo = QComboBox()
+        self.pn_obj_combo.setMinimumHeight(36)
+        self.pn_refresh_btn = QPushButton(t("refresh"))
+        self.pn_refresh_btn.setObjectName("refresh_btn")
+        self.pn_refresh_btn.setMinimumHeight(36)
+        self.pn_refresh_btn.clicked.connect(self.refresh_objects)
+        pn_row1.addWidget(self.pn_obj_combo, 1)
+        pn_row1.addWidget(self.pn_refresh_btn, 0)
+        pn_layout.addLayout(pn_row1)
+        
+        # Row 2: Nucleic Chains
+        pn_row2 = QHBoxLayout()
+        pn_row2.addWidget(QLabel("Nucleic Chains:"), 0)
+        self.pn_nucleic_chains = QLineEdit()
+        self.pn_nucleic_chains.setMinimumHeight(36)
+        self.pn_nucleic_chains.setPlaceholderText("Auto-detect if blank")
+        pn_row2.addWidget(self.pn_nucleic_chains, 1)
+        pn_layout.addLayout(pn_row2)
+        
+        # Row 3: Protein Chains
+        pn_row3 = QHBoxLayout()
+        pn_row3.addWidget(QLabel("Protein Chains:"), 0)
+        self.pn_protein_chains = QLineEdit()
+        self.pn_protein_chains.setMinimumHeight(36)
+        self.pn_protein_chains.setPlaceholderText("Auto-detect if blank")
+        pn_row3.addWidget(self.pn_protein_chains, 1)
+        pn_layout.addLayout(pn_row3)
+        
+        # Row 4: Distance & CSV
+        pn_row4 = QHBoxLayout()
+        pn_row4.addWidget(QLabel("Distance (Å):"), 0)
+        self.pn_distance = QLineEdit("4.5")
+        self.pn_distance.setFixedWidth(60)
+        self.pn_distance.setMinimumHeight(36)
+        pn_row4.addWidget(self.pn_distance, 0)
+        
+        pn_row4.addWidget(QLabel("Output CSV:"), 0)
+        self.pn_csv = QLineEdit()
+        self.pn_csv.setPlaceholderText("Optional")
+        self.pn_csv.setMinimumHeight(36)
+        pn_row4.addWidget(self.pn_csv, 1)
+        
+        self.pn_csv_btn = QPushButton(t("browse"))
+        self.pn_csv_btn.setMinimumHeight(36)
+        self.pn_csv_btn.setObjectName("browse_btn")
+        self.pn_csv_btn.clicked.connect(lambda: self._browse_save_file(self.pn_csv, "CSV (*.csv)"))
+        pn_row4.addWidget(self.pn_csv_btn, 0)
+        pn_layout.addLayout(pn_row4)
+        
+        # Row 5: Analyze Button
+        pn_row5 = QHBoxLayout()
+        self.pn_analyze_btn = QPushButton("Analyze Protein-Nucleic Acid")
+        self.pn_analyze_btn.setObjectName("highlight_btn")
+        self.pn_analyze_btn.setMinimumHeight(36)
+        self.pn_analyze_btn.clicked.connect(self.run_pn_analysis)
+        pn_row5.addWidget(self.pn_analyze_btn)
+        pn_row5.addStretch(1)
+        pn_layout.addLayout(pn_row5)
+        
+        main_layout.addWidget(grp_pn)
         
         # ========== 3. Atom Pair Analysis ========== (DISABLED - 高级功能,一般用户不需要)
         # grp_ap = QGroupBox("Atom Pair Analysis (Atomic-Level Precision)")
@@ -3411,6 +3511,40 @@ Thank you for your support! 🚀
             QMessageBox.critical(self, "Error", str(e))
             import traceback
             traceback.print_exc()
+
+    def run_pn_analysis(self):
+        obj = self.pn_obj_combo.currentText().strip()
+        if not obj or obj == t("no_object"):
+            self.log(t("log_error").format(msg="Please select a target object"))
+            return
+            
+        nucleic_chains = self.pn_nucleic_chains.text().strip()
+        protein_chains = self.pn_protein_chains.text().strip()
+        dist_str = self.pn_distance.text().strip()
+        csv_path = self.pn_csv.text().strip() or None
+        
+        try:
+            dist = float(dist_str)
+        except ValueError:
+            self.log(t("log_error").format(msg="Invalid distance cutoff"))
+            return
+            
+        n_chains = [c.strip() for c in nucleic_chains.split(",")] if nucleic_chains else None
+        p_chains = [c.strip() for c in protein_chains.split(",")] if protein_chains else None
+        
+        self.pn_analyze_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)
+        
+        self.pn_worker = PNAnalysisWorker(obj, n_chains, p_chains, csv_path, dist)
+        self.pn_worker.progress.connect(self.log)
+        self.pn_worker.error.connect(self.on_error)
+        self.pn_worker.finished.connect(self.on_finished_pn_analysis)
+        self.pn_worker.start()
+        
+    def on_finished_pn_analysis(self, interactions):
+        self.pn_analyze_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
 
     def run_tc_analysis(self):
         """运行三元复合体分析"""
