@@ -52,6 +52,12 @@ def _register_commands():
         from .interaction_2d_plot import generate_2d_interaction_diagram
         from .binding_heatmap import plot_binding_heatmap
         
+        # Ligand-Ligand Interaction
+        try:
+            from .ligand_ligand_analyzer import analyze_ligand_ligand_interactions
+        except ImportError:
+            analyze_ligand_ligand_interactions = None
+        
         # 新增: 分子胶特异功能 (PPI 分析 & Neo-表位)
         from .ppi_analyzer import (
             analyze_protein_protein_interface,
@@ -124,6 +130,8 @@ def _register_commands():
         cmd.extend("generate_interaction_network_plot", generate_interaction_network_plot)
         cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
         cmd.extend("plot_binding_heatmap", plot_binding_heatmap)
+        if analyze_ligand_ligand_interactions:
+            cmd.extend("analyze_ligand_ligand_interactions", analyze_ligand_ligand_interactions)
         
         # 分子胶特异命令
         cmd.extend("ppi_analyze", ppi_analyze)

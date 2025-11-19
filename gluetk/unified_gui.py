@@ -60,7 +60,7 @@ def _dynamic_load_by_filenames(names: list[str], symbol: str):
     return None
 
 def _import_helpers():
-    """返回：highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs"""
+    """返回：highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions"""
     # 包内尝试
     try:
         from .highlight_residues import highlight_csv_residues, highlight_gmotif_loops  # type: ignore
@@ -72,6 +72,12 @@ def _import_helpers():
         )
         from .interaction_2d_plot import generate_2d_interaction_diagram  # type: ignore
         try:
+            from .ligand_ligand_analyzer import analyze_ligand_ligand_interactions  # type: ignore
+        except ImportError:
+            analyze_ligand_ligand_interactions = None
+
+        find_crbn_g_motif = None
+        try:
             try:
                 from .g_motif_analyzer import find_crbn_g_motif  # type: ignore
             except Exception:
@@ -80,7 +86,7 @@ def _import_helpers():
             find_crbn_g_motif = _dynamic_load_by_filenames(
                 ["g_motif_analyzer.py", "g_motif.py", "g-motif.py"], "find_crbn_g_motif"
             )
-        return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs
+        return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions
     except Exception:
         pass
     # 同目录绝对
@@ -96,6 +102,10 @@ def _import_helpers():
             analyze_atom_pair_interactions, visualize_atom_pairs
         )
         from interaction_2d_plot import generate_2d_interaction_diagram  # type: ignore
+        try:
+            from ligand_ligand_analyzer import analyze_ligand_ligand_interactions  # type: ignore
+        except ImportError:
+            analyze_ligand_ligand_interactions = None
     except Exception as e:
         raise ModuleNotFoundError(
             "highlight_residues / interaction_analyzer not found; ensure they are in the same directory as unified_gui.py or inside the package."
@@ -110,9 +120,9 @@ def _import_helpers():
             find_crbn_g_motif = _dynamic_load_by_filenames(
                 ["g_motif_analyzer.py", "g_motif.py", "g-motif.py"], "find_crbn_g_motif"
             )
-    return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs
+    return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions
 
-highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs = _import_helpers()
+highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions = _import_helpers()
 
 # -------- 依赖检查 --------
 def _check_and_install_deps():
@@ -575,20 +585,7 @@ class GlueTKDialog(QDialog):
         row1.addWidget(self.refresh_obj_analysis, 0)
         pp_layout.addLayout(row1)
         
-        # Row 2: PDB File
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("PDB File (optional):"), 0)
-        self.pdb_path = QLineEdit()
-        self.pdb_path.setMinimumHeight(36)
-        self.pdb_browse = QPushButton(t("browse"))
-        self.pdb_browse.setMinimumHeight(36)
-        self.pdb_browse.setObjectName("browse_btn")
-        self.pdb_browse.clicked.connect(self.browse_pdb)
-        row2.addWidget(self.pdb_path, 1)
-        row2.addWidget(self.pdb_browse, 0)
-        pp_layout.addLayout(row2)
-        
-        # Row 3: Output CSV
+        # Row 2: Output CSV
         row4 = QHBoxLayout()
         row4.addWidget(QLabel("Output CSV (optional):"), 0)
         self.out_csv = QLineEdit()
@@ -718,6 +715,104 @@ class GlueTKDialog(QDialog):
         pl_layout.addLayout(btn_pl_row)
         
         main_layout.addWidget(grp_pl)
+        
+        # ========== 3. Ligand-Ligand Interaction (New Feature) ==========
+        grp_ll = QGroupBox("Ligand-Ligand Interaction Analysis (Small Molecule - Small Molecule)")
+        ll_layout = QVBoxLayout(grp_ll)
+        ll_layout.setSpacing(12)
+        ll_layout.setContentsMargins(12, 12, 12, 12)
+        
+        # Row 1: Target Object & PDB File
+        ll_row1 = QHBoxLayout()
+        
+        # Left: Object Combo
+        ll_row1.addWidget(QLabel("Target Object:"), 0)
+        self.ll_obj_combo = QComboBox()
+        self.ll_obj_combo.setMinimumHeight(36)
+        self.ll_refresh_btn = QPushButton(t("refresh"))
+        self.ll_refresh_btn.setObjectName("refresh_btn")
+        self.ll_refresh_btn.setMinimumHeight(36)
+        self.ll_refresh_btn.clicked.connect(self.refresh_objects)
+        
+        obj_container = QWidget()
+        obj_layout = QHBoxLayout(obj_container)
+        obj_layout.setContentsMargins(0,0,0,0)
+        obj_layout.addWidget(self.ll_obj_combo, 1)
+        obj_layout.addWidget(self.ll_refresh_btn, 0)
+        
+        ll_row1.addWidget(obj_container, 1)
+        
+        # Right: PDB File (Optional)
+        ll_row1.addWidget(QLabel("PDB File (optional):"), 0)
+        self.ll_pdb = QLineEdit()
+        self.ll_pdb.setPlaceholderText("Load from file...")
+        self.ll_pdb.setMinimumHeight(36)
+        self.ll_pdb_browse = QPushButton(t("browse"))
+        self.ll_pdb_browse.setObjectName("browse_btn")
+        self.ll_pdb_browse.setMinimumHeight(36)
+        self.ll_pdb_browse.clicked.connect(lambda: self._browse_file(self.ll_pdb, "PDB Files (*.pdb *.cif *.sdf)"))
+        
+        pdb_container = QWidget()
+        pdb_layout = QHBoxLayout(pdb_container)
+        pdb_layout.setContentsMargins(0,0,0,0)
+        pdb_layout.addWidget(self.ll_pdb, 1)
+        pdb_layout.addWidget(self.ll_pdb_browse, 0)
+        
+        ll_row1.addWidget(pdb_container, 1)
+        
+        ll_layout.addLayout(ll_row1)
+        
+        # Row 2: Selection 1 & 2
+        ll_row2 = QHBoxLayout()
+        
+        ll_row2.addWidget(QLabel("Selection 1:"), 0)
+        self.ll_sel1 = QLineEdit()
+        self.ll_sel1.setPlaceholderText("e.g. resn LIG1 or resi 100")
+        self.ll_sel1.setMinimumHeight(36)
+        ll_row2.addWidget(self.ll_sel1, 1)
+        
+        ll_row2.addWidget(QLabel("Selection 2:"), 0)
+        self.ll_sel2 = QLineEdit()
+        self.ll_sel2.setPlaceholderText("e.g. resn LIG2 or resi 200")
+        self.ll_sel2.setMinimumHeight(36)
+        ll_row2.addWidget(self.ll_sel2, 1)
+        
+        ll_layout.addLayout(ll_row2)
+        
+        # Row 3: Distance & CSV
+        ll_row3 = QHBoxLayout()
+        
+        ll_row3.addWidget(QLabel("Distance (Å):"), 0)
+        self.ll_dist = QLineEdit("4.5")
+        self.ll_dist.setFixedWidth(60)
+        self.ll_dist.setMinimumHeight(36)
+        ll_row3.addWidget(self.ll_dist, 0)
+        
+        ll_row3.addWidget(QLabel("Output CSV:"), 0)
+        self.ll_csv = QLineEdit()
+        self.ll_csv.setPlaceholderText("Optional")
+        self.ll_csv.setMinimumHeight(36)
+        ll_row3.addWidget(self.ll_csv, 1)
+        
+        self.ll_csv_btn = QPushButton(t("browse"))
+        self.ll_csv_btn.setMinimumHeight(36)
+        self.ll_csv_btn.setObjectName("browse_btn")
+        self.ll_csv_btn.clicked.connect(lambda: self._browse_save_file(self.ll_csv, "CSV (*.csv)"))
+        ll_row3.addWidget(self.ll_csv_btn, 0)
+        
+        ll_layout.addLayout(ll_row3)
+        
+        # Row 4: Analyze Button
+        ll_row4 = QHBoxLayout()
+        self.ll_analyze_btn = QPushButton("Analyze Ligand-Ligand Interactions")
+        self.ll_analyze_btn.setObjectName("highlight_btn")
+        self.ll_analyze_btn.setMinimumHeight(36)
+        self.ll_analyze_btn.clicked.connect(self.run_ll_analysis)
+        ll_row4.addWidget(self.ll_analyze_btn)
+        ll_row4.addStretch(1)
+        ll_layout.addLayout(ll_row4)
+        
+        main_layout.addWidget(grp_ll)
         
         # ========== 3. Atom Pair Analysis ========== (DISABLED - 高级功能,一般用户不需要)
         # grp_ap = QGroupBox("Atom Pair Analysis (Atomic-Level Precision)")
@@ -1914,6 +2009,7 @@ class GlueTKDialog(QDialog):
                    getattr(self, "obj_combo_apbs", None),
                    getattr(self, "pl_obj_combo", None),
                    getattr(self, "tc_obj_combo", None),
+                   getattr(self, "ll_obj_combo", None),
                    getattr(self, "ap_obj_combo", None),
                    getattr(self, "score_obj", None),
                    getattr(self, "pocket_obj_combo", None),
@@ -1933,13 +2029,19 @@ class GlueTKDialog(QDialog):
         fn, _ = QFileDialog.getOpenFileName(self, t("select_csv"), "", "CSV (*.csv);;All Files (*)")
         if fn: self.csv_path.setText(fn); self.update_enablement()
 
-    def browse_pdb(self):
-        fn, _ = QFileDialog.getOpenFileName(self, t("select_pdb"), "", "PDB (*.pdb *.cif);;All Files (*)")
-        if fn: self.pdb_path.setText(fn); self.update_enablement()
-
     def browse_out_csv(self):
         fn, _ = QFileDialog.getSaveFileName(self, t("select_outcsv"), "", "CSV (*.csv);;All Files (*)")
         if fn: self.out_csv.setText(fn); self.update_enablement()
+
+    def _browse_file(self, line_edit, filter_str):
+        fn, _ = QFileDialog.getOpenFileName(self, "Select File", "", filter_str)
+        if fn:
+            line_edit.setText(fn)
+            
+    def _browse_save_file(self, line_edit, filter_str):
+        fn, _ = QFileDialog.getSaveFileName(self, "Save File", "", filter_str)
+        if fn:
+            line_edit.setText(fn)
 
     def browse_gm_pdb(self):
         fn, _ = QFileDialog.getOpenFileName(self, t("select_pdb"), "", "PDB (*.pdb *.cif);;All Files (*)")
@@ -1980,13 +2082,12 @@ class GlueTKDialog(QDialog):
 
     def start_analysis(self):
         obj = self.obj_combo_analysis.currentText().strip()
-        pdb = self.pdb_path.text().strip() or None
         out_csv = self.out_csv.text().strip() or None
         if not obj or obj == t("no_object"):
             QMessageBox.warning(self, t("title"), t("no_object")); return
         self.analyze_btn.setEnabled(False)
         self.progress_bar.setVisible(True); self.progress_bar.setRange(0, 0)
-        self.analysis_thread = AnalysisWorker(obj, pdb, out_csv)
+        self.analysis_thread = AnalysisWorker(obj, None, out_csv)  # pdb_file=None，只从PyMOL加载
         self.analysis_thread.progress.connect(self.log)
         self.analysis_thread.error.connect(self.on_error)
         self.analysis_thread.finished.connect(self.on_finished_analysis)
@@ -3221,6 +3322,95 @@ Thank you for your support! 🚀
         except Exception as e:
             self.log(f"错误: {e}")
             import traceback; traceback.print_exc()
+
+    def run_ll_analysis(self):
+        """运行小分子-小分子相互作用分析"""
+        if analyze_ligand_ligand_interactions is None:
+             QMessageBox.critical(self, "Error", "Ligand-Ligand analysis module not found.")
+             return
+
+        # Check for PDB file first
+        pdb_file = self.ll_pdb.text().strip()
+        obj = self.ll_obj_combo.currentText()
+        
+        if pdb_file and os.path.exists(pdb_file):
+            try:
+                # Load PDB file
+                from pymol import cmd
+                loaded_obj = os.path.basename(pdb_file).split('.')[0]
+                # Ensure unique name
+                loaded_obj = cmd.get_unused_name(loaded_obj)
+                cmd.load(pdb_file, loaded_obj)
+                obj = loaded_obj
+                self.log(f"Loaded {pdb_file} as {obj}")
+                self.refresh_objects() # Refresh combos
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"Failed to load PDB file: {e}")
+                return
+        
+        sel1 = self.ll_sel1.text().strip()
+        sel2 = self.ll_sel2.text().strip()
+        dist_str = self.ll_dist.text().strip()
+        csv_path = self.ll_csv.text().strip() or None
+        
+        if not obj:
+            QMessageBox.warning(self, "Missing Input", "Please select a target object or load a PDB file.")
+            return
+        if not sel1 or not sel2:
+            QMessageBox.warning(self, "Missing Input", "Please define both Selection 1 and Selection 2.")
+            return
+            
+        try:
+            dist = float(dist_str) if dist_str else 4.5
+        except ValueError:
+            QMessageBox.warning(self, "Invalid Input", "Distance must be a number.")
+            return
+            
+        try:
+            # Import pymol to catch specific exceptions
+            import pymol
+            
+            # 构建完整的 PyMOL selection
+            # 如果用户只输入了 resn LIG, 我们需要将其限制在 obj 内吗?
+            # 通常用户输入 selection string, 最好结合 obj
+            # E.g. "obj and (sel1)"
+            full_sel1 = f"({obj}) and ({sel1})"
+            full_sel2 = f"({obj}) and ({sel2})"
+            
+            interactions = analyze_ligand_ligand_interactions(
+                obj_name=obj,
+                sel1=full_sel1,
+                sel2=full_sel2,
+                cutoff=dist,
+                output_csv=csv_path,
+                visualize=True
+            )
+            
+            msg = f"Analysis complete. Found {len(interactions)} interactions."
+            if csv_path:
+                msg += f"\nSaved to: {csv_path}"
+            
+            QMessageBox.information(self, "Success", msg)
+            
+        except pymol.CmdException as e:
+            msg = str(e)
+            if "Invalid selection name" in msg:
+                 QMessageBox.critical(self, "Selection Error", 
+                     f"PyMOL could not understand your selection.\n\n"
+                     f"Error: {msg}\n\n"
+                     f"Tip: Please use valid PyMOL selection syntax.\n"
+                     f"Examples:\n"
+                     f"• resn LIG (by residue name)\n"
+                     f"• resi 900 (by residue index)\n"
+                     f"• chain A (by chain)\n\n"
+                     f"You entered: '{sel1}' and '{sel2}'")
+            else:
+                 QMessageBox.critical(self, "PyMOL Error", str(e))
+            return
+        except Exception as e:
+            QMessageBox.critical(self, "Error", str(e))
+            import traceback
+            traceback.print_exc()
 
     def run_tc_analysis(self):
         """运行三元复合体分析"""

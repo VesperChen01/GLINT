@@ -63,25 +63,11 @@ try:
 except ImportError:
     print("[GlueTK] ⚠️ Matplotlib not installed; plotting unavailable")
 
-# ========== 重构模块导入（性能优化）==========
-try:
-    from .interaction_types import (
-        InteractionResult, HBond, SaltBridge, Hydrophobic,
-        PiStacking, PiCation, MetalCoordination, HalogenBond, WaterBridge
-    )
-    from .feature_extractor import MolecularFeatureExtractor
-    REFACTORED_MODULES_AVAILABLE = True
-    print("[GlueTK] ✅ Using refactored interaction detection (performance boost)")
-except ImportError as e:
-    REFACTORED_MODULES_AVAILABLE = False
-    # Silently fall back to legacy mode
-    pass
-
 # ========== 相互作用参数（实用标准）==========
 # 适用于大多数药物设计场景的均衡标准
 INTERACTION_PARAMS = {
     "hbond": {
-        "max_DA_dist": 3.2,         # Å，D···A 距离（3.2Å为推荐标准，平衡严格性与实用性）
+        "max_DA_dist": 3.5,         # Å，D···A 距离（常用标准，2.8太严格）
         "min_donor_angle": 120,     # °，∠D–H···A
         "min_acceptor_angle": 90    # °，∠H···A–X
     },
@@ -303,57 +289,16 @@ def is_hbond_precise(donor_atom, acceptor_atom, all_atoms_by_residue):
     
     return True, d_da, angle_dha
 
-def is_saltbridge_atom(res1, atom1_name, res2, atom2_name, d):
+def is_saltbridge(res1, res2, d):
     """
-    判断原子对是否形成盐桥（精确原子级检测）
+    判断是否为盐桥（简单版本，兼容旧代码）
     
     参数:
         res1, res2: 残基名称
-        atom1_name, atom2_name: 原子名称
-        d: 距离
-    """
-    max_dist = INTERACTION_PARAMS["ionic"]["max_dist"]
-    if d > max_dist:
-        return False
-
-    positive = {"ARG", "LYS", "HIS"}
-    negative = {"ASP", "GLU"}
-    # 核酸磷酸基团
-    nucleic = {"DA", "DT", "DG", "DC", "A", "T", "G", "C", "U", "PS"} 
+        d: 距离（Å）
     
-    # 定义带电原子集合
-    # 注意：这里假设 PDB 命名规范
-    pos_atoms = {
-        "ARG": {"NH1", "NH2", "NE", "NZ"}, # 包括 NE 为了兼容性，虽然主要是 NH1/NH2
-        "LYS": {"NZ"},
-        "HIS": {"ND1", "NE2"},
-    }
-    neg_atoms = {
-        "ASP": {"OD1", "OD2"},
-        "GLU": {"OE1", "OE2"},
-    }
-    nucleic_neg_atoms = {"OP1", "OP2", "O1P", "O2P"}
-
-    def is_pos_atom(res, atom):
-        return res in pos_atoms and atom in pos_atoms[res]
-
-    def is_neg_atom(res, atom):
-        if res in neg_atoms:
-            return atom in neg_atoms[res]
-        if res in nucleic:
-            return atom in nucleic_neg_atoms
-        return False
-
-    # 检查是否为一正一负
-    is_pair1 = is_pos_atom(res1, atom1_name) and is_neg_atom(res2, atom2_name)
-    is_pair2 = is_pos_atom(res2, atom2_name) and is_neg_atom(res1, atom1_name)
-    
-    return is_pair1 or is_pair2
-
-def is_saltbridge(res1, res2, d):
-    """
-    判断是否为盐桥（旧接口兼容，仅基于残基距离）
-    注意：这可能导致过多假阳性，建议使用 is_saltbridge_atom
+    返回:
+        bool: 是否为盐桥
     """
     positive = {"ARG", "LYS", "HIS"}
     negative = {"ASP", "GLU"}
@@ -433,54 +378,18 @@ def is_hydrophobic(res1, res2, atom1, atom2, d):
     
     参数:
         res1, res2: 残基名称
-        atom1, atom2: 原子信息元组 (chain, resn, resi, name, coord)
+        atom1, atom2: 原子名称
         d: 距离（Å）
     
     返回:
         bool: 是否为疏水相互作用
     
-    标准：疏水接触 ≤ 4.0 Å (other_max)，且原子必须是碳或特定的非极性原子
+    标准：疏水接触 ≤ 4.5 Å
     """
     hydrophobic = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "PRO", "TRP", "TYR", "CYS"}
-    # 也允许配体参与 (配体残基名可能不在列表中，但如果是 C-C 接触通常也是疏水)
-    # 这里我们暂时只检查 res1/res2 是否为标准疏水残基 OR 是否为配体（未知残基）
-    # 为了安全起见，我们主要依赖原子元素类型
-    
+    # 使用与参数区一致的键名（other_max 表示非π相关的疏水接触距离）
     max_dist = INTERACTION_PARAMS["hydrophobic"]["other_max"]
-    if d > max_dist:
-        return False
-
-    # 获取元素类型
-    elem1 = get_element_from_atom_name(atom1[3])
-    elem2 = get_element_from_atom_name(atom2[3])
-    
-    # 疏水原子：C, F, CL, BR, I, S (S 稍有争议，但通常算)
-    # 排除：N, O
-    hydrophobic_atoms = {"C", "F", "CL", "BR", "I", "S"}
-    
-    if elem1 in hydrophobic_atoms and elem2 in hydrophobic_atoms:
-        # 至少要求一个是标准疏水残基，或者两个都是碳
-        is_res1_hydro = res1 in hydrophobic
-        is_res2_hydro = res2 in hydrophobic
-        
-        # 如果两个原子都是碳，基本就是疏水接触
-        if elem1 == "C" and elem2 == "C":
-            # 进一步过滤：如果是在带电侧链上的碳（如 ARG 的 CZ），算疏水吗？
-            # 通常疏水作用特指非极性部分。为了简化，C-C 接触算疏水。
-            # 但为了避免极性环境下的偶然接触，我们可以要求残基也是疏水性质的，
-            # 或者至少不是极性极强的（如主链 C=O 的 C）。
-            # 主链 C 通常不参与疏水核心，除非是 Gly?
-            
-            # 过滤主链 Carbonyl C
-            if atom1[3].strip() == "C" or atom2[3].strip() == "C":
-                 return False
-                 
-            return True
-            
-        # 如果包含卤素/硫，且残基是疏水的
-        return is_res1_hydro and is_res2_hydro
-
-    return False
+    return res1 in hydrophobic and res2 in hydrophobic and d <= max_dist
 
 def centroid(coords):
     """计算坐标质心"""
@@ -646,136 +555,6 @@ def is_cationpi(res1, atoms1, res2, atoms2):
     c_ring = centroid(ring)
     d = distance(cation, c_ring)
     return d <= 6.0
-
-def is_halogen_bond(atom1, atom2, d):
-    """
-    判断是否为卤素键
-    
-    参数:
-        atom1, atom2: (chain, resn, resi, name, coord)
-        d: 距离
-    
-    返回:
-        (is_halogen: bool, distance: float, angle: float)
-    """
-    # 1. 识别卤素供体 (X) 和受体 (A)
-    # 供体必须是卤素原子 (F, CL, BR, I)
-    # 受体通常是 O, N, S
-    
-    elem1 = get_element_from_atom_name(atom1[3])
-    elem2 = get_element_from_atom_name(atom2[3])
-    
-    halogens = {"CL", "BR", "I", "F"}  # F 也可以形成卤素键，尽管较弱
-    acceptors = {"O", "N", "S"}
-    
-    halogen_atom = None
-    acceptor_atom = None
-    
-    if elem1 in halogens and elem2 in acceptors:
-        halogen_atom = atom1
-        acceptor_atom = atom2
-    elif elem2 in halogens and elem1 in acceptors:
-        halogen_atom = atom2
-        acceptor_atom = atom1
-    else:
-        return False, None, None
-        
-    # 2. 检查距离
-    max_dist = INTERACTION_PARAMS["halogen"]["max_distance"]
-    if d > max_dist:
-        return False, None, None
-        
-    # 3. 检查角度 C-X···A
-    # 需要找到与卤素相连的碳原子 (C)
-    # 由于这里没有拓扑信息，我们只能在同残基中寻找距离卤素最近的碳原子
-    
-    # 获取卤素所在残基的所有原子 (需要传入 all_atoms_by_residue，或者在这里简化处理)
-    # 为了保持接口简单，我们暂时无法精确计算 C-X...A 角度，除非传入更多上下文
-    # 这里做一个近似：假设 C 在 X 的反方向 (仅作示意，实际需要拓扑)
-    # 或者，我们修改调用签名，传入 all_atoms_by_residue
-    
-    # 暂时返回 True (距离满足)，角度检查留给更高级的分析或后续优化
-    # 为了严谨，我们至少要求距离比范德华半径之和略小，这里直接用 cutoff
-    
-    return True, d, 180.0 # 假定角度理想，后续应优化
-
-def is_water_bridge(ligand_atom, protein_atom, water_atom):
-    """
-    判断是否为水桥 (Ligand - Water - Protein)
-    
-    参数:
-        ligand_atom: 配体原子
-        protein_atom: 蛋白原子
-        water_atom: 水分子原子
-    
-    返回:
-        (is_wb: bool, d_lw: float, d_wp: float, angle: float)
-    """
-    # 1. 检查 Ligand-Water 距离 (H-bond)
-    d_lw = distance(ligand_atom[4], water_atom[4])
-    if d_lw > INTERACTION_PARAMS["water_bridge"]["max_DA_dist"]:
-        return False, None, None, None
-        
-    # 2. 检查 Water-Protein 距离 (H-bond)
-    d_wp = distance(water_atom[4], protein_atom[4])
-    if d_wp > INTERACTION_PARAMS["water_bridge"]["max_DA_dist"]:
-        return False, None, None, None
-        
-    # 3. 检查角度 Ligand-Water-Protein
-    angle = calculate_angle_three_points(ligand_atom[4], water_atom[4], protein_atom[4])
-    
-    # 水桥的角度通常在 75-140 度之间 (水的 H-O-H 角度约为 104.5)
-    # 这里使用较宽松的范围
-    if angle < INTERACTION_PARAMS["water_bridge"]["min_acceptor_angle"]:
-        return False, None, None, None
-        
-    return True, d_lw, d_wp, angle
-
-def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
-    """
-    计算相互作用置信度分数 (0.0 - 1.0)
-    基于几何参数的理想程度
-    """
-    score = 1.0
-    
-    if interaction_type == "氢键":
-        # 距离衰减: 2.8A -> 1.0, 3.5A -> 0.5
-        optimal_dist = 2.8
-        max_dist = INTERACTION_PARAMS["hbond"]["max_DA_dist"]
-        if distance_val <= optimal_dist:
-            dist_score = 1.0
-        else:
-            dist_score = max(0.0, 1.0 - (distance_val - optimal_dist) / (max_dist - optimal_dist))
-            
-        # 角度衰减: 180 -> 1.0, 120 -> 0.5
-        if angle_val:
-            optimal_angle = 180.0
-            min_angle = INTERACTION_PARAMS["hbond"]["min_donor_angle"]
-            angle_score = max(0.0, (angle_val - min_angle) / (optimal_angle - min_angle))
-        else:
-            angle_score = 0.8 # 默认
-            
-        score = dist_score * 0.7 + angle_score * 0.3
-        
-    elif interaction_type == "盐桥":
-        optimal_dist = 3.5
-        max_dist = INTERACTION_PARAMS["ionic"]["max_dist"]
-        if distance_val <= optimal_dist:
-            score = 1.0
-        else:
-            score = max(0.0, 1.0 - (distance_val - optimal_dist) / (max_dist - optimal_dist))
-            
-    elif interaction_type == "疏水相互作用":
-        optimal_dist = 3.8
-        max_dist = INTERACTION_PARAMS["hydrophobic"]["other_max"]
-        if distance_val <= optimal_dist:
-            score = 1.0
-        else:
-            score = max(0.0, 1.0 - (distance_val - optimal_dist) / (max_dist - optimal_dist))
-            
-    # ... 其他类型
-    
-    return round(score, 2)
 
 def identify_molecule_type(res_name):
     """
@@ -950,83 +729,36 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
     检查两个残基间的相互作用（提取为独立函数避免代码重复）
     
     使用严格标准进行相互作用判断
-    修复：并行检测所有相互作用类型，而非互斥判断
     """
-    # 使用集合记录已检测到的相互作用类型，避免重复
-    found_hbond = False
-    found_saltbridge = False
-    found_hydrophobic = False
-    found_halogen = False
-    
-    # 检查原子间相互作用（氢键、盐桥、疏水、卤素键）
+    # 检查原子间相互作用
+    interaction_type = None
     for at1 in a1:
         for at2 in a2:
             d = distance(at1[4], at2[4])
-            if d > 6.0:  # 扩大初筛阈值，覆盖所有相互作用类型
+            if d > 4.5:  # 距离阈值
                 continue
 
-            # 并行检测所有类型（不使用 elif）
-            if not found_hbond:
-                 # 尝试双向检测氢键
-                 is_hb, hb_dist, hb_angle = is_hbond_precise(at1, at2, grouped) # 注意：这里 grouped 并不完全等同于 all_atoms_by_residue，需要确认
-                 if not is_hb:
-                     is_hb, hb_dist, hb_angle = is_hbond_precise(at2, at1, grouped)
-                 
-                 if is_hb:
-                    conf = calculate_confidence_score("氢键", hb_dist, hb_angle)
-                    interactions.append({
-                        "Chain1": c1,
-                        "Residue1": f"{r1} {id1}",
-                        "Chain2": c2,
-                        "Residue2": f"{r2} {id2}",
-                        "Distance": round(hb_dist, 2),
-                        "Interaction": "氢键",
-                        "Confidence": conf
-                    })
-                    found_hbond = True
-            
-            if not found_saltbridge and is_saltbridge_atom(r1, at1[3], r2, at2[3], d):
-                conf = calculate_confidence_score("盐桥", d)
+            if is_hbond(at1, at2, d):
+                interaction_type = "氢键"
+            elif is_saltbridge(r1, r2, d):
+                interaction_type = "盐桥"
+            elif is_hydrophobic(r1, r2, at1, at2, d):
+                interaction_type = "疏水相互作用"
+
+            if interaction_type:
                 interactions.append({
                     "Chain1": c1,
                     "Residue1": f"{r1} {id1}",
                     "Chain2": c2,
                     "Residue2": f"{r2} {id2}",
                     "Distance": round(d, 2),
-                    "Interaction": "盐桥",
-                    "Confidence": conf
+                    "Interaction": interaction_type
                 })
-                found_saltbridge = True
-            
-            if not found_hydrophobic and is_hydrophobic(r1, r2, at1, at2, d):
-                conf = calculate_confidence_score("疏水相互作用", d)
-                interactions.append({
-                    "Chain1": c1,
-                    "Residue1": f"{r1} {id1}",
-                    "Chain2": c2,
-                    "Residue2": f"{r2} {id2}",
-                    "Distance": round(d, 2),
-                    "Interaction": "疏水相互作用",
-                    "Confidence": conf
-                })
-                found_hydrophobic = True
+                break  # 找到一个相互作用就跳出内层循环
+        if interaction_type:
+            break  # 找到一个相互作用就跳出外层循环
 
-            if not found_halogen:
-                is_halogen, hal_dist, hal_angle = is_halogen_bond(at1, at2, d)
-                if is_halogen:
-                    conf = calculate_confidence_score("卤素键", hal_dist, hal_angle)
-                    interactions.append({
-                        "Chain1": c1,
-                        "Residue1": f"{r1} {id1}",
-                        "Chain2": c2,
-                        "Residue2": f"{r2} {id2}",
-                        "Distance": round(hal_dist, 2),
-                        "Interaction": "卤素键",
-                        "Confidence": conf
-                    })
-                    found_halogen = True
-
-    # 检查π相互作用（独立于原子级检测）
+    # 检查π相互作用
     if is_pipi(r1, a1, r2, a2):
         interactions.append({
             "Chain1": c1,
@@ -1034,8 +766,7 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
             "Chain2": c2,
             "Residue2": f"{r2} {id2}",
             "Distance": "-",
-            "Interaction": "π–π 堆积",
-            "Confidence": 0.9 # 默认高置信度
+            "Interaction": "π–π 堆积"
         })
 
     if is_cationpi(r1, a1, r2, a2):
@@ -1045,8 +776,7 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
             "Chain2": c2,
             "Residue2": f"{r2} {id2}",
             "Distance": "-",
-            "Interaction": "π–阳离子相互作用",
-            "Confidence": 0.9
+            "Interaction": "π–阳离子相互作用"
         })
 
 def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains=True, 
@@ -1091,7 +821,7 @@ def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains
         try:
             with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(["Chain1", "Residue1", "Chain2", "Residue2", "Distance", "Interaction", "Confidence"])
+                writer.writerow(["Chain1", "Residue1", "Chain2", "Residue2", "Distance", "Interaction"])
                 for inter in interactions:
                     writer.writerow([
                         inter["Chain1"],
@@ -1099,8 +829,7 @@ def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains
                         inter["Chain2"],
                         inter["Residue2"],
                         inter["Distance"],
-                        inter["Interaction"],
-                        inter.get("Confidence", "-")
+                        inter["Interaction"]
                     ])
             print(f"[analyze_pdb_interactions] Results saved to: {output_csv}")
         except Exception as e:
@@ -1123,7 +852,7 @@ def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains
                 temp_csv = tempfile.NamedTemporaryFile(mode='w', suffix='.csv',
                                                      delete=False, encoding='utf-8')
                 writer = csv.writer(temp_csv)
-                writer.writerow(["Chain1", "Residue1", "Chain2", "Residue2", "Distance", "Interaction", "Confidence"])
+                writer.writerow(["Chain1", "Residue1", "Chain2", "Residue2", "Distance", "Interaction"])
                 for inter in interactions:
                     writer.writerow([
                         inter["Chain1"],
@@ -1131,8 +860,7 @@ def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains
                         inter["Chain2"],
                         inter["Residue2"],
                         inter["Distance"],
-                        inter["Interaction"],
-                        inter.get("Confidence", "-")
+                        inter["Interaction"]
                     ])
                 temp_csv.close()
 
@@ -1287,14 +1015,14 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
             "mode": "advanced"
         }
     
-    推荐标准（适合大多数场景）：
-        - 氢键: ≤3.2Å，角度≥120° (精确几何验证)
+    实用标准（适合大多数场景）：
+        - 氢键: ≤3.5Å，角度≥120° (常用标准)
         - 盐桥: ≤4.5Å
         - 疏水: ≤4.0Å
         - π相互作用: 严格几何判定
         - 金属配位: ≤3.4Å
     
-    注：现已使用精确氢键检测（距离+角度），避免假阳性
+    注：2.8Å氢键标准过于严格，仅适用于高分辨率晶体结构
     
     示例:
         result = analyze_protein_ligand_interactions('complex', 'LIG', output_csv='interactions.csv')
@@ -1490,13 +1218,6 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
 
     # 分析相互作用
     interactions = []
-    
-    # 构建残基原子索引（用于精确氢键检测）
-    all_atoms_by_residue = {}
-    for lig_key, lig_atoms in ligand_residues:
-        all_atoms_by_residue[lig_key] = lig_atoms
-    for prot_key, prot_atoms in protein_residues:
-        all_atoms_by_residue[prot_key] = prot_atoms
 
     for lig_key, lig_atoms in ligand_residues:
         lig_chain, lig_name, lig_id = lig_key
@@ -1522,16 +1243,10 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
 
                     # 判断相互作用类型
                     interaction_type = None
-                    
-                    # ✅ 使用精确的氢键检测（包括角度验证）
-                    is_hb, hb_dist, hb_angle = is_hbond_precise(lig_atom, prot_atom, all_atoms_by_residue)
-                    if not is_hb:
-                        # 反向检测：蛋白作为供体
-                        is_hb, hb_dist, hb_angle = is_hbond_precise(prot_atom, lig_atom, all_atoms_by_residue)
-                    
-                    if is_hb:
+
+                    if is_hbond(lig_atom, prot_atom, d):
                         interaction_type = "氢键"
-                    elif is_saltbridge_atom(lig_name, lig_atom[3], prot_name, prot_atom[3], d):
+                    elif is_saltbridge(lig_name, prot_name, d):
                         interaction_type = "盐桥"
                     elif not key_interactions_only and is_hydrophobic(lig_name, prot_name, lig_atom, prot_atom, d):
                         interaction_type = "疏水相互作用"
@@ -1540,7 +1255,6 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     # key_interactions_only=False时才启用宽松规则（不推荐）
 
                     if interaction_type:
-                        conf = calculate_confidence_score(interaction_type, d, hb_angle if interaction_type == "氢键" else None)
                         interactions.append({
                             "Ligand_Chain": lig_chain,
                             "Ligand_Residue": f"{lig_name} {lig_id}",
@@ -1549,24 +1263,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                             "Protein_Residue": f"{prot_name} {prot_id}",
                             "Protein_Atom": prot_atom[3],
                             "Distance": round(d, 2),
-                            "Interaction": interaction_type,
-                            "Confidence": conf
-                        })
-                        
-                    # 检查卤素键
-                    is_hal, hal_dist, hal_angle = is_halogen_bond(lig_atom, prot_atom, d)
-                    if is_hal:
-                        conf = calculate_confidence_score("卤素键", hal_dist, hal_angle)
-                        interactions.append({
-                            "Ligand_Chain": lig_chain,
-                            "Ligand_Residue": f"{lig_name} {lig_id}",
-                            "Ligand_Atom": lig_atom[3],
-                            "Protein_Chain": prot_chain,
-                            "Protein_Residue": f"{prot_name} {prot_id}",
-                            "Protein_Atom": prot_atom[3],
-                            "Distance": round(hal_dist, 2),
-                            "Interaction": "卤素键",
-                            "Confidence": conf
+                            "Interaction": interaction_type
                         })
 
             # 检查π相互作用
@@ -1579,8 +1276,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     "Protein_Residue": f"{prot_name} {prot_id}",
                     "Protein_Atom": "ring",
                     "Distance": "-",
-                    "Interaction": "π–π 堆积",
-                    "Confidence": 0.9
+                    "Interaction": "π–π 堆积"
                 })
 
             if is_cationpi(lig_name, lig_atoms, prot_name, prot_atoms):
@@ -1592,63 +1288,8 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     "Protein_Residue": f"{prot_name} {prot_id}",
                     "Protein_Atom": "ring/cation",
                     "Distance": "-",
-                    "Interaction": "π–阳离子相互作用",
-                    "Confidence": 0.9
+                    "Interaction": "π–阳离子相互作用"
                 })
-
-    # 检查水桥 (Water Bridges)
-    # 1. 收集所有水分子
-    water_atoms = []
-    for atom in atoms:
-        if identify_molecule_type(atom[1]) == "solvent":
-            water_atoms.append(atom)
-            
-    if water_atoms:
-        # print(f"[analyze_protein_ligand_interactions] Checking water bridges with {len(water_atoms)} water molecules...")
-        # 优化：建立空间索引或只检查配体附近的水
-        # 这里使用简单距离筛选
-        
-        for lig_key, lig_atoms in ligand_residues:
-            lig_chain, lig_name, lig_id = lig_key
-            
-            for water in water_atoms:
-                # 快速检查水-配体距离
-                min_dist_lw = float('inf')
-                closest_lig_atom = None
-                
-                for la in lig_atoms:
-                    d = distance(la[4], water[4])
-                    if d < min_dist_lw:
-                        min_dist_lw = d
-                        closest_lig_atom = la
-                
-                if min_dist_lw > 4.0: # 水桥通常 < 3.5 + 余裕
-                    continue
-                    
-                # 检查水-蛋白距离
-                for prot_key, prot_atoms in protein_residues:
-                    prot_chain, prot_name, prot_id = prot_key
-                    
-                    # 快速检查水-蛋白距离
-                    prot_centroid = centroid([a[4] for a in prot_atoms])
-                    if distance(water[4], prot_centroid) > 6.0:
-                        continue
-                        
-                    for pa in prot_atoms:
-                        is_wb, d_lw, d_wp, angle = is_water_bridge(closest_lig_atom, pa, water)
-                        if is_wb:
-                            conf = calculate_confidence_score("水桥", max(d_lw, d_wp), angle)
-                            interactions.append({
-                                "Ligand_Chain": lig_chain,
-                                "Ligand_Residue": f"{lig_name} {lig_id}",
-                                "Ligand_Atom": closest_lig_atom[3],
-                                "Protein_Chain": prot_chain,
-                                "Protein_Residue": f"{prot_name} {prot_id}",
-                                "Protein_Atom": pa[3],
-                                "Distance": f"{d_lw:.2f}/{d_wp:.2f}",
-                                "Interaction": "水桥",
-                                "Confidence": conf
-                            })
 
     # 输出到CSV
     if output_csv and interactions:
@@ -1657,7 +1298,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                 writer = csv.writer(f)
                 writer.writerow(["Ligand_Chain", "Ligand_Residue", "Ligand_Atom",
                                "Protein_Chain", "Protein_Residue", "Protein_Atom",
-                               "Distance", "Interaction", "Confidence"])
+                               "Distance", "Interaction"])
                 for inter in interactions:
                     writer.writerow([
                         inter["Ligand_Chain"],
@@ -1667,8 +1308,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                         inter["Protein_Residue"],
                         inter["Protein_Atom"],
                         inter["Distance"],
-                        inter["Interaction"],
-                        inter.get("Confidence", "-")
+                        inter["Interaction"]
                     ])
             # print(f"[analyze_protein_ligand_interactions] Results saved to: {output_csv}")
         except Exception as e:
@@ -2429,24 +2069,13 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     cmd.color("red", "lig_pocket and elem O")
     cmd.color("yellow", "lig_pocket and elem S")
     
-    # ========== 第八步：验证数据存在 ==========
-    # ⚠️ 关键：必须提供 interactions 数据，不再回退到 PyMOL 几何检测
-    if not interactions:
-        error_msg = (
-            "[visualize_protein_ligand_3d] ❌ Error: No interaction data provided!\n"
-            "   This function requires interaction data from analysis.\n\n"
-            "   Usage:\n"
-            "      1. result = analyze_protein_ligand_interactions('obj', 'LIG')\n"
-            "      2. visualize_protein_ligand_3d('obj', result, 'LIG')\n\n"
-            "   Or:\n"
-            "      visualize_protein_ligand_3d('obj', csv_path='interactions.csv', ligand_resname='LIG')\n"
-        )
-        print(error_msg)
-        return
-    
-    print(f"[visualize_protein_ligand_3d] 🔗 Drawing interactions from analysis result (CSV-compliant)...")
-    
-    # 删除旧的 PyMOL 几何检测对象（如果有）
+    # ========== 第八步：检测并绘制氢键（参考脚本逻辑）==========
+    # 如果是从 CSV 加载的相互作用数据，则不再额外做几何学检测，
+    # 避免出现“不在 CSV 里的额外氢键线”，保证与 CSV 一一对应。
+    use_geom_hbonds = not from_csv
+    print(f"[visualize_protein_ligand_3d] 🔗 Detecting hydrogen bonds..." if use_geom_hbonds else "[visualize_protein_ligand_3d] 🔗 Using CSV-defined hydrogen bonds only...")
+
+    # 先删除旧的 selection 和 distance 对象
     try:
         cmd.delete("polar_donors_lig")
         cmd.delete("polar_donors_res")
@@ -2458,6 +2087,48 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         cmd.delete("hbonds_lig_to_res")
     except:
         pass
+    
+    if use_geom_hbonds:
+        try:
+            # 定义极性供体（N/O 且带氢）
+            cmd.select("polar_donors_lig", f"{lig_sel} and elem n,o and (neighbor hydro)")
+            cmd.select("polar_donors_res", "lig_pocket and elem n,o and (neighbor hydro)")
+            
+            # 定义极性受体（O 或者 N且不带氢）
+            cmd.select("polar_acceptors_lig", f"{lig_sel} and (elem o or (elem n and not (neighbor hydro)))")
+            cmd.select("polar_acceptors_res", "lig_pocket and (elem o or (elem n and not (neighbor hydro)))")
+            
+            # 定义氢原子（连接到供体的）
+            cmd.select("don_hydrogens_lig", "hydro and (neighbor polar_donors_lig)")
+            cmd.select("don_hydrogens_res", "hydro and (neighbor polar_donors_res)")
+            
+            # 绘制氢键（双向）
+            # 蛋白供体 H -> 配体受体
+            n_hbonds1 = 0
+            try:
+                cmd.distance("hbonds_res_to_lig", "don_hydrogens_res", "polar_acceptors_lig", 3.2)
+                n_hbonds1 = cmd.count_atoms("hbonds_res_to_lig") // 2
+            except Exception as e:
+                print(f"[visualize_protein_ligand_3d]    ℹ️ Protein→Ligand H-bonds: {e}")
+            
+            # 配体供体 H -> 蛋白受体
+            n_hbonds2 = 0
+            try:
+                cmd.distance("hbonds_lig_to_res", "don_hydrogens_lig", "polar_acceptors_res", 3.2)
+                n_hbonds2 = cmd.count_atoms("hbonds_lig_to_res") // 2
+            except Exception as e:
+                print(f"[visualize_protein_ligand_3d]    ℹ️ Ligand→Protein H-bonds: {e}")
+            
+            total_hbonds = n_hbonds1 + n_hbonds2
+            if total_hbonds > 0:
+                print(f"[visualize_protein_ligand_3d]    ✅ Detected {total_hbonds} hydrogen bond(s)")
+            else:
+                print(f"[visualize_protein_ligand_3d]    ℹ️ No hydrogen bonds detected (parameters may need tuning)")
+                
+        except Exception as e:
+            print(f"[visualize_protein_ligand_3d]    ⚠️ Hydrogen-bond detection failed: {e}")
+            import traceback
+            traceback.print_exc()
     
     # ========== 第九步：氢键样式设置（专业配色）==========
     cmd.set("dash_length", 0.3)
@@ -2487,38 +2158,12 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     if protein_residues:
         print(f"[visualize_protein_ligand_3d] 📍 Showing {len(protein_residues)} interacting residues")
         
-        # 3字母氨基酸代码 -> 1字母代码
-        aa_map = {
-            "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D",
-            "CYS": "C", "GLN": "Q", "GLU": "E", "GLY": "G",
-            "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K",
-            "MET": "M", "PHE": "F", "PRO": "P", "SER": "S",
-            "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-        }
-        
-        # 显示相互作用残基为 licorice 并添加标签
+        # 显示相互作用残基为 licorice（参考脚本）
         for i, (chain, res_name, res_id) in enumerate(protein_residues, 1):
             res_sel = f"{obj_name} and chain {chain} and resi {res_id}"
             cmd.show("licorice", res_sel)
             # 隐藏这些残基上连接到碳的氢
             cmd.hide("everything", f"({res_sel}) and (elem H and neighbor elem C)")
-            
-            # 添加残基标签（使用一字母代码 + 残基号）
-            label_text = aa_map.get(res_name.upper(), res_name[:1]) + res_id
-            try:
-                # 使用CA原子位置放置标签
-                ca_sel = f"{res_sel} and name CA"
-                if cmd.count_atoms(ca_sel) > 0:
-                    coords = cmd.get_atom_coords(ca_sel)
-                    label_obj = f"res_label_{i}"
-                    cmd.pseudoatom(label_obj, pos=coords, label=label_text)
-                    cmd.set("label_size", 16, label_obj)
-                    cmd.set("label_color", "black", label_obj)
-                    cmd.set("label_font_id", 7, label_obj)  # Times-like font
-                    cmd.hide("everything", label_obj)
-                    cmd.show("label", label_obj)
-            except Exception as e:
-                pass  # 静默失败
     
     # ========== 第十一步：绘制其他类型相互作用 ==========
     print(f"[visualize_protein_ligand_3d] 🎨 Drawing key drug-design interactions...")
@@ -2596,7 +2241,6 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                          key=lambda x: interaction_priority.get(x, 999))
     
     total_shown = 0
-    hbonds_drawn_from_csv = 0  # 追踪从 CSV 绘制的氢键数量
     for interaction_type in sorted_types:
         # 跳过不显示的疏水相互作用
         if not show_hydrophobic and ("疏水" in interaction_type or "Hydrophobic" in interaction_type):
@@ -2607,9 +2251,10 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         if interaction_count.get(interaction_type, 0) >= max_for_type:
             continue
         
-        # ⚠️ 关键修复：删除跳过氢键的逻辑
-        # 现在所有相互作用（包括氢键）都从 CSV/result 数据绘制
-        # 只有当 interactions 为空时，use_geom_hbonds=True，才会使用PyMOL的几何检测
+        # 如果已经通过几何检测绘制了氢键，这里就不再从 CSV 画一遍，
+        # 只有在 use_geom_hbonds=False 时才从 CSV 中画氢键线。
+        if use_geom_hbonds and ("氢键" in interaction_type or "Hbond" in interaction_type):
+            continue
         
         # 筛选相互作用
         interactions_to_show = interactions_by_type.get(interaction_type, [])[:max_for_type]
@@ -2632,16 +2277,9 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 lig_resname_int, lig_resid = lig_res[0], lig_res[1]
                 prot_resname, prot_resid = prot_res[0], prot_res[1]
 
-                # 创建选择（处理空链 ID）
-                if lig_chain and lig_chain.strip():
-                    sel1 = f"{obj_name} and chain {lig_chain} and resi {lig_resid}"
-                else:
-                    sel1 = f"{obj_name} and resi {lig_resid}"
-                
-                if prot_chain and prot_chain.strip():
-                    sel2 = f"{obj_name} and chain {prot_chain} and resi {prot_resid}"
-                else:
-                    sel2 = f"{obj_name} and resi {prot_resid}"
+                # 创建选择
+                sel1 = f"{obj_name} and chain {lig_chain} and resi {lig_resid}"
+                sel2 = f"{obj_name} and chain {prot_chain} and resi {prot_resid}"
 
                 # 对于π相互作用,使用芳香环原子
                 if "ring" in str(lig_atom).lower():
@@ -2666,18 +2304,9 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 
                 # 尝试创建距离对象
                 try:
-                    # 🔍 调试输出
-                    n1 = cmd.count_atoms(sel1)
-                    n2 = cmd.count_atoms(sel2)
-                    print(f"[DEBUG] {dist_name}:")
-                    print(f"  sel1: {sel1} -> {n1} atoms")
-                    print(f"  sel2: {sel2} -> {n2} atoms")
-                    
-                    # mode=2: 只显示最短的距离（避免多个原子对产生多条线）
-                    cmd.distance(dist_name, sel1, sel2, mode=2)
+                    cmd.distance(dist_name, sel1, sel2)
                 except Exception as e:
                     # 如果选择失败,跳过
-                    print(f"[DEBUG] Failed to create {dist_name}: {e}")
                     continue
 
                 # 设置颜色（在创建后立即设置）
@@ -2699,10 +2328,6 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 # 统计相互作用类型
                 interaction_count[interaction_type] = interaction_count.get(interaction_type, 0) + 1
                 total_shown += 1
-                
-                # 统计氢键
-                if "氢键" in interaction_type or "Hbond" in interaction_type:
-                    hbonds_drawn_from_csv += 1
 
             except Exception as e:
                 # print(f"[visualize_protein_ligand_3d] ⚠️ 相互作用跳过: {e}")
@@ -2733,12 +2358,24 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     
     # ========== 第十四步：输出统计 ==========
     print(f"\n[visualize_protein_ligand_3d] ✅ 3D visualization complete!")
-    print(f"   📊 Interaction summary (from analysis result):")
+    print(f"   📊 Interaction summary:")
     
     # 统计氢键
-    total_hbonds = interaction_count.get("氢键", 0) + interaction_count.get("Hbond", 0)
-    if total_hbonds > 0:
-        print(f"      • H-bonds: {total_hbonds} (CSV-compliant ✅)")
+    total_hbonds = 0
+    if 'use_geom_hbonds' in locals() and use_geom_hbonds:
+        try:
+            n1 = cmd.count_atoms("hbonds_res_to_lig")
+            n2 = cmd.count_atoms("hbonds_lig_to_res")
+            total_hbonds = (n1 + n2) // 2
+            if total_hbonds > 0:
+                print(f"      • H-bonds: {total_hbonds}")
+        except:
+            pass
+    else:
+        # 仅使用 CSV / 分析结果中的统计信息
+        total_hbonds = interaction_count.get("氢键", 0) + interaction_count.get("Hbond", 0)
+        if total_hbonds > 0:
+            print(f"      • H-bonds: {total_hbonds}")
     
     # 统计其他相互作用
     for itype, count in sorted(interaction_count.items(), key=lambda x: x[1], reverse=True):
@@ -3463,217 +3100,4 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
     return output_path
 
 cmd.extend("generate_interaction_network_plot", generate_interaction_network_plot)
-
-def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
-                                        protein_chains=None, output_csv=None,
-                                        distance_cutoff=4.5, pdb_file=None):
-    """
-    分析蛋白质-核酸相互作用（DNA/RNA）
-    
-    参数:
-        obj_name: PyMOL对象名称
-        nucleic_chains: 核酸链 ID列表（例如 ["A", "B"]）,如果为None则自动检测
-        protein_chains: 蛋白质链 ID列表（例如 ["P", "Q"]）,如果为None则自动检测
-        output_csv: 输出CSV文件路径
-        distance_cutoff: 距离截断值（埃）
-        pdb_file: PDB文件路径（可选）
-    
-    返回:
-        dict: {
-            "nucleic_chains": [...],
-            "protein_chains": [...],
-            "interactions": [...],
-            "mode": "protein-nucleic"
-        }
-    
-    相互作用类型:
-        - 氢键: 蛋白与磷酸骨架/碱基
-        - 盐桥: 带电氨基酸与磷酸骨架
-        - 疏水: 疏水氨基酸与碱基
-        - π-π 堆积: 芳香氨基酸与碱基
-        - π-阳离子: 带正电氨基酸与碱基
-    
-    示例:
-        result = analyze_protein_nucleic_interactions('complex', nucleic_chains=["D"], protein_chains=["A"], output_csv='pn_interactions.csv')
-    """
-    
-    # 获取原子信息
-    if pdb_file:
-        atoms = parse_pdb_file(pdb_file)
-        if not atoms:
-            print(f"[analyze_protein_nucleic_interactions] Unable to read atom information from file: {pdb_file}")
-            return None
-    else:
-        atoms = parse_pdb_structure(obj_name)
-        if not atoms:
-            print("[analyze_protein_nucleic_interactions] Unable to obtain atom information")
-            return None
-    
-    # 按链和残基分组
-    chain_residues = defaultdict(list)
-    for atom in atoms:
-        res_key = (atom[0], atom[1], atom[2])  # (chain, res_name, res_id)
-        chain_residues[res_key].append(atom)
-    
-    # 分离收集核酸和蛋白质残基
-    nucleic_residues = []
-    protein_residues = []
-    
-    # 第一步：收集所有核酸残基
-    for res_key, res_atoms in chain_residues.items():
-        chain_id, res_name, res_id = res_key
-        mol_type = identify_molecule_type(res_name)
-        
-        if mol_type in ["dna", "rna"]:
-            if nucleic_chains is None or chain_id in nucleic_chains:
-                nucleic_residues.append((res_key, res_atoms))
-        elif mol_type == "protein":
-            if protein_chains is None or chain_id in protein_chains:
-                protein_residues.append((res_key, res_atoms))
-    
-    # 自动检测链
-    if nucleic_chains is None:
-        nucleic_chains = list(set(rk[0] for rk, _ in nucleic_residues))
-    if protein_chains is None:
-        protein_chains = list(set(rk[0] for rk, _ in protein_residues))
-    
-    if not nucleic_residues:
-        print("\n" + "="*60)
-        print("[analyze_protein_nucleic_interactions] ❌ No nucleic acid found")
-        print("\nPossible reasons:")
-        print("   1) No DNA/RNA in the structure")
-        print("   2) Nucleic acid chains not specified correctly")
-        print("="*60 + "\n")
-        return None
-    
-    if not protein_residues:
-        print("[analyze_protein_nucleic_interactions] ⚠️ No protein residues found")
-        return None
-    
-    print(f"[analyze_protein_nucleic_interactions] ✅ Detected {len(nucleic_residues)} nucleic acid residues (chains: {', '.join(nucleic_chains)})")
-    print(f"[analyze_protein_nucleic_interactions] ✅ Detected {len(protein_residues)} protein residues (chains: {', '.join(protein_chains)})")
-    
-    # 构建残基原子索引（用于精确氢键检测）
-    all_atoms_by_residue = {}
-    for nuc_key, nuc_atoms in nucleic_residues:
-        all_atoms_by_residue[nuc_key] = nuc_atoms
-    for prot_key, prot_atoms in protein_residues:
-        all_atoms_by_residue[prot_key] = prot_atoms
-    
-    # 分析相互作用
-    interactions = []
-    
-    for nuc_key, nuc_atoms in nucleic_residues:
-        nuc_chain, nuc_name, nuc_id = nuc_key
-        
-        for prot_key, prot_atoms in protein_residues:
-            prot_chain, prot_name, prot_id = prot_key
-            
-            # 快速距离筛选
-            nuc_centroid = centroid([a[4] for a in nuc_atoms])
-            prot_centroid = centroid([a[4] for a in prot_atoms])
-            
-            if distance(nuc_centroid, prot_centroid) > distance_cutoff + 5.0:
-                continue
-            
-            # 检查原子间相互作用
-            for nuc_atom in nuc_atoms:
-                for prot_atom in prot_atoms:
-                    d = distance(nuc_atom[4], prot_atom[4])
-                    
-                    if d > distance_cutoff:
-                        continue
-                    
-                    # 判断相互作用类型
-                    interaction_type = None
-                    
-                    # ✅ 使用精确的氢键检测
-                    is_hb, hb_dist, hb_angle = is_hbond_precise(nuc_atom, prot_atom, all_atoms_by_residue)
-                    if not is_hb:
-                        # 反向检测：蛋白作为供体
-                        is_hb, hb_dist, hb_angle = is_hbond_precise(prot_atom, nuc_atom, all_atoms_by_residue)
-                    
-                    if is_hb:
-                        interaction_type = "氢键"
-                    elif is_saltbridge(nuc_name, prot_name, d):
-                        interaction_type = "盐桥"
-                    elif is_hydrophobic(nuc_name, prot_name, nuc_atom, prot_atom, d):
-                        interaction_type = "疏水相互作用"
-                    
-                    if interaction_type:
-                        interactions.append({
-                            "Nucleic_Chain": nuc_chain,
-                            "Nucleic_Residue": f"{nuc_name} {nuc_id}",
-                            "Nucleic_Atom": nuc_atom[3],
-                            "Protein_Chain": prot_chain,
-                            "Protein_Residue": f"{prot_name} {prot_id}",
-                            "Protein_Atom": prot_atom[3],
-                            "Distance": round(d, 2),
-                            "Interaction": interaction_type
-                        })
-            
-            # 检查π相互作用
-            if is_pipi(nuc_name, nuc_atoms, prot_name, prot_atoms):
-                interactions.append({
-                    "Nucleic_Chain": nuc_chain,
-                    "Nucleic_Residue": f"{nuc_name} {nuc_id}",
-                    "Nucleic_Atom": "ring",
-                    "Protein_Chain": prot_chain,
-                    "Protein_Residue": f"{prot_name} {prot_id}",
-                    "Protein_Atom": "ring",
-                    "Distance": "-",
-                    "Interaction": "π–π 堆积"
-                })
-            
-            if is_cationpi(prot_name, prot_atoms, nuc_name, nuc_atoms):
-                interactions.append({
-                    "Nucleic_Chain": nuc_chain,
-                    "Nucleic_Residue": f"{nuc_name} {nuc_id}",
-                    "Nucleic_Atom": "ring",
-                    "Protein_Chain": prot_chain,
-                    "Protein_Residue": f"{prot_name} {prot_id}",
-                    "Protein_Atom": "cation",
-                    "Distance": "-",
-                    "Interaction": "π–阳离子相互作用"
-                })
-    
-    # 输出到CSV
-    if output_csv and interactions:
-        try:
-            with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
-                writer = csv.writer(f)
-                writer.writerow(["Nucleic_Chain", "Nucleic_Residue", "Nucleic_Atom",
-                               "Protein_Chain", "Protein_Residue", "Protein_Atom",
-                               "Distance", "Interaction"])
-                for inter in interactions:
-                    writer.writerow([
-                        inter["Nucleic_Chain"],
-                        inter["Nucleic_Residue"],
-                        inter["Nucleic_Atom"],
-                        inter["Protein_Chain"],
-                        inter["Protein_Residue"],
-                        inter["Protein_Atom"],
-                        inter["Distance"],
-                        inter["Interaction"]
-                    ])
-            print(f"[analyze_protein_nucleic_interactions] Results saved to: {output_csv}")
-        except Exception as e:
-            print(f"[analyze_protein_nucleic_interactions] Failed to save CSV: {e}")
-    
-    result = {
-        "nucleic_chains": nucleic_chains,
-        "protein_chains": protein_chains,
-        "interactions": interactions,
-        "mode": "protein-nucleic",
-        "parameters": {
-            "distance_cutoff": distance_cutoff,
-            "hbond_cutoff": INTERACTION_PARAMS["hbond"]["max_DA_dist"],
-            "saltbridge_cutoff": INTERACTION_PARAMS["ionic"]["max_dist"],
-        }
-    }
-    
-    print(f"[analyze_protein_nucleic_interactions] ✅ Analysis complete: found {len(interactions)} interactions")
-    return result
-
-cmd.extend("analyze_protein_nucleic_interactions", analyze_protein_nucleic_interactions)
 

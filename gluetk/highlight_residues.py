@@ -144,8 +144,27 @@ def _setup_view(obj, protein_chain, partner_chain, colorA, colorB):
     cmd.bg_color("white")
 
 def _label_for_residue(resn, resi):
-    """生成残基标签"""
-    return (resn.lower() if isinstance(resn, str) else str(resn)).strip() + str(resi).strip()
+    """生成残基标签，使用一字母氨基酸代码 + 残基号，例如 "T100"""    
+    resn = (resn or "").strip().upper()
+    resi_str = str(resi).strip()
+
+    # 3-letter 到 1-letter 的氨基酸映射
+    aa_map = {
+        "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D",
+        "CYS": "C", "GLN": "Q", "GLU": "E", "GLY": "G",
+        "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K",
+        "MET": "M", "PHE": "F", "PRO": "P", "SER": "S",
+        "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
+    }
+
+    if resn in aa_map:
+        prefix = aa_map[resn]
+    elif len(resn) == 1:
+        prefix = resn
+    else:
+        prefix = resn[:1] if resn else ""
+
+    return f"{prefix}{resi_str}" if resi_str else prefix
 
 def _interaction_to_abbr(interaction_text):
     """
@@ -171,7 +190,7 @@ def _interaction_to_abbr(interaction_text):
     return ''.join(c for c in interaction_text if ord(c) < 128)[:10] or "INT"
 
 def _place_label_pseudoatom(sel_name, label_text, idx):
-    """在残基位置放置标签"""
+    """在残基位置放置标签（Times-like 字体，黑色）"""
     # 尝试使用CA原子位置
     for name_sel in [f"({sel_name}) and name CA", f"({sel_name}) and name C1'", f"({sel_name}) and name P"]:
         try:
@@ -180,6 +199,7 @@ def _place_label_pseudoatom(sel_name, label_text, idx):
             cmd.pseudoatom(obj_name, pos=coords, label=label_text)
             cmd.set("label_size", 16, obj_name)
             cmd.set("label_color", "black", obj_name)
+            cmd.set("label_font_id", 5, obj_name)  # 使用接近 Times Roman 的矢量字体
             return
         except Exception:
             pass
@@ -196,6 +216,7 @@ def _place_label_pseudoatom(sel_name, label_text, idx):
             cmd.pseudoatom(obj_name, pos=(cx,cy,cz), label=label_text)
             cmd.set("label_size", 16, obj_name)
             cmd.set("label_color", "black", obj_name)
+            cmd.set("label_font_id", 5, obj_name)
     except Exception:
         pass
 
