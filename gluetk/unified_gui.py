@@ -87,7 +87,7 @@ def _import_helpers():
             find_crbn_g_motif = _dynamic_load_by_filenames(
                 ["g_motif_analyzer.py", "g_motif.py", "g-motif.py"], "find_crbn_g_motif"
             )
-        return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions
+        return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions
     except Exception:
         pass
     # 同目录绝对
@@ -259,13 +259,14 @@ class PNAnalysisWorker(QThread):
     progress = pyqtSignal(str)
     finished = pyqtSignal(list)
     error = pyqtSignal(str)
-    def __init__(self, obj_name, nucleic_chains, protein_chains, output_csv, distance_cutoff):
+    def __init__(self, obj_name, nucleic_chains, protein_chains, output_csv, distance_cutoff, pdb_file=None):
         super().__init__()
         self.obj_name = obj_name
         self.nucleic_chains = nucleic_chains
         self.protein_chains = protein_chains
         self.output_csv = output_csv
         self.distance_cutoff = distance_cutoff
+        self.pdb_file = pdb_file
         
     def run(self):
         try:
@@ -275,7 +276,8 @@ class PNAnalysisWorker(QThread):
                 nucleic_chains=self.nucleic_chains,
                 protein_chains=self.protein_chains,
                 output_csv=self.output_csv,
-                distance_cutoff=self.distance_cutoff
+                distance_cutoff=self.distance_cutoff,
+                pdb_file=self.pdb_file
             )
             interactions = result.get("interactions", [])
             self.progress.emit(f"Analysis complete. Found {len(interactions)} interactions.")
@@ -634,7 +636,13 @@ class GlueTKDialog(QDialog):
         self.analyze_btn.setMinimumHeight(36)
         self.analyze_btn.clicked.connect(self.start_analysis)
         
+        self.pp_heatmap_btn = QPushButton("Heatmap")
+        self.pp_heatmap_btn.setObjectName("highlight_btn")
+        self.pp_heatmap_btn.setMinimumHeight(36)
+        self.pp_heatmap_btn.clicked.connect(self.run_pp_heatmap)
+        
         btn_pp_row.addWidget(self.analyze_btn)
+        btn_pp_row.addWidget(self.pp_heatmap_btn)
         btn_pp_row.addStretch(1)
         pp_layout.addLayout(btn_pp_row)
         
@@ -863,6 +871,20 @@ class GlueTKDialog(QDialog):
         pn_row1.addWidget(self.pn_refresh_btn, 0)
         pn_layout.addLayout(pn_row1)
         
+        # Row 1.5: PDB File (Optional)
+        pn_row_pdb = QHBoxLayout()
+        pn_row_pdb.addWidget(QLabel("PDB File (optional):"), 0)
+        self.pn_pdb = QLineEdit()
+        self.pn_pdb.setPlaceholderText("Load from file...")
+        self.pn_pdb.setMinimumHeight(36)
+        self.pn_pdb_browse = QPushButton(t("browse"))
+        self.pn_pdb_browse.setObjectName("browse_btn")
+        self.pn_pdb_browse.setMinimumHeight(36)
+        self.pn_pdb_browse.clicked.connect(lambda: self._browse_file(self.pn_pdb, "PDB Files (*.pdb *.cif *.sdf)"))
+        pn_row_pdb.addWidget(self.pn_pdb, 1)
+        pn_row_pdb.addWidget(self.pn_pdb_browse, 0)
+        pn_layout.addLayout(pn_row_pdb)
+        
         # Row 2: Nucleic Chains
         pn_row2 = QHBoxLayout()
         pn_row2.addWidget(QLabel("Nucleic Chains:"), 0)
@@ -908,7 +930,14 @@ class GlueTKDialog(QDialog):
         self.pn_analyze_btn.setObjectName("highlight_btn")
         self.pn_analyze_btn.setMinimumHeight(36)
         self.pn_analyze_btn.clicked.connect(self.run_pn_analysis)
+        
+        self.pn_heatmap_btn = QPushButton("Heatmap")
+        self.pn_heatmap_btn.setObjectName("highlight_btn")
+        self.pn_heatmap_btn.setMinimumHeight(36)
+        self.pn_heatmap_btn.clicked.connect(self.run_pn_heatmap)
+        
         pn_row5.addWidget(self.pn_analyze_btn)
+        pn_row5.addWidget(self.pn_heatmap_btn)
         pn_row5.addStretch(1)
         pn_layout.addLayout(pn_row5)
         
@@ -2099,9 +2128,21 @@ class GlueTKDialog(QDialog):
         names = []
         try:
             from pymol import cmd
-            names = cmd.get_object_list() or []
-        except Exception:
+            # Prefer standard API: cmd.get_names("objects")
+            # Fallback to legacy/custom cmd.get_object_list() if available
+            if hasattr(cmd, "get_names"):
+                names = cmd.get_names("objects")
+            elif hasattr(cmd, "get_object_list"):
+                names = cmd.get_object_list()
+            else:
+                names = []
+        except Exception as e:
+            self.log(f"Error refreshing objects: {e}")
             pass
+        
+        # Ensure names is a list
+        if names is None: names = []
+        
         if not names: names = [t("no_object")]
         for cb in (getattr(self, "obj_combo_gm", None),
                    getattr(self, "obj_combo_analysis", None),
@@ -2110,6 +2151,7 @@ class GlueTKDialog(QDialog):
                    getattr(self, "pl_obj_combo", None),
                    getattr(self, "tc_obj_combo", None),
                    getattr(self, "ll_obj_combo", None),
+                   getattr(self, "pn_obj_combo", None),
                    getattr(self, "ap_obj_combo", None),
                    getattr(self, "score_obj", None),
                    getattr(self, "pocket_obj_combo", None),
@@ -2352,6 +2394,31 @@ class GlueTKDialog(QDialog):
     def on_finished_analysis(self, interactions: List[Dict[str, Any]]):
         self._interactions = interactions or []
         self.log(f"✅ Analysis complete: {len(interactions)} interactions found")
+        
+        if interactions:
+            self._last_pp_interactions = interactions
+            msg = f"Found {len(interactions)} protein-protein interactions."
+            QMessageBox.information(self, "Success", msg)
+
+    def run_pp_heatmap(self):
+        if not hasattr(self, '_last_pp_interactions') or not self._last_pp_interactions:
+            QMessageBox.warning(self, "Data Missing", "Please run Protein-Protein analysis first.")
+            return
+            
+        try:
+            from .interaction_analyzer import generate_interaction_heatmap
+            
+            fn, _ = QFileDialog.getSaveFileName(self, "Save Heatmap", "ppi_heatmap.png", "PNG (*.png)")
+            if fn:
+                output_path = generate_interaction_heatmap(
+                    interactions_result=self._last_pp_interactions,
+                    output_path=fn,
+                    show_plot=True
+                )
+                if output_path:
+                    self.log(f"✅ Heatmap saved: {output_path}")
+        except Exception as e:
+            self.on_error(f"Heatmap failed: {e}")
         if self.out_csv.text().strip() and os.path.exists(self.out_csv.text().strip()):
             self.log(f"   Saved to: {os.path.basename(self.out_csv.text().strip())}")
         self.progress_bar.setVisible(False); self.progress_bar.setRange(0, 1)
@@ -2371,7 +2438,9 @@ class GlueTKDialog(QDialog):
         self.log(t("log_error").format(msg=msg))
         QMessageBox.critical(self, t("title"), msg)
         self.progress_bar.setVisible(False); self.progress_bar.setRange(0, 1)
-        for b in (getattr(self, "analyze_btn", None), getattr(self, "gm_btn", None), getattr(self, "gm_btn_render", None)):
+        for b in (getattr(self, "analyze_btn", None), getattr(self, "gm_btn", None), getattr(self, "gm_btn_render", None), 
+                  getattr(self, "pn_analyze_btn", None), getattr(self, "ll_analyze_btn", None), 
+                  getattr(self, "tc_analyze_btn", None)):
             if b: b.setEnabled(True)
 
 
@@ -3514,8 +3583,10 @@ Thank you for your support! 🚀
 
     def run_pn_analysis(self):
         obj = self.pn_obj_combo.currentText().strip()
-        if not obj or obj == t("no_object"):
-            self.log(t("log_error").format(msg="Please select a target object"))
+        pdb_file = self.pn_pdb.text().strip() or None
+        
+        if (not obj or obj == t("no_object")) and not pdb_file:
+            QMessageBox.warning(self, "Missing Input", "Please select a target object or load a PDB file.")
             return
             
         nucleic_chains = self.pn_nucleic_chains.text().strip()
@@ -3526,7 +3597,7 @@ Thank you for your support! 🚀
         try:
             dist = float(dist_str)
         except ValueError:
-            self.log(t("log_error").format(msg="Invalid distance cutoff"))
+            QMessageBox.warning(self, "Invalid Input", "Distance cutoff must be a number.")
             return
             
         n_chains = [c.strip() for c in nucleic_chains.split(",")] if nucleic_chains else None
@@ -3536,15 +3607,85 @@ Thank you for your support! 🚀
         self.progress_bar.setVisible(True)
         self.progress_bar.setRange(0, 0)
         
-        self.pn_worker = PNAnalysisWorker(obj, n_chains, p_chains, csv_path, dist)
+        self.log(f"Starting Protein-Nucleic Acid analysis on '{obj}'...")
+        
+        self.pn_worker = PNAnalysisWorker(obj, n_chains, p_chains, csv_path, dist, pdb_file)
         self.pn_worker.progress.connect(self.log)
-        self.pn_worker.error.connect(self.on_error)
+        self.pn_worker.error.connect(self.on_pn_error)
         self.pn_worker.finished.connect(self.on_finished_pn_analysis)
         self.pn_worker.start()
         
     def on_finished_pn_analysis(self, interactions):
         self.pn_analyze_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
+        self.progress_bar.setRange(0, 1)
+        
+        self._last_pn_interactions = interactions
+        
+        msg = f"Analysis complete. Found {len(interactions)} protein-nucleic acid interactions."
+        csv_path = self.pn_csv.text().strip()
+        if csv_path:
+            msg += f"\nResults saved to: {csv_path}"
+        
+        self.log(f"✅ {msg}")
+        
+        if interactions:
+            reply = QMessageBox.question(self, "Success", 
+                                         f"{msg}\n\nDo you want to generate an interaction network plot?",
+                                         QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if reply == QMessageBox.StandardButton.Yes:
+                self.run_pn_network()
+        else:
+            QMessageBox.information(self, "Success", msg)
+
+    def run_pn_network(self):
+        if not hasattr(self, '_last_pn_interactions') or not self._last_pn_interactions:
+            return
+            
+        try:
+            from .interaction_analyzer import generate_interaction_network_plot
+            
+            # 让用户选择保存路径（默认文件名：pn_network.png）
+            fn, _ = QFileDialog.getSaveFileName(self, "Save Network Plot", "pn_network.png", "PNG (*.png)")
+            if fn:
+                output_path = generate_interaction_network_plot(
+                    interactions_result=self._last_pn_interactions,
+                    output_path=fn,
+                    show_plot=True,
+                    plot_style="professional"  # 指定默认样式
+                )
+                if output_path:
+                    self.log(f"✅ Network plot saved: {output_path}")
+        except Exception as e:
+            self.on_pn_error(f"Plotting failed: {e}")
+
+    def run_pn_heatmap(self):
+        if not hasattr(self, '_last_pn_interactions') or not self._last_pn_interactions:
+            QMessageBox.warning(self, "Data Missing", "Please run analysis first.")
+            return
+            
+        try:
+            from .interaction_analyzer import generate_interaction_heatmap
+            
+            fn, _ = QFileDialog.getSaveFileName(self, "Save Heatmap", "interaction_heatmap.png", "PNG (*.png)")
+            if fn:
+                output_path = generate_interaction_heatmap(
+                    interactions_result=self._last_pn_interactions,
+                    output_path=fn,
+                    show_plot=True
+                )
+                if output_path:
+                    self.log(f"✅ Heatmap saved: {output_path}")
+        except Exception as e:
+            self.on_pn_error(f"Heatmap failed: {e}")
+    
+    def on_pn_error(self, msg: str):
+        """Handle protein-nucleic acid analysis errors"""
+        self.pn_analyze_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.progress_bar.setRange(0, 1)
+        self.log(f"❌ Protein-Nucleic Analysis Error: {msg}")
+        QMessageBox.critical(self, "Analysis Error", f"Protein-Nucleic Acid analysis failed:\n\n{msg}")
 
     def run_tc_analysis(self):
         """运行三元复合体分析"""

@@ -105,7 +105,12 @@ def _coords_from_selection(sel: str):
 
 def _find_loaded_object_contains(code: str):
     code = (code or "").lower()
-    for obj in (cmd.get_object_list() or []):
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        
+    for obj in (objs or []):
         if code in obj.lower():
             return obj
     return None
@@ -152,7 +157,12 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         cmd.load(pdb_file, tmp_obj, quiet=1)
         obj = tmp_obj
     else:
-        obj = obj_name or (cmd.get_object_list()[0] if cmd.get_object_list() else None)
+        try:
+            objs = cmd.get_names("objects")
+        except AttributeError:
+            objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+            
+        obj = obj_name or (objs[0] if objs else None)
     if not obj:
         print("[G-MOTIF] No object available; load a structure or provide pdb_file")
         return []
@@ -544,7 +554,12 @@ def analyze_g_motif_glue_binding(obj_name,
             'confidence': float  # 置信度 [0-1]
         }
     """
-    if obj_name not in cmd.get_object_list():
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        
+    if obj_name not in objs:
         print(f"[analyze_g_motif_glue_binding] Object '{obj_name}' not found")
         return None
     

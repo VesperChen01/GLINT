@@ -259,15 +259,26 @@ def highlight_csv_residues(csv_path, obj=None,
 
     # 获取对象
     if obj is None:
-        objs = cmd.get_object_list()
+        try:
+            objs = cmd.get_names("objects")
+        except AttributeError:
+            objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+            
         if not objs:
             print("[highlight_csv_residues] No objects loaded. Please load a structure first.")
             return
         obj = objs[0]
         print(f"[highlight_csv_residues] Using first object: {obj}")
 
-    if obj not in cmd.get_object_list():
-        print(f"[highlight_csv_residues] Object '{obj}' not found. Available: {cmd.get_object_list()}")
+    # Check existence
+    current_objs = []
+    try:
+        current_objs = cmd.get_names("objects")
+    except AttributeError:
+        current_objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+
+    if obj not in current_objs:
+        print(f"[highlight_csv_residues] Object '{obj}' not found. Available: {current_objs}")
         return
 
     # 清除旧的选择和标签
@@ -295,10 +306,25 @@ def highlight_csv_residues(csv_path, obj=None,
             
             for r in reader:
                 try:
+                    # 支持标准格式
                     res1 = get(r, "residue1") or get(r, "res1")
                     res2 = get(r, "residue2") or get(r, "res2")
                     ch1 = get(r, "chain1") if has("chain1") else ""
                     ch2 = get(r, "chain2") if has("chain2") else ""
+                    
+                    # 支持核酸格式 (Nucleic -> 1, Protein -> 2)
+                    if not res1:
+                        res1 = get(r, "nucleic_residue")
+                        ch1 = get(r, "nucleic_chain")
+                    if not res2:
+                        res2 = get(r, "protein_residue")
+                        ch2 = get(r, "protein_chain")
+                        
+                    # 支持配体格式 (Ligand -> 1, Protein -> 2)
+                    if not res1:
+                        res1 = get(r, "ligand_residue")
+                        ch1 = get(r, "ligand_chain")
+                    
                     interaction = get(r, "interaction") or get(r, "type") or ""
                     
                     if res1 and res2:
@@ -401,13 +427,24 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
 
     # 获取对象
     if obj is None:
-        objs = cmd.get_object_list()
+        try:
+            objs = cmd.get_names("objects")
+        except AttributeError:
+            objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+            
         if not objs:
             print("[highlight_gmotif_loops] No objects loaded")
             return
         obj = objs[0]
 
-    if obj not in cmd.get_object_list():
+    # Check existence
+    current_objs = []
+    try:
+        current_objs = cmd.get_names("objects")
+    except AttributeError:
+        current_objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        
+    if obj not in current_objs:
         print(f"[highlight_gmotif_loops] Object '{obj}' not found")
         return
 

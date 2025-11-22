@@ -129,13 +129,25 @@ def parse_pdb_structure(obj_name=None):
         atoms: 原子信息列表 [(chain, res_name, res_id, atom_name, (x, y, z))]
     """
     if obj_name is None:
-        objs = cmd.get_object_list()
+        try:
+            objs = cmd.get_names("objects")
+        except AttributeError:
+            # Fallback for older versions/plugins
+            objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+            
         if not objs:
             print("[parse_pdb_structure] No objects loaded")
             return []
         obj_name = objs[0]
     
-    if obj_name not in cmd.get_object_list():
+    # Check existence
+    current_objs = []
+    try:
+        current_objs = cmd.get_names("objects")
+    except AttributeError:
+        current_objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        
+    if obj_name not in current_objs:
         print(f"[parse_pdb_structure] Object '{obj_name}' not found")
         return []
     
@@ -3344,6 +3356,9 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
         if "Ligand_Residue" in inter:
             lig_key = inter["Ligand_Residue"]
             ligand_nodes[lig_key] = ligand_nodes.get(lig_key, 0) + 1
+        elif "Nucleic_Residue" in inter:
+            lig_key = inter["Nucleic_Residue"]
+            ligand_nodes[lig_key] = ligand_nodes.get(lig_key, 0) + 1
         elif "Atom1_Residue" in inter:
             lig_key = inter["Atom1_Residue"]
             ligand_nodes[lig_key] = ligand_nodes.get(lig_key, 0) + 1
@@ -3401,7 +3416,7 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
     interaction_types_shown = {}
     for inter in interactions:
         try:
-            lig_key = inter.get("Ligand_Residue") or inter.get("Atom1_Residue")
+            lig_key = inter.get("Ligand_Residue") or inter.get("Nucleic_Residue") or inter.get("Atom1_Residue")
             prot_key = inter.get("Protein_Residue") or inter.get("Atom2_Residue")
 
             if not lig_key or not prot_key:
@@ -3431,10 +3446,33 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
         except Exception as e:
             continue
 
-    # 添加图例
+    # 添加图例 (Translate Chinese to English for plot labels to avoid font issues)
+    translation_map = {
+        "氢键": "H-Bond",
+        "盐桥": "Salt Bridge",
+        "疏水相互作用": "Hydrophobic",
+        "π–π 堆积": "Pi-Pi Stacking",
+        "π–阳离子相互作用": "Pi-Cation",
+        "二硫键": "Disulfide",
+        "卤素键": "Halogen Bond",
+        "金属配位": "Metal Coord",
+        "范德华力": "vdW"
+    }
+
     legend_elements = []
     for itype, color in sorted(interaction_types_shown.items()):
-        legend_elements.append(mpatches.Patch(color=color, label=itype))
+        # Try exact match first, then partial match
+        label = itype
+        if itype in translation_map:
+            label = translation_map[itype]
+        else:
+            # Fallback: try to find a key that is part of the itype string
+            for k, v in translation_map.items():
+                if k in itype:
+                    label = v
+                    break
+        
+        legend_elements.append(mpatches.Patch(color=color, label=label))
 
     if legend_elements:
         ax.legend(handles=legend_elements, loc='upper right', frameon=True,
@@ -3462,11 +3500,201 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
 
     return output_path
 
+def generate_interaction_heatmap(interactions_result, output_path=None, show_plot=True):
+    """
+    生成相互作用热图 (Heatmap)
+    特别适用于蛋白-核酸或蛋白-蛋白界面分析，展示残基-残基接触矩阵。
+    """
+    try:
+        import matplotlib.pyplot as plt
+        import seaborn as sns
+        import pandas as pd
+        import numpy as np
+    except ImportError as e:
+        print(f"[generate_interaction_heatmap] ❌ Dependencies missing: {e}")
+        print("Run: pip install seaborn pandas matplotlib numpy")
+        raise RuntimeError(f"Missing python packages for heatmap: {e}")
+
+    if not interactions_result:
+        print("[generate_interaction_heatmap] No interactions to plot")
+        return None
+
+    # 1. 提取数据
+    # 兼容不同的输入格式 (list of dicts or result dict)
+    interactions = interactions_result
+    if isinstance(interactions_result, dict) and "interactions" in interactions_result:
+        interactions = interactions_result["interactions"]
+        
+    if not interactions:
+        print("[generate_interaction_heatmap] Interaction list is empty")
+        return None
+
+    # 2. 准备矩阵数据
+    # 识别列名
+    # Protein-Nucleic: Nucleic_Residue vs Protein_Residue
+    # Protein-Protein: Chain1/Residue1 vs Chain2/Residue2
+    # Protein-Ligand: Ligand_Residue vs Protein_Residue
+    
+    row_residues = [] # Y轴
+    col_residues = [] # X轴
+    data_points = []
+    
+    # 检测模式
+    sample = interactions[0]
+    mode = "unknown"
+    
+    # Safe key retrieval function
+    def get_key(item, *keys):
+        for k in keys:
+            if k in item: return item[k]
+        return ""
+
+    if "Nucleic_Residue" in sample:
+        mode = "pn" # Protein-Nucleic
+        row_label = "Protein Residues"
+        col_label = "Nucleic Acid Residues"
+    elif "Ligand_Residue" in sample:
+        mode = "pl" # Protein-Ligand
+        row_label = "Protein Residues"
+        col_label = "Ligand Atoms/Residues"
+    elif "chain1" in sample: # PPI (from ppi_analyzer.py CSV format?)
+        # Need to check PPI interaction format
+        mode = "pp"
+        row_label = "Chain 1"
+        col_label = "Chain 2"
+    elif "atom1" in sample and "atom2" in sample: # PPI (from _analyze_interface_interactions)
+        mode = "pp_detail"
+        row_label = "Atom 1 (Chain 1)"
+        col_label = "Atom 2 (Chain 2)"
+    else:
+        # Fallback / Generic
+        mode = "generic"
+        row_label = "Partner 1"
+        col_label = "Partner 2"
+
+    # 优先级映射 (用于颜色强度)
+    type_score = {
+        "盐桥": 4, "Salt Bridge": 4,
+        "氢键": 3, "Hydrogen Bond": 3, "H-Bond": 3,
+        "π–π 堆积": 2, "Pi-Pi Stacking": 2,
+        "π–阳离子": 2, "Pi-Cation": 2,
+        "疏水相互作用": 1, "疏水接触": 1, "Hydrophobic": 1, "Hydrophobic Interaction": 1,
+        "范德华力": 0.5, "vdW": 0.5
+    }
+
+    # 收集所有唯一的残基
+    unique_rows = set()
+    unique_cols = set()
+    
+    matrix_data = {} # (row_res, col_res) -> max_score
+
+    for inter in interactions:
+        if mode == "pn":
+            r = inter.get("Protein_Residue", "Unknown")
+            c = inter.get("Nucleic_Residue", "Unknown")
+        elif mode == "pl":
+            r = inter.get("Protein_Residue", "Unknown")
+            c = inter.get("Ligand_Atom", inter.get("Ligand_Residue", "Unknown"))
+        elif mode == "pp_detail":
+            # atom1: "A:ARG 123:N" -> extract residue "A:ARG 123"
+            a1 = inter.get("atom1", "")
+            a2 = inter.get("atom2", "")
+            r = " ".join(a1.split(":")[:2]) if ":" in a1 else a1
+            c = " ".join(a2.split(":")[:2]) if ":" in a2 else a2
+        else: # generic/pp
+            # 尝试各种可能的键名
+            r_val = get_key(inter, "Protein_Residue", "Residue1", "atom1", "Chain1")
+            c_val = get_key(inter, "Ligand_Residue", "Nucleic_Residue", "Residue2", "atom2", "Chain2")
+            
+            # 如果是PPI，还需要加上Chain ID以防重复
+            c1 = get_key(inter, "Protein_Chain", "Chain1")
+            c2 = get_key(inter, "Ligand_Chain", "Nucleic_Chain", "Chain2")
+            
+            r = f"{c1} {r_val}".strip() if c1 else r_val
+            c = f"{c2} {c_val}".strip() if c2 else c_val
+            
+        itype = inter.get("Interaction", inter.get("type", ""))
+        score = type_score.get(itype, 1)
+        
+        # 如果更强的相互作用存在，覆盖
+        if (r, c) in matrix_data:
+            matrix_data[(r, c)] = max(matrix_data[(r, c)], score)
+        else:
+            matrix_data[(r, c)] = score
+            
+        unique_rows.add(r)
+        unique_cols.add(c)
+
+    if not unique_rows or not unique_cols:
+        print("[generate_interaction_heatmap] No valid data rows/cols extracted")
+        return None
+
+    # 排序函数
+    def sort_key(res_str):
+        # 尝试提取数字: "ARG 123" -> 123, "DA 5" -> 5
+        import re
+        m = re.search(r'(\d+)', str(res_str))
+        if m:
+            return int(m.group(1))
+        return str(res_str)
+
+    sorted_rows = sorted(list(unique_rows), key=sort_key)
+    sorted_cols = sorted(list(unique_cols), key=sort_key)
+    
+    # 构建 DataFrame
+    try:
+        df = pd.DataFrame(index=sorted_rows, columns=sorted_cols).fillna(0)
+        for (r, c), score in matrix_data.items():
+            df.loc[r, c] = score
+    except Exception as e:
+        print(f"[generate_interaction_heatmap] DataFrame construction failed: {e}")
+        raise e
+
+    # 绘图
+    try:
+        h = max(6, len(sorted_rows) * 0.3)
+        w = max(8, len(sorted_cols) * 0.3)
+        plt.figure(figsize=(w, h), dpi=120)
+        
+        # 自定义颜色条
+        # 0=None, 1=Hydrophobic, 2=Pi, 3=HBond, 4=Salt
+        cmap = sns.color_palette("YlGnBu", as_cmap=True)
+        
+        ax = sns.heatmap(df, cmap=cmap, linewidths=0.5, linecolor='white',
+                         square=True, cbar_kws={"label": "Interaction Strength (Approx.)"})
+        
+        plt.title(f"Interaction Heatmap ({len(interactions)} contacts)", fontsize=14, pad=20)
+        plt.ylabel(row_label, fontsize=12, fontweight='bold')
+        plt.xlabel(col_label, fontsize=12, fontweight='bold')
+        plt.xticks(rotation=45, ha="right")
+        plt.yticks(rotation=0)
+        
+        plt.tight_layout()
+        
+        if output_path is None:
+            output_path = "interaction_heatmap.png"
+            
+        plt.savefig(output_path, dpi=300, bbox_inches='tight')
+        print(f"[generate_interaction_heatmap] ✅ Heatmap saved: {output_path}")
+        
+        if show_plot:
+            try:
+                plt.show()
+            except Exception:
+                pass
+                
+        plt.close()
+        return output_path
+    except Exception as e:
+        print(f"[generate_interaction_heatmap] Plotting failed: {e}")
+        raise e
+
 cmd.extend("generate_interaction_network_plot", generate_interaction_network_plot)
+cmd.extend("generate_interaction_heatmap", generate_interaction_heatmap)
 
 def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
                                         protein_chains=None, output_csv=None,
-                                        distance_cutoff=4.5, pdb_file=None):
+                                        distance_cutoff=4.5, auto_highlight=True, pdb_file=None):
     """
     分析蛋白质-核酸相互作用（DNA/RNA）
     
@@ -3476,6 +3704,7 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
         protein_chains: 蛋白质链 ID列表（例如 ["P", "Q"]）,如果为None则自动检测
         output_csv: 输出CSV文件路径
         distance_cutoff: 距离截断值（埃）
+        auto_highlight: 是否自动在PyMOL中进行3D高亮显示
         pdb_file: PDB文件路径（可选）
     
     返回:
@@ -3595,10 +3824,12 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
                     
                     if is_hb:
                         interaction_type = "氢键"
-                    elif is_saltbridge(nuc_name, prot_name, d):
+                    elif is_saltbridge_atom(nuc_name, nuc_atom[3], prot_name, prot_atom[3], d):
                         interaction_type = "盐桥"
                     elif is_hydrophobic(nuc_name, prot_name, nuc_atom, prot_atom, d):
-                        interaction_type = "疏水相互作用"
+                        # 过滤掉核酸糖环原子 (带 ')，只允许碱基参与疏水相互作用
+                        if "'" not in nuc_atom[3]:
+                            interaction_type = "疏水相互作用"
                     
                     if interaction_type:
                         interactions.append({
@@ -3637,10 +3868,23 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
                     "Interaction": "π–阳离子相互作用"
                 })
     
-    # 输出到CSV
-    if output_csv and interactions:
+    # 输出到CSV 并处理自动高亮
+    csv_path_to_use = output_csv
+    is_temp_csv = False
+
+    # 如果需要高亮但没有输出路径，创建临时文件
+    if auto_highlight and not csv_path_to_use and interactions:
         try:
-            with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
+            fd, temp_path = tempfile.mkstemp(suffix=".csv", prefix="glue_pn_")
+            os.close(fd)
+            csv_path_to_use = temp_path
+            is_temp_csv = True
+        except Exception as e:
+            print(f"[analyze_protein_nucleic_interactions] Failed to create temp file: {e}")
+
+    if csv_path_to_use and interactions:
+        try:
+            with open(csv_path_to_use, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
                 writer.writerow(["Nucleic_Chain", "Nucleic_Residue", "Nucleic_Atom",
                                "Protein_Chain", "Protein_Residue", "Protein_Atom",
@@ -3656,9 +3900,28 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
                         inter["Distance"],
                         inter["Interaction"]
                     ])
-            print(f"[analyze_protein_nucleic_interactions] Results saved to: {output_csv}")
+            if output_csv:
+                print(f"[analyze_protein_nucleic_interactions] Results saved to: {output_csv}")
         except Exception as e:
             print(f"[analyze_protein_nucleic_interactions] Failed to save CSV: {e}")
+            # 如果写入失败，且是临时文件，则无法高亮
+            if is_temp_csv:
+                csv_path_to_use = None
+
+    # 自动高亮
+    if auto_highlight and csv_path_to_use and interactions:
+        try:
+            from .highlight_residues import highlight_csv_residues
+            print(f"[analyze_protein_nucleic_interactions] 🖌️ Visualizing 3D interactions...")
+            highlight_csv_residues(csv_path_to_use, obj=obj_name, show_labels=True, show_interaction_type=True)
+        except Exception as e:
+            print(f"[analyze_protein_nucleic_interactions] Failed to visualize: {e}")
+        finally:
+            if is_temp_csv and os.path.exists(csv_path_to_use):
+                try:
+                    os.unlink(csv_path_to_use)
+                except Exception:
+                    pass
     
     result = {
         "nucleic_chains": nucleic_chains,

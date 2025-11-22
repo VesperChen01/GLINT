@@ -265,7 +265,13 @@ def vina_score_complex(protein_obj, ligand_selection, mode='score_only', show_re
         print("[vina_score_complex] ⚠️ Vina not available")
         return None
     
-    if protein_obj not in cmd.get_object_list():
+    # 检查对象是否存在
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        
+    if protein_obj not in objs:
         print(f"[vina_score_complex] ⚠️ Object '{protein_obj}' not found")
         return None
     
@@ -521,7 +527,13 @@ def pocket_based_docking(obj_name: str, ligand_file: str, output_dir: Optional[s
         print("[pocket_based_docking] ⚠️ Vina not available")
         return {'success': False, 'error': 'Vina not available'}
     
-    if obj_name not in cmd.get_object_list():
+    # 检查对象
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        
+    if obj_name not in objs:
         print(f"[pocket_based_docking] ⚠️ Object '{obj_name}' not found")
         return {'success': False, 'error': 'Object not found'}
     
@@ -604,7 +616,12 @@ def manual_box_docking(obj_name: str, ligand_file: str, box_params: Dict[str, fl
     if not check_vina_available():
         return {'success': False, 'error': 'Vina not available'}
 
-    if obj_name not in cmd.get_object_list():
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+
+    if obj_name not in objs:
         return {'success': False, 'error': f"Object '{obj_name}' not found"}
 
     if output_dir is None:

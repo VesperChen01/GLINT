@@ -37,13 +37,17 @@ try:
     from .interaction_analyzer import (
         parse_pdb_structure, parse_pdb_file, distance,
         get_element_from_atom_name, calculate_angle_three_points,
-        identify_molecule_type, INTERACTION_PARAMS
+        identify_molecule_type, INTERACTION_PARAMS,
+        is_hbond_precise, is_ionic_precise, is_hydrophobic,
+        is_pipi, is_cationpi
     )
 except ImportError:
     from interaction_analyzer import (
         parse_pdb_structure, parse_pdb_file, distance,
         get_element_from_atom_name, calculate_angle_three_points,
-        identify_molecule_type, INTERACTION_PARAMS
+        identify_molecule_type, INTERACTION_PARAMS,
+        is_hbond_precise, is_ionic_precise, is_hydrophobic,
+        is_pipi, is_cationpi
     )
 
 # ========== PPI 参数 ==========
@@ -113,12 +117,20 @@ def analyze_protein_protein_interface(obj_name=None,
     
     # 按残基和链分组原子
     chain_residues = defaultdict(list)
+    all_atoms_by_residue = {}  # 构建索引
     for atom in atoms:
         chain, res_name, res_id, atom_name, coords = atom
+        res_key = (chain, res_name, res_id)
+        all_atoms_by_residue[res_key] = chain_residues[res_key] # 指向同一个list引用
+        
         if identify_molecule_type(res_name) != "protein":
             continue  # 只处理蛋白质原子
-        res_key = (chain, res_name, res_id)
         chain_residues[res_key].append(atom)
+    
+    # 确保索引完整（在append之后）
+    # 实际上上面的写法有问题，因为 append 是在后面。
+    # 重新构建索引：
+    all_atoms_by_residue = chain_residues
     
     # 分离两个蛋白的残基
     protein1_residues = {k: v for k, v in chain_residues.items() if k[0] in protein1_chains}
@@ -164,11 +176,16 @@ def analyze_protein_protein_interface(obj_name=None,
     print(f"[PPI] ✅ Found {len(interface_residues)} interface residue pairs")
     
     # 分析界面相互作用类型
-    interface_interactions = _analyze_interface_interactions(interface_atom_pairs)
+    interface_interactions = _analyze_interface_interactions(interface_atom_pairs, chain_residues)
     
     # 计算埋藏表面积（如果对象存在于PyMOL中）
     bsa = None
-    if obj_name and obj_name in cmd.get_object_list():
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        
+    if obj_name and obj_name in objs:
         try:
             bsa = calculate_interface_bsa(obj_name, protein1_chains[0], protein2_chains[0])
         except Exception as e:
@@ -218,7 +235,12 @@ def analyze_protein_protein_interface(obj_name=None,
     print("=" * 60)
     
     # 在PyMOL中可视化界面（如果启用）
-    if visualize and obj_name and obj_name in cmd.get_object_list():
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+
+    if visualize and obj_name and obj_name in objs:
         try:
             visualize_ppi_interface(obj_name, result, protein1_color, protein2_color)
         except Exception as e:
@@ -227,50 +249,63 @@ def analyze_protein_protein_interface(obj_name=None,
     return result
 
 
-def _analyze_interface_interactions(interface_atom_pairs):
+def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
     """
-    分析界面残基对之间的详细相互作用类型
+    分析界面残基对之间的详细相互作用类型（使用精确原子级标准）
     
     返回: list of dict
     """
     interactions = []
     
     for res1_atoms, res2_atoms, min_dist in interface_atom_pairs:
-        # 简化分析：检测氢键、盐桥、疏水接触
+        res1_name = res1_atoms[0][1]
+        res2_name = res2_atoms[0][1]
         
-        # 氢键检测（简化版 - 基于距离和原子类型）
+        # 1. 精确盐桥检测 (Residue-level check first)
+        is_ionic, ionic_dist = is_ionic_precise(res1_name, res1_atoms, res2_name, res2_atoms)
+        if is_ionic:
+            interactions.append({
+                "type": "盐桥",
+                "atom1": f"{res1_atoms[0][0]}:{res1_name} {res1_atoms[0][2]}",
+                "atom2": f"{res2_atoms[0][0]}:{res2_name} {res2_atoms[0][2]}",
+                "distance": round(ionic_dist, 2)
+            })
+        
+        # 遍历所有原子对进行其他检测
         for atom1 in res1_atoms:
-            elem1 = get_element_from_atom_name(atom1[3])
-            if elem1 not in ["N", "O"]:
-                continue
-            
             for atom2 in res2_atoms:
-                elem2 = get_element_from_atom_name(atom2[3])
-                if elem2 not in ["N", "O"]:
-                    continue
-                
                 d = distance(atom1[4], atom2[4])
-                if d <= INTERACTION_PARAMS["hbond"]["max_DA_dist"]:
+                
+                if d > INTERACTION_PARAMS["hydrophobic"]["other_max"] and d > INTERACTION_PARAMS["hbond"]["max_DA_dist"]:
+                    continue
+
+                # 2. 精确氢键检测
+                is_hb, _, _ = is_hbond_precise(atom1, atom2, all_atoms_by_residue)
+                if not is_hb:
+                    is_hb, _, _ = is_hbond_precise(atom2, atom1, all_atoms_by_residue)
+                
+                if is_hb:
                     interactions.append({
                         "type": "氢键",
                         "atom1": f"{atom1[0]}:{atom1[1]} {atom1[2]}:{atom1[3]}",
                         "atom2": f"{atom2[0]}:{atom2[1]} {atom2[2]}:{atom2[3]}",
                         "distance": round(d, 2)
                     })
-        
-        # 疏水接触检测
-        hydrophobic_residues = {"ALA", "VAL", "ILE", "LEU", "MET", "PHE", "TRP", "PRO"}
-        res1_name = res1_atoms[0][1]
-        res2_name = res2_atoms[0][1]
-        
-        if res1_name in hydrophobic_residues and res2_name in hydrophobic_residues:
-            if min_dist <= INTERACTION_PARAMS["hydrophobic"]["other_max"]:
-                interactions.append({
-                    "type": "疏水接触",
-                    "atom1": f"{res1_atoms[0][0]}:{res1_name} {res1_atoms[0][2]}",
-                    "atom2": f"{res2_atoms[0][0]}:{res2_name} {res2_atoms[0][2]}",
-                    "distance": round(min_dist, 2)
-                })
+                    continue
+                
+                # 3. 疏水接触 (排除极性原子)
+                if is_hydrophobic(res1_name, res2_name, atom1, atom2, d):
+                    interactions.append({
+                        "type": "疏水接触",
+                        "atom1": f"{atom1[0]}:{atom1[1]} {atom1[2]}:{atom1[3]}",
+                        "atom2": f"{atom2[0]}:{atom2[1]} {atom2[2]}:{atom2[3]}",
+                        "distance": round(d, 2)
+                    })
+    
+    # 去重 (因为双重循环可能产生重复，特别是对于对称的相互作用)
+    # 但这里是成对的链，通常不会重复，除非同一原子对被多次记录(例如氢键和疏水同时满足? 不会，因为有 continue)
+    # 盐桥是基于残基的，可能会记录一次。
+    # 暂时保持这样。
     
     return interactions
 
@@ -390,7 +425,12 @@ def visualize_ppi_interface(obj_name, ppi_result,
         print("[visualize_ppi_interface] Invalid PPI result")
         return
     
-    if obj_name not in cmd.get_object_list():
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+
+    if obj_name not in objs:
         print(f"[visualize_ppi_interface] Object '{obj_name}' not found")
         return
     
@@ -518,7 +558,12 @@ def calculate_interface_bsa(obj_name, chain1, chain2):
     返回:
         float: 埋藏表面积 (Ų)
     """
-    if obj_name not in cmd.get_object_list():
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        
+    if obj_name not in objs:
         raise ValueError(f"Object '{obj_name}' not found in PyMOL")
     
     try:
@@ -727,7 +772,12 @@ def identify_neo_epitope(obj_name=None,
     print("=" * 60)
     
     # 在PyMOL中可视化Neo-表位（如果启用）
-    if visualize and obj_name and obj_name in cmd.get_object_list():
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+
+    if visualize and obj_name and obj_name in objs:
         try:
             visualize_neo_epitope(obj_name, result, neo_color, glue_color)
         except Exception as e:
@@ -795,7 +845,12 @@ def visualize_neo_epitope(obj_name, neo_result, neo_color="yellow", glue_color="
         print("[visualize_neo_epitope] Invalid neo-epitope result")
         return
     
-    if obj_name not in cmd.get_object_list():
+    try:
+        objs = cmd.get_names("objects")
+    except AttributeError:
+        objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+
+    if obj_name not in objs:
         print(f"[visualize_neo_epitope] Object '{obj_name}' not found")
         return
     
