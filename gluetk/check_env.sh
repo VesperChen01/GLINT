@@ -41,6 +41,8 @@ REQUIRED_PACKAGES=(
     "matplotlib:Matplotlib (绘图)"
     "PIL:Pillow (图像处理)"
     "numpy:NumPy (数值计算)"
+    "pandas:Pandas (数据处理)"
+    "seaborn:Seaborn (可视化)"
     "PyQt5:PyQt5 (GUI框架)"
 )
 
@@ -282,13 +284,15 @@ install_dependencies() {
     conda update -n base -c defaults conda -y -q 2>/dev/null || true
     
     # 安装 conda 包
-    log_info "安装 conda 包 (rdkit, scipy, matplotlib, pillow, numpy, pyqt, vina, openbabel)..."
+    log_info "安装 conda 包 (rdkit, scipy, matplotlib, pillow, numpy, pandas, seaborn, pyqt, vina, openbabel)..."
     conda install -c conda-forge \
         rdkit \
         scipy \
         matplotlib \
         pillow \
         numpy \
+        pandas \
+        seaborn \
         pyqt \
         autodock-vina \
         openbabel \

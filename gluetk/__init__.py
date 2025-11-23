@@ -48,7 +48,8 @@ def _register_commands():
             analyze_ternary_complex,
             analyze_atom_pair_interactions,
             visualize_protein_ligand_3d,
-            generate_interaction_network_plot
+            generate_interaction_network_plot,
+            toggle_interaction_lines
         )
         from .interaction_2d_plot import generate_2d_interaction_diagram
         from .binding_heatmap import plot_binding_heatmap
@@ -103,6 +104,25 @@ def _register_commands():
             comprehensive_gmotif_pocket_analysis
         )
         
+        # 突变分析模块
+        from .mutation_analyzer import (
+            perform_mutation,
+            minimize_energy,
+            calculate_mutation_ddg,
+            analyze_mutation_effects
+        )
+        
+        # Open Targets 疾病靶点分析
+        try:
+            from .disease_target_commands import (
+                ot_disease_targets,
+                ot_glue_insight
+            )
+            _disease_analysis_available = True
+        except ImportError as e:
+            print(f"⚠️ Disease analysis not available: {e}")
+            _disease_analysis_available = False
+        
         # Vina集成(可选,需要安装Vina)
         try:
             from .vina_integration import (
@@ -129,6 +149,7 @@ def _register_commands():
         cmd.extend("analyze_ternary_complex", analyze_ternary_complex)
         cmd.extend("analyze_atom_pair_interactions", analyze_atom_pair_interactions)
         cmd.extend("visualize_protein_ligand_3d", visualize_protein_ligand_3d)
+        cmd.extend("toggle_interaction_lines", toggle_interaction_lines)
         cmd.extend("generate_interaction_network_plot", generate_interaction_network_plot)
         cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
         cmd.extend("plot_binding_heatmap", plot_binding_heatmap)
@@ -171,6 +192,17 @@ def _register_commands():
         cmd.extend("integrate_pockets_with_electrostatics", integrate_pockets_with_electrostatics)
         cmd.extend("comprehensive_glue_pocket_analysis", comprehensive_glue_pocket_analysis)
         cmd.extend("comprehensive_gmotif_pocket_analysis", comprehensive_gmotif_pocket_analysis)
+        
+        # 突变分析命令
+        cmd.extend("perform_mutation", perform_mutation)
+        cmd.extend("minimize_energy", minimize_energy)
+        cmd.extend("calculate_mutation_ddg", calculate_mutation_ddg)
+        cmd.extend("analyze_mutation_effects", analyze_mutation_effects)
+        
+        # Open Targets 疾病靶点分析命令
+        if _disease_analysis_available:
+            cmd.extend("ot_disease_targets", ot_disease_targets)
+            cmd.extend("ot_glue_insight", ot_glue_insight)
         
         # Vina集成命令(可选)
         if _vina_available:

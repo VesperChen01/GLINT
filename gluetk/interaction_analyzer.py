@@ -989,8 +989,10 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
                     interactions.append({
                         "Chain1": c1,
                         "Residue1": f"{r1} {id1}",
+                        "Atom1": at1[3],
                         "Chain2": c2,
                         "Residue2": f"{r2} {id2}",
+                        "Atom2": at2[3],
                         "Distance": round(hb_dist, 2),
                         "Interaction": "氢键",
                         "Confidence": conf
@@ -1002,8 +1004,10 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
                 interactions.append({
                     "Chain1": c1,
                     "Residue1": f"{r1} {id1}",
+                    "Atom1": at1[3],
                     "Chain2": c2,
                     "Residue2": f"{r2} {id2}",
+                    "Atom2": at2[3],
                     "Distance": round(d, 2),
                     "Interaction": "盐桥",
                     "Confidence": conf
@@ -1015,8 +1019,10 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
                 interactions.append({
                     "Chain1": c1,
                     "Residue1": f"{r1} {id1}",
+                    "Atom1": at1[3],
                     "Chain2": c2,
                     "Residue2": f"{r2} {id2}",
+                    "Atom2": at2[3],
                     "Distance": round(d, 2),
                     "Interaction": "疏水相互作用",
                     "Confidence": conf
@@ -1030,8 +1036,10 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
                     interactions.append({
                         "Chain1": c1,
                         "Residue1": f"{r1} {id1}",
+                        "Atom1": at1[3],
                         "Chain2": c2,
                         "Residue2": f"{r2} {id2}",
+                        "Atom2": at2[3],
                         "Distance": round(hal_dist, 2),
                         "Interaction": "卤素键",
                         "Confidence": conf
@@ -1043,8 +1051,10 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
         interactions.append({
             "Chain1": c1,
             "Residue1": f"{r1} {id1}",
+            "Atom1": "Ring",
             "Chain2": c2,
             "Residue2": f"{r2} {id2}",
+            "Atom2": "Ring",
             "Distance": "-",
             "Interaction": "π–π 堆积",
             "Confidence": 0.9 # 默认高置信度
@@ -1054,8 +1064,10 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
         interactions.append({
             "Chain1": c1,
             "Residue1": f"{r1} {id1}",
+            "Atom1": "Cation", 
             "Chain2": c2,
             "Residue2": f"{r2} {id2}",
+            "Atom2": "Ring",
             "Distance": "-",
             "Interaction": "π–阳离子相互作用",
             "Confidence": 0.9
@@ -1103,13 +1115,15 @@ def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains
         try:
             with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                writer.writerow(["Chain1", "Residue1", "Chain2", "Residue2", "Distance", "Interaction", "Confidence"])
+                writer.writerow(["Chain1", "Residue1", "Atom1", "Chain2", "Residue2", "Atom2", "Distance", "Interaction", "Confidence"])
                 for inter in interactions:
                     writer.writerow([
                         inter["Chain1"],
                         inter["Residue1"],
+                        inter.get("Atom1", ""),
                         inter["Chain2"],
                         inter["Residue2"],
+                        inter.get("Atom2", ""),
                         inter["Distance"],
                         inter["Interaction"],
                         inter.get("Confidence", "-")
@@ -1135,13 +1149,15 @@ def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains
                 temp_csv = tempfile.NamedTemporaryFile(mode='w', suffix='.csv',
                                                      delete=False, encoding='utf-8')
                 writer = csv.writer(temp_csv)
-                writer.writerow(["Chain1", "Residue1", "Chain2", "Residue2", "Distance", "Interaction", "Confidence"])
+                writer.writerow(["Chain1", "Residue1", "Atom1", "Chain2", "Residue2", "Atom2", "Distance", "Interaction", "Confidence"])
                 for inter in interactions:
                     writer.writerow([
                         inter["Chain1"],
                         inter["Residue1"],
+                        inter.get("Atom1", ""),
                         inter["Chain2"],
                         inter["Residue2"],
+                        inter.get("Atom2", ""),
                         inter["Distance"],
                         inter["Interaction"],
                         inter.get("Confidence", "-")
@@ -2678,18 +2694,18 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 
                 # 尝试创建距离对象
                 try:
-                    # 🔍 调试输出
-                    n1 = cmd.count_atoms(sel1)
-                    n2 = cmd.count_atoms(sel2)
-                    print(f"[DEBUG] {dist_name}:")
-                    print(f"  sel1: {sel1} -> {n1} atoms")
-                    print(f"  sel2: {sel2} -> {n2} atoms")
+                    # 🔍 调试输出（仅在需要时启用）
+                    # n1 = cmd.count_atoms(sel1)
+                    # n2 = cmd.count_atoms(sel2)
+                    # print(f"[DEBUG] {dist_name}:")
+                    # print(f"  sel1: {sel1} -> {n1} atoms")
+                    # print(f"  sel2: {sel2} -> {n2} atoms")
                     
                     # mode=2: 只显示最短的距离（避免多个原子对产生多条线）
                     cmd.distance(dist_name, sel1, sel2, mode=2)
                 except Exception as e:
-                    # 如果选择失败,跳过
-                    print(f"[DEBUG] Failed to create {dist_name}: {e}")
+                    # 如果选择失败,跳过（静默失败，不打印调试信息）
+                    # print(f"[DEBUG] Failed to create {dist_name}: {e}")
                     continue
 
                 # 设置颜色（在创建后立即设置）
@@ -2702,6 +2718,11 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 if interaction_color:
                     cmd.set("dash_color", interaction_color, dist_name)
                     cmd.color(interaction_color, dist_name)
+                
+                # 设置线条样式，确保可见
+                cmd.set("dash_width", 2.5, dist_name)
+                cmd.set("dash_gap", 0.15, dist_name)
+                cmd.set("dash_length", 0.25, dist_name)
                 
                 # 对于π相互作用,使用更粗的线条
                 if "PiPi" in type_en_clean or "PiCation" in type_en_clean:
@@ -2725,9 +2746,13 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         print(f"[visualize_protein_ligand_3d] 💡 Note: hydrophobic interactions are hidden (professional mode)")
         print(f"                                  To show them, use: visualize_protein_ligand_3d('{obj_name}', show_hydrophobic=True)")
 
-    # 隐藏所有距离标签
+    # 隐藏所有距离标签（但保留线条可见）
     cmd.hide("labels", "interact_*")
     cmd.hide("labels", "hbonds_*")
+
+    # 显式显示交互线条（有些主题/样式下需要）
+    cmd.show("dashes", "interact_*")
+    cmd.show("dashes", "hbonds_*")
     
     # ========== 第十二步：调整视角 ==========
     cmd.zoom(f"({lig_sel}) or lig_pocket", buffer=8)
@@ -2764,13 +2789,51 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     print(f"      show labels, hbonds_*       # show H-bond distances")
     print(f"      hide labels, hbonds_*       # hide H-bond distances")
     print(f"      show labels, interact_*     # show other interaction distances")
+    print(f"      hide dashes, interact_*     # hide interaction lines")
+    print(f"      show dashes, interact_*     # show interaction lines")
     print(f"      delete interact_*           # remove all interaction visuals")
     print(f"      delete hbonds_*             # remove H-bond visuals")
     print(f"      color red, interact_SaltBridge_*  # change salt-bridge color")
+    print(f"      set dash_width, 4, interact_*  # make lines thicker")
     print(f"      ray                         # high-quality render")
     print(f"      png output.png, dpi=300     # save high-resolution image")
 
 cmd.extend("visualize_protein_ligand_3d", visualize_protein_ligand_3d)
+
+def toggle_interaction_lines(show=True, line_width=2.5, dash_gap=0.15, dash_length=0.25):
+    """
+    切换相互作用线条的显示/隐藏状态
+    Toggle interaction lines visibility and properties
+    
+    参数:
+        show: True显示线条, False隐藏线条 (Show/hide interaction lines)
+        line_width: 线条宽度 (Line width)
+        dash_gap: 虚线间隙 (Gap between dashes)
+        dash_length: 虚线长度 (Length of each dash)
+    
+    使用示例:
+        toggle_interaction_lines(True, 3.0)  # 显示粗线条
+        toggle_interaction_lines(False)      # 隐藏所有线条
+    """
+    from pymol import cmd
+    
+    interaction_objects = ["interact_*", "hbonds_*", "ppi_dist*"]
+    
+    for obj_pattern in interaction_objects:
+        if show:
+            cmd.show("dashes", obj_pattern)
+            cmd.set("dash_width", line_width, obj_pattern)
+            cmd.set("dash_gap", dash_gap, obj_pattern)
+            cmd.set("dash_length", dash_length, obj_pattern)
+        else:
+            cmd.hide("dashes", obj_pattern)
+    
+    if show:
+        print(f"[toggle_interaction_lines] ✅ Interaction lines shown (width={line_width})")
+    else:
+        print(f"[toggle_interaction_lines] ⚫ Interaction lines hidden")
+
+cmd.extend("toggle_interaction_lines", toggle_interaction_lines)
 
 def apply_plot_style(style="professional"):
     """

@@ -290,11 +290,15 @@ class GMotifWorker(QThread):
     finished = pyqtSignal(list, str)
     error = pyqtSignal(str)
     def __init__(self, obj_name: str, pdb_file: str | None, rmsd: float, require_gly: bool,
-                 out_csv: str | None, template_mode: str, template_sel: str | None, template_builtin: str | None):
+                 out_csv: str | None, template_mode: str, template_sel: str | None, template_builtin: str | None,
+                 exclude_proline: bool = True, check_surface_exposure: bool = True, min_sasa: float = 15.0):
         super().__init__()
         self.obj_name = obj_name; self.pdb_file = pdb_file
         self.rmsd = rmsd; self.require_gly = require_gly; self.out_csv = out_csv
         self.template_mode = template_mode; self.template_sel = template_sel; self.template_builtin = template_builtin
+        self.exclude_proline = exclude_proline
+        self.check_surface_exposure = check_surface_exposure
+        self.min_sasa = min_sasa
     def run(self):
         try:
             if find_crbn_g_motif is None:
@@ -312,8 +316,11 @@ class GMotifWorker(QThread):
                 template_builtin=self.template_builtin,
                 rmsd_cutoff=float(self.rmsd),
                 out_csv=out_csv_path,
-                auto_highlight=0,
+                auto_highlight=1,  # 启用自动高亮
                 require_gly_pos6=bool(self.require_gly),
+                exclude_proline=bool(self.exclude_proline),
+                check_surface_exposure=bool(self.check_surface_exposure),
+                min_sasa_per_residue=float(self.min_sasa),
             ) or []
             self.progress.emit("[G-Motif] " + (f"完成，命中 {len(hits)} 条" if get_lang()=="zh" else f"Done, {len(hits)} hits"))
             self.finished.emit(hits, out_csv_path)
@@ -505,6 +512,7 @@ class GlueTKDialog(QDialog):
             ("Interaction Analysis", "Interaction Analysis"),
             ("Docking & Scoring", "Docking & Scoring"),
             ("Electrostatics", "Electrostatics"),
+            ("Disease Analysis", "Disease Analysis"),  # V3 新增
         ]
 
         for zh_text, en_text in nav_items:
@@ -559,8 +567,9 @@ class GlueTKDialog(QDialog):
         self.content_stack.addWidget(self.create_interaction_tab())     # 2: Interaction Analysis (Prot-Prot + Prot-Lig + Atom)
         self.content_stack.addWidget(self.create_docking_scoring_tab()) # 3: Docking & Scoring
         self.content_stack.addWidget(self.create_apbs_tab())            # 4: Electrostatics
-        self.content_stack.addWidget(self.create_readme_tab())          # 5: README
-        self.content_stack.addWidget(self.create_contact_tab())         # 6: Contact
+        self.content_stack.addWidget(self.create_disease_analysis_tab()) # 5: Disease Analysis (V3)
+        self.content_stack.addWidget(self.create_readme_tab())          # 6: README
+        self.content_stack.addWidget(self.create_contact_tab())         # 7: Contact
 
         # ========== Assemble horizontal layout (nav + full content) ==========
         content_row.addWidget(nav_widget, 0)  # Left nav: auto-size to content
@@ -1611,6 +1620,10 @@ class GlueTKDialog(QDialog):
         advanced_pocket_card = self._create_advanced_pocket_card()
         main_layout.addWidget(advanced_pocket_card)
         
+        # ========== 突变分析（全宽）========== ⭐ 新增
+        mutation_card = self._create_mutation_analysis_card()
+        main_layout.addWidget(mutation_card)
+        
         main_layout.addStretch(1)
         
         # 结果显示在底部日志
@@ -1958,6 +1971,77 @@ class GlueTKDialog(QDialog):
         layout.addStretch()
         return w
     
+    def _create_mutation_analysis_card(self) -> QWidget:
+        """创建突变分析卡片"""
+        card = QGroupBox("Protein Mutation & ΔΔG Analysis")
+        layout = QVBoxLayout(card)
+        layout.setSpacing(8)
+        
+        # 输入区域
+        input_grid = QGridLayout()
+        input_grid.setSpacing(6)
+        
+        # 对象选择
+        input_grid.addWidget(QLabel("Object:"), 0, 0)
+        self.mut_obj_combo = QComboBox()
+        self.mut_obj_combo.setFixedHeight(28)
+        self.mut_refresh_btn = QPushButton("Refresh")
+        self.mut_refresh_btn.setObjectName("refresh_btn")
+        self.mut_refresh_btn.setFixedHeight(28)
+        self.mut_refresh_btn.clicked.connect(self.refresh_objects)
+        obj_row = QHBoxLayout()
+        obj_row.addWidget(self.mut_obj_combo, 1)
+        obj_row.addWidget(self.mut_refresh_btn)
+        input_grid.addLayout(obj_row, 0, 1)
+        
+        # 突变输入
+        input_grid.addWidget(QLabel("Mutations:"), 1, 0)
+        self.mut_input = QLineEdit()
+        self.mut_input.setPlaceholderText("e.g., A:23:ALA, B:45:GLY")
+        self.mut_input.setFixedHeight(28)
+        input_grid.addWidget(self.mut_input, 1, 1)
+        
+        # 方法选择
+        input_grid.addWidget(QLabel("Method:"), 2, 0)
+        method_row = QHBoxLayout()
+        self.mut_method_combo = QComboBox()
+        self.mut_method_combo.addItems(["Auto", "FoldX", "PyRosetta"])
+        self.mut_method_combo.setFixedHeight(28)
+        self.mut_method_combo.setFixedWidth(120)
+        method_row.addWidget(self.mut_method_combo)
+        method_row.addStretch()
+        input_grid.addLayout(method_row, 2, 1)
+        
+        layout.addLayout(input_grid)
+        
+        # 按钮行
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+        
+        self.mut_perform_btn = QPushButton("Perform Mutation")
+        self.mut_perform_btn.setObjectName("primary_btn")
+        self.mut_perform_btn.setFixedHeight(32)
+        self.mut_perform_btn.clicked.connect(self.run_mutation)
+        
+        self.mut_minimize_btn = QPushButton("Minimize Energy")
+        self.mut_minimize_btn.setObjectName("highlight_btn")
+        self.mut_minimize_btn.setFixedHeight(32)
+        self.mut_minimize_btn.clicked.connect(self.run_minimize)
+        
+        self.mut_analyze_btn = QPushButton("Full Analysis")
+        self.mut_analyze_btn.setObjectName("highlight_btn")
+        self.mut_analyze_btn.setFixedHeight(32)
+        self.mut_analyze_btn.clicked.connect(self.run_mutation_analysis)
+        
+        btn_row.addWidget(self.mut_perform_btn)
+        btn_row.addWidget(self.mut_minimize_btn)
+        btn_row.addWidget(self.mut_analyze_btn)
+        btn_row.addStretch()
+        
+        layout.addLayout(btn_row)
+        
+        return card
+    
     def _create_pocket_correlation_tab(self) -> QWidget:
         """创建口袋-相互作用关联标签页"""
         w = QWidget()
@@ -2159,7 +2243,8 @@ class GlueTKDialog(QDialog):
                    getattr(self, "pocket_comp_obj_b", None),
                    getattr(self, "pocket_interface_obj", None),
                    getattr(self, "gmotif_pocket_obj", None),
-                   getattr(self, "glue_obj_combo", None)):
+                   getattr(self, "glue_obj_combo", None),
+                   getattr(self, "mut_obj_combo", None)):  # 添加突变分析对象下拉框
             if cb is not None:
                 cb.blockSignals(True); cb.clear()
                 for n in names: cb.addItem(n)
@@ -2878,6 +2963,37 @@ class GlueTKDialog(QDialog):
         
         return w
 
+
+    # ========== V3: Disease Analysis Tab ==========
+    def create_disease_analysis_tab(self) -> QWidget:
+        """创建疾病分析标签页（V3 功能）"""
+        try:
+            from .disease_analysis_gui import DiseaseAnalysisTab
+            return DiseaseAnalysisTab(self)
+        except ImportError as e:
+            # 如果导入失败，返回错误提示页面
+            w = QWidget()
+            layout = QVBoxLayout(w)
+            layout.setContentsMargins(20, 20, 20, 20)
+            
+            error_label = QLabel(
+                "⚠️ Disease Analysis Module Not Available\n\n"
+                f"Error: {str(e)}\n\n"
+                "Please ensure the following modules are installed:\n"
+                "• requests\n"
+                "• pandas\n\n"
+                "And that the following files exist:\n"
+                "• disease_analysis_gui.py\n"
+                "• open_targets_api.py\n"
+                "• disease_config.py"
+            )
+            error_label.setWordWrap(True)
+            error_label.setStyleSheet("color: #ff6b6b; font-size: 14px;")
+            layout.addWidget(error_label)
+            layout.addStretch()
+            
+            return w
+
     def create_readme_tab(self) -> QWidget:
         """创建README页面"""
         w = QWidget()
@@ -2891,7 +3007,7 @@ class GlueTKDialog(QDialog):
         check_btn.setObjectName("bottom_nav_btn")
         check_btn.setFlat(True)
         check_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        check_btn.clicked.connect(self.run_crbn_doctor)
+        check_btn.clicked.connect(self.check_environment)
         top_row.addWidget(check_btn)
         top_row.addStretch(1)
         layout.addLayout(top_row)
@@ -4880,6 +4996,106 @@ Thank you for your support! 🚀
             self.on_error(str(e))
             import traceback
             traceback.print_exc()
+    
+    # ==================== 突变分析事件处理 ====================
+    
+    def run_mutation(self):
+        """执行突变"""
+        obj_name = self.mut_obj_combo.currentText()
+        mutations_str = self.mut_input.text().strip()
+        
+        if not obj_name or not mutations_str:
+            self.log("❌ 请选择对象并输入突变")
+            return
+        
+        try:
+            # 解析突变字符串
+            mutations = []
+            for mut in mutations_str.split(','):
+                mut = mut.strip()
+                if ':' in mut:
+                    parts = mut.split(':')
+                    if len(parts) == 3:
+                        mutations.append((parts[0], parts[1], parts[2]))
+            
+            if not mutations:
+                self.log("❌ 突变格式错误，示例: A:23:ALA, B:45:GLY")
+                return
+            
+            self.log(f"🧬 执行突变: {obj_name}")
+            
+            # 调用突变分析模块
+            from pymol import cmd
+            cmd.perform_mutation(obj_name, mutations, method='pymol')
+            
+            self.log("✅ 突变完成")
+            
+        except Exception as e:
+            self.log(f"❌ 突变失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def run_minimize(self):
+        """能量最小化"""
+        obj_name = self.mut_obj_combo.currentText()
+        
+        if not obj_name:
+            self.log("❌ 请选择对象")
+            return
+        
+        try:
+            self.log(f"⚡ 能量最小化: {obj_name}")
+            
+            from pymol import cmd
+            cmd.minimize_energy(obj_name, cycles=100)
+            
+            self.log("✅ 最小化完成")
+            
+        except Exception as e:
+            self.log(f"❌ 最小化失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    def run_mutation_analysis(self):
+        """完整突变分析"""
+        obj_name = self.mut_obj_combo.currentText()
+        mutations_str = self.mut_input.text().strip()
+        method = self.mut_method_combo.currentText().lower()
+        
+        if not obj_name or not mutations_str:
+            self.log("❌ 请选择对象并输入突变")
+            return
+        
+        try:
+            # 解析突变
+            mutations = []
+            for mut in mutations_str.split(','):
+                mut = mut.strip()
+                if ':' in mut:
+                    parts = mut.split(':')
+                    if len(parts) == 3:
+                        mutations.append((parts[0], parts[1], parts[2]))
+            
+            if not mutations:
+                self.log("❌ 突变格式错误")
+                return
+            
+            self.log(f"🧬 开始完整分析: {obj_name}")
+            self.log(f"突变数量: {len(mutations)}")
+            self.log(f"方法: {method}")
+            
+            # 调用完整分析
+            from pymol import cmd
+            cmd.analyze_mutation_effects(obj_name, mutations, method=method)
+            
+            self.log("✅ 分析完成")
+            
+        except Exception as e:
+            self.log(f"❌ 分析失败: {e}")
+            import traceback
+            traceback.print_exc()
+    
+    # ==================== 其他方法 ====================
     
     def run_compare_scoring(self):
         """对比评分方法 - DEPRECATED"""

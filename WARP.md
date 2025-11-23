@@ -26,7 +26,7 @@ This is a PyMOL plugin. Installation is manual:
   ```bash
   conda create -n gluetk python=3.9 -y
   conda activate gluetk
-  conda install -c conda-forge rdkit scipy matplotlib pillow numpy pyqt autodock-vina openbabel -y
+  conda install -c conda-forge rdkit scipy matplotlib pillow numpy pandas seaborn pyqt autodock-vina openbabel -y
   # Optional (headless dev without system PyMOL):
   pip install pymol-open-source
   ```

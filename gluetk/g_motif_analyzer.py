@@ -139,16 +139,58 @@ def _get_template_coords(template_mode: str, template_sel: str | None, template_
         return _coords_from_builtin(template_builtin or "")
     return _ideal_beta_hairpin_template()
 
+def _calculate_sasa_for_window(obj_name, chain, window):
+    """
+    计算 8 个残基窗口的溶剂可及表面积 (SASA)
+    
+    参数:
+        obj_name: PyMOL 对象名
+        chain: 链 ID
+        window: [(resi_label, resn, xyz), ...] 8个残基的列表
+    
+    返回:
+        float: 平均 SASA (Ų/残基)，如果计算失败返回 None
+    """
+    try:
+        # 构建残基列表
+        resi_list = '+'.join([w[0] for w in window])
+        selection = f"{obj_name} and chain {chain} and resi {resi_list}"
+        
+        # 计算 SASA
+        total_sasa = cmd.get_area(selection, state=1)
+        
+        # 计算平均值
+        avg_sasa = total_sasa / 8.0
+        return avg_sasa
+    except Exception as e:
+        # 如果计算失败，返回 None（例如对象不存在）
+        return None
+
 # ====== 4) 主函数 ======
 def find_crbn_g_motif(obj_name=None, pdb_file=None,
                        template_mode="ideal", template_sel=None, template_builtin=None,
-                       rmsd_cutoff=3.5, out_csv=None, auto_highlight=0, require_gly_pos6=True,
-                       topk_debug=10):
+                       rmsd_cutoff=1.0, out_csv=None, auto_highlight=0, require_gly_pos6=True,
+                       exclude_proline=True, check_surface_exposure=True, 
+                       min_sasa_per_residue=15.0, topk_debug=10):
     """
-    - template_mode: "ideal" / "builtin" / "selection"
-    - template_sel: 选择表达式（当 template_mode="selection"）
-    - template_builtin: 内置模板名（在 BUILTIN_TEMPLATES 的 key 中任选）
-    返回：[(chain, start_resi_label, end_resi_label, seq8, rmsd), ...]
+    G-loop 挖掘主函数
+    
+    参数:
+        obj_name: PyMOL 对象名
+        pdb_file: PDB 文件路径
+        template_mode: "ideal" / "builtin" / "selection"
+        template_sel: 选择表达式（当 template_mode="selection"）
+        template_builtin: 内置模板名（在 BUILTIN_TEMPLATES 的 key 中任选）
+        rmsd_cutoff: RMSD 阈值（默认 1.0 Å）
+        out_csv: 输出 CSV 文件路径
+        auto_highlight: 是否自动高亮（0/1）
+        require_gly_pos6: 是否要求第 6 位为甘氨酸（默认 True）
+        exclude_proline: 是否排除含脯氨酸的窗口（默认 True）
+        check_surface_exposure: 是否检查表面暴露（默认 True）
+        min_sasa_per_residue: 最小 SASA 阈值，单位 Ų/残基（默认 15.0）
+        topk_debug: 显示前 N 个最小 RMSD（调试用）
+    
+    返回: [(chain, start_resi_label, end_resi_label, seq8, rmsd), ...]
     """
     # 载入对象
     tmp_obj = None
@@ -179,6 +221,8 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
     by_chain = _collect_ca_by_chain(obj)
     total_windows = 0
     gly_pos6_windows = 0
+    proline_excluded_windows = 0
+    buried_windows = 0
 
     for ch, rows in by_chain.items():
         seq = [(r[1], r[2], r[3]) for r in rows]  # (resi_label, resn, xyz)
@@ -187,10 +231,17 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         for i in range(0, len(seq) - 7):
             window = seq[i:i+8]
             total_windows += 1
+            # 检查第 6 位是否为甘氨酸
             if require_gly_pos6:
                 if window[5][1] not in ("GLY", "G"):
                     continue
                 gly_pos6_windows += 1
+            # 检查是否包含脯氨酸（Pro, P）
+            if exclude_proline:
+                has_proline = any(w[1] in ("PRO", "P") for w in window)
+                if has_proline:
+                    proline_excluded_windows += 1
+                    continue
             P = [w[2] for w in window]
             try:
                 rmsd = _kabsch_rmsd(P, tmpl)
@@ -198,6 +249,13 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
                 continue
             best_rmsd_pool.append((rmsd, ch, window))
             if rmsd <= float(rmsd_cutoff):
+                # 表面暴露检查
+                if check_surface_exposure:
+                    avg_sasa = _calculate_sasa_for_window(obj, ch, window)
+                    if avg_sasa is None or avg_sasa < min_sasa_per_residue:
+                        buried_windows += 1
+                        continue
+                
                 resi_s = window[0][0]; resi_e = window[-1][0]
                 seq8 = ''.join((aa[:1] if aa else 'X') for aa in [w[1] for w in window])
                 hits.append((ch, resi_s, resi_e, seq8, rmsd))
@@ -206,6 +264,10 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
     print(f"[G-MOTIF] Total windows: {total_windows}")
     if require_gly_pos6:
         print(f"[G-MOTIF] Windows with pos6=Gly: {gly_pos6_windows}")
+    if exclude_proline:
+        print(f"[G-MOTIF] Windows excluded (含脯氨酸): {proline_excluded_windows}")
+    if check_surface_exposure:
+        print(f"[G-MOTIF] Windows excluded (埋藏在内部): {buried_windows}")
     if best_rmsd_pool:
         best_rmsd_pool.sort(key=lambda x: x[0])
         nshow = min(topk_debug, len(best_rmsd_pool))
@@ -235,10 +297,12 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
     if auto_highlight and hits:
         try:
             try:
-                from .highlight_residues import highlight_csv_residues
+                from .highlight_residues import highlight_gmotif_loops
             except Exception:
-                from highlight_residues import highlight_csv_residues
-            highlight_csv_residues(out_csv, obj=obj, show_labels=1, stick_by_element=1)
+                from highlight_residues import highlight_gmotif_loops
+            # 使用专门的 G-loop 高亮函数
+            highlight_gmotif_loops(out_csv, obj=obj, color="yellow", show_labels=True, clear_old=True)
+            print(f"[G-MOTIF] Auto-highlighted {len(hits)} G-loop regions in PyMOL")
         except Exception as e:
             print(f"[G-MOTIF] Auto highlight failed: {e}")
 

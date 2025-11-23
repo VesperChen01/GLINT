@@ -134,12 +134,36 @@ def _res_sel(obj, chain, resn, resi):
 def _setup_view(obj, protein_chain, partner_chain, colorA, colorB):
     """设置基本视图和链颜色"""
     cmd.hide("everything", obj)
-    if protein_chain:
-        cmd.show("cartoon", f"model {obj} and chain {protein_chain}")
-        cmd.color(colorA, f"model {obj} and chain {protein_chain}")
-    if partner_chain:
-        cmd.show("cartoon", f"model {obj} and chain {partner_chain}")
-        cmd.color(colorB, f"model {obj} and chain {partner_chain}")
+    
+    # 自动检测所有链
+    all_chains = set()
+    model = cmd.get_model(obj)
+    for atom in model.atom:
+        if atom.chain:
+            all_chains.add(atom.chain.strip())
+    
+    # 设置所有蛋白链的 cartoon 显示
+    for chain in all_chains:
+        cmd.show("cartoon", f"model {obj} and chain {chain} and polymer.protein")
+        
+        # 根据链设置颜色
+        if chain == protein_chain:
+            cmd.color(colorA, f"model {obj} and chain {chain}")
+        elif chain == partner_chain:
+            cmd.color(colorB, f"model {obj} and chain {chain}")
+        else:
+            # 其他链使用默认颜色
+            cmd.color("gray70", f"model {obj} and chain {chain}")
+    
+    # 配体显示为 sticks 并使用独特颜色
+    ligand_sel = f"model {obj} and organic and not polymer"
+    if cmd.count_atoms(ligand_sel) > 0:
+        cmd.show("sticks", ligand_sel)
+        cmd.color("tv_orange", f"{ligand_sel} and elem C")
+        cmd.color("blue", f"{ligand_sel} and elem N")
+        cmd.color("red", f"{ligand_sel} and elem O")
+        cmd.color("yellow", f"{ligand_sel} and elem S")
+    
     cmd.set("cartoon_transparency", 0.15)
     cmd.bg_color("white")
 
@@ -227,11 +251,115 @@ def _color_sticks_by_element(selection_expr):
     cmd.color("red",    f"({selection_expr}) and elem O")
     cmd.color("yellow", f"({selection_expr}) and elem S")
 
+def _color_sticks_by_chain(selection_expr, chain, colorA, colorB):
+    """根据链设置碳原子颜色，其他元素保持标准颜色"""
+    # 根据链选择颜色
+    if chain == "A":
+        carbon_color = colorA
+    elif chain == "B":
+        carbon_color = colorB
+    else:
+        carbon_color = "grey70"
+    
+    # 设置碳原子颜色继承链的颜色
+    cmd.color(carbon_color, f"({selection_expr}) and elem C")
+    # 其他元素保持标准颜色
+    cmd.color("blue",   f"({selection_expr}) and elem N")
+    cmd.color("red",    f"({selection_expr}) and elem O")
+    cmd.color("yellow", f"({selection_expr}) and elem S")
+
+def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
+                                chain2, resid2, atom2,
+                                interaction_type, idx):
+    """
+    在两个原子之间绘制相互作用连接线
+    
+    参数:
+        obj: PyMOL对象名称
+        chain1, resid1, atom1: 第一个原子的链、残基号、原子名
+        chain2, resid2, atom2: 第二个原子的链、残基号、原子名
+        interaction_type: 相互作用类型(氢键、盐桥等)
+        idx: 索引编号,用于生成唯一的距离对象名称
+    
+    返回:
+        distance_obj_name: 创建的距离对象名称,如果失败则返回None
+    """
+    # 相互作用类型到颜色的映射
+    color_map = {
+        "氢键": "yellow",
+        "盐桥": "magenta",
+        "疏水相互作用": "green",
+        "π–π 堆积": "orange",
+        "π–阳离子相互作用": "tv_orange",
+        "卤素键": "cyan",
+        "水桥": "lightblue",
+        "金属配位": "purple",
+    }
+    
+    # 获取颜色,默认为灰色
+    color = color_map.get(interaction_type, "grey70")
+    
+    # 构建原子选择表达式
+    # 处理原子名称中的特殊字符(如单引号)
+    atom1_clean = atom1.replace("'", "\\'") if atom1 else "*"
+    atom2_clean = atom2.replace("'", "\\'") if atom2 else "*"
+    
+    # 构建选择表达式
+    parts1 = [f"model {obj}"]
+    if chain1:
+        parts1.append(f"chain {chain1}")
+    if resid1:
+        parts1.append(f"resi {resid1}")
+    if atom1 and atom1 != "ring" and atom1 != "ring/cation":
+        parts1.append(f"name {atom1_clean}")
+    sel1 = " and ".join(parts1)
+    
+    parts2 = [f"model {obj}"]
+    if chain2:
+        parts2.append(f"chain {chain2}")
+    if resid2:
+        parts2.append(f"resi {resid2}")
+    if atom2 and atom2 != "ring" and atom2 != "ring/cation":
+        parts2.append(f"name {atom2_clean}")
+    sel2 = " and ".join(parts2)
+    
+    # 对于π相互作用(ring/ring),使用残基质心
+    if atom1 in ["ring", "ring/cation"] or atom2 in ["ring", "ring/cation"]:
+        # 使用残基的所有原子质心
+        pass  # PyMOL的distance命令会自动处理
+    
+    # 创建距离对象
+    dist_name = f"dist_{idx}"
+    
+    try:
+        # 使用distance命令创建连接线
+        cmd.distance(dist_name, sel1, sel2)
+        
+        # 设置距离对象的显示样式
+        cmd.hide("labels", dist_name)  # 隐藏距离标签
+        cmd.color(color, dist_name)     # 设置颜色
+        cmd.set("dash_width", 2.5, dist_name)  # 设置线条粗细
+        cmd.set("dash_gap", 0.3, dist_name)    # 设置虚线间隙(0.3 = 较密集的虚线)
+        cmd.set("dash_length", 0.2, dist_name) # 设置虚线长度
+        
+        # 确保distance对象可见
+        cmd.show("dashes", dist_name)
+        
+        return dist_name
+    except Exception as e:
+        # 输出错误信息便于调试
+        print(f"[draw_atom_interaction_lines] ⚠️  Failed to create distance '{dist_name}':")
+        print(f"    Selection 1: {sel1}")
+        print(f"    Selection 2: {sel2}")
+        print(f"    Error: {e}")
+        return None
+
 def highlight_csv_residues(csv_path, obj=None,
                            protein_chain="A", partner_chain="B",
                            colorA="lightblue", colorB="lightorange",
                            show_labels=1, clear_old=1, debug=0, stick_by_element=1,
-                           show_interaction_type=0):
+                           show_interaction_type=0, show_atom_lines=True,
+                           show_only_interactions=True):
     """
     从CSV文件高亮显示残基相互作用
 
@@ -247,10 +375,11 @@ def highlight_csv_residues(csv_path, obj=None,
         debug: 调试模式 (默认0)
         stick_by_element: 是否按元素着色棍状模型 (默认1)
         show_interaction_type: 是否在标签中显示相互作用类型 (默认0，不显示)
+        show_atom_lines: 是否显示原子间相互作用连接线 (默认True)
 
     CSV格式要求:
         必须包含列: Chain1, Residue1, Chain2, Residue2
-        可选列: Interaction, Distance
+        可选列: Interaction, Distance, Ligand_Atom, Protein_Atom (或其他原子列)
     """
     csv_path = os.path.abspath(csv_path)
     if not os.path.exists(csv_path):
@@ -284,11 +413,16 @@ def highlight_csv_residues(csv_path, obj=None,
     # 清除旧的选择和标签
     if clear_old:
         for name in cmd.get_names("objects"):
-            if name.startswith("intsel_") or name.startswith("rlab_"):
+            if name.startswith("intsel_") or name.startswith("rlab_") or name.startswith("dist_"):
                 cmd.delete(name)
 
-    # 设置基本视图
-    _setup_view(obj, protein_chain, partner_chain, colorA, colorB)
+    # 设置基本视图（如果只显示相互作用，稍后设置）
+    if not show_only_interactions:
+        _setup_view(obj, protein_chain, partner_chain, colorA, colorB)
+    else:
+        # 简单的基础设置
+        cmd.hide("everything", obj)
+        cmd.bg_color("white")
 
     # 读取CSV文件
     rows = []
@@ -299,10 +433,15 @@ def highlight_csv_residues(csv_path, obj=None,
             fmap = {k.strip().lower(): k for k in reader.fieldnames}
             
             def has(key): 
-                return key in fmap
+                key_lower = key.strip().lower()
+                return key_lower in fmap
             
-            def get(r, key): 
-                return r[fmap[key]].strip() if key in fmap else ""
+            def get(r, key):
+                key_lower = key.strip().lower()
+                if key_lower in fmap:
+                    original_key = fmap[key_lower]
+                    return r.get(original_key, "").strip()
+                return ""
             
             for r in reader:
                 try:
@@ -327,8 +466,26 @@ def highlight_csv_residues(csv_path, obj=None,
                     
                     interaction = get(r, "interaction") or get(r, "type") or ""
                     
+                    # 读取原子信息(如果存在) - 支持大小写
+                    # 注意: get 函数会将键转为小写，所以要用小写版本
+                    atom1 = get(r, "ligand_atom") or get(r, "atom1") or get(r, "nucleic_atom") or ""
+                    atom2 = get(r, "protein_atom") or get(r, "atom2") or ""
+                    
+                    # 直接检查原始大写版本（如果上面没找到）
+                    if not atom1:
+                        for key in r.keys():
+                            if key in ['Atom1', 'Ligand_Atom']:
+                                atom1 = r[key].strip() if r[key] else ""
+                                break
+                    
+                    if not atom2:
+                        for key in r.keys():
+                            if key in ['Atom2', 'Protein_Atom']:
+                                atom2 = r[key].strip() if r[key] else ""
+                                break
+                    
                     if res1 and res2:
-                        rows.append((res1, res2, ch1, ch2, interaction))
+                        rows.append((res1, res2, ch1, ch2, interaction, atom1, atom2))
                 except Exception as e:
                     print(f"[highlight_csv_residues] Skipping row: {r}, Error: {e}")
                     continue
@@ -339,8 +496,9 @@ def highlight_csv_residues(csv_path, obj=None,
     # 处理每一行数据
     built = []
     labeled_residues = set()  # 跟踪已标记的残基，避免重复标签
+    distance_objects = []  # 跟踪创建的距离对象
 
-    for idx, (res1, res2, ch1_csv, ch2_csv, interaction) in enumerate(rows, start=1):
+    for idx, (res1, res2, ch1_csv, ch2_csv, interaction, atom1, atom2) in enumerate(rows, start=1):
         # 解析残基信息
         c1, n1, i1 = _parse_residue_tag(res1)
         c2, n2, i2 = _parse_residue_tag(res2)
@@ -368,17 +526,71 @@ def highlight_csv_residues(csv_path, obj=None,
         cmd.show("sticks", s2)
         built.extend([s1, s2])
 
-        # 按元素着色（如果启用）
+        # 颜色设置：如果是配体则用配体颜色，否则继承链的颜色
+        # 检测是否是配体（非标准残基）
+        standard_residues = {
+            'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE',
+            'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL'
+        }
+        
+        is_ligand1 = n1 not in standard_residues
+        is_ligand2 = n2 not in standard_residues
+        
+        # 设置颜色
         if stick_by_element:
-            _color_sticks_by_element(sel1)
-            _color_sticks_by_element(sel2)
+            # 配体残基：橙色碳原子
+            if is_ligand1:
+                cmd.color("tv_orange", f"({sel1}) and elem C")
+                cmd.color("blue", f"({sel1}) and elem N")
+                cmd.color("red", f"({sel1}) and elem O")
+                cmd.color("yellow", f"({sel1}) and elem S")
+            else:
+                # 蛋白残基：继承链的颜色的碳原子
+                _color_sticks_by_chain(sel1, c1, colorA, colorB)
+            
+            if is_ligand2:
+                cmd.color("tv_orange", f"({sel2}) and elem C")
+                cmd.color("blue", f"({sel2}) and elem N")
+                cmd.color("red", f"({sel2}) and elem O")
+                cmd.color("yellow", f"({sel2}) and elem S")
+            else:
+                # 蛋白残基：继承链的颜色的碳原子
+                _color_sticks_by_chain(sel2, c2, colorA, colorB)
+
+        # 绘制原子级相互作用连接线（如果启用且有原子信息）
+        if show_atom_lines:
+            if atom1 and atom2:
+                # 从残基标签中提取残基号
+                # res1/res2格式: "LIG 1" 或 "ARG 123"
+                resid1 = i1  # 已经从_parse_residue_tag解析出来
+                resid2 = i2
+                
+                if debug:
+                    print(f"[debug] Drawing atom line {idx}: {c1}:{resid1}:{atom1} <-> {c2}:{resid2}:{atom2} ({interaction})")
+                
+                dist_obj = draw_atom_interaction_lines(
+                    obj, c1, resid1, atom1,
+                    c2, resid2, atom2,
+                    interaction, idx
+                )
+                if dist_obj:
+                    distance_objects.append(dist_obj)
+                    if debug:
+                        print(f"[debug]   ✓ Created distance object: {dist_obj}")
+            elif debug and idx <= 5:
+                print(f"[debug] No atom info for row {idx}: atom1='{atom1}', atom2='{atom2}'")
 
         # 添加标签（如果启用）- 只为每个唯一残基创建一次标签
         if show_labels:
             # 为残基1创建唯一标识符
             res1_key = (c1, n1, i1)
             if res1_key not in labeled_residues:
+                # 生成标签文本
                 label1 = _label_for_residue(n1, i1)
+                # 如果需要显示相互作用类型
+                if show_interaction_type and interaction:
+                    abbr = _interaction_to_abbr(interaction)
+                    label1 = f"{label1}({abbr})"
                 _place_label_pseudoatom(s1, label1, len(labeled_residues) + 1)
                 labeled_residues.add(res1_key)
 
@@ -386,24 +598,48 @@ def highlight_csv_residues(csv_path, obj=None,
             res2_key = (c2, n2, i2)
             if res2_key not in labeled_residues:
                 label2 = _label_for_residue(n2, i2)
+                if show_interaction_type and interaction:
+                    abbr = _interaction_to_abbr(interaction)
+                    label2 = f"{label2}({abbr})"
                 _place_label_pseudoatom(s2, label2, len(labeled_residues) + 1)
                 labeled_residues.add(res2_key)
 
+    # 如果启用了只显示相互作用，现在设置蛋白背景
+    if show_only_interactions and built:
+        # 显示蛋白链为半透明 cartoon 背景
+        cmd.show("cartoon", f"{obj} and polymer.protein")
+        cmd.set("cartoon_transparency", 0.6, obj)
+        cmd.color("gray80", f"{obj} and polymer.protein")
+        
+        # 强调显示相互作用的残基
+        for sel in built:
+            # 相互作用残基显示为不透明
+            cmd.set("stick_transparency", 0.0, sel)
+    
     # 缩放到显示的残基
     if built:
         cmd.zoom(" or ".join(built), buffer=5.0, complete=1)
+
+    # 确保所有distance对象可见
+    if show_atom_lines and distance_objects:
+        cmd.show("dashes")  # 全局显示所有虚线对象
+        print(f"[highlight_csv_residues] 💡 Tip: If you don't see dashes, run: show dashes")
 
     # 强制刷新PyMOL视图
     cmd.refresh()
     cmd.rebuild()
 
-    print(f"[highlight_csv_residues] Highlighted {len(rows)} interaction residue pairs, {len(labeled_residues)} unique residues")
+    if show_atom_lines and distance_objects:
+        print(f"[highlight_csv_residues] Highlighted {len(rows)} interaction residue pairs, {len(labeled_residues)} unique residues, {len(distance_objects)} atom-level connections")
+    else:
+        print(f"[highlight_csv_residues] Highlighted {len(rows)} interaction residue pairs, {len(labeled_residues)} unique residues")
 
     # 返回统计信息，供GUI使用
     return {
         "pairs": len(rows),
         "unique_residues": len(labeled_residues),
-        "selections": built
+        "selections": built,
+        "distance_objects": distance_objects
     }
 
 # 注册命令到PyMOL

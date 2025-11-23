@@ -22,6 +22,8 @@ REQUIRED_PACKAGES = [
     ("matplotlib", "Matplotlib", "matplotlib"),
     ("PIL", "Pillow", "pillow"),
     ("numpy", "NumPy", "numpy"),
+    ("pandas", "Pandas", "pandas"),
+    ("seaborn", "Seaborn", "seaborn"),
     ("PyQt5", "PyQt5", "pyqt5"),
 ]
 
@@ -533,7 +535,7 @@ conda activate {ENV_NAME}
             
             if py_packages:
                 install_cmd.append("# 安装 Python 包")
-                install_cmd.append("conda install -c conda-forge rdkit scipy matplotlib pillow numpy pyqt -y")
+                install_cmd.append("conda install -c conda-forge rdkit scipy matplotlib pillow numpy pandas seaborn pyqt -y")
             
             if cmd_tools:
                 install_cmd.append("\n# 安装命令行工具")

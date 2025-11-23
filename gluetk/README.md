@@ -61,6 +61,10 @@ analyze_atom_pair_interactions('protein', 'elem N', 'elem O', 3.5)
 # 3D 可视化
 visualize_protein_ligand_3d('protein', result, 'LIG')
 
+# 控制相互作用线条显示
+toggle_interaction_lines(True, 3.0)   # 显示粗线条
+toggle_interaction_lines(False)       # 隐藏所有线条
+
 # 生成网络图
 generate_interaction_network_plot(result, output_path='network.png')
 
@@ -125,6 +129,10 @@ result = analyze_protein_ligand_interactions('protein', 'LIG',
 
 # 可视化
 visualize_protein_ligand_3d('protein', result, 'LIG')
+
+# 调整相互作用线条
+toggle_interaction_lines(True, 3.5)  # 显示更粗的线条
+set dash_color, marine, interact_Hbond_*  # 改变氢键颜色
 
 # 设置渲染
 bg_color white
