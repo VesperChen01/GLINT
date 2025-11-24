@@ -2316,7 +2316,10 @@ def visualize_atom_pairs(obj_name, interactions_result=None, csv_path=None):
 
 cmd.extend("visualize_atom_pairs", visualize_atom_pairs)
 
-def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resname=None, csv_path=None, show_hydrophobic=False, max_interactions_per_type=None):
+def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resname=None,
+                                   csv_path=None, show_hydrophobic=False,
+                                   max_interactions_per_type=None,
+                                   min_confidence=0.8):
     """
     在PyMOL中3D可视化蛋白-配体相互作用（改进版，参考专业脚本）
 
@@ -2357,6 +2360,28 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     if not interactions:
         print("[visualize_protein_ligand_3d] No interaction data")
         return
+
+    # ========== 置信度过滤：只保留高置信度相互作用 ==========
+    if min_confidence is not None:
+        filtered = []
+        dropped = 0
+        for inter in interactions:
+            conf_val = inter.get("Confidence") or inter.get("confidence") or inter.get("CONFIDENCE")
+            try:
+                conf = float(conf_val)
+            except (TypeError, ValueError):
+                # 没有置信度字段时默认视为 1.0（不丢弃）
+                conf = 1.0
+            if conf >= float(min_confidence):
+                filtered.append(inter)
+            else:
+                dropped += 1
+        if not filtered:
+            print(f"[visualize_protein_ligand_3d] ℹ️ No interactions with Confidence ≥ {min_confidence}")
+            return
+        if dropped > 0:
+            print(f"[visualize_protein_ligand_3d] Filtering by Confidence ≥ {min_confidence}: kept {len(filtered)}/{len(interactions)} interactions")
+        interactions = filtered
 
     # 为非 CSV 来源的相互作用补充一个稳定的行号（1-based）
     if not from_csv:
@@ -2437,25 +2462,18 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     cmd.show("cartoon", obj_name)
     cmd.set("cartoon_transparency", 0.3, obj_name)
     
-    # 显示配体和口袋残基为sticks
+    # 只显示配体为 sticks；口袋残基本身不单独高亮，后面只高亮真正有高置信度相互作用的残基
     cmd.show("sticks", lig_sel)
-    cmd.show("sticks", "lig_pocket")
     
     # 隐藏连接到碳原子的氢（只保留极性氢：NH, OH, SH）
     cmd.hide("(h. and (e. c extend 1))")
     
-    # ========== 第七步：配体着色（参考脚本：配体碳原子黄色） ==========
+    # ========== 第七步：配体着色（参考脚本：配体碳原子黄色） ==========\
     cmd.color("yellow", f"{lig_sel} and name C*")     # 配体碳原子：黄色
     cmd.color("blue", f"{lig_sel} and elem N")
     cmd.color("red", f"{lig_sel} and elem O")
     cmd.color("yellow", f"{lig_sel} and elem S")
     cmd.color("green", f"{lig_sel} and elem F+CL+BR+I")
-    
-    # 口袋残基碳原子：青色（参考脚本）
-    cmd.color("cyan", "lig_pocket and name C*")
-    cmd.color("blue", "lig_pocket and elem N")
-    cmd.color("red", "lig_pocket and elem O")
-    cmd.color("yellow", "lig_pocket and elem S")
     
     # ========== 第八步：验证数据存在 ==========
     # ⚠️ 关键：必须提供 interactions 数据，不再回退到 PyMOL 几何检测
@@ -2694,18 +2712,25 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 
                 # 尝试创建距离对象
                 try:
-                    # 🔍 调试输出（仅在需要时启用）
-                    # n1 = cmd.count_atoms(sel1)
-                    # n2 = cmd.count_atoms(sel2)
-                    # print(f"[DEBUG] {dist_name}:")
-                    # print(f"  sel1: {sel1} -> {n1} atoms")
-                    # print(f"  sel2: {sel2} -> {n2} atoms")
-                    
+                    # 检查选择是否有效
+                    if cmd.count_atoms(sel1) == 0:
+                        print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Ligand selection empty: {sel1}")
+                        continue
+                    if cmd.count_atoms(sel2) == 0:
+                        print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Protein selection empty: {sel2}")
+                        continue
+
                     # mode=2: 只显示最短的距离（避免多个原子对产生多条线）
                     cmd.distance(dist_name, sel1, sel2, mode=2)
+                    
+                    # 验证是否创建成功
+                    if dist_name not in cmd.get_names("objects"):
+                        print(f"[visualize_protein_ligand_3d] ⚠️ Failed to create distance object: {dist_name}")
+                        continue
+                        
                 except Exception as e:
                     # 如果选择失败,跳过（静默失败，不打印调试信息）
-                    # print(f"[DEBUG] Failed to create {dist_name}: {e}")
+                    print(f"[visualize_protein_ligand_3d] ⚠️ Error creating distance {dist_name}: {e}")
                     continue
 
                 # 设置颜色（在创建后立即设置）
@@ -2754,7 +2779,11 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     cmd.show("dashes", "interact_*")
     cmd.show("dashes", "hbonds_*")
     
-    # ========== 第十二步：调整视角 ==========
+    # 确保线条宽度足够
+    cmd.set("dash_width", 3.0, "interact_*")
+    cmd.set("dash_width", 3.0, "hbonds_*")
+    
+    # ========== 第十二步：调整视角 ==========\
     cmd.zoom(f"({lig_sel}) or lig_pocket", buffer=8)
     cmd.orient(f"({lig_sel}) or lig_pocket")
     
@@ -2799,6 +2828,118 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     print(f"      png output.png, dpi=300     # save high-resolution image")
 
 cmd.extend("visualize_protein_ligand_3d", visualize_protein_ligand_3d)
+
+def diagnose_csv_visualization(obj_name, csv_path, max_rows=5):
+    """
+    诊断CSV可视化问题 - 检查CSV中的选择是否有效
+    Diagnose CSV visualization issues - check if selections in CSV are valid
+    
+    参数:
+        obj_name: PyMOL对象名称
+        csv_path: CSV文件路径
+        max_rows: 最多检查多少行 (default: 5)
+    """
+    from pymol import cmd
+    import csv
+    
+    print(f"\n[diagnose_csv_visualization] 🔍 Diagnosing CSV: {csv_path}")
+    print(f"   Object: {obj_name}\n")
+    
+    if obj_name not in cmd.get_object_list():
+        print(f"   ❌ Object '{obj_name}' not found in PyMOL!")
+        print(f"   Available objects: {cmd.get_object_list()}")
+        return
+    
+    if not os.path.exists(csv_path):
+        print(f"   ❌ CSV file not found: {csv_path}")
+        return
+    
+    # Read CSV
+    try:
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv.DictReader(f)
+            rows = list(reader)
+    except Exception as e:
+        print(f"   ❌ Failed to read CSV: {e}")
+        return
+    
+    if not rows:
+        print(f"   ❌ CSV is empty!")
+        return
+    
+    print(f"   CSV has {len(rows)} interactions\n")
+    print(f"   Checking first {min(max_rows, len(rows))} rows:\n")
+    
+    valid_count = 0
+    for i, row in enumerate(rows[:max_rows], 1):
+        lig_chain = row.get("Ligand_Chain", "")
+        lig_res = row.get("Ligand_Residue", "").split()
+        lig_atom = row.get("Ligand_Atom", "")
+        prot_chain = row.get("Protein_Chain", "")
+        prot_res = row.get("Protein_Residue", "").split()
+        prot_atom = row.get("Protein_Atom", "")
+        interaction_type = row.get("Interaction", "")
+        confidence = row.get("Confidence", "1.0")
+        
+        if len(lig_res) < 2 or len(prot_res) < 2:
+            print(f"   Row {i}: ⚠️  Invalid residue format")
+            continue
+        
+        lig_resid = lig_res[1]
+        prot_resid = prot_res[1]
+        
+        # Create selections
+        if lig_chain and lig_chain.strip():
+            sel1 = f"{obj_name} and chain {lig_chain} and resi {lig_resid}"
+        else:
+            sel1 = f"{obj_name} and resi {lig_resid}"
+        
+        if lig_atom:
+            sel1 += f" and name {lig_atom}"
+        
+        if prot_chain and prot_chain.strip():
+            sel2 = f"{obj_name} and chain {prot_chain} and resi {prot_resid}"
+        else:
+            sel2 = f"{obj_name} and resi {prot_resid}"
+        
+        if prot_atom:
+            sel2 += f" and name {prot_atom}"
+        
+        # Check selections
+        count1 = cmd.count_atoms(sel1)
+        count2 = cmd.count_atoms(sel2)
+        
+        # Print results
+        status = "✅" if (count1 > 0 and count2 > 0) else "❌"
+        conf_val = f", conf={confidence}" if confidence else ""
+        hydro_note = " [hidden by default]" if "疏水" in interaction_type or "Hydrophobic" in interaction_type else ""
+        
+        print(f"   Row {i}: {status} {interaction_type}{conf_val}{hydro_note}")
+        print(f"          Ligand: {lig_res[0]} {lig_resid}/{lig_atom} → {count1} atoms")
+        print(f"          Protein: {prot_res[0]} {prot_resid}/{prot_atom} → {count2} atoms")
+        
+        if count1 == 0:
+            print(f"          ⚠️  Ligand selection empty: {sel1}")
+        if count2 == 0:
+            print(f"          ⚠️  Protein selection empty: {sel2}")
+        
+        if count1 > 0 and count2 > 0:
+            valid_count += 1
+        
+        print()
+    
+    print(f"   Summary: {valid_count}/{min(max_rows, len(rows))} selections valid\n")
+    
+    # Print recommendations
+    print("   💡 Recommendations:")
+    print("      1. To show ALL interactions including hydrophobic:")
+    print(f"         visualize_protein_ligand_3d('{obj_name}', csv_path='{csv_path}', show_hydrophobic=True)\n")
+    print("      2. To lower confidence threshold (e.g., ≥0.5):")
+    print(f"         visualize_protein_ligand_3d('{obj_name}', csv_path='{csv_path}', min_confidence=0.5)\n")
+    print("      3. To show all with both options:")
+    print(f"         visualize_protein_ligand_3d('{obj_name}', csv_path='{csv_path}', show_hydrophobic=True, min_confidence=0.5)\n")
+
+cmd.extend("diagnose_csv_visualization", diagnose_csv_visualization)
 
 def toggle_interaction_lines(show=True, line_width=2.5, dash_gap=0.15, dash_length=0.25):
     """

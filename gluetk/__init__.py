@@ -15,7 +15,7 @@ __author__ = "Vesper"
 
 # ---- 环境依赖检查与自动安装 ----
 try:
-    from .env_setup import ensure_dependencies
+    from .env_checker import ensure_dependencies
     _DEPS_OK = ensure_dependencies()
 except Exception as e:
     print(f"[GlueTK] ⚠️ Dependency check failed: {e}")
@@ -74,7 +74,8 @@ def _register_commands():
             find_crbn_g_motif,
             analyze_g_motif_glue_binding,
             validate_crbn_hbonds,
-            validate_g_motif_geometry
+            validate_g_motif_geometry,
+            degron_annotate
         )
         
         # 分子胶设计分析（Ternary complex 建模）
@@ -109,7 +110,8 @@ def _register_commands():
             perform_mutation,
             minimize_energy,
             calculate_mutation_ddg,
-            analyze_mutation_effects
+            analyze_mutation_effects,
+            ddg_heatmap
         )
         
         # Open Targets 疾病靶点分析
@@ -168,6 +170,7 @@ def _register_commands():
         cmd.extend("analyze_g_motif_glue_binding", analyze_g_motif_glue_binding)
         cmd.extend("validate_crbn_hbonds", validate_crbn_hbonds)
         cmd.extend("validate_g_motif_geometry", validate_g_motif_geometry)
+        cmd.extend("degron_annotate", degron_annotate)
         
         # 分子胶设计分析命令
         cmd.extend("align_gloop_for_modeling", align_gloop_for_modeling)
@@ -198,6 +201,7 @@ def _register_commands():
         cmd.extend("minimize_energy", minimize_energy)
         cmd.extend("calculate_mutation_ddg", calculate_mutation_ddg)
         cmd.extend("analyze_mutation_effects", analyze_mutation_effects)
+        cmd.extend("ddg_heatmap", ddg_heatmap)
         
         # Open Targets 疾病靶点分析命令
         if _disease_analysis_available:

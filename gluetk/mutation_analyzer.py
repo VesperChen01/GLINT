@@ -9,11 +9,17 @@ import sys
 import tempfile
 import subprocess
 from typing import List, Tuple, Dict, Optional, Any
+import csv
+import math
 
 try:
     from pymol import cmd
+    from .highlight_residues import set_b_factors, color_by_b
 except ImportError:
     cmd = None
+    # Mock for testing
+    def set_b_factors(*args): pass
+    def color_by_b(*args): pass
 
 
 # ==================== 氨基酸转换表 ====================
@@ -28,26 +34,25 @@ AA_3TO1 = {
 AA_1TO3 = {v: k for k, v in AA_3TO1.items()}
 
 
-# ==================== 工具检测 ====================
+# ==================== 工具检测 ====================\n
+def _which(exe: str) -> Optional[str]:
+    path = os.environ.get("FOLDX") if exe.lower() == "foldx" else None
+    if path and os.path.isfile(path) and os.access(path, os.X_OK):
+        return path
+    for p in os.environ.get("PATH", "").split(os.pathsep):
+        cand = os.path.join(p, exe)
+        if os.path.isfile(cand) and os.access(cand, os.X_OK):
+            return cand
+        # macOS app bundle
+        if exe.lower() == "foldx" and os.path.isdir(os.path.join(p, "FoldX.app")):
+            app_bin = os.path.join(p, "FoldX.app", "Contents", "MacOS", "FoldX")
+            if os.path.isfile(app_bin) and os.access(app_bin, os.X_OK):
+                return app_bin
+    return None
 
 def _detect_foldx() -> Optional[str]:
     """检测 FoldX 可执行文件"""
-    # 复用 pymol_crbn_tools.py 中的检测逻辑
-    try:
-        from .pymol_crbn_tools import _detect_foldx as detect
-        return detect()
-    except ImportError:
-        # 简化版检测
-        foldx_path = os.environ.get("FOLDX")
-        if foldx_path and os.path.isfile(foldx_path):
-            return foldx_path
-        
-        # 检查 PATH
-        for path in os.environ.get("PATH", "").split(os.pathsep):
-            candidate = os.path.join(path, "foldx")
-            if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
-                return candidate
-        
+    return _which("foldx")
         return None
 
 
@@ -422,21 +427,170 @@ def analyze_mutation_effects(obj_name: str, mutations: List[Tuple[str, str, str]
                     writer.writerow([chain, resi, target_aa, 
                                    ddg_result.get('ddg', 'N/A'),
                                    ddg_result.get('method', 'N/A')])
-            print(f"\n✅ 结果已保存到: {output_csv}")
+            print(f"\\n✅ 结果已保存到: {output_csv}")
         except Exception as e:
             print(f"⚠️ CSV 导出失败: {e}")
     
-    print(f"\n{'='*60}")
+    print(f"\\n{'='*60}")
     print(f"✅ 突变分析完成")
-    print(f"{'='*60}\n")
+    print(f"{'='*60}\\n")
     
     return results
 
 
-# ==================== PyMOL 命令注册 ====================
+# ==================== ΔΔG Heatmap (Legacy/Quick Mode) ====================
 
+def _prep_complex_tmp(crbn_sel: str, poi_sel: str) -> Tuple[str, Dict[Tuple[str,str,str], Tuple[str,str,str]]]:
+    # Export CRBN+POI complex to PDB with consistent chain/resi mapping
+    tmp = tempfile.mkdtemp(prefix="pymol_crbn_")
+    pdb_path = os.path.join(tmp, "complex.pdb")
+    # Create a temporary object combining selections
+    tmp_obj = "__crbn_tmp_complex__"
+    cmd.delete(tmp_obj)
+    cmd.create(tmp_obj, f"({crbn_sel}) or ({poi_sel})")
+    cmd.sort(tmp_obj)
+    cmd.save(pdb_path, tmp_obj)
+    # Build atom-to-resi mapping for later results
+    mapping = {}
+    model = cmd.get_model(poi_sel)
+    for a in model.atom:
+        key = (a.chain, a.resi, getattr(a, 'q', a.icode))
+        mapping[key] = key
+    return pdb_path, mapping
+
+def _foldx_alanine_scan(foldx_bin: str, pdb_path: str, poi_sel: str) -> Dict[Tuple[str,str,str], float]:
+    # Interface residues on POI
+    poi_iface = cmd.get_model(f"byres ({poi_sel} within 5.0 of not {poi_sel})")
+    # Mutation list format for FoldX: "<PDB>; <chain><resi><icode><WT><Mut>"
+    muts = []
+    seen = set()
+    for a in poi_iface.atom:
+        key = (a.chain, a.resi, getattr(a, 'q', a.icode))
+        if key in seen:
+            continue
+        seen.add(key)
+        wt1 = AA_3TO1.get(a.resn.upper(), 'X')
+        if wt1 == "X":
+            continue
+        code = (a.chain or "A") + a.resi + (getattr(a, 'q', a.icode) or " ") + wt1 + "A"
+        muts.append(code)
+    if not muts:
+        return {}
+
+    tmpdir = os.path.dirname(pdb_path)
+    mut_file = os.path.join(tmpdir, "mutations.txt")
+    with open(mut_file, "w") as f:
+        for m in muts:
+            f.write(m + "\\n")
+
+    # Run FoldX BuildModel
+    cmd_line = [foldx_bin, "--command=BuildModel", f"--pdb={os.path.basename(pdb_path)}", f"--pdb-dir={tmpdir}", f"--mutant-file={mut_file}"]
+    try:
+        subprocess.run(cmd_line, cwd=tmpdir, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except Exception:
+        return {}
+
+    # Parse DifferencesBetweenMutantAndWildType_fxout.csv if exists
+    out_csv = os.path.join(tmpdir, "DifferencesBetweenMutantAndWildType_fxout.csv")
+    ddg = {}
+    if os.path.isfile(out_csv):
+        with open(out_csv, newline='') as f:
+            reader = csv.DictReader(f, delimiter=';')
+            for row in reader:
+                # Name like: <pdb>;<mutation> e.g., complex.pdb;A123A->A
+                mut = row.get('Mutation', '') or row.get('mutation', '')
+                # Extract chain/resi
+                if len(mut) >= 5:
+                    chain = mut[0]
+                    resi = mut[1:4].strip()
+                    icode = ""
+                    key = (chain, resi, icode)
+                    try:
+                        ddg[key] = float(row.get('Total Energy', row.get('Total energy', '0')))
+                    except Exception:
+                        pass
+    return ddg
+
+def _asa_ddg_proxy(poi_sel: str, complex_sel: str, scale: float = 0.025) -> Dict[Tuple[str,str,str], float]:
+    # Use PyMOL get_area per residue in monomer vs complex; ΔASA scaled to ddG
+    poi = f"({poi_sel})"
+    # Build list of residues
+    model = cmd.get_model(poi)
+    residues = []
+    seen = set()
+    for a in model.atom:
+        key = (a.chain, a.resi, getattr(a, 'q', a.icode))
+        if key not in seen:
+            seen.add(key)
+            residues.append(key)
+
+    ddg = {}
+    # Ensure surface areas are computed with dot settings
+    prev_dot_solvent = cmd.get("dot_solvent")
+    prev_dot_density = cmd.get("dot_density")
+    cmd.set("dot_solvent", 1)
+    cmd.set("dot_density", 3)
+
+    for (ch, resi, icode) in residues:
+        sel_res = f"{poi} and chain {ch} and resi {resi}"
+        asa_complex = cmd.get_area(sel_res, load_b=0, state=1)
+        # To get monomer ASA, duplicate POI only into temp object and measure
+        tmp_obj = "__poi_tmp__"
+        cmd.delete(tmp_obj)
+        cmd.create(tmp_obj, sel_res)
+        asa_monomer = cmd.get_area(tmp_obj, load_b=0, state=1)
+        cmd.delete(tmp_obj)
+        dASA = max(0.0, asa_monomer - asa_complex)
+        ddg[(ch, resi, icode)] = -scale * dASA  # burial stabilizes binding (negative)
+
+    # Restore settings
+    cmd.set("dot_solvent", prev_dot_solvent)
+    cmd.set("dot_density", prev_dot_density)
+    return ddg
+
+def ddg_heatmap(CRBN_sel: str, POI_sel: str, method: str = "auto", name: str = "ddg", scale: float = 0.025):
+    """
+    Color POI by ΔΔG. method: auto|foldx|asa. Stores value to b-factor and colors by spectrum.
+    """
+    poi = f"({POI_sel})"
+    crbn = f"({CRBN_sel})"
+    # Try FoldX if auto
+    ddg = {}
+    use_foldx = False
+    if method in ("auto", "foldx"):
+        fx = _detect_foldx()
+        if fx:
+            use_foldx = True
+            print(f"[ddg_heatmap] ✅ Using FoldX at: {fx}")
+            pdb_path, _ = _prep_complex_tmp(crbn, poi)
+            ddg = _foldx_alanine_scan(fx, pdb_path, poi)
+        elif method == "foldx":
+            # User explicitly requested FoldX but it's not available
+            print("[ddg_heatmap] ❌ FoldX not found in PATH or $FOLDX")
+            print("[ddg_heatmap] 💡 Download FoldX from: https://foldxsuite.crg.eu/")
+            if method == "foldx":  # Don't fallback if explicitly requested
+                return
+    
+    if (not ddg) and method in ("auto", "asa"):
+        # ASA proxy fallback
+        print("[ddg_heatmap] ⚠️ Using ASA-based proxy (ΔΔG approximation, not publication quality)")
+        print("[ddg_heatmap] 💡 For accurate ΔΔG values, install FoldX: https://foldxsuite.crg.eu/")
+        ddg = _asa_ddg_proxy(poi, f"{crbn} or {poi}", scale=scale)
+
+    if not ddg:
+        cmd.feedback("pop", "all", "actions")
+        print("[ddg_heatmap] ❌ No ΔΔG values computed. Check selections.")
+        return
+
+    set_b_factors(poi, ddg)
+    color_by_b(poi, palette="blue_white_red", ramp_name=f"{name}_ramp")
+    cmd.show("surface", poi)
+
+# ==================== PyMOL 命令注册 ====================\n
 if cmd:
     cmd.extend("perform_mutation", perform_mutation)
     cmd.extend("minimize_energy", minimize_energy)
     cmd.extend("calculate_mutation_ddg", calculate_mutation_ddg)
+    cmd.extend("analyze_mutation_effects", analyze_mutation_effects)
+    cmd.extend("ddg_heatmap", ddg_heatmap)
     cmd.extend("analyze_mutation_effects", analyze_mutation_effects)

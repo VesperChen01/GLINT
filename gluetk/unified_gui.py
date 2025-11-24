@@ -19,6 +19,29 @@ from __future__ import annotations
 import os, sys, csv, importlib.util
 from typing import List, Dict, Any, Tuple
 
+# Open Targets API 模块 (集成)
+try:
+    from .open_targets_api import (
+        search_disease,
+        get_disease_targets,
+        enrich_targets_with_e3_scores
+    )
+    from .disease_config import DEFAULT_OUTPUT_DIR, E3_LIGASES
+except ImportError:
+    try:
+        from open_targets_api import (
+            search_disease,
+            get_disease_targets,
+            enrich_targets_with_e3_scores
+        )
+        from disease_config import DEFAULT_OUTPUT_DIR, E3_LIGASES
+    except ImportError:
+        search_disease = None
+        get_disease_targets = None
+        enrich_targets_with_e3_scores = None
+        DEFAULT_OUTPUT_DIR = "./disease_data"
+        E3_LIGASES = ["CRBN", "VHL", "MDM2", "XIAP"]
+
 # -------- Qt 兼容（优先 PyQt5）--------
 QT_LIB = None
 try:
@@ -130,26 +153,15 @@ highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_c
 def _check_and_install_deps():
     """检查并安装依赖，GUI启动时调用"""
     try:
-        # 尝试导入env_setup模块
+        # 尝试导入env_checker模块
         here = os.path.dirname(os.path.abspath(__file__))
         sys.path.insert(0, here)
         try:
-            from .env_setup import ensure_dependencies, get_dependency_status
+            from .env_checker import ensure_dependencies
         except ImportError:
-            from env_setup import ensure_dependencies, get_dependency_status
+            from env_checker import ensure_dependencies
         
-        # 检查依赖状态
-        status = get_dependency_status()
-        missing = [pkg for pkg, avail in status.items() if not avail and pkg in ['rdkit', 'scipy', 'matplotlib', 'pillow', 'numpy']]
-        
-        if missing:
-            print(f"[GlueTK] Missing dependencies: {', '.join(missing)}")
-            print("[GlueTK] Installing automatically...")
-            success = ensure_dependencies()
-            if not success:
-                print("[GlueTK] ⚠️ Some dependencies failed to install; please install manually")
-                return False
-        return True
+        return ensure_dependencies(silent=False)
     except Exception as e:
         print(f"[GlueTK] Dependency check failed: {e}")
         return False
@@ -738,6 +750,36 @@ class GlueTKDialog(QDialog):
         )
         pl_row6.addWidget(self.pl_plot_style, 1)
         pl_layout.addLayout(pl_row6)
+        
+        # Row 7: Visualization Options
+        pl_row7 = QHBoxLayout()
+        pl_row7.addWidget(QLabel("📐 Visualization:"), 0)
+        
+        # Show hydrophobic checkbox
+        self.pl_show_hydrophobic = QCheckBox("Show hydrophobic")
+        self.pl_show_hydrophobic.setToolTip(
+            "Include hydrophobic interactions in visualization.\n"
+            "Note: Even with high confidence, hydrophobic interactions\n"
+            "are hidden by default (professional mode)."
+        )
+        pl_row7.addWidget(self.pl_show_hydrophobic, 0)
+        
+        # Min confidence filter
+        pl_row7.addWidget(QLabel("Min Confidence:"), 0)
+        self.pl_min_confidence = QComboBox()
+        self.pl_min_confidence.setMinimumHeight(36)
+        self.pl_min_confidence.addItems(["0.0", "0.3", "0.5", "0.7", "0.8 (default)", "0.9", "1.0"])
+        self.pl_min_confidence.setCurrentIndex(4)  # 0.8 by default
+        self.pl_min_confidence.setToolTip(
+            "Minimum confidence score for interactions to display.\n"
+            "Lower values show more interactions; higher values\n"
+            "show only high-confidence interactions."
+        )
+        self.pl_min_confidence.setFixedWidth(120)
+        pl_row7.addWidget(self.pl_min_confidence, 0)
+        
+        pl_row7.addStretch(1)
+        pl_layout.addLayout(pl_row7)
         
         btn_pl_row = QHBoxLayout()
         self.pl_analyze_btn = QPushButton("Analyze")
@@ -2671,8 +2713,184 @@ class GlueTKDialog(QDialog):
             self.on_error(str(e))
 
     # ==============  蛋白-配体分析标签页 ==============
-    def create_prot_lig_tab(self) -> QWidget:
-        """创建蛋白-配体分析标签页"""
+    def create_disease_analysis_tab(self) -> QWidget:
+        """Create Disease Analysis Tab (V3)"""
+        if DiseaseAnalysisTab:
+            return DiseaseAnalysisTab()
+        else:
+            w = QWidget()
+            layout = QVBoxLayout(w)
+            layout.addWidget(QLabel("⚠️ Disease Analysis module not available."))
+            layout.addWidget(QLabel("Please ensure 'disease_analysis_gui.py' and 'open_targets_api.py' are present."))
+            layout.addStretch()
+            return w
+
+    def _create_mutation_analysis_card(self) -> QWidget:
+        """创建突变分析卡片"""
+        card = QGroupBox("Protein Mutation & ΔΔG Analysis")
+        layout = QVBoxLayout(card)
+        layout.setSpacing(8)
+        
+        # 输入区域
+        input_grid = QGridLayout()
+        input_grid.setSpacing(6)
+        
+        # 对象选择
+        input_grid.addWidget(QLabel("Object:"), 0, 0)
+        self.mut_obj_combo = QComboBox()
+        self.mut_obj_combo.setFixedHeight(28)
+        self.mut_refresh_btn = QPushButton("Refresh")
+        self.mut_refresh_btn.setObjectName("refresh_btn")
+        self.mut_refresh_btn.setFixedHeight(28)
+        self.mut_refresh_btn.clicked.connect(self.refresh_objects)
+        obj_row = QHBoxLayout()
+        obj_row.addWidget(self.mut_obj_combo, 1)
+        obj_row.addWidget(self.mut_refresh_btn)
+        input_grid.addLayout(obj_row, 0, 1)
+        
+        # 突变输入
+        input_grid.addWidget(QLabel("Mutations:"), 1, 0)
+        self.mut_input = QLineEdit()
+        self.mut_input.setPlaceholderText("e.g., A:23:ALA, B:45:GLY")
+        self.mut_input.setFixedHeight(28)
+        input_grid.addWidget(self.mut_input, 1, 1)
+        
+        # 方法选择
+        input_grid.addWidget(QLabel("Method:"), 2, 0)
+        method_row = QHBoxLayout()
+        self.mut_method_combo = QComboBox()
+        self.mut_method_combo.addItems(["Auto", "FoldX", "PyRosetta"])
+        self.mut_method_combo.setFixedHeight(28)
+        self.mut_method_combo.setFixedWidth(120)
+        method_row.addWidget(self.mut_method_combo)
+        method_row.addStretch()
+        input_grid.addLayout(method_row, 2, 1)
+        
+        layout.addLayout(input_grid)
+        
+        # 按钮行
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
+        
+        self.mut_perform_btn = QPushButton("Perform Mutation")
+        self.mut_perform_btn.setObjectName("primary_btn")
+        self.mut_perform_btn.setFixedHeight(32)
+        self.mut_perform_btn.clicked.connect(self.run_mutation)
+        
+        self.mut_minimize_btn = QPushButton("Minimize Energy")
+        self.mut_minimize_btn.setObjectName("highlight_btn")
+        self.mut_minimize_btn.setFixedHeight(32)
+        self.mut_minimize_btn.clicked.connect(self.run_minimize)
+        
+        self.mut_analyze_btn = QPushButton("Full Analysis")
+        self.mut_analyze_btn.setObjectName("highlight_btn")
+        self.mut_analyze_btn.setFixedHeight(32)
+        self.mut_analyze_btn.clicked.connect(self.run_mutation_analysis)
+        
+        btn_row.addWidget(self.mut_perform_btn)
+        btn_row.addWidget(self.mut_minimize_btn)
+        btn_row.addWidget(self.mut_analyze_btn)
+        btn_row.addStretch()
+        
+        layout.addLayout(btn_row)
+        
+        return card
+
+    def run_mutation(self):
+        """执行突变"""
+        obj_name = self.mut_obj_combo.currentText()
+        mutations_str = self.mut_input.text().strip()
+        
+        if not obj_name or not mutations_str:
+            self.log("❌ 请选择对象并输入突变")
+            return
+        
+        try:
+            # 解析突变字符串
+            mutations = []
+            for mut in mutations_str.split(','):
+                mut = mut.strip()
+                if ':' in mut:
+                    parts = mut.split(':')
+                    if len(parts) == 3:
+                        mutations.append((parts[0], parts[1], parts[2]))
+            
+            if not mutations:
+                self.log("❌ 突变格式错误，示例: A:23:ALA, B:45:GLY")
+                return
+            
+            self.log(f"🧬 执行突变: {obj_name}")
+            
+            # 调用突变分析模块
+            from pymol import cmd
+            cmd.perform_mutation(obj_name, mutations, method='pymol')
+            
+            self.log("✅ 突变完成")
+            
+        except Exception as e:
+            self.log(f"❌ 突变失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def run_minimize(self):
+        """能量最小化"""
+        obj_name = self.mut_obj_combo.currentText()
+        
+        if not obj_name:
+            self.log("❌ 请选择对象")
+            return
+        
+        try:
+            self.log(f"⚡ 能量最小化: {obj_name}")
+            
+            from pymol import cmd
+            cmd.minimize_energy(obj_name, cycles=100)
+            
+            self.log("✅ 最小化完成")
+            
+        except Exception as e:
+            self.log(f"❌ 最小化失败: {e}")
+            import traceback
+            traceback.print_exc()
+
+    def run_mutation_analysis(self):
+        """完整突变分析"""
+        obj_name = self.mut_obj_combo.currentText()
+        mutations_str = self.mut_input.text().strip()
+        method = self.mut_method_combo.currentText().lower()
+        
+        if not obj_name or not mutations_str:
+            self.log("❌ 请选择对象并输入突变")
+            return
+        
+        try:
+            # 解析突变
+            mutations = []
+            for mut in mutations_str.split(','):
+                mut = mut.strip()
+                if ':' in mut:
+                    parts = mut.split(':')
+                    if len(parts) == 3:
+                        mutations.append((parts[0], parts[1], parts[2]))
+            
+            if not mutations:
+                self.log("❌ 突变格式错误")
+                return
+            
+            self.log(f"🧬 开始完整分析: {obj_name}")
+            self.log(f"突变数量: {len(mutations)}")
+            self.log(f"方法: {method}")
+            
+            # 调用完整分析
+            from pymol import cmd
+            cmd.analyze_mutation_effects(obj_name, mutations, method=method)
+            
+            self.log("✅ 分析完成")
+            
+        except Exception as e:
+            self.log(f"❌ 分析失败: {e}")
+            import traceback
+            traceback.print_exc()
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(12)
@@ -3516,6 +3734,16 @@ Thank you for your support! 🚀
             
             # 获取CSV路径（如果有的话）
             csv_path = self.pl_csv.text().strip() or None
+            
+            # 获取可视化选项
+            show_hydrophobic = self.pl_show_hydrophobic.isChecked()
+            
+            # 解析置信度阈值
+            conf_text = self.pl_min_confidence.currentText()
+            try:
+                min_confidence = float(conf_text.split()[0])  # 提取数字部分，如"0.8 (default)"→0.8
+            except:
+                min_confidence = 0.8  # 默认值
 
             # 静默生成,仅显示结果
             
@@ -3532,13 +3760,17 @@ Thank you for your support! 🚀
                     visualize_protein_ligand_3d(
                         obj_name=obj_name,
                         csv_path=csv_path,
-                        ligand_resname=ligand_resname
+                        ligand_resname=ligand_resname,
+                        show_hydrophobic=show_hydrophobic,
+                        min_confidence=min_confidence
                     )
                 elif hasattr(self, 'current_pl_result'):
                     visualize_protein_ligand_3d(
                         obj_name=obj_name,
                         interactions_result=self.current_pl_result,
-                        ligand_resname=ligand_resname
+                        ligand_resname=ligand_resname,
+                        show_hydrophobic=show_hydrophobic,
+                        min_confidence=min_confidence
                     )
                 else:
                     self.log("没有可用的相互作用数据" if get_lang() == "zh" else "No interaction data available")
@@ -4364,11 +4596,14 @@ Thank you for your support! 🚀
             # 检查 FoldX (额外的工具)
             self.log("\n额外工具:" if get_lang() == "zh" else "\nAdditional Tools:")
             try:
-                self._ensure_crbn_tools_loaded()
-                from pymol import cmd
-                ok = cmd.crbn_tools_doctor(verbose=0)
-                if ok:
-                    self.log("  FoldX: Detected")
+                try:
+                    from .mutation_analyzer import _detect_foldx
+                except ImportError:
+                    from mutation_analyzer import _detect_foldx
+                
+                foldx_path = _detect_foldx()
+                if foldx_path:
+                    self.log(f"  FoldX: Detected ({foldx_path})")
                 else:
                     self.log("  FoldX: Not detected (optional)")
                     self.log("     Download: https://foldxsuite.crg.eu/")
@@ -4428,26 +4663,6 @@ Thank you for your support! 🚀
         self.log(f"\n{'='*50}")
         self.log("环境检查完成" if get_lang() == "zh" else "Environment check complete")
         self.log(f"{'='*50}\n")
-    
-    def run_crbn_doctor(self):
-        """调用 PyMOL CRBN crbn_tools_doctor 命令检查环境"""
-        try:
-            self._ensure_crbn_tools_loaded()
-            
-            self.log(f"\n{'检查环境...' if get_lang() == 'zh' else 'Checking environment...'}")
-            
-            from pymol import cmd
-            ok = cmd.crbn_tools_doctor()
-            
-            if ok:
-                self.log("环境检查通过！FoldX 可用。" if get_lang() == "zh" else "Environment OK! FoldX available.")
-            else:
-                self.log("FoldX 未检测到，ΔΔG 计算将使用 ASA 近似。" if get_lang() == "zh" else "FoldX not found, ΔΔG will use ASA proxy.")
-            
-        except Exception as e:
-            self.log(f"错误: {e}")
-            import traceback
-            traceback.print_exc()
     
     # ==========================
     # Scoring Callbacks
@@ -5198,40 +5413,6 @@ Heatmap saved successfully!
             import traceback
             traceback.print_exc()
     
-    def _ensure_crbn_tools_loaded(self):
-        """确保 pymol_crbn_tools.py 已加载"""
-        from pymol import cmd
-        
-        # 检查是否已加载（通过检查命令是否存在）
-        if hasattr(cmd, 'interface_map'):
-            return  # 已加载
-        
-        # 尝试加载
-        here = os.path.dirname(os.path.abspath(__file__))
-        parent = os.path.dirname(here)
-        
-        # 在多个位置查找
-        search_paths = [
-            os.path.join(parent, "pymol_crbn_tools.py"),
-            os.path.join(here, "pymol_crbn_tools.py"),
-            os.path.join(os.getcwd(), "pymol_crbn_tools.py"),
-        ]
-        
-        for path in search_paths:
-            if os.path.exists(path):
-                self.log(f"加载 CRBN 工具: {os.path.basename(path)}")
-                try:
-                    cmd.do(f"run {path}")
-                    self.log("CRBN 工具加载成功")
-                    return
-                except Exception as e:
-                    self.log(f"加载失败: {e}")
-        
-        # 如果找不到，提示用户
-        raise FileNotFoundError(
-            "pymol_crbn_tools.py not found. Please ensure it's in the plugin directory."
-        )
-    
     def update_enablement(self):
         gm_ok = getattr(self, "obj_combo_gm", None) and self.obj_combo_gm.currentText().strip() not in ("", t("no_object"))
         if getattr(self, "gm_btn", None): self.gm_btn.setEnabled(bool(gm_ok))
@@ -5315,17 +5496,399 @@ Heatmap saved successfully!
     # --- 自动缩放（随屏幕/系统字体）---
     def _compute_ui_scale(self) -> float:
         try:
-            # 兼容 PyQt5/6
-            from PyQt5.QtGui import QGuiApplication as _QGA  # type: ignore
+            screen = QApplication.primaryScreen()
+            dpi = screen.logicalDotsPerInch()
+            # 基准 DPI 96
+            return max(1.0, dpi / 96.0)
         except Exception:
+            return 1.0
+
+    def apply_auto_scaling(self):
+        """应用自动缩放"""
+        # 暂时禁用，因为使用了布局调优
+        pass
+
+# ============================================================================
+# Disease Analysis Components (Integrated from disease_analysis_gui.py)
+# ============================================================================
+
+class DiseaseQueryWorker(QThread):
+    """
+    疾病查询工作线程（避免 GUI 卡顿）
+    """
+    progress = pyqtSignal(str)
+    finished = pyqtSignal(object)  # DataFrame
+    error = pyqtSignal(str)
+    
+    def __init__(self, disease_name: str, top_n: int, include_e3: bool, e3_symbol: str):
+        super().__init__()
+        self.disease_name = disease_name
+        self.top_n = top_n
+        self.include_e3 = include_e3
+        self.e3_symbol = e3_symbol
+    
+    def run(self):
+        try:
+            # 步骤 1: 搜索疾病
+            self.progress.emit(f"Searching for disease: {self.disease_name}...")
+            if search_disease is None:
+                raise ImportError("Open Targets API modules not available")
+
+            candidates = search_disease(self.disease_name, max_results=5)
+            
+            if not candidates:
+                self.error.emit(f"No disease found for '{self.disease_name}'")
+                return
+            
+            # 使用第一个候选
+            disease_id = candidates[0]['id']
+            disease_name = candidates[0]['name']
+            
+            # 步骤 2: 获取靶点
+            self.progress.emit(f"Fetching targets for {disease_name}...")
+            df = get_disease_targets(disease_id, top_n=self.top_n)
+            
+            if df is None or df.empty:
+                self.error.emit(f"No targets found for {disease_name}")
+                return
+            
+            # 步骤 3: 添加 E3 评分
+            if self.include_e3:
+                self.progress.emit(f"Calculating E3 compatibility scores ({self.e3_symbol})...")
+                df = enrich_targets_with_e3_scores(df, e3_symbol=self.e3_symbol)
+            
+            # 添加疾病信息
+            df['disease_name'] = disease_name
+            df['disease_id'] = disease_id
+            
+            self.progress.emit(f"Query complete: {len(df)} targets found")
+            self.finished.emit(df)
+            
+        except Exception as e:
+            self.error.emit(f"Query failed: {str(e)}")
+
+
+class DiseaseAnalysisTab(QWidget):
+    """
+    疾病分析主标签页
+    """
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.current_results = None  # 当前查询结果 DataFrame
+        self.query_worker = None
+        
+        self.init_ui()
+    
+    def init_ui(self):
+        """初始化界面"""
+        main_layout = QVBoxLayout(self)
+        main_layout.setSpacing(12)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        
+        # ========== 疾病搜索区域 ==========
+        search_group = QGroupBox("Disease Search")
+        search_layout = QVBoxLayout(search_group)
+        search_layout.setSpacing(10)
+        
+        # 疾病名称输入
+        disease_row = QHBoxLayout()
+        disease_row.addWidget(QLabel("Disease Name:"))
+        self.disease_input = QLineEdit()
+        self.disease_input.setPlaceholderText("e.g., multiple myeloma, breast cancer")
+        self.disease_input.setMinimumHeight(32)
+        disease_row.addWidget(self.disease_input, 1)
+        search_layout.addLayout(disease_row)
+        
+        # 参数设置
+        params_layout = QHBoxLayout()
+        
+        # Top N
+        params_layout.addWidget(QLabel("Top N Targets:"))
+        self.top_n_spin = QSpinBox()
+        self.top_n_spin.setRange(5, 100)
+        self.top_n_spin.setValue(30)
+        self.top_n_spin.setMinimumHeight(32)
+        params_layout.addWidget(self.top_n_spin)
+        
+        params_layout.addSpacing(20)
+        
+        # E3 连接酶
+        params_layout.addWidget(QLabel("E3 Ligase:"))
+        self.e3_combo = QComboBox()
+        self.e3_combo.addItems(E3_LIGASES)
+        self.e3_combo.setMinimumHeight(32)
+        params_layout.addWidget(self.e3_combo)
+        
+        params_layout.addSpacing(20)
+        
+        # E3 评分选项
+        self.e3_checkbox = QCheckBox("Include E3 Score")
+        self.e3_checkbox.setChecked(True)
+        params_layout.addWidget(self.e3_checkbox)
+        
+        params_layout.addStretch()
+        search_layout.addLayout(params_layout)
+        
+        # 查询按钮
+        btn_row = QHBoxLayout()
+        self.query_btn = QPushButton("🔍 Query Targets")
+        self.query_btn.setMinimumHeight(36)
+        self.query_btn.setObjectName("primary_btn")
+        self.query_btn.clicked.connect(self.on_query_clicked)
+        btn_row.addWidget(self.query_btn)
+        btn_row.addStretch()
+        search_layout.addLayout(btn_row)
+        
+        # 进度条
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setTextVisible(True)
+        self.progress_bar.setVisible(False)
+        search_layout.addWidget(self.progress_bar)
+        
+        main_layout.addWidget(search_group)
+        
+        # ========== 结果展示区域 ==========
+        results_group = QGroupBox("Results")
+        results_layout = QVBoxLayout(results_group)
+        results_layout.setSpacing(10)
+        
+        # 结果表格
+        self.results_table = QTableWidget()
+        self.results_table.setColumnCount(6)
+        self.results_table.setHorizontalHeaderLabels([
+            "Symbol", "Name", "Disease Score", "E3 Score", "Composite Score", "Actions"
+        ])
+        
+        # 设置表格属性
+        from PyQt5.QtWidgets import QAbstractItemView, QHeaderView
+        self.results_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.results_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.results_table.setSortingEnabled(True)
+        
+        # 设置列宽
+        header = self.results_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Symbol
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Name
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Disease Score
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # E3 Score
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Composite Score
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)  # Actions
+        self.results_table.setColumnWidth(5, 120)
+        
+        results_layout.addWidget(self.results_table)
+        
+        # 导出按钮
+        export_row = QHBoxLayout()
+        self.export_csv_btn = QPushButton("📄 Export CSV")
+        self.export_csv_btn.setMinimumHeight(32)
+        self.export_csv_btn.clicked.connect(self.on_export_csv)
+        self.export_csv_btn.setEnabled(False)
+        export_row.addWidget(self.export_csv_btn)
+        export_row.addStretch()
+        results_layout.addLayout(export_row)
+        
+        main_layout.addWidget(results_group, 1)
+        
+        # ========== 状态栏 ==========
+        self.status_label = QLabel("Ready")
+        self.status_label.setStyleSheet("color: #666; font-size: 11px;")
+        main_layout.addWidget(self.status_label)
+    
+    def on_query_clicked(self):
+        """查询按钮点击事件"""
+        disease_name = self.disease_input.text().strip()
+        
+        if not disease_name:
+            QMessageBox.warning(self, "Input Required", "Please enter a disease name")
+            return
+        
+        # 检查模块是否可用
+        if search_disease is None or get_disease_targets is None:
+            QMessageBox.critical(
+                self,
+                "Module Not Available",
+                "Open Targets API modules are not available.\n"
+                "Please ensure the required modules are installed."
+            )
+            return
+        
+        # 禁用查询按钮
+        self.query_btn.setEnabled(False)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setRange(0, 0)  # 不确定进度
+        
+        # 创建并启动 Worker 线程
+        top_n = self.top_n_spin.value()
+        include_e3 = self.e3_checkbox.isChecked()
+        e3_symbol = self.e3_combo.currentText()
+        
+        self.query_worker = DiseaseQueryWorker(disease_name, top_n, include_e3, e3_symbol)
+        self.query_worker.progress.connect(self.on_query_progress)
+        self.query_worker.finished.connect(self.on_query_finished)
+        self.query_worker.error.connect(self.on_query_error)
+        self.query_worker.start()
+    
+    def on_query_progress(self, message: str):
+        """查询进度更新"""
+        self.status_label.setText(message)
+    
+    def on_query_finished(self, df):
+        """查询完成"""
+        self.current_results = df
+        self.populate_results_table(df)
+        
+        # 恢复 UI
+        self.query_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        self.export_csv_btn.setEnabled(True)
+        
+        disease_name = df['disease_name'].iloc[0] if not df.empty else "Unknown"
+        self.status_label.setText(f"Query complete: {len(df)} targets found for {disease_name}")
+    
+    def on_query_error(self, error_msg: str):
+        """查询错误"""
+        self.query_btn.setEnabled(True)
+        self.progress_bar.setVisible(False)
+        
+        QMessageBox.warning(
+            self,
+            "Query Error",
+            f"Failed to query disease targets:\n\n{error_msg}\n\n"
+            "Please check:\n"
+            "• Network connection\n"
+            "• Disease name spelling\n"
+            "• API availability"
+        )
+        
+        self.status_label.setText(f"Error: {error_msg}")
+    
+    def populate_results_table(self, df):
+        """填充结果表格"""
+        if df is None or df.empty:
+            self.results_table.setRowCount(0)
+            return
+        
+        self.results_table.setRowCount(len(df))
+        self.results_table.setSortingEnabled(False)  # 填充时禁用排序
+        
+        # Check if pandas is available
+        try:
+            import pandas as pd
+        except ImportError:
+            return
+
+        for i, row in df.iterrows():
+            # Symbol
+            self.results_table.setItem(i, 0, QTableWidgetItem(row['symbol']))
+            
+            # Name
+            name = row.get('name', '')
+            if len(name) > 50:
+                name = name[:47] + "..."
+            self.results_table.setItem(i, 1, QTableWidgetItem(name))
+            
+            # Disease Score
+            disease_score = f"{row['score']:.4f}"
+            self.results_table.setItem(i, 2, QTableWidgetItem(disease_score))
+            
+            # E3 Score
+            if 'e3_score' in row and pd.notna(row['e3_score']):
+                e3_score = f"{row['e3_score']:.4f}"
+                self.results_table.setItem(i, 3, QTableWidgetItem(e3_score))
+            else:
+                self.results_table.setItem(i, 3, QTableWidgetItem("N/A"))
+            
+            # Composite Score
+            if 'composite_score' in row and pd.notna(row['composite_score']):
+                composite_score = f"{row['composite_score']:.4f}"
+                self.results_table.setItem(i, 4, QTableWidgetItem(composite_score))
+            else:
+                self.results_table.setItem(i, 4, QTableWidgetItem("N/A"))
+            
+            # Actions - Load Structure 按钮
+            load_btn = QPushButton("Load")
+            load_btn.setMinimumHeight(28)
+            load_btn.clicked.connect(lambda checked, symbol=row['symbol']: self.on_load_structure(symbol))
+            self.results_table.setCellWidget(i, 5, load_btn)
+        
+        self.results_table.setSortingEnabled(True)  # 重新启用排序
+    
+    def on_load_structure(self, symbol: str):
+        """加载蛋白结构到 PyMOL"""
+        try:
+            from pymol import cmd
+            
+            reply = QMessageBox.question(
+                self,
+                "Load Structure",
+                f"Load structure for {symbol}?\n\n"
+                "This will attempt to fetch the structure from PDB.\n"
+                "You can also manually load from AlphaFold or other sources.",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            
+            if reply == QMessageBox.StandardButton.Yes:
+                # 尝试 fetch
+                try:
+                    # 先显示提示
+                    QMessageBox.information(
+                        self,
+                        "Load Structure",
+                        f"Instructions:\n\n"
+                        f"1. Fetching {symbol} from PDB...\n"
+                        f"2. If PDB not found, try loading AlphaFold model.\n"
+                        f"3. Run: ot_glue_insight protein_obj=\"{symbol}\", gene_symbol=\"{symbol}\""
+                    )
+                    # 简单的 fetch (假设 symbol 也是 PDB ID，或者需要查询)
+                    # 实际上 gene symbol != PDB ID. 
+                    # 这里我们只是提供指导，或者如果 PyMOL 连接了网络，可以尝试 fetch alphafold
+                    cmd.fetch(symbol, type="alphafold") # PyMOL 2.5+ supports fetch <uniprot> or alphafold
+                except Exception as e:
+                    QMessageBox.warning(self, "Fetch Failed", f"Could not fetch structure: {e}")
+
+        except ImportError:
+            QMessageBox.warning(
+                self,
+                "PyMOL Not Available",
+                "PyMOL is not available in this environment"
+            )
+    
+    def on_export_csv(self):
+        """导出 CSV"""
+        if self.current_results is None or self.current_results.empty:
+            QMessageBox.warning(self, "No Data", "No results to export")
+            return
+        
+        # 文件对话框
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Export CSV",
+            os.path.join(DEFAULT_OUTPUT_DIR, "disease_targets.csv"),
+            "CSV Files (*.csv)"
+        )
+        
+        if file_path:
             try:
-                from PyQt6.QtGui import QGuiApplication as _QGA  # type: ignore
-            except Exception:
-                _QGA = None  # type: ignore
-        dpi = 96.0
-        if _QGA is not None:
-            scr = _QGA.primaryScreen()
-            try:
+                # 确保目录存在
+                os.makedirs(os.path.dirname(file_path), exist_ok=True)
+                
+                # 导出
+                self.current_results.to_csv(file_path, index=False)
+                
+                QMessageBox.information(
+                    self,
+                    "Export Successful",
+                    f"Results exported to:\n{file_path}"
+                )
+                
+                self.status_label.setText(f"Exported to: {file_path}")
+                
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Export Failed",
+                    f"Failed to export CSV:\n{str(e)}"
+                )
                 if scr is not None:
                     dpi = float(scr.logicalDotsPerInch())
             except Exception:

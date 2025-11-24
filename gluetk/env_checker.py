@@ -373,7 +373,20 @@ class EnvironmentChecker:
         except Exception as e:
             self.log(f"✗ 环境创建出错: {e}")
             return False
-    
+    def _install_pip_package(self, package_name: str) -> bool:
+        """
+        通过 pip 安装包 (fallback)
+        """
+        try:
+            # 使用当前 python 环境的 pip
+            cmd = [sys.executable, "-m", "pip", "install", package_name, "--quiet", "--disable-pip-version-check"]
+            self.log(f"  执行 pip: {' '.join(cmd)}")
+            subprocess.check_call(cmd)
+            return True
+        except Exception as e:
+            self.log(f"  ✗ Pip 安装失败: {e}")
+            return False
+
     def auto_install_dependencies(self) -> Dict[str, bool]:
         """
         自动安装缺失的依赖
@@ -381,9 +394,9 @@ class EnvironmentChecker:
         Returns:
             Dict[str, bool]: {依赖名: 是否安装成功}
         """
-        if not self.check_conda():
-            self.log("✗ 无法自动安装: Conda 未安装")
-            return {}
+        use_conda = self.check_conda()
+        if not use_conda:
+             self.log("⚠️ Conda 未安装，将尝试使用 pip 安装")
         
         status = self.check_all_dependencies()
         missing = [name for name, avail in status.items() if not avail]
@@ -392,7 +405,7 @@ class EnvironmentChecker:
             self.log("✅ 所有依赖已安装，无需操作")
             return status
         
-        self.log(f"\n📦 开始自动安装缺失的依赖...")
+        self.log(f"\\n📦 开始自动安装缺失的依赖...")
         
         install_results = {}
         
@@ -402,75 +415,94 @@ class EnvironmentChecker:
         
         # 批量安装 Python 包
         if py_packages:
-            self.log(f"\n  安装 Python 包: {', '.join(py_packages)}")
-            packages_to_install = []
+            self.log(f"\\n  安装 Python 包: {', '.join(py_packages)}")
             
-            for _, display_name, pip_name in REQUIRED_PACKAGES:
-                if display_name in py_packages:
-                    packages_to_install.append(pip_name)
-            
-            if packages_to_install:
-                try:
-                    cmd = [
-                        "conda", "install", "-c", "conda-forge",
-                        "-y"
-                    ] + packages_to_install
-                    
-                    self.log(f"  执行: {' '.join(cmd)}")
-                    
-                    result = subprocess.run(
-                        cmd,
-                        capture_output=True,
-                        text=True,
-                        timeout=600
-                    )
-                    
-                    if result.returncode == 0:
-                        for pkg in py_packages:
+            # 尝试 Conda 安装
+            if use_conda:
+                packages_to_install = []
+                for _, display_name, pip_name in REQUIRED_PACKAGES:
+                    if display_name in py_packages:
+                        packages_to_install.append(pip_name)
+                
+                if packages_to_install:
+                    try:
+                        cmd = ["conda", "install", "-c", "conda-forge", "-y"] + packages_to_install
+                        self.log(f"  执行: {' '.join(cmd)}")
+                        
+                        result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+                        
+                        if result.returncode == 0:
+                            for pkg in py_packages:
+                                install_results[pkg] = True
+                                self.log(f"  ✅ {pkg} 安装成功 (Conda)")
+                        else:
+                            self.log(f"  ⚠️ Conda 安装失败，尝试 Pip...")
+                            # Fallback to pip for each package
+                            for pkg in py_packages:
+                                # Find pip name
+                                pip_name = next((p[2] for p in REQUIRED_PACKAGES if p[1] == pkg), None)
+                                if pip_name:
+                                    if self._install_pip_package(pip_name):
+                                        install_results[pkg] = True
+                                        self.log(f"  ✅ {pkg} 安装成功 (Pip)")
+                                    else:
+                                        install_results[pkg] = False
+                                        self.log(f"  ✗ {pkg} 安装失败")
+                    except Exception as e:
+                         self.log(f"  ⚠️ Conda 出错 ({e})，尝试 Pip...")
+                         # Fallback code duplication (can be optimized but fine for now)
+                         for pkg in py_packages:
+                            pip_name = next((p[2] for p in REQUIRED_PACKAGES if p[1] == pkg), None)
+                            if pip_name and self._install_pip_package(pip_name):
+                                install_results[pkg] = True
+                            else:
+                                install_results[pkg] = False
+            else:
+                # No Conda, use Pip directly
+                for pkg in py_packages:
+                    pip_name = next((p[2] for p in REQUIRED_PACKAGES if p[1] == pkg), None)
+                    if pip_name:
+                        if self._install_pip_package(pip_name):
                             install_results[pkg] = True
-                            self.log(f"  ✅ {pkg} 安装成功")
-                    else:
-                        for pkg in py_packages:
+                            self.log(f"  ✅ {pkg} 安装成功 (Pip)")
+                        else:
                             install_results[pkg] = False
                             self.log(f"  ✗ {pkg} 安装失败")
-                        self.log(f"  错误信息: {result.stderr[:200]}")
-                except subprocess.TimeoutExpired:
-                    for pkg in py_packages:
-                        install_results[pkg] = False
-                        self.log(f"  ✗ {pkg} 安装超时")
-                except Exception as e:
-                    for pkg in py_packages:
-                        install_results[pkg] = False
-                        self.log(f"  ✗ {pkg} 安装出错: {e}")
-        
-        # 安装命令行工具
-        if "AutoDock Vina" in cmd_tools:
-            self.log(f"\n  安装 AutoDock Vina...")
-            success = self._install_conda_package("autodock-vina")
-            install_results["AutoDock Vina"] = success
-            if success:
-                self.log("  ✅ AutoDock Vina 安装成功")
-            else:
-                self.log("  ✗ AutoDock Vina 安装失败")
-        
-        if "Open Babel" in cmd_tools:
-            self.log(f"\n  安装 Open Babel...")
-            success = self._install_conda_package("openbabel")
-            install_results["Open Babel"] = success
-            if success:
-                self.log("  ✅ Open Babel 安装成功")
-            else:
-                self.log("  ✗ Open Babel 安装失败")
-        
+
+        # 安装命令行工具 (仅 Conda 支持)
+        if cmd_tools and use_conda:
+            if "AutoDock Vina" in cmd_tools:
+                self.log(f"\\n  安装 AutoDock Vina...")
+                success = self._install_conda_package("autodock-vina")
+                install_results["AutoDock Vina"] = success
+                if success:
+                    self.log("  ✅ AutoDock Vina 安装成功")
+                else:
+                    self.log("  ✗ AutoDock Vina 安装失败")
+            
+            if "Open Babel" in cmd_tools:
+                self.log(f"\\n  安装 Open Babel...")
+                success = self._install_conda_package("openbabel")
+                install_results["Open Babel"] = success
+                if success:
+                    self.log("  ✅ Open Babel 安装成功")
+                else:
+                    self.log("  ✗ Open Babel 安装失败")
+        elif cmd_tools:
+             self.log(f"\\n  ⚠️ 无法安装命令行工具: {', '.join(cmd_tools)} (需要 Conda)")
+             for t in cmd_tools:
+                 install_results[t] = False
+
         # 总结
         success_count = sum(1 for v in install_results.values() if v)
         total_count = len(install_results)
         
         if success_count == total_count:
-            self.log(f"\n✅ 所有依赖安装完成 ({success_count}/{total_count})")
+            self.log(f"\\n✅ 所有依赖安装完成 ({success_count}/{total_count})")
         else:
-            self.log(f"\n⚠️  部分依赖安装失败 ({success_count}/{total_count})")
+            self.log(f"\\n⚠️  部分依赖安装失败 ({success_count}/{total_count})")
         
+        return install_results
         return install_results
     
     def _install_conda_package(self, package_name: str) -> bool:
@@ -695,3 +727,31 @@ if __name__ == "__main__":
     result = checker.run_full_check()
     
     sys.exit(0 if result["all_ok"] else 1)
+
+def ensure_dependencies(silent=True) -> bool:
+    """
+    Ensure all dependencies are available.
+    If missing, attempts to install automatically (Conda preferred, then Pip).
+    
+    Args:
+        silent: If True, suppresses stdout (but errors may still print)
+    
+    Returns:
+        bool: True if all dependencies are satisfied (or successfully installed)
+    """
+    # Check first (fast)
+    checker = EnvironmentChecker(log_callback=None if silent else print, auto_install=False)
+    status = checker.check_all_dependencies()
+    if all(status.values()):
+        return True
+    
+    # Attempt install
+    if not silent:
+        print("[GlueTK] Missing dependencies, attempting auto-install...")
+        
+    checker.auto_install = True
+    results = checker.auto_install_dependencies()
+    
+    # Re-check
+    status = checker.check_all_dependencies()
+    return all(status.values())

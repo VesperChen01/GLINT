@@ -849,3 +849,121 @@ def _distance_3d(coord1, coord2):
     return ((coord1[0] - coord2[0])**2 + 
             (coord1[1] - coord2[1])**2 + 
             (coord1[2] - coord2[2])**2)**0.5
+
+# ===========================================================================
+# Degron Annotation & Helpers (Moved from pymol_crbn_tools.py)
+# ===========================================================================
+
+def _resn3_to_1(resn):
+    table = {
+        'ALA':'A','ARG':'R','ASN':'N','ASP':'D','CYS':'C','GLN':'Q','GLU':'E','GLY':'G','HIS':'H','ILE':'I',
+        'LEU':'L','LYS':'K','MET':'M','PHE':'F','PRO':'P','SER':'S','THR':'T','TRP':'W','TYR':'Y','VAL':'V',
+    }
+    return table.get(resn.upper(), 'X')
+
+def _seq_of_selection(sel):
+    model = cmd.get_model(sel)
+    residues = []  # (chain,resi,icode,resn)
+    seen = set()
+    for a in model.atom:
+        key = (a.chain, a.resi, getattr(a, 'q', a.icode))
+        if key not in seen:
+            seen.add(key)
+            residues.append((a.chain, a.resi, getattr(a, 'q', a.icode), a.resn))
+    seq = ''.join(_resn3_to_1(r[3]) for r in residues)
+    res_keys = [(r[0], r[1], r[2]) for r in residues]
+    return seq, res_keys
+
+def _find_c2h2(seq):
+    # Very rough C2H2 motif: C-X(2-4)-C-...-H-X(3-5)-H, window 20-40
+    results = []
+    n = len(seq)
+    for i in range(n):
+        if seq[i] != 'C':
+            continue
+        for j in range(i+2, min(i+5, n)):
+            if seq[j] != 'C':
+                continue
+            for k in range(j+8, min(j+35, n)):
+                if seq[k] != 'H':
+                    continue
+                for l in range(k+3, min(k+6, n)):
+                    if seq[l] == 'H':
+                        results.append((i, l))
+                        break
+    return results
+
+def _find_beta_hairpins(seq):
+    # Heuristic: short segments (6-10) with alternating hydrophobicity signal
+    hyd = set("VILMFYW")
+    res = []
+    n = len(seq)
+    for i in range(n-6):
+        window = seq[i:i+8]
+        score = sum((1 if ((c in hyd) == (idx % 2 == 0)) else 0) for idx, c in enumerate(window))
+        if score >= 6:
+            res.append((i, i+7))
+    return res
+
+def degron_annotate(POI_sel: str, csv_path: str = None, auto: bool = True, name: str = "degron"):
+    """
+    Annotate degron-like regions. If csv provided, expects columns: chain,start,end,label.
+    Auto mode marks simple C2H2-ZF-like motifs and β-hairpin heuristics.
+    """
+    poi = f"({POI_sel})"
+    regions = []  # start,end,label (0-based indices)
+
+    # CSV regions (1-based resi numbers, chain-agnostic)
+    if csv_path:
+        if not os.path.isfile(csv_path):
+            print(f"[degron_annotate] File not found: {csv_path}")
+            return
+        with open(csv_path, newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                try:
+                    s = int(str(row.get('start', '')).strip()) - 1
+                    e = int(str(row.get('end', '')).strip()) - 1
+                    label = (row.get('label', '') or 'degron').strip()
+                    regions.append((s, e, label))
+                except Exception:
+                    continue
+
+    if auto:
+        seq, res_keys = _seq_of_selection(poi)
+        for s, e in _find_c2h2(seq):
+            regions.append((s, e, 'C2H2_like'))
+        for s, e in _find_beta_hairpins(seq):
+            regions.append((s, e, 'beta_hairpin_like'))
+
+    if not regions:
+        print("[degron_annotate] No regions to annotate.")
+        return
+
+    # Build selections and visuals
+    # Map sequence index to (chain,resi,icode)
+    _, res_keys = _seq_of_selection(poi)
+    colors = {
+        'C2H2_like': 'magenta',
+        'beta_hairpin_like': 'tv_green',
+        'degron': 'tv_red',
+    }
+    for idx, (s, e, label) in enumerate(regions, 1):
+        s = max(0, s); e = max(s, e)
+        if s >= len(res_keys) or e >= len(res_keys):
+            continue
+            
+        keys = res_keys[s:e+1]
+        if not keys:
+            continue
+        sel_parts = [f"(chain {ch} and resi {resi})" for (ch, resi, _ic) in keys]
+        sel_expr = f"({poi}) and (" + " or ".join(sel_parts) + ")"
+        sel_name = f"{name}_{label}_{idx}"
+        cmd.select(sel_name, sel_expr)
+        cmd.show("cartoon", sel_name)
+        cmd.color(colors.get(label, 'yellow'), sel_name)
+        # Label start-end
+        cmd.label(f"first {sel_name}", f"\"{label}:{idx} start\"")
+        cmd.label(f"last {sel_name}", f"\"{label}:{idx} end\"")
+
+cmd.extend("degron_annotate", degron_annotate)

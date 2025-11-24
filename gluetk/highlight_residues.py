@@ -10,6 +10,7 @@ from __future__ import print_function
 import csv
 import os
 import re
+import math
 from pymol import cmd
 
 # --- Robust CSV helpers (encoding, delimiter, header normalization) ---
@@ -644,6 +645,95 @@ def highlight_csv_residues(csv_path, obj=None,
 
 # 注册命令到PyMOL
 cmd.extend("highlight_csv_residues", highlight_csv_residues)
+
+# ===========================================================================
+# Score Coloring & B-factor Utilities (Moved from pymol_crbn_tools.py)
+# ===========================================================================
+
+def normalize_values(v):
+    """Normalize a list of values to [0, 1]"""
+    if not v:
+        return (0.0, 1.0)
+    vmin, vmax = min(v), max(v)
+    if math.isclose(vmin, vmax):
+        vmax = vmin + 1.0
+    return vmin, vmax
+
+def set_b_factors(sel, resi_to_value):
+    """
+    Set B-factors for residues based on a dictionary {(chain, resi, icode): value}
+    resi key: (chain, resi, icode)
+    """
+    # Reset B-factors
+    cmd.alter(sel, "b=b", space={"b": 0.0})
+    cmd.iterate_state(1, sel, "b=b", space={})  # Force update
+    
+    # Helper for updating atoms
+    model = cmd.get_model(sel)
+    for a in model.atom:
+        key = (a.chain, a.resi, getattr(a, 'q', a.icode))
+        if key in resi_to_value:
+            icode_part = getattr(a, 'q', a.icode)
+            icode_str = icode_part if icode_part else '""'
+            cmd.alter(f"{sel} and chain {a.chain} and resi {a.resi} and icode {icode_str}", 
+                     f"b={float(resi_to_value[key])}")
+    cmd.rebuild()
+
+def color_by_b(sel, palette="blue_white_red", min_val=None, max_val=None, ramp_name=""):
+    """
+    Color selection by B-factor spectrum
+    """
+    if min_val is None or max_val is None:
+        vals = []
+        model = cmd.get_model(sel)
+        for a in model.atom:
+            vals.append(a.b)
+        vmin, vmax = normalize_values(vals)
+    else:
+        vmin, vmax = min_val, max_val
+        
+    cmd.spectrum("b", palette, selection=sel, minimum=vmin, maximum=vmax)
+    
+    if ramp_name:
+        cmd.ramp_new(ramp_name, sel, [vmin, (vmin+vmax)/2.0, vmax], ["blue", "white", "red"])
+
+def score_color(POI_sel, scores_csv, col_chain="chain", col_resi="resi", col_score="score", 
+                vmin=None, vmax=None):
+    """
+    Color POI by scores from CSV (chain,resi,score). 
+    Stores score into b-factor and colors by spectrum.
+    """
+    poi = f"({POI_sel})"
+    if not os.path.isfile(scores_csv):
+        print(f"[score_color] File not found: {scores_csv}")
+        return
+        
+    mapping = {}
+    try:
+        with open(scores_csv, newline='') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                chain = (row.get(col_chain, "")).strip() or "A"
+                resi = str(row.get(col_resi, "")).strip()
+                icode = ""
+                try:
+                    val = float(row.get(col_score, 0.0))
+                except Exception:
+                    continue
+                mapping[(chain, resi, icode)] = val
+    except Exception as e:
+        print(f"[score_color] Failed to read CSV: {e}")
+        return
+
+    if not mapping:
+        print("[score_color] No valid scores parsed.")
+        return
+        
+    set_b_factors(poi, mapping)
+    color_by_b(poi, palette="blue_white_red", min_val=vmin, max_val=vmax, ramp_name="score_ramp")
+    cmd.show("surface", poi)
+
+cmd.extend("score_color", score_color)
 
 def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True, clear_old=True):
     """
