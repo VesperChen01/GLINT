@@ -31,27 +31,57 @@ def find_vina_executable():
     """
     自动查找 Vina 可执行文件
     
+    搜索顺序:
+    1. 系统 PATH (shutil.which)
+    2. Conda 环境
+    3. 用户常用路径 (~/bin, ~/local/bin, /usr/local/bin 等)
+    4. 平台特定路径 (Windows Program Files, macOS /opt/homebrew 等)
+    
     返回:
         str: Vina 可执行文件路径，未找到返回 None
     """
+    # 1. 系统 PATH
     vina = shutil.which('vina') or shutil.which('vina.exe')
     if vina:
         return vina
     
-    if sys.platform == 'win32':
-        common_paths = [
-            r'C:\Program Files\vina\vina.exe',
-            r'C:\Program Files (x86)\vina\vina.exe',
-            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs', 'VinaTools', 'vina', 'vina.exe'),
-        ]
-        for path in common_paths:
-            if os.path.exists(path):
-                return path
-    
+    # 2. Conda 环境
     if 'CONDA_PREFIX' in os.environ:
         conda_vina = os.path.join(os.environ['CONDA_PREFIX'], 'bin', 'vina')
         if os.path.exists(conda_vina):
             return conda_vina
+    
+    # 3. 用户常用路径（GUI 应用可能不继承 shell PATH）
+    home = os.path.expanduser('~')
+    user_paths = [
+        os.path.join(home, 'bin', 'vina'),
+        os.path.join(home, '.local', 'bin', 'vina'),
+        os.path.join(home, 'local', 'bin', 'vina'),
+        '/usr/local/bin/vina',
+    ]
+    
+    # 4. 平台特定路径
+    if sys.platform == 'darwin':  # macOS
+        user_paths.extend([
+            '/opt/homebrew/bin/vina',  # Apple Silicon Homebrew
+            '/usr/local/Cellar/autodock-vina/*/bin/vina',  # Intel Homebrew
+        ])
+    elif sys.platform == 'win32':  # Windows
+        user_paths.extend([
+            r'C:\Program Files\vina\vina.exe',
+            r'C:\Program Files (x86)\vina\vina.exe',
+            os.path.join(os.environ.get('LOCALAPPDATA', ''), 'Programs', 'VinaTools', 'vina', 'vina.exe'),
+        ])
+    
+    for path in user_paths:
+        # 支持 glob 通配符（如 Homebrew 版本路径）
+        if '*' in path:
+            import glob
+            matches = glob.glob(path)
+            if matches:
+                return matches[0]
+        elif os.path.exists(path):
+            return path
     
     return None
 

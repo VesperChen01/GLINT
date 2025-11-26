@@ -334,7 +334,7 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     
     try:
         # 使用distance命令创建连接线
-        cmd.distance(dist_name, sel1, sel2)
+        cmd.distance(dist_name, sel1, sel2, cutoff=10.0)
         
         # 设置距离对象的显示样式
         cmd.hide("labels", dist_name)  # 隐藏距离标签

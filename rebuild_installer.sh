@@ -54,10 +54,27 @@ cat > "${MACOS}/launcher" << 'EOF'
 # GlueTK Installer Launcher (Tk GUI via conda python)
 
 # 查找 conda
-if ! command -v conda &> /dev/null; then
+# 查找 conda
+CONDA_EXE=""
+if command -v conda &> /dev/null; then
+    CONDA_EXE=$(command -v conda)
+else
+    # 尝试常见路径
+    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "$HOME/opt/miniconda3/bin/conda"; do
+        if [ -x "$p" ]; then
+            CONDA_EXE="$p"
+            break
+        fi
+    done
+fi
+
+if [ -z "$CONDA_EXE" ]; then
   osascript -e 'display alert "Conda Not Found" message "Please install Miniconda (conda) first, then re-run GlueTK Installer."'
   exit 1
 fi
+
+# 初始化 conda 环境
+eval "$($CONDA_EXE shell.bash hook)"
 
 CONDA_BASE="$(conda info --base 2>/dev/null)"
 if [ ! -d "$CONDA_BASE" ]; then

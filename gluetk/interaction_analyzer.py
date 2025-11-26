@@ -2293,7 +2293,7 @@ def visualize_atom_pairs(obj_name, interactions_result=None, csv_path=None):
 
             # 绘制距离线
             pair_name = f"atom_pairs_{i}"
-            cmd.distance(pair_name, sel1, sel2)
+            cmd.distance(pair_name, sel1, sel2, cutoff=10.0)
 
             # 设置颜色
             interaction_type = inter.get("Interaction", "")
@@ -2415,9 +2415,9 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         
         if ligand_resnames:
             ligand_resname = ligand_resnames[0]
-            print(f"[visualize_protein_ligand_3d] 📌 Auto-detected ligand: {ligand_resname}")
+            print(f"[visualize_protein_ligand_3d] 📌 自动检测到配体: {ligand_resname}")
         else:
-            print(f"[visualize_protein_ligand_3d] ⚠️ No ligand found")
+            print(f"[visualize_protein_ligand_3d] ⚠️ 未找到配体")
             ligand_resname = None
     
     # 定义配体选择
@@ -2434,25 +2434,25 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     cmd.select("lig_pocket", f"byres ({obj_name} and polymer within 5 of ({lig_sel}))")
     
     # ========== 第五步：添加氢原子（关键！）==========
-    print(f"[visualize_protein_ligand_3d] ➕ Adding hydrogens...")
+    print(f"[visualize_protein_ligand_3d] ➕ 正在添加氢原子...")
     
     # 检测配体是否已有氢原子
     n_h_lig = cmd.count_atoms(f"({lig_sel}) and hydro")
     if n_h_lig == 0:
         try:
             cmd.h_add(lig_sel)
-            print(f"[visualize_protein_ligand_3d]    ✓ Added hydrogens to ligand")
+            print(f"[visualize_protein_ligand_3d]    ✓ 已为配体添加氢原子")
         except Exception as e:
-            print(f"[visualize_protein_ligand_3d]    ⚠️ Failed to add hydrogens to ligand: {e}")
+            print(f"[visualize_protein_ligand_3d]    ⚠️ 为配体添加氢原子失败: {e}")
     
     # 检测口袋残基是否已有氢原子
     n_h_pocket = cmd.count_atoms("lig_pocket and hydro")
     if n_h_pocket == 0:
         try:
             cmd.h_add("lig_pocket")
-            print(f"[visualize_protein_ligand_3d]    ✓ Added hydrogens to pocket residues")
+            print(f"[visualize_protein_ligand_3d]    ✓ 已为口袋残基添加氢原子")
         except Exception as e:
-            print(f"[visualize_protein_ligand_3d]    ⚠️ Failed to add hydrogens to pocket residues: {e}")
+            print(f"[visualize_protein_ligand_3d]    ⚠️ 为口袋残基添加氢原子失败: {e}")
 
     # ========== 第六步：基础显示设置 ==========
     # 背景白色
@@ -2490,7 +2490,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         print(error_msg)
         return
     
-    print(f"[visualize_protein_ligand_3d] 🔗 Drawing interactions from analysis result (CSV-compliant)...")
+    print(f"[visualize_protein_ligand_3d] 🔗 正在绘制相互作用 (基于分析结果)...")
     
     # 删除旧的 PyMOL 几何检测对象（如果有）
     try:
@@ -2507,7 +2507,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     
     # ========== 第九步：氢键样式设置（专业配色）==========
     cmd.set("dash_length", 0.3)
-    cmd.set("dash_radius", 0.0)    # 默认使用线条模式（兼容性更好），而不是圆柱体(0.08)
+    cmd.set("dash_radius", 0.06)   # 使用细圆柱体，确保在所有渲染模式下可见
     cmd.set("dash_color", "blue")  # 氢键：蓝色虚线
     cmd.set("dash_width", 2.0)
     cmd.set("dash_gap", 0.5)
@@ -2531,7 +2531,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 protein_residues.add((prot_chain, res_name, res_id))
     
     if protein_residues:
-        print(f"[visualize_protein_ligand_3d] 📍 Showing {len(protein_residues)} interacting residues")
+        print(f"[visualize_protein_ligand_3d] 📍 显示 {len(protein_residues)} 个相互作用残基")
         
         # 3字母氨基酸代码 -> 1字母代码
         aa_map = {
@@ -2567,7 +2567,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 pass  # 静默失败
     
     # ========== 第十一步：绘制其他类型相互作用 ==========
-    print(f"[visualize_protein_ligand_3d] 🎨 Drawing key drug-design interactions...")
+    print(f"[visualize_protein_ligand_3d] 🎨 正在绘制关键药物设计相互作用...")
     
     # 相互作用类型到颜色的映射（专业配色方案）
     color_map = {
@@ -2710,7 +2710,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 row_idx = inter.get("_row_index", idx)
                 dist_name = f"interact_{type_en_clean}_{row_idx}"
                 
-                # 尝试创建距离对象
+                # 尝试创建距离对象（参考 PPI 可视化代码）
                 try:
                     # 检查选择是否有效
                     if cmd.count_atoms(sel1) == 0:
@@ -2720,20 +2720,32 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                         print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Protein selection empty: {sel2}")
                         continue
 
-                    # mode=2: 只显示最短的距离（避免多个原子对产生多条线）
-                    cmd.distance(dist_name, sel1, sel2, mode=2)
+                    # 创建距离对象（不使用 mode 参数，与 PPI 代码保持一致）
+                    # Debug output for the first few interactions
+                    if idx <= 3:
+                        print(f"[visualize_protein_ligand_3d] DEBUG: Creating {dist_name}")
+                        print(f"    sel1: {sel1} (atoms: {cmd.count_atoms(sel1)})")
+                        print(f"    sel2: {sel2} (atoms: {cmd.count_atoms(sel2)})")
+
+                    # 创建距离对象（强制 mode=0, cutoff=10.0）
+                    cmd.distance(dist_name, sel1, sel2, cutoff=10.0, mode=0)
                     
-                    # 验证是否创建成功
-                    if dist_name not in cmd.get_names("objects"):
-                        print(f"[visualize_protein_ligand_3d] ⚠️ Failed to create distance object: {dist_name}")
-                        continue
+                    # 强制显示设置
+                    cmd.enable(dist_name)
+                    cmd.show("dashes", dist_name)
+                    cmd.set("dash_width", 3.0, dist_name)
+                    cmd.set("dash_gap", 0.2, dist_name)
+                    cmd.set("dash_length", 0.4, dist_name)
+                    
+                    if interaction_color:
+                        cmd.color(interaction_color, dist_name)
+                        cmd.set("dash_color", interaction_color, dist_name)
                         
                 except Exception as e:
-                    # 如果选择失败,跳过（静默失败，不打印调试信息）
                     print(f"[visualize_protein_ligand_3d] ⚠️ Error creating distance {dist_name}: {e}")
                     continue
 
-                # 设置颜色（在创建后立即设置）
+                # 设置颜色和样式（与 PPI 代码保持一致的简洁方式）
                 interaction_color = None
                 for key, color in color_map.items():
                     if key in interaction_type or key == type_en:
@@ -2742,18 +2754,14 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 
                 if interaction_color:
                     cmd.set("dash_color", interaction_color, dist_name)
-                    cmd.color(interaction_color, dist_name)
                 
-                # 设置线条样式，确保可见
-                cmd.set("dash_width", 2.5, dist_name)
-                cmd.set("dash_gap", 0.15, dist_name)
-                cmd.set("dash_length", 0.25, dist_name)
-                cmd.set("dash_radius", 0.0, dist_name) # 强制使用线条
+                # 设置线条宽度并隐藏标签（与 PPI 代码一致）
+                cmd.set("dash_width", 2.0, dist_name)
+                cmd.hide("labels", dist_name)
                 
                 # 对于π相互作用,使用更粗的线条
                 if "PiPi" in type_en_clean or "PiCation" in type_en_clean:
                     cmd.set("dash_width", 3.0, dist_name)
-                    cmd.set("dash_radius", 0.12, dist_name) # π作用使用圆柱体
 
                 # 统计相互作用类型
                 interaction_count[interaction_type] = interaction_count.get(interaction_type, 0) + 1
@@ -2799,34 +2807,32 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     cmd.set("label_color", "black")
     
     # ========== 第十四步：输出统计 ==========
-    print(f"\n[visualize_protein_ligand_3d] ✅ 3D visualization complete!")
-    print(f"   📊 Interaction summary (from analysis result):")
+    print(f"\n[visualize_protein_ligand_3d] ✅ 3D 可视化完成!")
+    print(f"   📊 相互作用统计 (来自分析结果):")
     
     # 统计氢键
     total_hbonds = interaction_count.get("氢键", 0) + interaction_count.get("Hbond", 0)
     if total_hbonds > 0:
-        print(f"      • H-bonds: {total_hbonds} (CSV-compliant ✅)")
+        print(f"      • 氢键: {total_hbonds}")
     
     # 统计其他相互作用
     for itype, count in sorted(interaction_count.items(), key=lambda x: x[1], reverse=True):
-        if count > 0:
+        if count > 0 and itype not in ["氢键", "Hbond"]:
             print(f"      • {itype}: {count}")
     
     if protein_residues:
-        print(f"   📍 Involving {len(protein_residues)} protein residues")
+        print(f"   📍 涉及 {len(protein_residues)} 个蛋白残基")
     
-    print(f"\n   💡 PyMOL tips:")
-    print(f"      show labels, hbonds_*       # show H-bond distances")
-    print(f"      hide labels, hbonds_*       # hide H-bond distances")
-    print(f"      show labels, interact_*     # show other interaction distances")
-    print(f"      hide dashes, interact_*     # hide interaction lines")
-    print(f"      show dashes, interact_*     # show interaction lines")
-    print(f"      delete interact_*           # remove all interaction visuals")
-    print(f"      delete hbonds_*             # remove H-bond visuals")
-    print(f"      color red, interact_SaltBridge_*  # change salt-bridge color")
-    print(f"      set dash_width, 4, interact_*  # make lines thicker")
-    print(f"      ray                         # high-quality render")
-    print(f"      png output.png, dpi=300     # save high-resolution image")
+    print(f"\n   💡 PyMOL 提示:")
+    print(f"      show labels, hbonds_*       # 显示氢键距离")
+    print(f"      hide labels, hbonds_*       # 隐藏氢键距离")
+    print(f"      show labels, interact_*     # 显示其他相互作用距离")
+    print(f"      hide dashes, interact_*     # 隐藏相互作用线条")
+    print(f"      show dashes, interact_*     # 显示相互作用线条")
+    print(f"      delete interact_*           # 删除所有相互作用对象")
+    print(f"      delete hbonds_*             # 删除氢键对象")
+    print(f"      ray                         # 高质量渲染")
+    print(f"      png output.png, dpi=300     # 保存高清图片")
 
 cmd.extend("visualize_protein_ligand_3d", visualize_protein_ligand_3d)
 

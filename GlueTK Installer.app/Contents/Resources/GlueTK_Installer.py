@@ -58,9 +58,8 @@ class InstallerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("GlueTK Installer")
-        
-        # macOS: 先设置最小尺寸，延迟设置实际尺寸
-        self.root.minsize(700, 650)
+        self.root.geometry("700x650")
+        self.root.resizable(True, True)
         
         self.install_path = tk.StringVar(value=DEFAULT_INSTALL_PATH)
         self.create_launcher = tk.BooleanVar(value=True)
@@ -68,33 +67,17 @@ class InstallerApp:
         self.conda_ok = False
         self.env_ok = False
         
-        # macOS: 先更新以初始化窗口
-        self.root.update_idletasks()
-        
         self._build_ui()
-        
-        # macOS: 强制刷新并置顶窗口
-        self.root.update_idletasks()
+        # Fix for macOS Dark Mode / Blank Screen
         self.root.update()
+        self.root.lift()
+        self.root.attributes('-topmost',True)
+        self.root.after_idle(self.root.attributes,'-topmost',False)
         
-        # 设置窗口大小和位置
-        self.root.geometry("700x650")
         self._center_window()
         
-        # macOS: 多次刷新确保渲染
-        self.root.update_idletasks()
-        self.root.update()
-        
-        # macOS: 窗口置顶技巧
-        self.root.lift()
-        self.root.attributes('-topmost', True)
-        self.root.after(100, lambda: self.root.attributes('-topmost', False))
-        
-        # macOS: 聚焦窗口
-        self.root.focus_force()
-        
         # 只有在 UI 完全加载后才启动检查
-        self.root.after(500, lambda: threading.Thread(target=self._check_environment, daemon=True).start())
+        self.root.after(1000, lambda: threading.Thread(target=self._check_environment, daemon=True).start())
     
     def _center_window(self):
         self.root.update_idletasks()
@@ -331,61 +314,30 @@ class InstallerApp:
 </dict>
 </plist>''')
 
-                # Launcher - 智能检测 PyMOL 位置
+                # Launcher
+                conda_exe = shutil.which("conda")
+                if not conda_exe and self.conda_ok:
+                    # Try standard paths
+                    for p in [os.path.expanduser("~/miniconda3/bin/conda"), "/usr/local/bin/conda", "/opt/homebrew/bin/conda"]:
+                        if os.path.exists(p):
+                            conda_exe = p
+                            break
+                
+                conda_base = os.path.dirname(os.path.dirname(conda_exe)) if conda_exe else ""
                 launcher_script = os.path.join(macos, "launcher")
+                plugin_init = os.path.join(install_path, "__init__.py")
                 
                 with open(launcher_script, "w") as f:
-                    f.write('''#!/bin/bash
+                    f.write(f'''#!/bin/bash
 # GlueTK Launcher
-
-# 日志文件
-LOGFILE="$HOME/.gluetk_launch.log"
-echo "=== GlueTK Launch $(date) ===" > "$LOGFILE"
-
-# 查找 PyMOL
-PYMOL_CMD=""
-PYMOL_APP="/Applications/PyMOL.app"
-
-# 方案 1: PyMOL.app (独立应用)
-if [ -d "$PYMOL_APP" ]; then
-    PYMOL_CMD="$PYMOL_APP/Contents/MacOS/PyMOL"
-    echo "Found PyMOL.app" >> "$LOGFILE"
+if [ -f "{conda_base}/etc/profile.d/conda.sh" ]; then
+    source "{conda_base}/etc/profile.d/conda.sh"
+else
+    export PATH="{conda_base}/bin:$PATH"
 fi
-
-# 方案 2: conda 环境中的 pymol
-if [ -z "$PYMOL_CMD" ] || [ ! -x "$PYMOL_CMD" ]; then
-    CONDA_PATHS=(
-        "$HOME/miniconda3"
-        "$HOME/anaconda3"
-        "$HOME/miniforge3"
-        "/opt/homebrew/Caskroom/miniconda/base"
-    )
-    
-    for base in "${CONDA_PATHS[@]}"; do
-        if [ -f "${base}/etc/profile.d/conda.sh" ]; then
-            source "${base}/etc/profile.d/conda.sh" 2>>"$LOGFILE"
-            conda activate gluetk 2>>"$LOGFILE" || conda activate base 2>>"$LOGFILE"
-            break
-        fi
-    done
-    
-    if command -v pymol &>/dev/null; then
-        PYMOL_CMD="pymol"
-        echo "Found pymol in PATH" >> "$LOGFILE"
-    fi
-fi
-
-if [ -z "$PYMOL_CMD" ] || [ ! -x "$PYMOL_CMD" ]; then
-    echo "PyMOL not found!" >> "$LOGFILE"
-    osascript -e \'display alert "PyMOL Not Found" message "Please install PyMOL first.\\n\\nOption 1: Download from pymol.org\\nOption 2: conda install -c conda-forge pymol-open-source"\'
-    exit 1
-fi
-
-echo "Using PyMOL: $PYMOL_CMD" >> "$LOGFILE"
-
-# 启动 PyMOL (PyMOL 会自动加载 ~/.pymol/startup 中的插件)
-echo "Starting PyMOL..." >> "$LOGFILE"
-"$PYMOL_CMD" 2>>"$LOGFILE"
+conda activate {ENV_NAME}
+echo "Starting GlueTK..."
+pymol "{plugin_init}"
 ''')
                 os.chmod(launcher_script, 0o755)
                 self._log(f"  ✅ Created {desktop_app}")
@@ -405,35 +357,8 @@ echo "Starting PyMOL..." >> "$LOGFILE"
             self.root.after(0, lambda: self.install_btn.configure(state=tk.NORMAL))
 
 def main():
-    # macOS: 在创建 Tk 之前设置环境
-    import platform
-    if platform.system() == "Darwin":
-        # 尝试使用原生 macOS 主题
-        try:
-            from tkinter import _tkinter
-        except ImportError:
-            pass
-    
     root = tk.Tk()
-    
-    # macOS: 设置窗口为前台应用
-    if platform.system() == "Darwin":
-        try:
-            # 使窗口出现在所有其他窗口之上
-            root.createcommand('::tk::mac::ReopenApplication', lambda: root.lift())
-        except:
-            pass
-    
-    # macOS: 先显示窗口框架
-    root.withdraw()
-    root.update_idletasks()
-    
     app = InstallerApp(root)
-    
-    # macOS: 显示窗口
-    root.deiconify()
-    root.update()
-    
     root.mainloop()
 
 if __name__ == "__main__":
