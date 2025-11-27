@@ -44,11 +44,10 @@ echo ""
 echo "📦 Installing conda dependencies..."
 echo "   (This might take a few minutes)"
 
-# 1. 尝试安装核心计算库 + pymol-open-source + Vina Stack
+# 1. 尝试安装核心计算库 + pymol-open-source
 conda install -n ${ENV_NAME} -c conda-forge \
     rdkit scipy matplotlib pillow numpy pandas seaborn \
-    pyqt openbabel pymol-open-source \
-    vina meeko -y
+    pyqt openbabel pymol-open-source -y
 
 # 2. 检查 PyMOL 是否安装成功
 PYMOL_EXECUTABLE="pymol"
@@ -74,15 +73,24 @@ fi
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate ${ENV_NAME}
 
-# 使用 pip 安装其他 Python 包 (如果需要)
-# echo "📦 Installing additional pip packages..."
-# ...
+# 使用 pip 尝试安装 Vina + Meeko（可选，如失败仅给出警告，不中断安装）
+echo ""
+echo "📦 Installing optional docking stack via pip (vina + meeko)..."
+set +e
+pip install vina meeko --quiet --disable-pip-version-check
+PIP_STATUS=$?
+set -e
+if [[ ${PIP_STATUS} -ne 0 ]]; then
+  echo "⚠️  pip install vina/meeko failed (optional). Docking features may be unavailable."
+  echo "   You can try manually inside the environment:"
+  echo "   conda activate ${ENV_NAME} && pip install vina meeko"
+else
+  echo "✅ Vina + Meeko installed via pip"
+fi
 
 # 创建插件符号链接 (作为备份加载方式)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p ~/.pymol/startup
-# 先清理旧的链接或目录，防止 ln 报错或嵌套
-rm -rf ~/.pymol/startup/gluetk
 ln -sf "${SCRIPT_DIR}" ~/.pymol/startup/gluetk
 echo "✅ Plugin installed to ~/.pymol/startup/gluetk"
 

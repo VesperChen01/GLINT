@@ -228,58 +228,56 @@ def _import_gui_dialog():
     """尝试多种方式导入 GlueTKDialog"""
     import sys
     import os
-    import inspect
     
-    # 1. 获取真实的插件目录
-    try:
-        # 优先使用 inspect 获取当前文件路径，这在 PyMOL 内部运行脚本时往往比 __file__ 更可靠
-        frame = inspect.currentframe()
-        current_file = inspect.getfile(frame)
-        package_dir = os.path.dirname(os.path.realpath(current_file))
-    except Exception:
-        # 回退到 __file__
-        try:
-            current_file = os.path.realpath(__file__)
-            package_dir = os.path.dirname(current_file)
-        except:
-            package_dir = os.getcwd()
-
-    # 2. 确保该目录在 sys.path 顶端
-    if package_dir not in sys.path:
-        sys.path.insert(0, package_dir)
-    
-    # 3. 直接从文件加载 (最稳健的方式)
-    gui_file = os.path.join(package_dir, 'unified_gui.py')
-    if os.path.exists(gui_file):
-        try:
-            import importlib.util
-            # 关键修改：指定完整的包路径名，并设置 package='gluetk'
-            # 这样 unified_gui.py 里的 from .xxx import xxx 就能正常工作了
-            spec = importlib.util.spec_from_file_location('gluetk.unified_gui', gui_file)
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                # 这一步至关重要：告诉模块它属于哪个包
-                module.__package__ = 'gluetk'
-                sys.modules['gluetk.unified_gui'] = module
-                spec.loader.exec_module(module)
-                return module.GlueTKDialog
-        except Exception as e:
-            print(f"Debug: Direct load failed: {e}")
-            pass
-
-    # 4. 尝试标准导入
+    # 方案 1: 相对导入 (标准包模式)
     try:
         from .unified_gui import GlueTKDialog
         return GlueTKDialog
-    except ImportError:
+    except (ImportError, ModuleNotFoundError, ValueError, SystemError):
         pass
-        
+    
+    # 获取包目录
+    current_file = os.path.realpath(__file__)  # 解析软链接
+    if current_file.endswith('.pyc'):
+        current_file = current_file[:-1]
+    package_dir = os.path.dirname(current_file)
+    gui_file = os.path.join(package_dir, 'unified_gui.py')
+    
+    # 方案 2: 直接执行文件 (PyMOL run 命令模式)
+    if os.path.exists(gui_file):
+        try:
+            import importlib.util
+            spec = importlib.util.spec_from_file_location('unified_gui', gui_file)
+            unified_gui = importlib.util.module_from_spec(spec)
+            sys.modules['unified_gui'] = unified_gui
+            spec.loader.exec_module(unified_gui)
+            return unified_gui.GlueTKDialog
+        except Exception:
+            pass
+    
+    # 方案 3: sys.path 方式
     try:
+        if package_dir not in sys.path:
+            sys.path.insert(0, package_dir)
+        # 清除旧的模块缓存
+        for mod_name in list(sys.modules.keys()):
+            if 'unified_gui' in mod_name:
+                del sys.modules[mod_name]
         import unified_gui
         return unified_gui.GlueTKDialog
-    except ImportError:
+    except Exception:
         pass
-
+    
+    # 方案 4: 作为 gluetk 包导入
+    try:
+        parent_dir = os.path.dirname(package_dir)
+        if parent_dir not in sys.path:
+            sys.path.insert(0, parent_dir)
+        import gluetk.unified_gui
+        return gluetk.unified_gui.GlueTKDialog
+    except Exception:
+        pass
+    
     return None
 
 def gluetk_gui():

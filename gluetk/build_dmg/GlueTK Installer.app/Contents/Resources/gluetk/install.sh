@@ -39,50 +39,35 @@ if ! conda env list | grep -q "^${ENV_NAME} "; then
     conda create -n ${ENV_NAME} python=${PYTHON_VERSION} -y
 fi
 
-# 安装 conda 依赖
+# 安装 conda 依赖（不包含 Vina，本身可选，且在 osx-arm64 上可能没有官方包）
 echo ""
-echo "📦 Installing conda dependencies..."
-echo "   (This might take a few minutes)"
-
-# 1. 尝试安装核心计算库 + pymol-open-source + Vina Stack
+echo "📦 Installing conda dependencies (core stack, without Vina)..."
 conda install -n ${ENV_NAME} -c conda-forge \
     rdkit scipy matplotlib pillow numpy pandas seaborn \
-    pyqt openbabel pymol-open-source \
-    vina meeko -y
-
-# 2. 检查 PyMOL 是否安装成功
-PYMOL_EXECUTABLE="pymol"
-USE_SYSTEM_PYMOL=false
-
-if ! conda run -n ${ENV_NAME} command -v pymol &> /dev/null; then
-    echo "⚠️  Conda 'pymol' not found. Checking for system PyMOL..."
-    
-    if [ -d "/Applications/PyMOL.app" ]; then
-        echo "✓ Found system PyMOL at /Applications/PyMOL.app"
-        PYMOL_EXECUTABLE="/Applications/PyMOL.app/Contents/bin/pymol"
-        USE_SYSTEM_PYMOL=true
-    else
-        echo "❌ Error: No PyMOL found (neither in conda nor /Applications)."
-        echo "   Please install PyMOL manually."
-        # 不退出，允许只安装环境
-    fi
-else
-    echo "✓ Conda PyMOL installed successfully."
-fi
+    pyqt openbabel pymol-open-source -y
 
 # 激活环境
 source "$(conda info --base)/etc/profile.d/conda.sh"
 conda activate ${ENV_NAME}
 
-# 使用 pip 安装其他 Python 包 (如果需要)
-# echo "📦 Installing additional pip packages..."
-# ...
+# 使用 pip 尝试安装 Vina + Meeko（可选，如失败仅给出警告，不中断安装）
+echo ""
+echo "📦 Installing optional docking stack via pip (vina + meeko)..."
+set +e
+pip install vina meeko --quiet --disable-pip-version-check
+PIP_STATUS=$?
+set -e
+if [[ ${PIP_STATUS} -ne 0 ]]; then
+  echo "⚠️  pip install vina/meeko failed (optional). Docking features may be unavailable."
+  echo "   You can try manually inside the environment:"
+  echo "   conda activate ${ENV_NAME} && pip install vina meeko"
+else
+  echo "✅ Vina + Meeko installed via pip"
+fi
 
 # 创建插件符号链接 (作为备份加载方式)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 mkdir -p ~/.pymol/startup
-# 先清理旧的链接或目录，防止 ln 报错或嵌套
-rm -rf ~/.pymol/startup/gluetk
 ln -sf "${SCRIPT_DIR}" ~/.pymol/startup/gluetk
 echo "✅ Plugin installed to ~/.pymol/startup/gluetk"
 
@@ -142,28 +127,19 @@ cat > "${LAUNCHER_SCRIPT}" << EOF
 #!/bin/bash
 # GlueTK Launcher
 
-# 1. Source Conda to get dependencies (rdkit, etc)
+# Source Conda
 source "${CONDA_BASE_PATH}/etc/profile.d/conda.sh"
+
+# 激活环境
 conda activate ${ENV_NAME}
 
-# 2. Define Paths
+# 插件路径
 PLUGIN_PATH="${SCRIPT_DIR}/__init__.py"
-PYMOL_CMD="${PYMOL_EXECUTABLE}"
 
 echo "Starting GlueTK..."
-echo "PyMOL: \${PYMOL_CMD}"
-echo "Plugin: \${PLUGIN_PATH}"
-
-# 3. Launch
-if [[ "\${PYMOL_CMD}" == *"/Applications/PyMOL.app"* ]]; then
-    # 如果使用的是系统 PyMOL，尝试注入 PYTHONPATH 以加载 Conda 里的库
-    # 注意：如果 Python 版本差异过大，这可能会失败，但在 Mac 上这是唯一让系统 PyMOL 用 Conda 库的办法
-    export PYTHONPATH="\$CONDA_PREFIX/lib/python${PYTHON_VERSION}/site-packages:\$PYTHONPATH"
-    "\${PYMOL_CMD}" "\${PLUGIN_PATH}"
-else
-    # 使用 Conda 内部 PyMOL
-    pymol "\${PLUGIN_PATH}"
-fi
+# 启动 PyMOL 并加载插件
+# -q: quiet launch (optional)
+pymol "\${PLUGIN_PATH}"
 EOF
 
 chmod +x "${LAUNCHER_SCRIPT}"

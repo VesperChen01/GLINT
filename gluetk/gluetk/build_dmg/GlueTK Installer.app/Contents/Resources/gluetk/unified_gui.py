@@ -4676,8 +4676,11 @@ Thank you for your support! 🚀
         except:
             pass
         
-        # 方法3: 用户目录下的常见位置
-        candidates.append(os.path.expanduser("~/git/GlueTK/install.sh"))
+        # 方法3: 常见位置
+        candidates.extend([
+            os.path.expanduser("~/git/GlueTK/install.sh"),
+            "/Volumes/data/git/GlueTK/install.sh",
+        ])
         
         # 查找存在的脚本
         install_script = None
