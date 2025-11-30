@@ -2727,8 +2727,21 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                         print(f"    sel1: {sel1} (atoms: {cmd.count_atoms(sel1)})")
                         print(f"    sel2: {sel2} (atoms: {cmd.count_atoms(sel2)})")
 
-                    # 创建距离对象（强制 mode=0, cutoff=10.0）
-                    cmd.distance(dist_name, sel1, sel2, cutoff=10.0, mode=0)
+                    # Determine cutoff based on interaction type
+                    cutoff = 5.0  # Default
+                    if "氢键" in interaction_type or "Hbond" in interaction_type:
+                        cutoff = 3.8
+                    elif "盐桥" in interaction_type or "Salt" in interaction_type:
+                        cutoff = 5.0
+                    elif "疏水" in interaction_type or "Hydrophobic" in interaction_type:
+                        cutoff = 5.5
+                    elif "Pi" in interaction_type or "π" in interaction_type:
+                        cutoff = 6.5
+                    elif "金属" in interaction_type or "Metal" in interaction_type:
+                        cutoff = 4.0
+
+                    # 创建距离对象（强制 mode=0, 使用动态 cutoff）
+                    cmd.distance(dist_name, sel1, sel2, cutoff=cutoff, mode=0)
                     
                     # 强制显示设置
                     cmd.enable(dist_name)
