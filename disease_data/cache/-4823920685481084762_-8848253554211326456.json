@@ -1,0 +1,68 @@
+{
+  "data": {
+    "search": {
+      "hits": [
+        {
+          "id": "EFO_0001378",
+          "name": "multiple myeloma",
+          "description": "A bone marrow-based plasma cell neoplasm characterized by a serum monoclonal protein and skeletal destruction with osteolytic lesions, pathological fractures, bone pain, hypercalcemia, and anemia. Clinical variants include non-secretory myeloma, smoldering myeloma, indolent myeloma, and plasma cell leukemia. (WHO, 2001)",
+          "entity": "disease"
+        },
+        {
+          "id": "EFO_0003073",
+          "name": "asymptomatic myeloma",
+          "description": "A plasma cell myeloma lacking clinical manifestations and organ impairment.",
+          "entity": "disease"
+        },
+        {
+          "id": "MONDO_0008082",
+          "name": "multiple endocrine neoplasia type 2B",
+          "description": "Multiple endocrine neoplasia 2B (MEN2B) syndrome is a rare aggressive form of MEN2 characterized by medullary thyroid carcinoma (MTC), pheochromocytoma, mucosal ganglioneuroma, and marfanoid habitus.",
+          "entity": "disease"
+        },
+        {
+          "id": "EFO_1000417",
+          "name": "Ovarian Endometrioid Adenocarcinoma with Squamous Differentiation",
+          "description": "An endometrioid adenocarcinoma that arises from the ovary and exhibits squamous differentiation. The squamous cell component often has a cytologically benign appearance.",
+          "entity": "disease"
+        },
+        {
+          "id": "HP_0012021",
+          "name": "Persistent patent ductus venosus",
+          "description": "Persistence of blood flow through the ductus venosus for longer than the normal time after birth.",
+          "entity": "disease"
+        },
+        {
+          "id": "MONDO_0021634",
+          "name": "epithelial skin neoplasm",
+          "description": "A epithelial neoplasm that involves the zone of skin.",
+          "entity": "disease"
+        },
+        {
+          "id": "EFO_0009259",
+          "name": "skin carcinoma",
+          "description": "A carcinoma that arises from epithelial cells of the zone of skin",
+          "entity": "disease"
+        },
+        {
+          "id": "EFO_0009260",
+          "name": "non-melanoma skin carcinoma",
+          "description": "Any skin carcinoma that is not melanoma, with the most common types being basal cell carcinoma and squamous cell carcinoma",
+          "entity": "disease"
+        },
+        {
+          "id": "EFO_0010176",
+          "name": "keratinocyte carcinoma",
+          "description": "A skin cancer arising from the keratin-producing cells of the epidermis. The term encompasses both basal cell carcinoma and squamous cell carcinoma.",
+          "entity": "disease"
+        },
+        {
+          "id": "EFO_1001763",
+          "name": "basal cell neoplasm",
+          "description": "A neoplastic proliferation of basal cells in the epidermis (part of the skin) or other anatomic sites (most frequently the salivary glands). The basal cell neoplastic proliferation in the epidermis results in basal cell carcinomas. The basal cell neoplastic proliferation in the salivary glands can be benign, resulting in basal cell adenomas or malignant, resulting in basal cell adenocarcinomas.",
+          "entity": "disease"
+        }
+      ]
+    }
+  }
+}

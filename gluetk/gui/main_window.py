@@ -68,6 +68,7 @@ class GlueTKDialog(QDialog):
         # Initialize UI
         self.build_ui()
         self.setup_style()
+        self._update_content_bg()
         
         # Init Timer
         QTimer.singleShot(100, self.refresh_objects)
@@ -239,9 +240,9 @@ class GlueTKDialog(QDialog):
             getattr(self, "obj_combo_gm", None),
             getattr(self, "obj_combo_apbs", None),
             getattr(self, "pocket_obj_combo", None),
-            getattr(self, "glue_obj_combo", None),
-            getattr(self, "tc_obj_combo", None),
+            getattr(self, "ppi_obj_combo", None),
             getattr(self, "pl_obj_combo", None),
+            getattr(self, "ll_obj_combo", None),
             getattr(self, "mut_obj_combo", None)
         ]
         
@@ -261,6 +262,7 @@ class GlueTKDialog(QDialog):
         self._dark_mode = not self._dark_mode
         self.setup_style()
         self.theme_btn.setText("☾" if self._dark_mode else "☀")
+        self._update_content_bg()
         self.log(f"Switched to {'Dark' if self._dark_mode else 'Light'} mode")
 
     def setup_style(self):
@@ -316,6 +318,14 @@ class GlueTKDialog(QDialog):
             # 更新导航栏样式
             if hasattr(self, 'nav_widget'):
                 self.nav_widget.setStyleSheet("background-color: #f1f5f9; border-right: 1px solid #e2e8f0;")
+
+    def _update_content_bg(self):
+        """使各标签页滚动内容区背景随主题切换而同步更新。"""
+        bg = "#161b22" if self._dark_mode else "#ffffff"
+        for name in ("_target_scroll_content", "_lead_scroll_content", "_hit_scroll_content"):
+            w = getattr(self, name, None)
+            if w is not None:
+                w.setStyleSheet(f"#scroll_content {{ background-color: {bg}; }}")
 
     def check_environment(self):
         try:

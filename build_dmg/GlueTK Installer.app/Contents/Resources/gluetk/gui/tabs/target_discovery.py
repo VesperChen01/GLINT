@@ -40,17 +40,9 @@ class TargetDiscoveryTab(CommonTab):
         super().__init__(parent)
         self._gmotif_hits = []
         self._last_gmotif_csv = None
-        self._detected_pockets = []
-        self._interface_pockets = []
-        self._comparison_pockets_a = []
-        self._comparison_pockets_b = []
-        self._comparison_result = []
         
         # Remove proxies for methods implemented here to avoid shadowing
-        for attr in ['start_gmotif', 'render_gmotif_with_esp', 'browse_gm_pdb', 'browse_gm_out_csv', 
-                     'run_pocket_detection', 'run_pocket_visualization', 'run_pocket_comparison', 
-                     'visualize_pocket_comparison', 'run_interface_pockets', 'run_pocket_correlation', 
-                     'run_gmotif_pocket_analysis', 'browse_pocket_corr_csv']:
+        for attr in ['start_gmotif', 'render_gmotif_with_esp', 'browse_gm_pdb', 'browse_gm_out_csv']:
             if attr in self.__dict__:
                 del self.__dict__[attr]
         
@@ -146,12 +138,6 @@ class TargetDiscoveryTab(CommonTab):
         
         layout.addWidget(grp_gm)
         layout.addLayout(gm_btn_row)
-        
-        # 3. Pocket Detection
-        layout.addWidget(self._create_pocket_detection_card())
-        
-        # 4. Advanced Pocket Analysis
-        layout.addWidget(self._create_advanced_pocket_card())
         
         layout.addStretch(1)
         scroll_area.setWidget(content_widget)
@@ -313,126 +299,4 @@ class TargetDiscoveryTab(CommonTab):
         cmd.color(ramp_name, obj)
         self.log("Showing full-protein electrostatic surface")
 
-    # --- Pocket Logic ---
-    def run_pocket_detection(self):
-        try:
-            obj = self.parent_window.pocket_obj_combo.currentText().strip()
-            if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select an object")
-                return
-            try:
-                grid_spacing = float(self.parent_window.pocket_grid_spacing.text().strip() or "0.6")
-                min_volume = float(self.parent_window.pocket_min_volume.text().strip() or "20")
-            except ValueError:
-                QMessageBox.warning(self, "Warning", "Invalid parameter values")
-                return
-            
-            self.log(f"\\n🔍 Detecting pockets in {obj}...")
-            try: from ...pocket_detector import detect_pockets
-            except ImportError: from pocket_detector import detect_pockets
-            
-            pockets = detect_pockets(obj, grid_spacing, min_volume)
-            if not pockets:
-                self.log("⚠️  No pockets detected")
-                QMessageBox.information(self, "Result", "No pockets detected.")
-                return
-            
-            self._detected_pockets = pockets
-            self.log(f"\\n✅ Detected {len(pockets)} pockets")
-            self.run_pocket_visualization()
-            
-        except Exception as e:
-            self.on_error(str(e))
 
-    def run_pocket_visualization(self):
-        try:
-            if not self._detected_pockets:
-                QMessageBox.warning(self, "Warning", "Please run pocket detection first")
-                return
-            
-            color_by_map = {"Volume": "volume", "Druggability": "druggability", "Hydrophobicity": "hydrophobicity", "Depth": "depth"}
-            color_by = color_by_map.get(self.parent_window.pocket_color_by.currentText(), "volume")
-            
-            try: from ...pocket_visualizer import visualize_pockets
-            except ImportError: from pocket_visualizer import visualize_pockets
-            
-            visualize_pockets(self._detected_pockets, 'gluetk_pockets', color_by=color_by, show_spheres=True, sphere_radius=1.5)
-            self.log("Pockets visualized")
-        except Exception as e:
-            self.on_error(str(e))
-
-    def run_pocket_comparison(self):
-        try:
-            obj_a = self.parent_window.pocket_comp_obj_a.currentText().strip()
-            obj_b = self.parent_window.pocket_comp_obj_b.currentText().strip()
-            if not obj_a or not obj_b: return
-            align = self.parent_window.pocket_comp_align.isChecked()
-            
-            self.log(f"Comparing {obj_a} vs {obj_b}...")
-            try: from ...pocket_detector import compare_pockets
-            except ImportError: from pocket_detector import compare_pockets
-            
-            pockets_a, pockets_b, comparison = compare_pockets(
-                obj_a, obj_b, align=align,
-                grid_spacing=float(self.parent_window.pocket_grid_spacing.text() or "0.6"),
-                min_volume=float(self.parent_window.pocket_min_volume.text() or "20")
-            )
-            self._comparison_pockets_a = pockets_a
-            self._comparison_pockets_b = pockets_b
-            self._comparison_result = comparison
-            self.log(f"Comparison complete. Matched: {sum(1 for c in comparison if c['match_type'] == 'matched')}")
-        except Exception as e:
-            self.on_error(str(e))
-
-    def visualize_pocket_comparison(self):
-        try:
-            if not self._comparison_result: return
-            try: from ...pocket_visualizer import visualize_pocket_comparison
-            except ImportError: from pocket_visualizer import visualize_pocket_comparison
-            visualize_pocket_comparison(
-                self._comparison_result, self._comparison_pockets_a, self._comparison_pockets_b,
-                self.parent_window.pocket_comp_obj_a.currentText(), self.parent_window.pocket_comp_obj_b.currentText()
-            )
-            self.log("Comparison visualized")
-        except Exception as e:
-            self.on_error(str(e))
-
-    def run_interface_pockets(self):
-        try:
-            obj = self.parent_window.pocket_interface_obj.currentText().strip()
-            chain_a = self.parent_window.pocket_interface_chain_a.text().strip()
-            chain_b = self.parent_window.pocket_interface_chain_b.text().strip()
-            if not obj or not chain_a or not chain_b: return
-            
-            self.log(f"Analyzing interface pockets for {obj} ({chain_a}-{chain_b})...")
-            try: from ...pocket_glue_integration import analyze_pockets_in_ppi_interface
-            except ImportError: from pocket_glue_integration import analyze_pockets_in_ppi_interface
-            
-            self._interface_pockets = analyze_pockets_in_ppi_interface(
-                obj, chain_a, chain_b, visualize=True,
-                grid_spacing=float(self.parent_window.pocket_grid_spacing.text() or "0.6"),
-                min_volume=float(self.parent_window.pocket_min_volume.text() or "20")
-            )
-            self.log(f"Found {len(self._interface_pockets)} interface pockets")
-        except Exception as e:
-            self.on_error(str(e))
-
-    def browse_pocket_corr_csv(self):
-        fn, _ = QFileDialog.getOpenFileName(self, "Select CSV", "", "CSV (*.csv)")
-        if fn: self.parent_window.pocket_corr_csv.setText(fn)
-
-    def run_pocket_correlation(self):
-        try:
-            csv_file = self.parent_window.pocket_corr_csv.text().strip()
-            if not csv_file or not self._detected_pockets: return
-            
-            try: from ...pocket_glue_integration import correlate_pockets_with_interactions
-            except ImportError: from pocket_glue_integration import correlate_pockets_with_interactions
-            
-            correlations = correlate_pockets_with_interactions(self._detected_pockets, csv_file)
-            self.log(f"Correlation complete. {len(correlations)} pockets correlated.")
-        except Exception as e:
-            self.on_error(str(e))
-
-    def run_gmotif_pocket_analysis(self):
-        self.log("G-Motif Pocket Analysis not fully implemented in refactor yet.")

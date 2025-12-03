@@ -225,14 +225,60 @@ def _register_commands():
 _dlg = None
 
 def _import_gui_dialog():
-    """尝试导入 GlueTKDialog (优先使用新的模块化 GUI)"""
+    """尝试导入 GlueTKDialog (优先使用新的模块化 GUI)
+
+    兼容两种加载方式:
+    1) PyMOL 插件机制从 ~/.pymol/startup/gluetk 导入包
+    2) 用户/Launcher 直接 `pymol gluetk/__init__.py` 作为脚本运行
+
+    在某些情况下，__file__ 可能被解析到 PyMOL 自己的目录 (site-packages/pymol)，
+    因此这里增加多重路径修正逻辑，尽量找到真正的 gluetk 根目录
+    """
     import sys
     import os
     
-    # 确保 gluetk 包的父目录在 sys.path 中
-    # 关键: 使用 __file__ 而不是 os.path.realpath(__file__)
-    # 因为 realpath 会跟随符号链接，可能导致错误的路径
+    def _looks_like_plugin_root(path: str) -> bool:
+        return (
+            bool(path)
+            and os.path.isdir(path)
+            and os.path.exists(os.path.join(path, "gui"))
+            and os.path.exists(os.path.join(path, "env_checker.py"))
+        )
+    
+    # 1) 首选: 基于当前 __file__ 推断
     plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    if not _looks_like_plugin_root(plugin_dir):
+        print(f"[GlueTK Debug] __file__ path suspicious: {plugin_dir}")
+        # 2) 退而求其次: 使用 inspect 获取真实源文件路径
+        try:
+            import inspect
+            frame = inspect.currentframe()
+            if frame is not None:
+                file_from_frame = inspect.getfile(frame)
+                cand = os.path.dirname(os.path.abspath(file_from_frame))
+                if _looks_like_plugin_root(cand):
+                    plugin_dir = cand
+                    print(f"[GlueTK Debug] Corrected plugin_dir via inspect: {plugin_dir}")
+        except Exception as e:
+            print(f"[GlueTK Debug] Inspect failed: {e}")
+    
+    # 3) 仍然不对: 搜索常见安装路径
+    if not _looks_like_plugin_root(plugin_dir):
+        home = os.path.expanduser("~")
+        candidates = [
+            os.path.join(home, ".pymol", "startup", "gluetk"),
+            os.path.join(home, "pymol", "startup", "gluetk"),
+        ]
+        # 开发者环境: 当前工作目录下的 gluetk 目录
+        cwd = os.getcwd()
+        candidates.append(os.path.join(cwd, "gluetk"))
+        
+        for cand in candidates:
+            if _looks_like_plugin_root(cand):
+                plugin_dir = cand
+                print(f"[GlueTK Debug] Found plugin root candidate: {plugin_dir}")
+                break
+    
     parent_dir = os.path.dirname(plugin_dir)
     
     # Debug: 打印路径信息
@@ -240,7 +286,7 @@ def _import_gui_dialog():
     print(f"[GlueTK Debug] parent_dir = {parent_dir}")
     print(f"[GlueTK Debug] parent_dir in sys.path? {parent_dir in sys.path}")
     
-    if parent_dir not in sys.path:
+    if parent_dir and parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
         print(f"[GlueTK Debug] Added {parent_dir} to sys.path")
     

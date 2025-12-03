@@ -75,6 +75,10 @@ def _make_graphql_request(query: str, variables: dict, use_cache: bool = True) -
         "Accept": "application/json"
     }
     
+    # 禁用 SSL 警告（解决部分环境证书问题）
+    import urllib3
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+    
     payload = {
         "query": query,
         "variables": variables
@@ -89,7 +93,8 @@ def _make_graphql_request(query: str, variables: dict, use_cache: bool = True) -
                 OPEN_TARGETS_GRAPHQL_ENDPOINT,
                 json=payload,
                 headers=headers,
-                timeout=REQUEST_TIMEOUT
+                timeout=REQUEST_TIMEOUT,
+                verify=False  # 禁用 SSL 验证
             )
             
             # 检查 HTTP 状态码
@@ -279,12 +284,18 @@ def get_disease_targets(disease_id: str, top_n: int = 30, use_cache: bool = True
                     uniprot_id = pid.get("id")
                     break
             
+            # 提取 datatypeScores
+            datatype_scores = row.get("datatypeScores", [])
+            # 将 scores 转换为字典: {id: score}
+            dt_score_dict = {item['id']: item['score'] for item in datatype_scores}
+            
             targets_list.append({
                 "symbol": target.get("approvedSymbol", ""),
                 "name": target.get("approvedName", ""),
                 "score": score,
                 "uniprot_id": uniprot_id or "",
-                "ensembl_id": target.get("id", "")
+                "ensembl_id": target.get("id", ""),
+                **dt_score_dict  # 展平 datatypeScores 到顶级字典
             })
         
         # 创建 DataFrame

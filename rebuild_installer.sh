@@ -371,7 +371,13 @@ class InstallerApp:
                 if result.returncode == 0:
                     self._log("  ✅ Conda packages installed")
                 else:
-                    self._log(f"  ⚠️ Some packages may have failed: {result.stderr}")
+                    self._log(f"  ⚠️ Some packages may have failed")
+                
+                # 验证 PyMOL 是否安装成功
+                pymol_check = subprocess.run([self.conda_exe, "run", "-n", ENV_NAME, "which", "pymol"], 
+                                            capture_output=True, text=True)
+                if pymol_check.returncode != 0:
+                    self._log("  ⚠️ PyMOL not installed in conda, will check system PyMOL.app")
                 
                 # 2b. Pip dependencies inside the environment
                 if PIP_PACKAGES:
@@ -463,22 +469,63 @@ class InstallerApp:
 </dict>
 </plist>''')
 
-                # Launcher（使用 conda run + import gluetk 方式启动）
+                # Launcher（智能检测 PyMOL 类型）
                 conda_exe_str = self.conda_exe or ""
                 launcher_script = os.path.join(macos, "launcher")
                 
+                # 检测 PyMOL 安装方式
+                pymol_app_path = "/Applications/PyMOL.app/Contents/MacOS/PyMOL"
+                has_pymol_app = os.path.exists(pymol_app_path) and os.access(pymol_app_path, os.X_OK)
+                
+                # 检查 conda 环境中是否有 pymol
+                has_conda_pymol = False
+                try:
+                    check_result = subprocess.run([self.conda_exe, "run", "-n", ENV_NAME, "which", "pymol"],
+                                                capture_output=True, text=True, timeout=5)
+                    has_conda_pymol = (check_result.returncode == 0)
+                except:
+                    pass
+                
                 with open(launcher_script, "w") as f:
-                    f.write(f'''#!/bin/bash
-# GlueTK Launcher (using conda run)
+                    if has_pymol_app:
+                        # 使用系统 PyMOL.app
+                        self._log("  Using system PyMOL.app")
+                        f.write(f'''#!/bin/bash
+# GlueTK Launcher (PyMOL.app + conda dependencies)
+
+# 激活 conda 环境以加载依赖
+export CONDA_EXE="{conda_exe_str}"
+eval "$(\$CONDA_EXE shell.bash hook)" 2>/dev/null
+conda activate {ENV_NAME} 2>/dev/null || true
+
+# 使用系统 PyMOL
+"{pymol_app_path}" -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
+''')
+                    elif has_conda_pymol:
+                        # 使用 conda PyMOL
+                        self._log("  Using conda PyMOL")
+                        f.write(f'''#!/bin/bash
+# GlueTK Launcher (conda pymol)
+
 CONDA_EXE="{conda_exe_str}"
 if [ -n "$CONDA_EXE" ] && [ -x "$CONDA_EXE" ]; then
-  echo "Starting GlueTK via conda env {ENV_NAME} (import mode)..."
+  echo "Starting GlueTK via conda env {ENV_NAME}..."
   "$CONDA_EXE" run -n {ENV_NAME} pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
 else
-  echo "[GlueTK] ERROR: conda not found at $CONDA_EXE"
+  osascript -e 'display alert "Error" message "Conda not found. Please reinstall GlueTK."'
   exit 1
 fi
 ''')
+                    else:
+                        # 没有找到 PyMOL，创建错误提示启动器
+                        self._log("  ⚠️ PyMOL not found! Creating error handler launcher")
+                        f.write(f'''#!/bin/bash
+# GlueTK Launcher (PyMOL not found)
+
+osascript -e 'display alert "PyMOL Not Found" message "Please install PyMOL.app from https://pymol.org/ or run the installer again to install conda PyMOL." buttons {{"OK"}}'
+exit 1
+''')
+                
                 os.chmod(launcher_script, 0o755)
                 self._log(f"  ✅ Created {desktop_app}")
             else:

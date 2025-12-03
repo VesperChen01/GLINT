@@ -140,6 +140,10 @@ query DiseaseTargets($efoId: String!, $size: Int!) {
           }
         }
         score
+        datatypeScores {
+          id
+          score
+        }
       }
     }
   }

@@ -52,7 +52,8 @@ def ot_disease_targets(
     output_dir: str = None,
     auto_select: bool = True,
     include_e3_score: bool = True,
-    e3_symbol: str = "CRBN"
+    e3_symbol: str = "CRBN",
+    mining: bool = False
 ):
     """
     查询指定疾病的关联靶点列表（V2: 支持 E3 评分和综合评分）
@@ -64,9 +65,11 @@ def ot_disease_targets(
         auto_select: 如果搜索结果唯一，自动选择（默认 True）
         include_e3_score: 是否计算 E3 兼容度评分（默认 True）
         e3_symbol: E3 连接酶符号（默认 CRBN）
+        mining: 是否启用数据挖掘模式（显示证据类型分数）（默认 False）
     
     Example:
         ot_disease_targets disease_name="multiple myeloma", top_n=30
+        ot_disease_targets disease_name="multiple myeloma", mining=True
         ot_disease_targets disease_name="acute myeloid leukemia", top_n=50, include_e3_score=True
     
     Output:
@@ -113,8 +116,31 @@ def ot_disease_targets(
             print(f"\n❌ No targets found for {disease_display_name}")
             return
         
+        if mining:
+            print("\n⛏️  DATA MINING MODE: ENABLED")
+            print("   Showing evidence datatype scores (Genetic, Drug, etc.)")
+            # 打印详细表格
+            # 获取所有可能的列（除去基本列）
+            basic_cols = ['symbol', 'name', 'score', 'uniprot_id', 'ensembl_id']
+            mining_cols = [col for col in df.columns if col not in basic_cols and col != 'e3_score' and col != 'composite_score']
+            
+            print("\n" + "=" * 120)
+            print("EVIDENCE MINING REPORT")
+            print("=" * 120)
+            
+            display_df = df.head(min(top_n, 30)).copy()
+            cols_to_show = ['symbol', 'score'] + mining_cols
+            
+            # 格式化
+            for col in cols_to_show:
+                if col in display_df.columns and display_df[col].dtype == float:
+                    display_df[col] = display_df[col].apply(lambda x: f"{x:.3f}")
+            
+            print(display_df[cols_to_show].to_string(index=True))
+            print("=" * 120 + "\n")
+
         # 步骤 3.5: 添加 E3 评分（V2 功能）
-        if include_e3_score:
+        if include_e3_score and not mining: # Mining 模式下可能不需要混淆太多信息，或者由用户决定
             try:
                 from .open_targets_api import enrich_targets_with_e3_scores, print_enriched_targets_table
                 print(f"\n🧬 Calculating E3 compatibility scores (E3: {e3_symbol})...")

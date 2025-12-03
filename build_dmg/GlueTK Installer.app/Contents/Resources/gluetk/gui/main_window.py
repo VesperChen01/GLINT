@@ -130,6 +130,8 @@ class GlueTKDialog(QDialog):
 
     def _create_nav_widget(self) -> QWidget:
         nav_widget = QWidget()
+        nav_widget.setObjectName("nav_widget")
+        self.nav_widget = nav_widget  # 保存引用以便切换主题时更新
         nav_widget.setFixedWidth(240)
         nav_widget.setStyleSheet("background-color: #f1f5f9; border-right: 1px solid #e2e8f0;" if not self._dark_mode else "background-color: #0d1117; border-right: 1px solid #30363d;")
         
@@ -237,13 +239,9 @@ class GlueTKDialog(QDialog):
             getattr(self, "obj_combo_gm", None),
             getattr(self, "obj_combo_apbs", None),
             getattr(self, "pocket_obj_combo", None),
-            getattr(self, "pocket_comp_obj_a", None),
-            getattr(self, "pocket_comp_obj_b", None),
-            getattr(self, "pocket_interface_obj", None),
-            getattr(self, "gmotif_pocket_obj", None),
-            getattr(self, "glue_obj_combo", None),
-            getattr(self, "tc_obj_combo", None),
+            getattr(self, "ppi_obj_combo", None),
             getattr(self, "pl_obj_combo", None),
+            getattr(self, "ll_obj_combo", None),
             getattr(self, "mut_obj_combo", None)
         ]
         
@@ -280,9 +278,44 @@ class GlueTKDialog(QDialog):
                 QScrollArea { border: none; background-color: transparent; }
                 QScrollBar:vertical { border: none; background: #0d1117; width: 10px; margin: 0px 0 0px 0; }
                 QScrollBar::handle:vertical { background: #30363d; min-height: 20px; border-radius: 5px; }
+                QListWidget { background: transparent; font-size: 14px; color: #c9d1d9; }
+                QListWidget::item { padding: 12px; }
+                QListWidget::item:selected { background: #3b82f6; color: white; border-radius: 4px; }
+                #nav_widget { background-color: #0d1117; border-right: 1px solid #30363d; }
+                #tab_content { background-color: #161b22; }
             """)
+            # 更新导航栏样式
+            if hasattr(self, 'nav_widget'):
+                self.nav_widget.setStyleSheet("background-color: #0d1117; border-right: 1px solid #30363d;")
         else:
-            self.setStyleSheet("") # Default Light
+            # 浅色主题样式
+            self.setStyleSheet("""
+                QDialog, QWidget { background-color: #ffffff; color: #1f2937; }
+                QGroupBox { border: 1px solid #e5e7eb; border-radius: 6px; margin-top: 12px; padding-top: 10px; background-color: #f9fafb; }
+                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px; color: #3b82f6; font-weight: bold; }
+                QLineEdit, QComboBox, QSpinBox { background-color: #ffffff; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px; color: #1f2937; selection-background-color: #3b82f6; }
+                QPushButton { background-color: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; padding: 6px 12px; color: #374151; }
+                QPushButton:hover { background-color: #e5e7eb; border-color: #9ca3af; }
+                QPushButton:pressed { background-color: #d1d5db; }
+                QPushButton#highlight_btn { background-color: #22c55e; color: #ffffff; border: 1px solid #16a34a; }
+                QPushButton#highlight_btn:hover { background-color: #16a34a; }
+                QPushButton#primary_btn { background-color: #3b82f6; color: #ffffff; border: 1px solid #2563eb; }
+                QPushButton#primary_btn:hover { background-color: #2563eb; }
+                QScrollArea { border: none; background-color: transparent; }
+                QScrollBar:vertical { border: none; background: #f3f4f6; width: 10px; margin: 0px 0 0px 0; }
+                QScrollBar::handle:vertical { background: #d1d5db; min-height: 20px; border-radius: 5px; }
+                QListWidget { background: transparent; font-size: 14px; color: #1f2937; }
+                QListWidget::item { padding: 12px; }
+                QListWidget::item:selected { background: #3b82f6; color: white; border-radius: 4px; }
+                #nav_widget { background-color: #f1f5f9; border-right: 1px solid #e2e8f0; }
+                #tab_content { background-color: #ffffff; }
+                QTabWidget::pane { border: 1px solid #e5e7eb; background-color: #ffffff; }
+                QTabBar::tab { background-color: #f3f4f6; border: 1px solid #e5e7eb; padding: 6px 12px; }
+                QTabBar::tab:selected { background-color: #ffffff; border-bottom-color: #ffffff; }
+            """)
+            # 更新导航栏样式
+            if hasattr(self, 'nav_widget'):
+                self.nav_widget.setStyleSheet("background-color: #f1f5f9; border-right: 1px solid #e2e8f0;")
 
     def check_environment(self):
         try:

@@ -19,21 +19,33 @@ from pymol import cmd
 
 # ====== 1) 内置模板定义（可按需自改）======
 BUILTIN_TEMPLATES = {
-    "GSPT1 (6H0G A:60-67)": {
-        "pdb": "6H0G",
-        "selection_fmt": "{obj} and chain A and resi 60+61+62+63+64+65+66+67 and name CA",
+    "GSPT1 (5HXB A:570-577)": {
+        "pdb": "5HXB",
+        "selection_fmt": "{obj} and chain A and resi 570+571+572+573+574+575+576+577 and name CA",
     },
-    "CK1α (3M51 A:36-43)": {
-        "pdb": "3M51",
-        "selection_fmt": "{obj} and chain A and resi 36+37+38+39+40+41+42+43 and name CA",
-    },
-    "VAV1 RT-loop (2MC1 A:95-102)": {
-        "pdb": "2MC1",
-        "selection_fmt": "{obj} and chain A and resi 95+96+97+98+99+100+101+102 and name CA",
+    "CK1α (5FQD C:35-42)": {
+        "pdb": "5FQD",
+        "selection_fmt": "{obj} and chain C and resi 35+36+37+38+39+40+41+42 and name CA",
     },
 }
 
-# ====== 2) 基础工具：resi 解析/排序、Kabsch RMSD ======
+# 氨基酸三字母到单字母转换表
+AA_3TO1 = {
+    'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
+    'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
+    'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
+    'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V',
+    # 非标准/修饰氨基酸
+    'MSE': 'M',  # 硒代蛋氨酸
+    'SEC': 'U',  # 硒半胱氨酸
+    'PYL': 'O',  # 吡咯赖氨酸
+}
+
+def _aa_3to1(resn: str) -> str:
+    """将三字母氨基酸代码转换为单字母代码"""
+    resn_upper = resn.strip().upper()
+    return AA_3TO1.get(resn_upper, 'X')  # 未知氨基酸返回 'X'
+
 def _parse_resi(resi_str: str):
     if resi_str is None:
         return (0, "")
@@ -258,7 +270,7 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
                         continue
                 
                 resi_s = window[0][0]; resi_e = window[-1][0]
-                seq8 = ''.join((aa[:1] if aa else 'X') for aa in [w[1] for w in window])
+                seq8 = ''.join(_aa_3to1(aa) if aa else 'X' for aa in [w[1] for w in window])
                 hits.append((ch, resi_s, resi_e, seq8, rmsd))
 
     # 调试输出
@@ -275,24 +287,41 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         print(f"[G-MOTIF] Smallest RMSD (top {nshow}):")
         for k in range(nshow):
             r, ch, window = best_rmsd_pool[k]
-            seq8 = ''.join((aa[:1] if aa else 'X') for aa in [w[1] for w in window])
+            seq8 = ''.join(_aa_3to1(aa) if aa else 'X' for aa in [w[1] for w in window])
             resi_s = window[0][0]; resi_e = window[-1][0]
             print("  #{:02d} chain={} {:>6s}-{:>6s}  seq={}  RMSD={:.2f} Å".format(
                 k+1, ch or '.', str(resi_s), str(resi_e), seq8, r
             ))
 
-    # 写 CSV
+    # 写 CSV - 输出所有扫描的窗口(不仅是 hits)
     if out_csv is None:
         import tempfile
         fd, out_csv = tempfile.mkstemp(suffix="_gmotif.csv"); os.close(fd)
+    
+    # 对 best_rmsd_pool 按 RMSD 排序
+    best_rmsd_pool.sort(key=lambda x: x[0])
+    
+    print(f"[G-MOTIF] Writing {len(best_rmsd_pool)} windows to CSV (all RMSD values): {out_csv}")
+    print(f"[G-MOTIF] Hits (RMSD ≤ {rmsd_cutoff} Å): {len(hits)}")
+    
     with open(out_csv, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        # 使用 G-Motif 专用表头
-        w.writerow(["Chain", "Sequence", "Start", "End", "RMSD", "Type"])
-        for (ch, s, e, seq8, rmsd) in hits:
-            w.writerow([ch, seq8, s, e, f"{rmsd:.2f}", "G-Motif"])
+        # 表头增加 Status 列
+        w.writerow(["Chain", "Sequence", "Start", "End", "RMSD", "Status", "Type"])
+        
+        # 写入所有窗口
+        for rmsd, ch, window in best_rmsd_pool:
+            resi_s = window[0][0]
+            resi_e = window[-1][0]
+            seq8 = ''.join(_aa_3to1(aa) if aa else 'X' for aa in [w[1] for w in window])
+            
+            # 判断是否通过阈值
+            status = "Pass" if rmsd <= float(rmsd_cutoff) else "Fail"
+            
+            w.writerow([ch, seq8, resi_s, resi_e, f"{rmsd:.2f}", status, "G-Motif"])
 
     print(f"[G-MOTIF] Hits: {len(hits)}; output: {out_csv}")
+
 
     # 自动高亮
     if auto_highlight and hits:

@@ -66,6 +66,7 @@ class InstallerApp:
         self.install_deps = tk.BooleanVar(value=True)
         self.conda_ok = False
         self.env_ok = False
+        self.conda_exe = None  # Store detected conda path
         
         self._build_ui()
         # Fix for macOS Dark Mode / Blank Screen
@@ -167,24 +168,48 @@ class InstallerApp:
             
     def _check_environment(self):
         self._log("Checking environment...")
-        try:
-            result = subprocess.run(["conda", "--version"], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                version = result.stdout.strip()
-                self.conda_status.configure(text=f"✅ {version}", foreground="green")
-                self.conda_ok = True
-                self.conda_install_btn.configure(state=tk.DISABLED)
-                self._log(f"  Conda: {version}")
-            else:
-                raise Exception("conda not working")
-        except:
+        
+        # 1. Find Conda Executable
+        self.conda_exe = shutil.which("conda")
+        if not self.conda_exe:
+            # Try standard paths
+            possible_paths = [
+                os.path.expanduser("~/miniconda3/bin/conda"),
+                os.path.expanduser("~/opt/miniconda3/bin/conda"),
+                os.path.expanduser("~/anaconda3/bin/conda"),
+                "/usr/local/bin/conda",
+                "/opt/homebrew/bin/conda",
+                "/opt/homebrew/Caskroom/miniconda/base/bin/conda"
+            ]
+            for p in possible_paths:
+                if os.path.exists(p) and os.access(p, os.X_OK):
+                    self.conda_exe = p
+                    break
+        
+        if self.conda_exe:
+            try:
+                result = subprocess.run([self.conda_exe, "--version"], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    version = result.stdout.strip()
+                    self.conda_status.configure(text=f"✅ {version}", foreground="green")
+                    self.conda_ok = True
+                    self.conda_install_btn.configure(state=tk.DISABLED)
+                    self._log(f"  Conda found: {self.conda_exe}")
+                    self._log(f"  Version: {version}")
+                else:
+                    raise Exception("conda command failed")
+            except Exception as e:
+                self.conda_status.configure(text="❌ Error", foreground="red")
+                self._log(f"  Conda error: {e}")
+        else:
             self.conda_status.configure(text="❌ Not found", foreground="red")
             self.conda_install_btn.configure(state=tk.NORMAL)
-            self._log("  Conda: Not found")
+            self._log("  Conda: Not found in PATH or standard locations")
             return
             
+        # 2. Check Environment
         try:
-            result = subprocess.run(["conda", "env", "list"], capture_output=True, text=True, timeout=10)
+            result = subprocess.run([self.conda_exe, "env", "list"], capture_output=True, text=True, timeout=10)
             if ENV_NAME in result.stdout:
                 self.env_status.configure(text="✅ Exists", foreground="green")
                 self.env_ok = True
@@ -214,7 +239,8 @@ class InstallerApp:
             self.progress["value"] = 20
             if not self.env_ok:
                 self._log(f"  Creating environment '{ENV_NAME}'...")
-                result = subprocess.run(["conda", "create", "-n", ENV_NAME, f"python={PYTHON_VERSION}", "-y"], capture_output=True, text=True)
+                # Use full conda path
+                result = subprocess.run([self.conda_exe, "create", "-n", ENV_NAME, f"python={PYTHON_VERSION}", "-y"], capture_output=True, text=True)
                 if result.returncode != 0:
                     self._log(f"  Error: {result.stderr}")
                 else:
@@ -224,18 +250,39 @@ class InstallerApp:
                 
             # 2. Dependencies
             if self.install_deps.get():
-                self._log("\n[2/5] Installing dependencies...")
+                self._log("\\n[2/5] Installing dependencies (conda)...")
                 self.progress["value"] = 40
                 pkg_str = " ".join(CONDA_PACKAGES)
-                cmd = f"conda install -n {ENV_NAME} -c conda-forge {pkg_str} -y"
-                self._log(f"  Running: conda install ...")
-                result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+                # Use full conda path and list args instead of shell=True for better safety/stability
+                self._log(f"  Running: conda install -n {ENV_NAME} -c conda-forge {pkg_str}")
+                cmd = [self.conda_exe, "install", "-n", ENV_NAME, "-c", "conda-forge", "-y"] + CONDA_PACKAGES
+                
+                # Run without shell=True
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                
                 if result.returncode == 0:
                     self._log("  ✅ Conda packages installed")
                 else:
-                    self._log(f"  ⚠️ Some packages may have failed: {result.stderr}")
+                    self._log(f"  ⚠️ Some packages may have failed")
+                
+                # 验证 PyMOL 是否安装成功
+                pymol_check = subprocess.run([self.conda_exe, "run", "-n", ENV_NAME, "which", "pymol"], 
+                                            capture_output=True, text=True)
+                if pymol_check.returncode != 0:
+                    self._log("  ⚠️ PyMOL not installed in conda, will check system PyMOL.app")
+                
+                # 2b. Pip dependencies inside the environment
+                if PIP_PACKAGES:
+                    self._log("\\n[2b/5] Installing pip packages inside environment...")
+                    pip_cmd = [self.conda_exe, "run", "-n", ENV_NAME, "python", "-m", "pip", "install", "--upgrade"] + PIP_PACKAGES
+                    self._log(f"  Running: {' '.join(pip_cmd)}")
+                    pip_result = subprocess.run(pip_cmd, capture_output=True, text=True)
+                    if pip_result.returncode == 0:
+                        self._log("  ✅ Pip packages installed")
+                    else:
+                        self._log(f"  ⚠️ Pip install issues: {pip_result.stderr}")
             else:
-                self._log("\n[2/5] Skipping dependencies (unchecked)")
+                self._log("\\n[2/5] Skipping dependencies (unchecked)")
                 
             self.progress["value"] = 60
             
@@ -314,31 +361,63 @@ class InstallerApp:
 </dict>
 </plist>''')
 
-                # Launcher
-                conda_exe = shutil.which("conda")
-                if not conda_exe and self.conda_ok:
-                    # Try standard paths
-                    for p in [os.path.expanduser("~/miniconda3/bin/conda"), "/usr/local/bin/conda", "/opt/homebrew/bin/conda"]:
-                        if os.path.exists(p):
-                            conda_exe = p
-                            break
-                
-                conda_base = os.path.dirname(os.path.dirname(conda_exe)) if conda_exe else ""
+                # Launcher（智能检测 PyMOL 类型）
+                conda_exe_str = self.conda_exe or ""
                 launcher_script = os.path.join(macos, "launcher")
-                plugin_init = os.path.join(install_path, "__init__.py")
+                
+                # 检测 PyMOL 安装方式
+                pymol_app_path = "/Applications/PyMOL.app/Contents/MacOS/PyMOL"
+                has_pymol_app = os.path.exists(pymol_app_path) and os.access(pymol_app_path, os.X_OK)
+                
+                # 检查 conda 环境中是否有 pymol
+                has_conda_pymol = False
+                try:
+                    check_result = subprocess.run([self.conda_exe, "run", "-n", ENV_NAME, "which", "pymol"],
+                                                capture_output=True, text=True, timeout=5)
+                    has_conda_pymol = (check_result.returncode == 0)
+                except:
+                    pass
                 
                 with open(launcher_script, "w") as f:
-                    f.write(f'''#!/bin/bash
-# GlueTK Launcher
-if [ -f "{conda_base}/etc/profile.d/conda.sh" ]; then
-    source "{conda_base}/etc/profile.d/conda.sh"
-else
-    export PATH="{conda_base}/bin:$PATH"
-fi
-conda activate {ENV_NAME}
-echo "Starting GlueTK..."
-pymol "{plugin_init}"
+                    if has_pymol_app:
+                        # 使用系统 PyMOL.app
+                        self._log("  Using system PyMOL.app")
+                        f.write(f'''#!/bin/bash
+# GlueTK Launcher (PyMOL.app + conda dependencies)
+
+# 激活 conda 环境以加载依赖
+export CONDA_EXE="{conda_exe_str}"
+eval "$(\$CONDA_EXE shell.bash hook)" 2>/dev/null
+conda activate {ENV_NAME} 2>/dev/null || true
+
+# 使用系统 PyMOL
+"{pymol_app_path}" -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
 ''')
+                    elif has_conda_pymol:
+                        # 使用 conda PyMOL
+                        self._log("  Using conda PyMOL")
+                        f.write(f'''#!/bin/bash
+# GlueTK Launcher (conda pymol)
+
+CONDA_EXE="{conda_exe_str}"
+if [ -n "$CONDA_EXE" ] && [ -x "$CONDA_EXE" ]; then
+  echo "Starting GlueTK via conda env {ENV_NAME}..."
+  "$CONDA_EXE" run -n {ENV_NAME} pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
+else
+  osascript -e 'display alert "Error" message "Conda not found. Please reinstall GlueTK."'
+  exit 1
+fi
+''')
+                    else:
+                        # 没有找到 PyMOL，创建错误提示启动器
+                        self._log("  ⚠️ PyMOL not found! Creating error handler launcher")
+                        f.write(f'''#!/bin/bash
+# GlueTK Launcher (PyMOL not found)
+
+osascript -e 'display alert "PyMOL Not Found" message "Please install PyMOL.app from https://pymol.org/ or run the installer again to install conda PyMOL." buttons {{"OK"}}'
+exit 1
+''')
+                
                 os.chmod(launcher_script, 0o755)
                 self._log(f"  ✅ Created {desktop_app}")
             else:
