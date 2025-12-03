@@ -4,13 +4,13 @@ GlueTK - PyMOL Plugin for Molecular Glue Analysis
 Molecular Glue vs PROTAC Classification Toolkit
 
 Author: Vesper
-Version: 1.0.0
+Version: v0.1.3-beta
 """
 
 from __future__ import print_function
 import locale
 
-__version__ = "1.0.0"
+__version__ = "v0.1.3-beta"
 __author__ = "Vesper"
 
 # ---- 环境依赖检查 ----
@@ -225,60 +225,35 @@ def _register_commands():
 _dlg = None
 
 def _import_gui_dialog():
-    """尝试多种方式导入 GlueTKDialog"""
+    """尝试导入 GlueTKDialog (优先使用新的模块化 GUI)"""
     import sys
     import os
     
-    # 方案 1: 相对导入 (标准包模式)
+    # 确保 gluetk 包的父目录在 sys.path 中
+    # 关键: 使用 __file__ 而不是 os.path.realpath(__file__)
+    # 因为 realpath 会跟随符号链接，可能导致错误的路径
+    plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    parent_dir = os.path.dirname(plugin_dir)
+    
+    # Debug: 打印路径信息
+    print(f"[GlueTK Debug] plugin_dir = {plugin_dir}")
+    print(f"[GlueTK Debug] parent_dir = {parent_dir}")
+    print(f"[GlueTK Debug] parent_dir in sys.path? {parent_dir in sys.path}")
+    
+    if parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+        print(f"[GlueTK Debug] Added {parent_dir} to sys.path")
+    
+    # 使用绝对导入 gluetk.gui.main_window
     try:
-        from .unified_gui import GlueTKDialog
-        return GlueTKDialog
-    except (ImportError, ModuleNotFoundError, ValueError, SystemError):
-        pass
-    
-    # 获取包目录
-    current_file = os.path.realpath(__file__)  # 解析软链接
-    if current_file.endswith('.pyc'):
-        current_file = current_file[:-1]
-    package_dir = os.path.dirname(current_file)
-    gui_file = os.path.join(package_dir, 'unified_gui.py')
-    
-    # 方案 2: 直接执行文件 (PyMOL run 命令模式)
-    if os.path.exists(gui_file):
-        try:
-            import importlib.util
-            spec = importlib.util.spec_from_file_location('unified_gui', gui_file)
-            unified_gui = importlib.util.module_from_spec(spec)
-            sys.modules['unified_gui'] = unified_gui
-            spec.loader.exec_module(unified_gui)
-            return unified_gui.GlueTKDialog
-        except Exception:
-            pass
-    
-    # 方案 3: sys.path 方式
-    try:
-        if package_dir not in sys.path:
-            sys.path.insert(0, package_dir)
-        # 清除旧的模块缓存
-        for mod_name in list(sys.modules.keys()):
-            if 'unified_gui' in mod_name:
-                del sys.modules[mod_name]
-        import unified_gui
-        return unified_gui.GlueTKDialog
-    except Exception:
-        pass
-    
-    # 方案 4: 作为 gluetk 包导入
-    try:
-        parent_dir = os.path.dirname(package_dir)
-        if parent_dir not in sys.path:
-            sys.path.insert(0, parent_dir)
-        import gluetk.unified_gui
-        return gluetk.unified_gui.GlueTKDialog
-    except Exception:
-        pass
-    
-    return None
+        import gluetk.gui.main_window as gui_module
+        return gui_module.GlueTKDialog
+    except ImportError as e:
+        print(f"❌ Error importing modular GUI: {e}")
+        print(f"[GlueTK Debug] sys.path = {sys.path[:5]}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def gluetk_gui():
     """启动 GlueTK 统一 GUI 窗口（非模态，不阻塞事件循环）"""
@@ -355,7 +330,7 @@ def __init_plugin__(app=None):
 
     # 欢迎信息
     if _DEPS_OK:
-        print("\n🧬 GlueTK - Molecular Glue Analyzer v1.0.0")
+        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.3-beta")
         print("┌" + "─" * 48 + "┐")
         print("│  Quick Start:                                   │")
         print("│    • gluetk_gui            - Launch GUI          │")
@@ -363,7 +338,7 @@ def __init_plugin__(app=None):
         print("│    • Plugins → GlueTK       - Menu access       │")
         print("└" + "─" * 48 + "┘")
     else:
-        print("\n🧬 GlueTK v1.0.0 - ⚠️  Setup required (see above)")
+        print("\n🧬 GlueTK v0.1.3-beta - ⚠️  Setup required (see above)")
         print("💡 After setup, restart PyMOL to use all features.\n")
 
 # Auto-register if running within PyMOL environment (e.g. via 'run' command or import)

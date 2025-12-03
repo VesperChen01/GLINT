@@ -332,9 +332,23 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     # 创建距离对象
     dist_name = f"dist_{idx}"
     
+    # Determine cutoff based on interaction type
+    cutoff = 5.0  # Default
+    if "氢键" in interaction_type or "Hydrogen" in interaction_type:
+        cutoff = 3.8
+    elif "盐桥" in interaction_type or "Salt" in interaction_type:
+        cutoff = 5.0
+    elif "疏水" in interaction_type or "Hydrophobic" in interaction_type:
+        cutoff = 5.5
+    elif "Pi" in interaction_type or "π" in interaction_type:
+        cutoff = 6.5
+    elif "金属" in interaction_type or "Metal" in interaction_type:
+        cutoff = 4.0
+    
     try:
         # 使用distance命令创建连接线
-        cmd.distance(dist_name, sel1, sel2)
+        # 使用 cutoff 参数过滤掉距离过远的错误连接（例如 > 3.8A 的氢键）
+        cmd.distance(dist_name, sel1, sel2, cutoff=cutoff)
         
         # 设置距离对象的显示样式
         cmd.hide("labels", dist_name)  # 隐藏距离标签

@@ -166,6 +166,53 @@ class EnvironmentChecker:
             self.log(f"  ✗ {display_name} (未安装)")
             return False
     
+    def _find_command_path(self, cmd: str) -> Optional[str]:
+        """
+        查找命令的完整路径，支持用户目录下的工具
+        
+        GUI 应用（如 PyMOL.app）可能不继承终端的 shell PATH，
+        因此需要额外搜索用户常用路径。
+        
+        Args:
+            cmd: 命令名称
+            
+        Returns:
+            str: 命令路径，未找到返回 None
+        """
+        import shutil
+        
+        # 1. 系统 PATH
+        path = shutil.which(cmd)
+        if path:
+            return path
+        
+        # 2. Conda 环境
+        if 'CONDA_PREFIX' in os.environ:
+            conda_path = os.path.join(os.environ['CONDA_PREFIX'], 'bin', cmd)
+            if os.path.exists(conda_path):
+                return conda_path
+        
+        # 3. 用户常用路径
+        home = os.path.expanduser('~')
+        user_paths = [
+            os.path.join(home, 'bin', cmd),
+            os.path.join(home, '.local', 'bin', cmd),
+            os.path.join(home, 'local', 'bin', cmd),
+            f'/usr/local/bin/{cmd}',
+        ]
+        
+        # 4. 平台特定路径
+        if sys.platform == 'darwin':  # macOS
+            user_paths.extend([
+                f'/opt/homebrew/bin/{cmd}',  # Apple Silicon Homebrew
+            ])
+        
+        for path in user_paths:
+            if os.path.exists(path):
+                return path
+        
+        return None
+    
     def check_command(self, cmd: str, name: str) -> bool:
         """
         检查命令行工具是否可用
@@ -177,9 +224,15 @@ class EnvironmentChecker:
         Returns:
             bool: True 如果命令可用
         """
+        # 使用增强的路径查找
+        cmd_path = self._find_command_path(cmd)
+        if not cmd_path:
+            self.log(f"  ✗ {name} (未找到)")
+            return False
+        
         try:
             result = subprocess.run(
-                [cmd, "--version"],
+                [cmd_path, "--version"],
                 capture_output=True,
                 text=True,
                 timeout=5

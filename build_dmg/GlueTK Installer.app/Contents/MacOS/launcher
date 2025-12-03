@@ -1,54 +1,44 @@
 #!/bin/bash
 # GlueTK Installer Launcher (Tk GUI via conda python)
 
-# macOS app bundle 启动时环境变量不完整，需要手动查找 conda
-CONDA_BASE=""
-CONDA_PATHS=(
-  "$HOME/miniconda3"
-  "$HOME/anaconda3"
-  "$HOME/miniforge3"
-  "$HOME/mambaforge"
-  "/opt/miniconda3"
-  "/opt/anaconda3"
-  "/opt/homebrew/Caskroom/miniconda/base"
-  "/usr/local/Caskroom/miniconda/base"
-)
-
-# 先尝试 source conda profile (如果存在)
-for base in "${CONDA_PATHS[@]}"; do
-  if [ -f "${base}/etc/profile.d/conda.sh" ]; then
-    source "${base}/etc/profile.d/conda.sh" 2>/dev/null
-    CONDA_BASE="$base"
-    break
-  fi
-done
-
-# 如果 source 成功，验证 conda 可用
-if [ -n "$CONDA_BASE" ] && command -v conda &>/dev/null; then
-  : # conda found
+# 查找 conda
+# 查找 conda
+CONDA_EXE=""
+if command -v conda &> /dev/null; then
+    CONDA_EXE=$(command -v conda)
 else
-  # 直接检查 conda 可执行文件
-  CONDA_BASE=""
-  for base in "${CONDA_PATHS[@]}"; do
-    if [ -x "${base}/bin/conda" ]; then
-      CONDA_BASE="$base"
-      export PATH="${CONDA_BASE}/bin:$PATH"
-      break
-    fi
-  done
+    # 尝试常见路径
+    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "$HOME/opt/miniconda3/bin/conda"; do
+        if [ -x "$p" ]; then
+            CONDA_EXE="$p"
+            break
+        fi
+    done
 fi
 
-if [ -z "$CONDA_BASE" ]; then
-  osascript -e 'display alert "Conda Not Found" message "Please install Miniconda first.\n\nDownload: https://docs.conda.io/en/latest/miniconda.html\n\nThen re-run GlueTK Installer."'
-  open "https://docs.conda.io/en/latest/miniconda.html"
+if [ -z "$CONDA_EXE" ]; then
+  osascript -e 'display alert "Conda Not Found" message "Please install Miniconda (conda) first, then re-run GlueTK Installer."'
   exit 1
 fi
 
-# 使用 conda base 环境的 Python (有 Tk 支持)
+# 初始化 conda 环境
+eval "$($CONDA_EXE shell.bash hook)"
+
+CONDA_BASE="$(conda info --base 2>/dev/null)"
+if [ ! -d "$CONDA_BASE" ]; then
+  osascript -e 'display alert "Conda Base Not Found" message "Conda is installed but CONDA_BASE is invalid. Please check your conda installation."'
+  exit 1
+fi
+
 PYTHON="${CONDA_BASE}/bin/python"
 if [ ! -x "$PYTHON" ]; then
-  osascript -e 'display alert "Python Not Found" message "Conda base Python not found at: '"$PYTHON"'"'
-  exit 1
+  # 退而求其次，使用当前 shell 中的 python
+  if command -v python &> /dev/null; then
+    PYTHON=$(command -v python)
+  else
+    osascript -e 'display alert "Python Not Found" message "Cannot find a suitable python interpreter."'
+    exit 1
+  fi
 fi
 
 # 获取资源目录
@@ -56,6 +46,4 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 RESOURCES_DIR="$(dirname "$DIR")/Resources"
 INSTALLER_SCRIPT="${RESOURCES_DIR}/GlueTK_Installer.py"
 
-# 确保 Tk 可以正常渲染
-export DISPLAY=:0
 "$PYTHON" "$INSTALLER_SCRIPT"

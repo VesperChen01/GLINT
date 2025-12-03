@@ -4,13 +4,13 @@ GlueTK - PyMOL Plugin for Molecular Glue Analysis
 Molecular Glue vs PROTAC Classification Toolkit
 
 Author: Vesper
-Version: 1.0.0
+Version: v0.1.3-beta
 """
 
 from __future__ import print_function
 import locale
 
-__version__ = "1.0.0"
+__version__ = "v0.1.3-beta"
 __author__ = "Vesper"
 
 # ---- 环境依赖检查 ----
@@ -225,62 +225,81 @@ def _register_commands():
 _dlg = None
 
 def _import_gui_dialog():
-    """尝试多种方式导入 GlueTKDialog"""
+    """尝试导入 GlueTKDialog (优先使用新的模块化 GUI)
+
+    兼容两种加载方式:
+    1) PyMOL 插件机制从 ~/.pymol/startup/gluetk 导入包
+    2) 用户/Launcher 直接 `pymol gluetk/__init__.py` 作为脚本运行
+
+    在某些情况下，__file__ 可能被解析到 PyMOL 自己的目录 (site-packages/pymol)，
+    因此这里增加多重路径修正逻辑，尽量找到真正的 gluetk 根目录
+    """
     import sys
     import os
-    import inspect
     
-    # 1. 获取真实的插件目录
-    try:
-        # 优先使用 inspect 获取当前文件路径，这在 PyMOL 内部运行脚本时往往比 __file__ 更可靠
-        frame = inspect.currentframe()
-        current_file = inspect.getfile(frame)
-        package_dir = os.path.dirname(os.path.realpath(current_file))
-    except Exception:
-        # 回退到 __file__
-        try:
-            current_file = os.path.realpath(__file__)
-            package_dir = os.path.dirname(current_file)
-        except:
-            package_dir = os.getcwd()
-
-    # 2. 确保该目录在 sys.path 顶端
-    if package_dir not in sys.path:
-        sys.path.insert(0, package_dir)
+    def _looks_like_plugin_root(path: str) -> bool:
+        return (
+            bool(path)
+            and os.path.isdir(path)
+            and os.path.exists(os.path.join(path, "gui"))
+            and os.path.exists(os.path.join(path, "env_checker.py"))
+        )
     
-    # 3. 直接从文件加载 (最稳健的方式)
-    gui_file = os.path.join(package_dir, 'unified_gui.py')
-    if os.path.exists(gui_file):
+    # 1) 首选: 基于当前 __file__ 推断
+    plugin_dir = os.path.dirname(os.path.abspath(__file__))
+    if not _looks_like_plugin_root(plugin_dir):
+        print(f"[GlueTK Debug] __file__ path suspicious: {plugin_dir}")
+        # 2) 退而求其次: 使用 inspect 获取真实源文件路径
         try:
-            import importlib.util
-            # 关键修改：指定完整的包路径名，并设置 package='gluetk'
-            # 这样 unified_gui.py 里的 from .xxx import xxx 就能正常工作了
-            spec = importlib.util.spec_from_file_location('gluetk.unified_gui', gui_file)
-            if spec and spec.loader:
-                module = importlib.util.module_from_spec(spec)
-                # 这一步至关重要：告诉模块它属于哪个包
-                module.__package__ = 'gluetk'
-                sys.modules['gluetk.unified_gui'] = module
-                spec.loader.exec_module(module)
-                return module.GlueTKDialog
+            import inspect
+            frame = inspect.currentframe()
+            if frame is not None:
+                file_from_frame = inspect.getfile(frame)
+                cand = os.path.dirname(os.path.abspath(file_from_frame))
+                if _looks_like_plugin_root(cand):
+                    plugin_dir = cand
+                    print(f"[GlueTK Debug] Corrected plugin_dir via inspect: {plugin_dir}")
         except Exception as e:
-            print(f"Debug: Direct load failed: {e}")
-            pass
-
-    # 4. 尝试标准导入
-    try:
-        from .unified_gui import GlueTKDialog
-        return GlueTKDialog
-    except ImportError:
-        pass
+            print(f"[GlueTK Debug] Inspect failed: {e}")
+    
+    # 3) 仍然不对: 搜索常见安装路径
+    if not _looks_like_plugin_root(plugin_dir):
+        home = os.path.expanduser("~")
+        candidates = [
+            os.path.join(home, ".pymol", "startup", "gluetk"),
+            os.path.join(home, "pymol", "startup", "gluetk"),
+        ]
+        # 开发者环境: 当前工作目录下的 gluetk 目录
+        cwd = os.getcwd()
+        candidates.append(os.path.join(cwd, "gluetk"))
         
+        for cand in candidates:
+            if _looks_like_plugin_root(cand):
+                plugin_dir = cand
+                print(f"[GlueTK Debug] Found plugin root candidate: {plugin_dir}")
+                break
+    
+    parent_dir = os.path.dirname(plugin_dir)
+    
+    # Debug: 打印路径信息
+    print(f"[GlueTK Debug] plugin_dir = {plugin_dir}")
+    print(f"[GlueTK Debug] parent_dir = {parent_dir}")
+    print(f"[GlueTK Debug] parent_dir in sys.path? {parent_dir in sys.path}")
+    
+    if parent_dir and parent_dir not in sys.path:
+        sys.path.insert(0, parent_dir)
+        print(f"[GlueTK Debug] Added {parent_dir} to sys.path")
+    
+    # 使用绝对导入 gluetk.gui.main_window
     try:
-        import unified_gui
-        return unified_gui.GlueTKDialog
-    except ImportError:
-        pass
-
-    return None
+        import gluetk.gui.main_window as gui_module
+        return gui_module.GlueTKDialog
+    except ImportError as e:
+        print(f"❌ Error importing modular GUI: {e}")
+        print(f"[GlueTK Debug] sys.path = {sys.path[:5]}")
+        import traceback
+        traceback.print_exc()
+        return None
 
 def gluetk_gui():
     """启动 GlueTK 统一 GUI 窗口（非模态，不阻塞事件循环）"""
@@ -357,7 +376,7 @@ def __init_plugin__(app=None):
 
     # 欢迎信息
     if _DEPS_OK:
-        print("\n🧬 GlueTK - Molecular Glue Analyzer v1.0.0")
+        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.3-beta")
         print("┌" + "─" * 48 + "┐")
         print("│  Quick Start:                                   │")
         print("│    • gluetk_gui            - Launch GUI          │")
@@ -365,7 +384,7 @@ def __init_plugin__(app=None):
         print("│    • Plugins → GlueTK       - Menu access       │")
         print("└" + "─" * 48 + "┘")
     else:
-        print("\n🧬 GlueTK v1.0.0 - ⚠️  Setup required (see above)")
+        print("\n🧬 GlueTK v0.1.3-beta - ⚠️  Setup required (see above)")
         print("💡 After setup, restart PyMOL to use all features.\n")
 
 # Auto-register if running within PyMOL environment (e.g. via 'run' command or import)
