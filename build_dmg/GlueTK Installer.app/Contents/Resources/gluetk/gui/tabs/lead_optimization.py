@@ -83,14 +83,21 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.ppi_csv_btn.clicked.connect(lambda: self._browse_save_file(self.parent_window.ppi_csv, "CSV (*.csv)"))
         r2 = QHBoxLayout(); r2.addWidget(self.parent_window.ppi_csv, 1); r2.addWidget(self.parent_window.ppi_csv_btn)
         ppi_grid.addLayout(r2, 2, 1, 1, 3)
+
+        # Row 3: Visualization Options
+        ppi_grid.addWidget(QLabel("Display Mode:"), 3, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.ppi_display_mode = QComboBox()
+        self.parent_window.ppi_display_mode.addItems(["Cartoon + Surface + Interactions", "Surface + Interactions"])
+        ppi_grid.addWidget(self.parent_window.ppi_display_mode, 3, 1)
+        
+        self.parent_window.ppi_show_labels = QCheckBox("Show Distance Labels")
+        self.parent_window.ppi_show_labels.setChecked(True)
+        ppi_grid.addWidget(self.parent_window.ppi_show_labels, 3, 3)
         
         ppi_btn_row = QHBoxLayout()
         self.parent_window.ppi_analyze_btn = QPushButton("Analyze PPI Interface"); self.parent_window.ppi_analyze_btn.setObjectName("highlight_btn")
         self.parent_window.ppi_analyze_btn.clicked.connect(self.run_ppi_analysis)
-        self.parent_window.ppi_visualize_btn = QPushButton("Visualize Interface"); self.parent_window.ppi_visualize_btn.setObjectName("highlight_btn")
-        self.parent_window.ppi_visualize_btn.clicked.connect(self.run_ppi_visualize)
         ppi_btn_row.addWidget(self.parent_window.ppi_analyze_btn)
-        ppi_btn_row.addWidget(self.parent_window.ppi_visualize_btn)
         ppi_btn_row.addStretch(1)
         
         layout.addWidget(grp_ppi)
@@ -223,12 +230,20 @@ class LeadOptimizationTab(CommonTab):
             interface_dist = float(self.parent_window.ppi_interface_dist.text())
             output_csv = self.parent_window.ppi_csv.text().strip() or None
             
+            # Get Visualization Options
+            display_mode_idx = self.parent_window.ppi_display_mode.currentIndex()
+            display_mode = "backbone_surface" if display_mode_idx == 0 else "surface_only"
+            show_labels = self.parent_window.ppi_show_labels.isChecked()
+
             result = analyze_protein_protein_interface(
                 obj_name=obj,
                 protein1_chains=p1_list,
                 protein2_chains=p2_list,
                 interface_distance=interface_dist,
-                output_csv=output_csv
+                output_csv=output_csv,
+                visualize=True,
+                display_mode=display_mode,
+                show_labels=show_labels
             )
             
             if result:
@@ -255,39 +270,7 @@ class LeadOptimizationTab(CommonTab):
             self.on_error(str(e))
             import traceback; traceback.print_exc()
     
-    def run_ppi_visualize(self):
-        """可视化PPI界面"""
-        try:
-            obj = self.parent_window.ppi_obj_combo.currentText().strip()
-            if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select a structure object")
-                return
-            
-            p1_chains = self.parent_window.ppi_protein1_chains.text().strip()
-            p2_chains = self.parent_window.ppi_protein2_chains.text().strip()
-            
-            if not p1_chains or not p2_chains:
-                QMessageBox.warning(self, "Warning", "Please specify both protein chain groups")
-                return
-            
-            try: from ...ppi_analyzer import visualize_ppi_interface
-            except ImportError: from ppi_analyzer import visualize_ppi_interface
-            
-            p1_list = [c.strip() for c in p1_chains.split(",")]
-            p2_list = [c.strip() for c in p2_chains.split(",")]
-            interface_dist = float(self.parent_window.ppi_interface_dist.text())
-            
-            visualize_ppi_interface(
-                obj_name=obj,
-                protein1_chains=p1_list,
-                protein2_chains=p2_list,
-                interface_distance=interface_dist
-            )
-            
-            self.log(f"PPI interface visualized for {obj}")
-        except Exception as e:
-            self.on_error(str(e))
-            import traceback; traceback.print_exc()
+
 
     # --- PL Logic ---
     def run_pl_analysis(self):

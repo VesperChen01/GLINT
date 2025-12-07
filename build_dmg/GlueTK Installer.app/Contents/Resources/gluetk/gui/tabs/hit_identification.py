@@ -46,6 +46,7 @@ class HitIdentificationTab(CommonTab):
         
         content_widget = QWidget()
         content_widget.setObjectName("scroll_content")
+        self.parent_window._hit_scroll_content = content_widget
         bg_color = "#0d1117" if getattr(self.parent_window, "_dark_mode", True) else "#f8fafc"
         content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
         

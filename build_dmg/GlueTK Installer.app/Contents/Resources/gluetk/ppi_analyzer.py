@@ -39,7 +39,7 @@ try:
         get_element_from_atom_name, calculate_angle_three_points,
         identify_molecule_type, INTERACTION_PARAMS,
         is_hbond_precise, is_ionic_precise, is_hydrophobic,
-        is_pipi, is_cationpi
+        is_pipi, is_cationpi, is_pipi_precise
     )
 except ImportError:
     from interaction_analyzer import (
@@ -47,7 +47,7 @@ except ImportError:
         get_element_from_atom_name, calculate_angle_three_points,
         identify_molecule_type, INTERACTION_PARAMS,
         is_hbond_precise, is_ionic_precise, is_hydrophobic,
-        is_pipi, is_cationpi
+        is_pipi, is_cationpi, is_pipi_precise
     )
 
 # ========== PPI 参数 ==========
@@ -67,7 +67,9 @@ def analyze_protein_protein_interface(obj_name=None,
                                       pdb_file=None,
                                       visualize=True,
                                       protein1_color="cyan",
-                                      protein2_color="magenta"):
+                                      protein2_color="magenta",
+                                      show_labels=True,
+                                      display_mode="backbone_surface"):
     """
     检测两个蛋白质之间的直接相互作用（分子胶机制的核心特征）
     
@@ -85,6 +87,8 @@ def analyze_protein_protein_interface(obj_name=None,
         visualize: 是否在PyMOL中可视化界面（默认True）
         protein1_color: 蛋白质1的显示颜色（默认cyan）
         protein2_color: 蛋白质2的显示颜色（默认magenta）
+        display_mode: 显示模式 - "backbone_surface" (卡通+表面) 或 "surface_only" (仅表面)
+        show_labels: 是否显示距离标签 (默认True)
     
     返回:
         dict: {
@@ -242,7 +246,9 @@ def analyze_protein_protein_interface(obj_name=None,
 
     if visualize and obj_name and obj_name in objs:
         try:
-            visualize_ppi_interface(obj_name, result, protein1_color, protein2_color)
+            visualize_ppi_interface(obj_name, result, protein1_color, protein2_color, 
+                                    show_labels=show_labels, 
+                                    display_mode=display_mode)
         except Exception as e:
             print(f"[PPI] 可视化失败: {e}")
     
@@ -251,27 +257,145 @@ def analyze_protein_protein_interface(obj_name=None,
 
 def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
     """
-    分析界面残基对之间的详细相互作用类型（使用精确原子级标准）
+    分析界面残基对之间的详细相互作用类型(使用精确原子级标准)
     
-    返回: list of dict
+    检测五种非共价键:
+    1. 氢键 (Hydrogen Bond)
+    2. 盐桥 (Salt Bridge)
+    3. 疏水接触 (Hydrophobic Contact)
+    4. π-π堆积 (Pi-Pi Stacking)
+    5. 阳离子-π (Cation-Pi Interaction)
+    
+    返回: list of dict，每个dict包含详细的相互作用信息
     """
     interactions = []
     
     for res1_atoms, res2_atoms, min_dist in interface_atom_pairs:
         res1_name = res1_atoms[0][1]
         res2_name = res2_atoms[0][1]
+        res1_chain = res1_atoms[0][0]
+        res2_chain = res2_atoms[0][0]
+        res1_id = res1_atoms[0][2]
+        res2_id = res2_atoms[0][2]
         
-        # 1. 精确盐桥检测 (Residue-level check first)
+        # 1. Pi-Pi stacking detection (highest priority, most specific)
+        is_pipi_result, pipi_mode, pipi_dist = is_pipi_precise(res1_name, res1_atoms, res2_name, res2_atoms)
+        if is_pipi_result:
+            # Store ring center info for later pseudoatom creation
+            interactions.append({
+                "type": "π-π堆积",
+                "atom1": f"{res1_chain}:{res1_name} {res1_id}",
+                "atom2": f"{res2_chain}:{res2_name} {res2_id}",
+                "distance": round(pipi_dist, 2),
+                "mode": pipi_mode,
+                "res1": res1_name,
+                "res2": res2_name,
+                "resid1": res1_id,
+                "resid2": res2_id,
+                "chain1": res1_chain,
+                "chain2": res2_chain,
+                "atom1_name": "CENTROID",  # Special marker for ring center
+                "atom2_name": "CENTROID",
+                "res1_atoms": res1_atoms,  # Save for centroid calculation
+                "res2_atoms": res2_atoms
+            })
+            continue  # Pi-pi stacking excludes other types
+        
+        # 2. Cation-pi detection
+        if is_cationpi(res1_name, res1_atoms, res2_name, res2_atoms):
+            # Determine which is cation and which is ring
+            pos_res = {"ARG", "LYS", "HIS"}
+            ring_res = {"PHE", "TYR", "TRP", "HIS"}
+            
+            if res1_name in pos_res and res2_name in ring_res:
+                cation_res = res1_name
+                ring_res_name = res2_name
+                cation_chain = res1_chain
+                ring_chain = res2_chain
+                cation_id = res1_id
+                ring_id = res2_id
+                cation_atoms = res1_atoms
+                ring_atoms = res2_atoms
+            else:
+                cation_res = res2_name
+                ring_res_name = res1_name
+                cation_chain = res2_chain
+                ring_chain = res1_chain
+                cation_id = res2_id
+                ring_id = res1_id
+                cation_atoms = res2_atoms
+                ring_atoms = res1_atoms
+            
+            interactions.append({
+                "type": "阳离子-π",
+                "atom1": f"{cation_chain}:{cation_res} {cation_id}",
+                "atom2": f"{ring_chain}:{ring_res_name} {ring_id}",
+                "distance": round(min_dist, 2),
+                "res1": res1_name,
+                "res2": res2_name,
+                "resid1": res1_id,
+                "resid2": res2_id,
+                "chain1": res1_chain,
+                "chain2": res2_chain,
+                "atom1_name": "CENTROID",  # Cation center
+                "atom2_name": "CENTROID",  # Ring center
+                "cation_atoms": cation_atoms,  # Save for centroid calculation
+                "ring_atoms": ring_atoms
+            })
+            continue  # Cation-pi excludes other types
+        
+        # 3. Salt bridge detection with specific atoms
         is_ionic, ionic_dist = is_ionic_precise(res1_name, res1_atoms, res2_name, res2_atoms)
         if is_ionic:
+            # Find the closest charged atoms
+            positive = {"ARG", "LYS", "HIS"}
+            negative = {"ASP", "GLU"}
+            
+            charged_atoms1 = []
+            charged_atoms2 = []
+            
+            if res1_name in positive:
+                charged_atoms1 = [a for a in res1_atoms if a[3] in ["NZ", "NH1", "NH2", "NE", "ND1", "NE2"]]
+            elif res1_name in negative:
+                charged_atoms1 = [a for a in res1_atoms if a[3] in ["OD1", "OD2", "OE1", "OE2"]]
+            
+            if res2_name in positive:
+                charged_atoms2 = [a for a in res2_atoms if a[3] in ["NZ", "NH1", "NH2", "NE", "ND1", "NE2"]]
+            elif res2_name in negative:
+                charged_atoms2 = [a for a in res2_atoms if a[3] in ["OD1", "OD2", "OE1", "OE2"]]
+            
+            # Find closest pair
+            min_d = float('inf')
+            closest_atom1 = None
+            closest_atom2 = None
+            for a1 in charged_atoms1:
+                for a2 in charged_atoms2:
+                    d = distance(a1[4], a2[4])
+                    if d < min_d:
+                        min_d = d
+                        closest_atom1 = a1[3]
+                        closest_atom2 = a2[3]
+            
             interactions.append({
                 "type": "盐桥",
-                "atom1": f"{res1_atoms[0][0]}:{res1_name} {res1_atoms[0][2]}",
-                "atom2": f"{res2_atoms[0][0]}:{res2_name} {res2_atoms[0][2]}",
-                "distance": round(ionic_dist, 2)
+                "atom1": f"{res1_chain}:{res1_name} {res1_id}",
+                "atom2": f"{res2_chain}:{res2_name} {res2_id}",
+                "distance": round(ionic_dist, 2),
+                "res1": res1_name,
+                "res2": res2_name,
+                "resid1": res1_id,
+                "resid2": res2_id,
+                "chain1": res1_chain,
+                "chain2": res2_chain,
+                "atom1_name": closest_atom1,
+                "atom2_name": closest_atom2
             })
+            continue  # Salt bridge excludes H-bond/hydrophobic
         
-        # 遍历所有原子对进行其他检测
+        # 4. 遍历所有原子对进行氢键和疏水检测
+        hbond_found = False
+        hydrophobic_found = False
+        
         for atom1 in res1_atoms:
             for atom2 in res2_atoms:
                 d = distance(atom1[4], atom2[4])
@@ -279,35 +403,50 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
                 if d > INTERACTION_PARAMS["hydrophobic"]["other_max"] and d > INTERACTION_PARAMS["hbond"]["max_DA_dist"]:
                     continue
 
-                # 2. 精确氢键检测
-                is_hb, _, _ = is_hbond_precise(atom1, atom2, all_atoms_by_residue)
-                if not is_hb:
-                    is_hb, _, _ = is_hbond_precise(atom2, atom1, all_atoms_by_residue)
+                # 4a. 精确氢键检测
+                if not hbond_found:
+                    is_hb, _, _ = is_hbond_precise(atom1, atom2, all_atoms_by_residue)
+                    if not is_hb:
+                        is_hb, _, _ = is_hbond_precise(atom2, atom1, all_atoms_by_residue)
+                    
+                    if is_hb:
+                        interactions.append({
+                            "type": "氢键",
+                            "atom1": f"{atom1[0]}:{atom1[1]} {atom1[2]}:{atom1[3]}",
+                            "atom2": f"{atom2[0]}:{atom2[1]} {atom2[2]}:{atom2[3]}",
+                            "distance": round(d, 2),
+                            "res1": res1_name,
+                            "res2": res2_name,
+                            "resid1": res1_id,
+                            "resid2": res2_id,
+                            "chain1": res1_chain,
+                            "chain2": res2_chain,
+                            "atom1_name": atom1[3],  # 保存原子名
+                            "atom2_name": atom2[3]
+                        })
+                        hbond_found = True
+                        continue
                 
-                if is_hb:
-                    interactions.append({
-                        "type": "氢键",
-                        "atom1": f"{atom1[0]}:{atom1[1]} {atom1[2]}:{atom1[3]}",
-                        "atom2": f"{atom2[0]}:{atom2[1]} {atom2[2]}:{atom2[3]}",
-                        "distance": round(d, 2)
-                    })
-                    continue
-                
-                # 3. 疏水接触 (排除极性原子)
-                if is_hydrophobic(res1_name, res2_name, atom1, atom2, d):
+                # 4b. 疏水接触 (排除极性原子)
+                if not hydrophobic_found and is_hydrophobic(res1_name, res2_name, atom1, atom2, d):
                     interactions.append({
                         "type": "疏水接触",
                         "atom1": f"{atom1[0]}:{atom1[1]} {atom1[2]}:{atom1[3]}",
                         "atom2": f"{atom2[0]}:{atom2[1]} {atom2[2]}:{atom2[3]}",
-                        "distance": round(d, 2)
+                        "distance": round(d, 2),
+                        "res1": res1_name,
+                        "res2": res2_name,
+                        "resid1": res1_id,
+                        "resid2": res2_id,
+                        "chain1": res1_chain,
+                        "chain2": res2_chain,
+                        "atom1_name": atom1[3],  # 保存原子名
+                        "atom2_name": atom2[3]
                     })
-    
-    # 去重 (因为双重循环可能产生重复，特别是对于对称的相互作用)
-    # 但这里是成对的链，通常不会重复，除非同一原子对被多次记录(例如氢键和疏水同时满足? 不会，因为有 continue)
-    # 盐桥是基于残基的，可能会记录一次。
-    # 暂时保持这样。
+                    hydrophobic_found = True
     
     return interactions
+
 
 
 def _calculate_interface_strength(contact_count, interactions, bsa):
@@ -394,17 +533,26 @@ def visualize_ppi_interface(obj_name, ppi_result,
                             protein1_color="cyan", 
                             protein2_color="magenta",
                             show_labels=True,
-                            clear_old=True):
+                            clear_old=True,
+                            display_mode="backbone_surface"):
     """
-    在PyMOL中可视化蛋白-蛋白界面
+    在PyMOL中可视化蛋白-蛋白界面 (增强版)
     
     参数:
         obj_name: PyMOL对象名称
         ppi_result: analyze_protein_protein_interface()的返回结果
-        protein1_color: 蛋白质1界面残基的颜色
-        protein2_color: 蛋白质2界面残基的颜色
-        show_labels: 是否显示残基标签
+        protein1_color: 蛋白质1的颜色 (默认cyan)
+        protein2_color: 蛋白质2的颜色 (默认magenta)
+        show_labels: 是否显示距离标签
         clear_old: 是否清除旧的高亮
+        display_mode: 显示模式 - "backbone_surface" (卡通+表面) 或 "surface_only" (仅表面)
+    
+    五种非共价键配色方案:
+        - 氢键: 蓝色 (blue)
+        - 盐桥: 红色 (red)
+        - 疏水接触: 绿色 (green)
+        - π-π堆积: 黄色 (yellow)
+        - 阳离子-π: 紫色 (purple)
     """
     # 三字母到单字母氨基酸代码转换
     AA_3TO1 = {
@@ -414,14 +562,26 @@ def visualize_ppi_interface(obj_name, ppi_result,
         'SER': 'S', 'THR': 'T', 'VAL': 'V', 'TRP': 'W', 'TYR': 'Y'
     }
     
-    # 定义多种颜色用于不同的chain
-    CHAIN_COLORS = [
-        "cyan", "magenta", "yellow", "salmon", "lime", 
-        "orange", "purple", "green", "blue", "red",
-        "pink", "brown", "gray", "lightblue", "lightorange"
-    ]
+    # 五种非共价键的配色和样式
+    # 自定义颜色 (RGB列表，范围0-1)
+    glue_red = [215/255.0, 92/255.0, 93/255.0]    # 盐桥
+    glue_blue = [64/255.0, 124/255.0, 174/255.0]  # 氢键
+    glue_green = [142/255.0, 186/255.0, 141/255.0] # 疏水
     
-    if not ppi_result or "interface_residues" not in ppi_result:
+    # 注册自定义颜色到PyMOL (避免覆盖标准颜色名)
+    cmd.set_color("glue_red", glue_red)
+    cmd.set_color("glue_blue", glue_blue)
+    cmd.set_color("glue_green", glue_green)
+
+    INTERACTION_COLORS = {
+        "氢键": {"color": "glue_blue", "width": 2.0, "gap": 0.3},
+        "盐桥": {"color": "glue_red", "width": 2.5, "gap": 0.25},
+        "疏水接触": {"color": "glue_green", "width": 1.5, "gap": 0.35},
+        "π-π堆积": {"color": "yellow", "width": 2.0, "gap": 0.3},
+        "阳离子-π": {"color": "purple", "width": 2.0, "gap": 0.3}
+    }
+    
+    if not ppi_result or "interface_interactions" not in ppi_result:
         print("[visualize_ppi_interface] Invalid PPI result")
         return
     
@@ -440,107 +600,328 @@ def visualize_ppi_interface(obj_name, ppi_result,
             if name.startswith("ppi_"):
                 cmd.delete(name)
     
-    interface_residues = ppi_result["interface_residues"]
+    interface_interactions = ppi_result.get("interface_interactions", [])
     protein1_chains = ppi_result.get("protein1_chains", [])
     protein2_chains = ppi_result.get("protein2_chains", [])
     all_chains = list(set(protein1_chains + protein2_chains))
     
-    if not interface_residues:
-        print("[visualize_ppi_interface] No interface residues to visualize")
+    if not interface_interactions:
+        print("[visualize_ppi_interface] No interface interactions to visualize")
         return
     
-    print(f"[visualize_ppi_interface] Visualizing {len(interface_residues)} interface residue pairs...")
+    print(f"[visualize_ppi_interface] Visualizing {len(interface_interactions)} interactions...")
+    print(f"[visualize_ppi_interface] Display mode: {display_mode}")
     
-    # 为每条链分配颜色
-    chain_color_map = {}
-    for idx, chain in enumerate(all_chains):
-        chain_color_map[chain] = CHAIN_COLORS[idx % len(CHAIN_COLORS)]
+    # ========== 设置蛋白显示模式 ==========
+    if display_mode == "backbone_surface":
+        # 模式1: 卡通 + 表面 + 非共价键
+        cmd.hide("everything", obj_name)
+        cmd.show("cartoon", obj_name)
+        cmd.show("surface", obj_name)
+        cmd.set("transparency", 0.4, obj_name)
+        cmd.set("cartoon_transparency", 0.0, obj_name)
+        print("[visualize_ppi_interface] 显示模式: 卡通 + 表面 + 非共价键")
+    elif display_mode == "surface_only":
+        # 模式2: 仅表面 + 非共价键
+        cmd.hide("everything", obj_name)
+        cmd.show("surface", obj_name)
+        cmd.set("transparency", 0.3, obj_name)
+        print("[visualize_ppi_interface] 显示模式: 表面 + 非共价键")
     
-    # 收集所有界面残基(去重),按chain分组
-    interface_by_chain = {}  # {chain: {(resid, resname): True}}
+    # 为蛋白链着色
+    for chain in protein1_chains:
+        cmd.color(protein1_color, f"{obj_name} and chain {chain}")
+    for chain in protein2_chains:
+        cmd.color(protein2_color, f"{obj_name} and chain {chain}")
     
-    for res in interface_residues:
-        chain1, resid1, resname1 = res["chain1"], res["resid1"], res["resname1"]
-        chain2, resid2, resname2 = res["chain2"], res["resid2"], res["resname2"]
+    # ========== 收集参与相互作用的残基 ==========
+    interacting_residues = {}  # {(chain, resid): [interaction_types]}
+    
+    for interaction in interface_interactions:
+        res1_key = (interaction["chain1"], interaction["resid1"])
+        res2_key = (interaction["chain2"], interaction["resid2"])
         
-        if chain1 not in interface_by_chain:
-            interface_by_chain[chain1] = {}
-        interface_by_chain[chain1][(resid1, resname1)] = True
+        if res1_key not in interacting_residues:
+            interacting_residues[res1_key] = {"types": [], "resname": interaction["res1"]}
+        if res2_key not in interacting_residues:
+            interacting_residues[res2_key] = {"types": [], "resname": interaction["res2"]}
         
-        if chain2 not in interface_by_chain:
-            interface_by_chain[chain2] = {}
-        interface_by_chain[chain2][(resid2, resname2)] = True
+        interacting_residues[res1_key]["types"].append(interaction["type"])
+        interacting_residues[res2_key]["types"].append(interaction["type"])
     
-    # 可视化每条链的界面残基
-    visualized_selections = []
-    global_idx = 0
+    # ========== 高亮成键氨基酸 (显示为sticks) ==========
+    for (chain, resid), info in interacting_residues.items():
+        sel_name = f"ppi_res_{chain}_{resid}"
+        cmd.select(sel_name, f"{obj_name} and chain {chain} and resi {resid}")
+        cmd.show("sticks", sel_name)
+        
+        # 按元素着色（C/N/O/S等），不使用相互作用颜色
+        cmd.util.cnc(sel_name)  # Carbon: cyan/magenta (by chain), N/O/S by element
+        
+        # 只在CA原子上添加残基标签
+        if show_labels:
+            ca_sel = f"{obj_name} and chain {chain} and resi {resid} and name CA"
+            aa_code = AA_3TO1.get(info["resname"].upper(), info["resname"][0].upper())
+            label_text = f"{aa_code}{resid}"
+            cmd.label(ca_sel, f"'{label_text}'")
+            cmd.set("label_color", "black", ca_sel)
+            cmd.set("label_size", 14, ca_sel)
     
-    for chain in sorted(interface_by_chain.keys()):
-        residues = interface_by_chain[chain]
-        chain_color = chain_color_map[chain]
+    # ========== 绘制相互作用虚线 ==========
+    interaction_counts = {}  # 统计每种相互作用的数量
+    
+    # 中文到英文的映射（PyMOL不支持中文对象名）
+    TYPE_NAME_MAP = {
+        "氢键": "hbond",
+        "盐桥": "saltbridge",
+        "疏水接触": "hydrophobic",
+        "π-π堆积": "pipi",
+        "阳离子-π": "cationpi"
+    }
+    
+    for idx, interaction in enumerate(interface_interactions):
+        interaction_type = interaction["type"]
         
-        print(f"[visualize_ppi_interface] Chain {chain}: {len(residues)} unique interface residues (color: {chain_color})")
+        # 统计
+        if interaction_type not in interaction_counts:
+            interaction_counts[interaction_type] = 0
+        interaction_counts[interaction_type] += 1
         
-        for (resid, resname) in sorted(residues.keys()):
-            global_idx += 1
-            sel_name = f"ppi_{chain}_{resid}"
-            sel_expr = f"{obj_name} and chain {chain} and resi {resid}"
+        # Get color info
+        color_info = INTERACTION_COLORS.get(interaction_type, {"color": "gray", "width": 1.5, "gap": 0.3})
+        
+        # Create selection - use actual interacting atoms
+        atom1_name = interaction.get("atom1_name")
+        atom2_name = interaction.get("atom2_name")
+        
+        # Special handling for CENTROID (pi-pi and cation-pi) - use ring center
+        if atom1_name == "CENTROID" or atom2_name == "CENTROID":
+            type_en = TYPE_NAME_MAP.get(interaction_type, "other")
             
-            # 创建选择并显示为sticks
-            cmd.select(sel_name, sel_expr)
-            cmd.show("sticks", sel_name)
-            cmd.color(chain_color, sel_name)
-            visualized_selections.append(sel_name)
-            
-            # 添加标签(使用单字母大写氨基酸代码)
-            if show_labels:
-                label_name = f"ppi_label_{chain}_{resid}"
-                ca_sel = f"{sel_expr} and name CA"
-                try:
-                    coords = cmd.get_atom_coords(ca_sel)
-                    if coords:
-                        # 转换为单字母大写代码
-                        aa_code = AA_3TO1.get(resname.upper(), resname[0].upper())
-                        label_text = f"{aa_code}{resid}"
-                        
-                        cmd.pseudoatom(label_name, pos=coords, label=label_text)
-                        cmd.set("label_size", 16, label_name)
-                        cmd.set("label_color", chain_color, label_name)
-                except:
-                    pass
-    
-    # 绘制界面接触线(距离线) - 只显示前20条,避免过于拥挤
-    for idx, res in enumerate(interface_residues[:20], start=1):
-        distance_name = f"ppi_dist{idx}"
-        sel1 = f"{obj_name} and chain {res['chain1']} and resi {res['resid1']} and name CA"
-        sel2 = f"{obj_name} and chain {res['chain2']} and resi {res['resid2']} and name CA"
+            try:
+                # Define aromatic ring atoms for common residues
+                ring_atoms_map = {
+                    "PHE": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
+                    "TYR": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
+                    "TRP": ["CD2", "CE2", "CE3", "CZ2", "CZ3", "CH2"],  # 6-membered ring
+                    "HIS": ["CG", "ND1", "CD2", "CE1", "NE2"]
+                }
+                
+                # Get residue names
+                res1_name = interaction['res1']
+                res2_name = interaction['res2']
+                
+                print(f"[DEBUG] Calculating ring centers for {res1_name}-{res2_name}")
+                
+                # Calculate ring centers
+                def get_ring_center(obj, chain, resi, resname):
+                    """Calculate center of aromatic ring atoms"""
+                    if resname not in ring_atoms_map:
+                        print(f"[DEBUG]   {resname} not in ring_atoms_map")
+                        return None
+                    
+                    ring_atom_names = ring_atoms_map[resname]
+                    coords = []
+                    
+                    print(f"[DEBUG]   Looking for ring atoms in {resname} {chain}:{resi}")
+                    for atom_name in ring_atom_names:
+                        sel = f"{obj} and chain {chain} and resi {resi} and name {atom_name}"
+                        try:
+                            model = cmd.get_model(sel)
+                            if model.atom:
+                                # coord is a list [x, y, z]
+                                coord = model.atom[0].coord
+                                coords.append((coord[0], coord[1], coord[2]))
+                                print(f"[DEBUG]     Found {atom_name}: {coord}")
+                        except Exception as e:
+                            print(f"[DEBUG]     Failed to get {atom_name}: {e}")
+                            continue
+                    
+                    print(f"[DEBUG]   Total ring atoms found: {len(coords)}")
+                    if len(coords) >= 3:  # Need at least 3 atoms to define a ring
+                        x = sum(c[0] for c in coords) / len(coords)
+                        y = sum(c[1] for c in coords) / len(coords)
+                        z = sum(c[2] for c in coords) / len(coords)
+                        center = (x, y, z)
+                        print(f"[DEBUG]   Ring center: {center}")
+                        return center
+                    print(f"[DEBUG]   Not enough atoms for ring center")
+                    return None
+                
+                # Get ring centers
+                center1 = get_ring_center(obj_name, interaction['chain1'], interaction['resid1'], res1_name)
+                center2 = get_ring_center(obj_name, interaction['chain2'], interaction['resid2'], res2_name)
+                
+                # For cation-pi, one residue is aromatic and one is cationic
+                # If one center is None (cationic residue), calculate cation center instead
+                if center1 is None and interaction_type == "阳离子-π":
+                    # Res1 is cationic (ARG, LYS, HIS), calculate cation center
+                    cation_atoms_sel = f"{obj_name} and chain {interaction['chain1']} and resi {interaction['resid1']} and name NZ+NH1+NH2+NE+ND1+NE2"
+                    try:
+                        model = cmd.get_model(cation_atoms_sel)
+                        if model.atom:
+                            coords = [(a.coord[0], a.coord[1], a.coord[2]) for a in model.atom]
+                            x = sum(c[0] for c in coords) / len(coords)
+                            y = sum(c[1] for c in coords) / len(coords)
+                            z = sum(c[2] for c in coords) / len(coords)
+                            center1 = (x, y, z)
+                            print(f"[DEBUG]   Calculated cation center for {res1_name}: {center1}")
+                    except Exception as e:
+                        print(f"[DEBUG]   Failed to calculate cation center: {e}")
+                
+                if center2 is None and interaction_type == "阳离子-π":
+                    # Res2 is cationic, calculate cation center
+                    cation_atoms_sel = f"{obj_name} and chain {interaction['chain2']} and resi {interaction['resid2']} and name NZ+NH1+NH2+NE+ND1+NE2"
+                    try:
+                        model = cmd.get_model(cation_atoms_sel)
+                        if model.atom:
+                            coords = [(a.coord[0], a.coord[1], a.coord[2]) for a in model.atom]
+                            x = sum(c[0] for c in coords) / len(coords)
+                            y = sum(c[1] for c in coords) / len(coords)
+                            z = sum(c[2] for c in coords) / len(coords)
+                            center2 = (x, y, z)
+                            print(f"[DEBUG]   Calculated cation center for {res2_name}: {center2}")
+                    except Exception as e:
+                        print(f"[DEBUG]   Failed to calculate cation center: {e}")
+                
+                if center1 and center2:
+                    # Create pseudoatoms at ring centers
+                    pseudo1 = f"ppi_centroid_{type_en}_{idx}_1"
+                    pseudo2 = f"ppi_centroid_{type_en}_{idx}_2"
+                    cmd.pseudoatom(pseudo1, pos=center1)
+                    cmd.pseudoatom(pseudo2, pos=center2)
+                    cmd.hide("everything", pseudo1)
+                    cmd.hide("everything", pseudo2)
+                    
+                    sel1 = pseudo1
+                    sel2 = pseudo2
+                    atom_info = f"atoms: RING_CENTER-RING_CENTER ({res1_name}-{res2_name})"
+                else:
+                    # Fallback to CA
+                    sel1 = f"{obj_name} and chain {interaction['chain1']} and resi {interaction['resid1']} and name CA"
+                    sel2 = f"{obj_name} and chain {interaction['chain2']} and resi {interaction['resid2']} and name CA"
+                    atom_info = "atoms: CA-CA (ring center failed)"
+                
+            except Exception as e:
+                print(f"[DEBUG] Failed to create ring center pseudoatoms: {e}")
+                import traceback
+                traceback.print_exc()
+                # Fallback to CA
+                sel1 = f"{obj_name} and chain {interaction['chain1']} and resi {interaction['resid1']} and name CA"
+                sel2 = f"{obj_name} and chain {interaction['chain2']} and resi {interaction['resid2']} and name CA"
+                atom_info = "atoms: CA-CA (exception fallback)"
+                
+        elif atom1_name and atom2_name:
+            # Use actual interacting atoms (H-bond, hydrophobic, salt bridge)
+            sel1 = f"{obj_name} and chain {interaction['chain1']} and resi {interaction['resid1']} and name {atom1_name}"
+            sel2 = f"{obj_name} and chain {interaction['chain2']} and resi {interaction['resid2']} and name {atom2_name}"
+            atom_info = f"atoms: {atom1_name}-{atom2_name}"
+        else:
+            # Use CA atoms (fallback)
+            sel1 = f"{obj_name} and chain {interaction['chain1']} and resi {interaction['resid1']} and name CA"
+            sel2 = f"{obj_name} and chain {interaction['chain2']} and resi {interaction['resid2']} and name CA"
+            atom_info = "atoms: CA-CA (fallback)"
+        
+        # Draw dashes - use English names
+        type_en = TYPE_NAME_MAP.get(interaction_type, "other")
+        distance_name = f"ppi_{type_en}_{idx}"
+        
+        print(f"[DEBUG] Creating distance: {distance_name}")
+        print(f"[DEBUG]   Type: {interaction_type} -> {type_en}")
+        print(f"[DEBUG]   {atom_info}")
+        print(f"[DEBUG]   Stored distance: {interaction.get('distance', 'N/A')} Å")
+        print(f"[DEBUG]   Sel1: {sel1}")
+        print(f"[DEBUG]   Sel2: {sel2}")
         
         try:
+            # Create distance object
             cmd.distance(distance_name, sel1, sel2)
-            cmd.set("dash_color", "yellow", distance_name)
-            cmd.set("dash_width", 2.0, distance_name)
-            cmd.hide("labels", distance_name)  # 隐藏距离标签
+            
+            # VERIFY: Check if object actually exists
+            all_objs = cmd.get_names("all")
+            if distance_name in all_objs:
+                print(f"[DEBUG]   ✓ Distance created successfully - VERIFIED in object list")
+                
+                # Get the actual distance value
+                try:
+                    dist_value = cmd.get_distance(distance_name)
+                    print(f"[DEBUG]   ✓ Distance value: {dist_value:.2f} Å")
+                except:
+                    print(f"[DEBUG]   ⚠ Cannot get distance value")
+            else:
+                print(f"[DEBUG]   ✗ Object NOT in object list! Available objects: {len(all_objs)}")
+                print(f"[DEBUG]   ✗ This means cmd.distance() failed silently")
+                continue
+            
+            # Set dash color - must use both color and set dash_color
+            # color command sets overall object color (including labels)
+            # set dash_color sets the dash line color itself
+            cmd.color(color_info["color"], distance_name)
+            cmd.set("dash_color", color_info["color"], distance_name)
+            cmd.set("dash_width", color_info["width"], distance_name)
+            cmd.set("dash_gap", color_info["gap"], distance_name)
+            cmd.set("dash_radius", 0.1, distance_name)
+            
+            # Show distance labels (set to black)
+            if show_labels:
+                cmd.set("label_size", 12, distance_name)
+                cmd.set("label_color", "black", distance_name)
+            else:
+                cmd.hide("labels", distance_name)
+        except Exception as e:
+            print(f"[DEBUG]   ✗ EXCEPTION: {e}")
+            import traceback
+            traceback.print_exc()
+            print(f"[visualize_ppi_interface] Failed to draw interaction {idx}: {e}")
+    
+    # ========== 创建图例 (使用伪原子) ==========
+    print("\n" + "=" * 60)
+    print("相互作用可视化统计:")
+    print("=" * 60)
+    
+    legend_y = 0
+    for int_type in ["氢键", "盐桥", "疏水接触", "π-π堆积", "阳离子-π"]:
+        count = interaction_counts.get(int_type, 0)
+        if count > 0:
+            color_info = INTERACTION_COLORS[int_type]
+            print(f"  {int_type}: {count} 个 (颜色: {color_info['color']})")
+            
+            # 创建图例伪原子 - 使用英文名称
+            type_en = TYPE_NAME_MAP.get(int_type, "other")
+            legend_name = f"ppi_legend_{type_en}"
+            try:
+                cmd.pseudoatom(legend_name, pos=[100, legend_y, 0], 
+                              label=f"{int_type}: {count}")
+                cmd.color(color_info["color"], legend_name)
+                cmd.set("label_size", 18, legend_name)
+                legend_y += 8
+            except:
+                pass
+    
+    print("=" * 60)
+    
+    # ========== 缩放到界面区域 ==========
+    interface_selections = [f"ppi_res_{chain}_{resid}" 
+                           for (chain, resid) in interacting_residues.keys()]
+    if interface_selections:
+        try:
+            cmd.zoom(" or ".join(interface_selections), buffer=10.0, complete=1)
         except:
             pass
-    
-    # 显示整体蛋白链(cartoon),按chain着色
-    for chain in all_chains:
-        chain_color = chain_color_map[chain]
-        cmd.show("cartoon", f"{obj_name} and chain {chain}")
-        cmd.color(chain_color, f"{obj_name} and chain {chain}")
-    
-    # 缩放到界面区域
-    if visualized_selections:
-        cmd.zoom(" or ".join(visualized_selections), buffer=8.0, complete=1)
     
     # 刷新视图
     cmd.refresh()
     cmd.rebuild()
     
-    total_residues = sum(len(residues) for residues in interface_by_chain.values())
-    print(f"[visualize_ppi_interface] ✅ Visualized {total_residues} unique interface residues")
-    for chain, color in chain_color_map.items():
-        print(f"  Chain {chain}: {color}")
+    total_residues = len(interacting_residues)
+    total_interactions = len(interface_interactions)
+    print(f"\n[visualize_ppi_interface] ✅ 可视化完成:")
+    print(f"  - 参与相互作用的残基: {total_residues}")
+    print(f"  - 总相互作用数: {total_interactions}")
+    print(f"  - 显示模式: {display_mode}")
+    print(f"  - 蛋白1 ({', '.join(protein1_chains)}): {protein1_color}")
+    print(f"  - 蛋白2 ({', '.join(protein2_chains)}): {protein2_color}")
+
 
 
 def calculate_interface_bsa(obj_name, chain1, chain2):

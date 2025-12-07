@@ -388,8 +388,8 @@ class GlueTKDialog(QDialog):
         self._interactions: List[Dict[str, Any]] = []
         self._gmotif_hits: List[Tuple] = []
         self._last_gmotif_csv: Optional[str] = None
-        self._esp_maps: Dict[str, Tuple[str, str]] = {}  # obj -> (map, ramp)
-        self._dark_mode: bool = True  # 默认深色主题
+        self.settings = QSettings("GlueTK", "GlueTK_App")
+        self._dark_mode: bool = False  # 默认浅色主题
         self._ui_scale: float = 1.0   # 自动缩放比例
 
         # 预先创建log_edit和progress_bar（在build_ui之前）
@@ -407,7 +407,7 @@ class GlueTKDialog(QDialog):
         self.build_ui()
         self.setup_style()
         # 初始化主题图标 - 使用 Unicode 符号
-        self.theme_toggle_btn.setText("☾" if self._dark_mode else "☀")
+        # self.theme_toggle_btn.setText("☾" if self._dark_mode else "☀")
         # 禁用自动缩放以保持固定高度
         # self.apply_auto_scaling()
 
@@ -523,14 +523,14 @@ class GlueTKDialog(QDialog):
         nav_header = QHBoxLayout()
         nav_header.setSpacing(6)
         
-        # Theme toggle button - sun/moon icon
-        self.theme_toggle_btn = QPushButton("")  # Icon set after setup_style
-        self.theme_toggle_btn.setObjectName("theme_toggle_btn")
-        self.theme_toggle_btn.setFlat(True)
-        self.theme_toggle_btn.setFixedSize(32, 32)
-        self.theme_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.theme_toggle_btn.setToolTip("Toggle theme (Light/Dark)")
-        self.theme_toggle_btn.clicked.connect(self.toggle_theme)
+        # Theme toggle button - REMOVED for specific white-only request
+        # self.theme_toggle_btn = QPushButton("")  # Icon set after setup_style
+        # self.theme_toggle_btn.setObjectName("theme_toggle_btn")
+        # self.theme_toggle_btn.setFlat(True)
+        # self.theme_toggle_btn.setFixedSize(32, 32)
+        # self.theme_toggle_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        # self.theme_toggle_btn.setToolTip("Toggle theme (Light/Dark)")
+        # self.theme_toggle_btn.clicked.connect(self.toggle_theme)
         
         # Modules label (centered, borderless)
         self.modules_btn = QPushButton("Modules")
@@ -541,7 +541,7 @@ class GlueTKDialog(QDialog):
         self.modules_btn.setMinimumWidth(120)  # 设置最小宽度以显示完整文本
         
         nav_header.addStretch()
-        nav_header.addWidget(self.theme_toggle_btn)
+        # nav_header.addWidget(self.theme_toggle_btn)
         nav_header.addWidget(self.modules_btn)
         nav_header.addStretch()
         
@@ -2761,7 +2761,7 @@ class GlueTKDialog(QDialog):
             w = QWidget()
             layout = QVBoxLayout(w)
             layout.addWidget(QLabel("⚠️ Disease Analysis module not available."))
-            layout.addWidget(QLabel("Please ensure 'disease_analysis_gui.py' and 'open_targets_api.py' are present."))
+            layout.addWidget(QLabel("Please ensure 'open_targets_api.py' is present."))
             layout.addStretch()
             return w
 
@@ -3225,32 +3225,11 @@ class GlueTKDialog(QDialog):
     # ========== V3: Disease Analysis Tab ==========
     def create_disease_analysis_tab(self) -> QWidget:
         """创建疾病分析标签页（V3 功能）"""
-        try:
-            from .disease_analysis_gui import DiseaseAnalysisTab
-            return DiseaseAnalysisTab(self)
-        except ImportError as e:
-            # 如果导入失败，返回错误提示页面
-            w = QWidget()
-            layout = QVBoxLayout(w)
-            layout.setContentsMargins(20, 20, 20, 20)
-            
-            error_label = QLabel(
-                "⚠️ Disease Analysis Module Not Available\n\n"
-                f"Error: {str(e)}\n\n"
-                "Please ensure the following modules are installed:\n"
-                "• requests\n"
-                "• pandas\n\n"
-                "And that the following files exist:\n"
-                "• disease_analysis_gui.py\n"
-                "• open_targets_api.py\n"
-                "• disease_config.py"
-            )
-            error_label.setWordWrap(True)
-            error_label.setStyleSheet("color: #ff6b6b; font-size: 14px;")
-            layout.addWidget(error_label)
-            layout.addStretch()
-            
-            return w
+        w = QWidget()
+        layout = QVBoxLayout(w)
+        layout.addWidget(QLabel("Disease Analysis module has been removed."))
+        layout.addStretch()
+        return w
 
     def create_readme_tab(self) -> QWidget:
         """创建README页面"""
@@ -5571,7 +5550,7 @@ Heatmap saved successfully!
             pass
         self.setup_style()
         # Update theme icon
-        self.theme_toggle_btn.setText("☾" if self._dark_mode else "☀")
+        # self.theme_toggle_btn.setText("☾" if self._dark_mode else "☀")
         # Update Modules button color (easter egg effect)
         self.update_modules_button_style()
         # Update separator color based on theme

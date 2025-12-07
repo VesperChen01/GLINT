@@ -63,19 +63,6 @@ class TargetDiscoveryTab(CommonTab):
         layout.setSpacing(14)
         layout.setContentsMargins(12, 12, 12, 12)
         
-        # 1. Disease Analysis
-        if search_disease is not None:
-            try:
-                # Try to import DiseaseAnalysisTab
-                from ...disease_analysis_gui import DiseaseAnalysisTab
-                disease_card = DiseaseAnalysisTab(self.parent_window)
-                grp_disease = QGroupBox("Disease Target Analysis")
-                d_layout = QVBoxLayout(grp_disease)
-                d_layout.addWidget(disease_card)
-                layout.addWidget(grp_disease)
-            except Exception as e:
-                self.log(f"Failed to load Disease Analysis: {e}")
-        
         # 2. G-Motif Detection
         grp_gm = QGroupBox("G-Motif (CRBN G-loop) Detection")
         gm_grid = QGridLayout(grp_gm)

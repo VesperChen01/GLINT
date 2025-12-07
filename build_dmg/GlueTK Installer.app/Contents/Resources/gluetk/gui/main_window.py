@@ -8,7 +8,7 @@ import sys
 from typing import Optional, List, Dict, Tuple, Any
 
 try:
-    from PyQt5.QtCore import Qt, QTimer, QSize
+    from PyQt5.QtCore import Qt, QTimer, QSize, QSettings
     from PyQt5.QtWidgets import (
         QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QStackedWidget,
         QWidget, QPushButton, QLabel, QFrame, QTextEdit, QProgressBar, QMessageBox
@@ -16,7 +16,7 @@ try:
     from PyQt5.QtGui import QIcon, QPixmap
 except ImportError:
     try:
-        from PyQt6.QtCore import Qt, QTimer, QSize
+        from PyQt6.QtCore import Qt, QTimer, QSize, QSettings
         from PyQt6.QtWidgets import (
             QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QStackedWidget,
             QWidget, QPushButton, QLabel, QFrame, QTextEdit, QProgressBar, QMessageBox
@@ -54,9 +54,10 @@ class GlueTKDialog(QDialog):
         min_w, min_h = 1280, 720
         self.setMinimumSize(min_w, min_h)
         self.resize(min_w, min_h)
+        self.settings = QSettings("GlueTK", "GlueTK_App")
         
         # State
-        self._dark_mode = True
+        self._dark_mode = False
         self._interactions = []
         self._gmotif_hits = []
         self._esp_maps = {}
@@ -68,6 +69,7 @@ class GlueTKDialog(QDialog):
         # Initialize UI
         self.build_ui()
         self.setup_style()
+        self._update_content_bg()
         
         # Init Timer
         QTimer.singleShot(100, self.refresh_objects)
@@ -152,15 +154,15 @@ class GlueTKDialog(QDialog):
             logo_layout.addWidget(logo_lbl)
         layout.addWidget(logo_frame)
         
-        # Header (Theme)
+        # Header (Theme) - REMOVED for specific white-only request
         header = QWidget()
         h_layout = QHBoxLayout(header)
-        self.theme_btn = QPushButton("☾" if self._dark_mode else "☀")
-        self.theme_btn.setFixedSize(30, 30)
-        self.theme_btn.setFlat(True)
-        self.theme_btn.clicked.connect(self.toggle_theme)
+        # self.theme_btn = QPushButton("☾" if self._dark_mode else "☀")
+        # self.theme_btn.setFixedSize(30, 30)
+        # self.theme_btn.setFlat(True)
+        # self.theme_btn.clicked.connect(self.toggle_theme)
         h_layout.addStretch()
-        h_layout.addWidget(self.theme_btn)
+        # h_layout.addWidget(self.theme_btn)
         h_layout.setContentsMargins(10, 5, 10, 5)
         layout.addWidget(header)
         
@@ -260,7 +262,8 @@ class GlueTKDialog(QDialog):
     def toggle_theme(self):
         self._dark_mode = not self._dark_mode
         self.setup_style()
-        self.theme_btn.setText("☾" if self._dark_mode else "☀")
+        # self.theme_btn.setText("☾" if self._dark_mode else "☀")
+        self._update_content_bg()
         self.log(f"Switched to {'Dark' if self._dark_mode else 'Light'} mode")
 
     def setup_style(self):
@@ -316,6 +319,14 @@ class GlueTKDialog(QDialog):
             # 更新导航栏样式
             if hasattr(self, 'nav_widget'):
                 self.nav_widget.setStyleSheet("background-color: #f1f5f9; border-right: 1px solid #e2e8f0;")
+
+    def _update_content_bg(self):
+        """使各标签页滚动内容区背景随主题切换而同步更新。"""
+        bg = "#161b22" if self._dark_mode else "#ffffff"
+        for name in ("_target_scroll_content", "_lead_scroll_content", "_hit_scroll_content"):
+            w = getattr(self, name, None)
+            if w is not None:
+                w.setStyleSheet(f"#scroll_content {{ background-color: {bg}; }}")
 
     def check_environment(self):
         try:
