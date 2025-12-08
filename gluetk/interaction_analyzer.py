@@ -453,10 +453,11 @@ def is_hydrophobic(res1, res2, atom1, atom2, d):
     
     标准：疏水接触 ≤ 4.0 Å (other_max)，且原子必须是碳或特定的非极性原子
     """
-    hydrophobic = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "PRO", "TRP", "TYR", "CYS"}
-    # 也允许配体参与 (配体残基名可能不在列表中，但如果是 C-C 接触通常也是疏水)
-    # 这里我们暂时只检查 res1/res2 是否为标准疏水残基 OR 是否为配体（未知残基）
-    # 为了安全起见，我们主要依赖原子元素类型
+    # 标准疏水残基
+    hydrophobic_residues = {"ALA", "VAL", "LEU", "ILE", "MET", "PHE", "PRO", "TRP", "TYR", "CYS"}
+    # 标准氨基酸（用于判断是否为配体）
+    standard_aa = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE",
+                   "LEU", "LYS", "MET", "PHE", "PRO", "SER", "THR", "TRP", "TYR", "VAL"}
     
     max_dist = INTERACTION_PARAMS["hydrophobic"]["other_max"]
     if d > max_dist:
@@ -466,32 +467,42 @@ def is_hydrophobic(res1, res2, atom1, atom2, d):
     elem1 = get_element_from_atom_name(atom1[3])
     elem2 = get_element_from_atom_name(atom2[3])
     
-    # 疏水原子：C, F, CL, BR, I, S (S 稍有争议，但通常算)
-    # 排除：N, O
+    # 疏水原子：C, F, CL, BR, I, S
     hydrophobic_atoms = {"C", "F", "CL", "BR", "I", "S"}
     
-    if elem1 in hydrophobic_atoms and elem2 in hydrophobic_atoms:
-        # 至少要求一个是标准疏水残基，或者两个都是碳
-        is_res1_hydro = res1 in hydrophobic
-        is_res2_hydro = res2 in hydrophobic
-        
-        # 如果两个原子都是碳，基本就是疏水接触
-        if elem1 == "C" and elem2 == "C":
-            # 进一步过滤：如果是在带电侧链上的碳（如 ARG 的 CZ），算疏水吗？
-            # 通常疏水作用特指非极性部分。为了简化，C-C 接触算疏水。
-            # 但为了避免极性环境下的偶然接触，我们可以要求残基也是疏水性质的，
-            # 或者至少不是极性极强的（如主链 C=O 的 C）。
-            # 主链 C 通常不参与疏水核心，除非是 Gly?
-            
-            # 过滤主链 Carbonyl C
-            if atom1[3].strip() == "C" or atom2[3].strip() == "C":
-                 return False
-                 
-            return True
-            
-        # 如果包含卤素/硫，且残基是疏水的
-        return is_res1_hydro and is_res2_hydro
-
+    # 两个原子都必须是疏水原子
+    if elem1 not in hydrophobic_atoms or elem2 not in hydrophobic_atoms:
+        return False
+    
+    # 过滤主链 Carbonyl C（原子名为"C"的是主链羰基碳）
+    if atom1[3].strip() == "C" or atom2[3].strip() == "C":
+        return False
+    
+    # 判断是否为配体（非标准氨基酸）
+    is_res1_ligand = res1.upper() not in standard_aa
+    is_res2_ligand = res2.upper() not in standard_aa
+    
+    # 判断是否为疏水残基
+    is_res1_hydro = res1.upper() in hydrophobic_residues
+    is_res2_hydro = res2.upper() in hydrophobic_residues
+    
+    # 情况分析：
+    # 1. 两个都是碳原子 -> 疏水接触（最常见）
+    if elem1 == "C" and elem2 == "C":
+        return True
+    
+    # 2. 配体与蛋白质疏水残基 -> 疏水接触
+    if (is_res1_ligand and is_res2_hydro) or (is_res2_ligand and is_res1_hydro):
+        return True
+    
+    # 3. 两个都是配体（配体-配体） -> 疏水接触
+    if is_res1_ligand and is_res2_ligand:
+        return True
+    
+    # 4. 两个都是疏水残基 -> 疏水接触
+    if is_res1_hydro and is_res2_hydro:
+        return True
+    
     return False
 
 def centroid(coords):
@@ -501,8 +512,152 @@ def centroid(coords):
         return (0, 0, 0)
     return tuple(sum(c[i] for c in coords)/n for i in range(3))
 
+
+def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7):
+    """
+    检测配体中的芳香/平面环结构
+    
+    [这是什么？] 通过几何方法检测配体分子中的环结构（不依赖 RDKit）
+    [为什么要这么做？] 配体没有标准残基名，无法使用预定义的原子列表
+    [为什么这是个好主意！] 使得 π-π 检测可以适用于任意配体
+    
+    参数:
+        atoms: 原子信息列表 [(chain, resn, resi, name, coord), ...]
+        min_ring_size: 最小环大小（默认5，五元环）
+        max_ring_size: 最大环大小（默认7，七元环）
+    
+    返回:
+        list of lists: 每个内部列表包含一个环的原子坐标 [(x,y,z), ...]
+                       如果没有检测到环，返回空列表
+    
+    方法：
+        1. 筛选 sp2 杂化可能的原子（C, N, O, S）
+        2. 基于距离（1.2-1.6Å）构建连接图
+        3. 使用简单的 DFS 寻找环
+        4. 验证环的共面性（法向量检查）
+    """
+    # 1. 筛选可能参与芳香环的原子（主要是 C 和 N）
+    aromatic_elements = {"C", "N"}  # 主要关注碳和氮
+    
+    ring_candidates = []
+    for atom in atoms:
+        elem = get_element_from_atom_name(atom[3])
+        # 排除主链原子
+        if atom[3].strip() in ["C", "CA", "N", "O"]:
+            continue
+        if elem in aromatic_elements:
+            ring_candidates.append(atom)
+    
+    if len(ring_candidates) < min_ring_size:
+        return []
+    
+    # 2. 构建连接图（基于距离）
+    # 芳香环 C-C 键长约 1.39Å，C-N 键长约 1.35Å
+    bond_min = 1.2
+    bond_max = 1.65
+    
+    n = len(ring_candidates)
+    adjacency = [[] for _ in range(n)]
+    
+    for i in range(n):
+        for j in range(i + 1, n):
+            d = distance(ring_candidates[i][4], ring_candidates[j][4])
+            if bond_min <= d <= bond_max:
+                adjacency[i].append(j)
+                adjacency[j].append(i)
+    
+    # 3. 使用 DFS 寻找环
+    detected_rings = []
+    visited_rings = set()  # 避免重复检测相同的环
+    
+    def dfs_find_rings(start, current, path, depth):
+        """DFS 寻找从 start 开始的环"""
+        if depth > max_ring_size:
+            return
+        
+        for neighbor in adjacency[current]:
+            if neighbor == start and depth >= min_ring_size:
+                # 找到一个环
+                ring_key = tuple(sorted(path))
+                if ring_key not in visited_rings:
+                    visited_rings.add(ring_key)
+                    ring_coords = [ring_candidates[i][4] for i in path]
+                    # 验证共面性
+                    if is_planar_ring(ring_coords):
+                        detected_rings.append(ring_coords)
+                return
+            
+            if neighbor not in path and neighbor > start:  # 避免重复和回退
+                dfs_find_rings(start, neighbor, path + [neighbor], depth + 1)
+    
+    # 从每个节点开始搜索
+    for start in range(n):
+        if len(adjacency[start]) >= 2:  # 至少有两个连接才可能形成环
+            dfs_find_rings(start, start, [start], 1)
+    
+    return detected_rings
+
+
+def is_planar_ring(coords, tolerance=0.5):
+    """
+    检查一组坐标是否共面（用于验证芳香环）
+    
+    参数:
+        coords: 坐标列表 [(x,y,z), ...]
+        tolerance: 允许的最大偏离（Å）
+    
+    返回:
+        bool: 是否共面
+    """
+    if len(coords) < 4:
+        return True  # 3个点总是共面
+    
+    # 使用前3个点定义平面
+    p0, p1, p2 = coords[0], coords[1], coords[2]
+    
+    # 计算法向量
+    v1 = [p1[i] - p0[i] for i in range(3)]
+    v2 = [p2[i] - p0[i] for i in range(3)]
+    
+    # 叉积得法向量
+    nx = v1[1] * v2[2] - v1[2] * v2[1]
+    ny = v1[2] * v2[0] - v1[0] * v2[2]
+    nz = v1[0] * v2[1] - v1[1] * v2[0]
+    
+    norm = math.sqrt(nx*nx + ny*ny + nz*nz)
+    if norm < 1e-6:
+        return False
+    
+    nx, ny, nz = nx/norm, ny/norm, nz/norm
+    
+    # 计算平面方程 d 值: ax + by + cz = d
+    d = nx * p0[0] + ny * p0[1] + nz * p0[2]
+    
+    # 检查其余点到平面的距离
+    for p in coords[3:]:
+        dist = abs(nx * p[0] + ny * p[1] + nz * p[2] - d)
+        if dist > tolerance:
+            return False
+    
+    return True
+
+
 def ring_atoms(res_name, atoms):
-    """获取环状结构原子坐标"""
+    """
+    获取环状结构原子坐标
+    
+    [这是什么？] 返回残基中芳香环的原子坐标
+    [为什么要这么做？] 用于计算 π-π 堆积和 π-阳离子相互作用
+    [为什么这是个好主意！] 现在支持配体动态检测，不再局限于标准残基
+    
+    参数:
+        res_name: 残基名称
+        atoms: 原子列表 [(chain, resn, resi, name, coord), ...]
+    
+    返回:
+        coords: 环原子坐标列表，或 None（无环）
+    """
+    # 标准残基的预定义环原子
     ring_dict = {
         "PHE": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
         "TYR": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
@@ -515,11 +670,53 @@ def ring_atoms(res_name, atoms):
         "U": ["N1", "C2", "N3", "C4", "C5", "C6"],
     }
     
-    if res_name not in ring_dict:
-        return None
+    # 标准残基使用预定义的原子列表
+    if res_name in ring_dict:
+        coords = [a[4] for a in atoms if a[3].strip() in ring_dict[res_name]]
+        return coords if len(coords) >= 3 else None
     
-    coords = [a[4] for a in atoms if a[3].strip() in ring_dict[res_name]]
-    return coords if len(coords) >= 3 else None
+    # 非标准残基（配体）：使用动态检测
+    detected_rings = detect_ligand_rings(atoms)
+    if detected_rings:
+        # 返回第一个检测到的环（可根据需求扩展为返回所有环）
+        return detected_rings[0]
+    
+    return None
+
+
+def ring_atoms_all(res_name, atoms):
+    """
+    获取残基中所有芳香环的原子坐标（支持多环配体）
+    
+    参数:
+        res_name: 残基名称
+        atoms: 原子列表 [(chain, resn, resi, name, coord), ...]
+    
+    返回:
+        list of coords: 每个元素是一个环的原子坐标列表
+    """
+    # 标准残基的预定义环原子
+    ring_dict = {
+        "PHE": [["CG", "CD1", "CD2", "CE1", "CE2", "CZ"]],
+        "TYR": [["CG", "CD1", "CD2", "CE1", "CE2", "CZ"]],
+        "TRP": [
+            ["CG", "CD1", "NE1", "CE2", "CD2"],  # 五元环
+            ["CD2", "CE2", "CE3", "CZ2", "CZ3", "CH2"]  # 六元环
+        ],
+        "HIS": [["CG", "ND1", "CD2", "CE1", "NE2"]],
+    }
+    
+    if res_name in ring_dict:
+        result = []
+        for ring_atoms_list in ring_dict[res_name]:
+            coords = [a[4] for a in atoms if a[3].strip() in ring_atoms_list]
+            if len(coords) >= 3:
+                result.append(coords)
+        return result if result else None
+    
+    # 非标准残基（配体）：使用动态检测
+    detected_rings = detect_ligand_rings(atoms)
+    return detected_rings if detected_rings else None
 
 def normal_vector(a, b, c):
     """计算三点确定平面的法向量"""
@@ -1503,18 +1700,17 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
         print("[analyze_protein_ligand_interactions] ⚠️ No protein residues found")
         return None
 
-    # print(f"[analyze_protein_ligand_interactions] ✓ Detected {len(ligand_residues)} ligand molecule(s)")
-    # print(f"[analyze_protein_ligand_interactions] ✓ Detected {len(protein_residues)} protein residues (chains: {', '.join(protein_chains)})")
-    # # Show strict-standard parameters
-    # print("[analyze_protein_ligand_interactions] 🔬 Strict parameters:")
-    # print(f"  • H-bond: D···A ≤ {INTERACTION_PARAMS['hbond']['max_DA_dist']} Å, ∠D–H···A ≥ {INTERACTION_PARAMS['hbond']['min_donor_angle']}°")
-    # print(f"  • Salt bridge: ≤ {INTERACTION_PARAMS['ionic']['max_dist']} Å")
-    # print(f"  • Pi-cation: ≤ {INTERACTION_PARAMS['hydrophobic']['pi_cation_max']} Å")
-    # print(f"  • Metal coordination: ≤ {INTERACTION_PARAMS['metal_coord']['max_dist']} Å")
-    # if key_interactions_only:
-    #     print("  • Hydrophobic: disabled")
-    # else:
-    #     print(f"  • Hydrophobic: ≤ {INTERACTION_PARAMS['hydrophobic']['other_max']} Å")
+    # ✅ 调试打印
+    print(f"[DEBUG] ✅ 检测到 {len(ligand_residues)} 个配体分子")
+    for lig_key, lig_atoms in ligand_residues:
+        print(f"[DEBUG]   配体: {lig_key[1]} (chain='{lig_key[0]}', resid={lig_key[2]}, 原子数={len(lig_atoms)})")
+    print(f"[DEBUG] ✅ 检测到 {len(protein_residues)} 个蛋白质残基")
+    print(f"[DEBUG]   蛋白质链: {protein_chains}")
+    print(f"[DEBUG] 检测参数:")
+    print(f"[DEBUG]   氢键: D···A ≤ {INTERACTION_PARAMS['hbond']['max_DA_dist']} Å")
+    print(f"[DEBUG]   盐桥: ≤ {INTERACTION_PARAMS['ionic']['max_dist']} Å")
+    print(f"[DEBUG]   疏水: ≤ {INTERACTION_PARAMS['hydrophobic']['other_max']} Å")
+    print(f"[DEBUG]   距离截断: {distance_cutoff} Å")
 
     # 分析相互作用
     interactions = []
@@ -1526,19 +1722,29 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
     for prot_key, prot_atoms in protein_residues:
         all_atoms_by_residue[prot_key] = prot_atoms
 
+    # 计数器
+    close_pairs_count = 0
+    checked_pairs = 0
+    
     for lig_key, lig_atoms in ligand_residues:
         lig_chain, lig_name, lig_id = lig_key
-        # print(f"[analyze_protein_ligand_interactions] Analyzing ligand: {lig_name} {lig_id} (chain {lig_chain})")
+        print(f"[DEBUG] 分析配体: {lig_name} (chain='{lig_chain}', resid={lig_id})")
 
+        # 计算配体质心（只计算一次）
+        lig_centroid = centroid([a[4] for a in lig_atoms])
+        
         for prot_key, prot_atoms in protein_residues:
             prot_chain, prot_name, prot_id = prot_key
 
-            # 快速距离筛选
-            lig_centroid = centroid([a[4] for a in lig_atoms])
+            # 快速距离筛选（放宽到15Å）
             prot_centroid = centroid([a[4] for a in prot_atoms])
-
-            if distance(lig_centroid, prot_centroid) > distance_cutoff + 5.0:
+            centroid_dist = distance(lig_centroid, prot_centroid)
+            
+            # 放宽距离筛选：配体可能很大，质心距离不代表边缘距离
+            if centroid_dist > 15.0:
                 continue
+            
+            checked_pairs += 1
 
             # 检查原子间相互作用
             for lig_atom in lig_atoms:
@@ -1547,22 +1753,27 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
 
                     if d > distance_cutoff:
                         continue
+                    
+                    close_pairs_count += 1
 
-                    # 判断相互作用类型
+                    # 判断相互作用类型（优先级：盐桥 > 氢键 > 疏水）
                     interaction_type = None
+                    hb_angle = None
                     
-                    # ✅ 使用精确的氢键检测（包括角度验证）
-                    is_hb, hb_dist, hb_angle = is_hbond_precise(lig_atom, prot_atom, all_atoms_by_residue)
-                    if not is_hb:
-                        # 反向检测：蛋白作为供体
-                        is_hb, hb_dist, hb_angle = is_hbond_precise(prot_atom, lig_atom, all_atoms_by_residue)
-                    
-                    if is_hb:
-                        interaction_type = "氢键"
-                    elif is_saltbridge_atom(lig_name, lig_atom[3], prot_name, prot_atom[3], d):
+                    # ① 最高优先级：盐桥
+                    if is_saltbridge_atom(lig_name, lig_atom[3], prot_name, prot_atom[3], d):
                         interaction_type = "盐桥"
-                    elif not key_interactions_only and is_hydrophobic(lig_name, prot_name, lig_atom, prot_atom, d):
-                        interaction_type = "疏水相互作用"
+                    else:
+                        # ② 次优先级：氢键
+                        is_hb, hb_dist, hb_angle = is_hbond_precise(lig_atom, prot_atom, all_atoms_by_residue)
+                        if not is_hb:
+                            is_hb, hb_dist, hb_angle = is_hbond_precise(prot_atom, lig_atom, all_atoms_by_residue)
+                        
+                        if is_hb:
+                            interaction_type = "氢键"
+                        # ③ 最低优先级：疏水
+                        elif not key_interactions_only and is_hydrophobic(lig_name, prot_name, lig_atom, prot_atom, d):
+                            interaction_type = "疏水相互作用"
 
                     # 严格模式：只检测关键相互作用
                     # key_interactions_only=False时才启用宽松规则（不推荐）
@@ -1678,6 +1889,11 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                                 "Confidence": conf
                             })
 
+    # 调试输出
+    print(f"[DEBUG] 检查了 {checked_pairs} 个残基对")
+    print(f"[DEBUG] 距离内的原子对: {close_pairs_count}")
+    print(f"[DEBUG] 检测到的相互作用: {len(interactions)}")
+    
     # 输出到CSV
     if output_csv and interactions:
         try:
@@ -2614,8 +2830,16 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         interactions_by_type[itype].append(inter)
     
     # 对每种类型按距离排序（短距离优先）
+    def safe_distance(x):
+        """安全获取距离值，处理 '-' 等非数字情况"""
+        d = x.get("Distance", "999")
+        try:
+            return float(d)
+        except (ValueError, TypeError):
+            return 999.0  # 非数字距离放到最后
+    
     for itype in interactions_by_type:
-        interactions_by_type[itype].sort(key=lambda x: float(x.get("Distance", "999")))
+        interactions_by_type[itype].sort(key=safe_distance)
     
     # 设置每种相互作用类型的默认显示数量（专业筛选策略）
     if max_interactions_per_type is None:
@@ -2689,19 +2913,6 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 else:
                     sel2 = f"{obj_name} and resi {prot_resid}"
 
-                # 对于π相互作用,使用芳香环原子
-                if "ring" in str(lig_atom).lower():
-                    # 配体芳香环: 选择芳香原子(环上的C/N原子)
-                    sel1 = f"({sel1}) and (name C* or name N*) and (name CA or name CB or name CG or name CD or name CE or name CZ or name CH or name N or name ND or name NE)"
-                elif lig_atom and lig_atom != "":
-                    sel1 += f" and name {lig_atom}"
-                
-                if "ring" in str(prot_atom).lower():
-                    # 蛋白芳香环: PHE/TYR/TRP/HIS
-                    sel2 = f"({sel2}) and (name C* or name N*) and (name CA or name CB or name CG or name CD or name CE or name CZ or name CH or name N or name ND or name NE)"
-                elif prot_atom and prot_atom != "":
-                    sel2 += f" and name {prot_atom}"
-
                 # 生成合法的PyMOL对象名（只使用英文和数字），并带上 CSV 中的行号，方便一一对应
                 # 将中文相互作用类型转换为英文
                 type_en = type_name_map.get(interaction_type, interaction_type)
@@ -2710,22 +2921,126 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 row_idx = inter.get("_row_index", idx)
                 dist_name = f"interact_{type_en_clean}_{row_idx}"
                 
+                # ========== π-π 相互作用：使用环中心 pseudoatom（参考 PPI 代码）==========
+                if "ring" in str(lig_atom).lower() or "ring" in str(prot_atom).lower():
+                    try:
+                        # 定义蛋白质芳香环原子
+                        ring_atoms_map = {
+                            "PHE": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
+                            "TYR": ["CG", "CD1", "CD2", "CE1", "CE2", "CZ"],
+                            "TRP": ["CD2", "CE2", "CE3", "CZ2", "CZ3", "CH2"],  # 六元环
+                            "HIS": ["CG", "ND1", "CD2", "CE1", "NE2"]
+                        }
+                        
+                        def get_ring_center_from_selection(obj, chain, resi, resname):
+                            """计算芳香环中心坐标"""
+                            # 蛋白质标准残基
+                            if resname in ring_atoms_map:
+                                ring_atom_names = ring_atoms_map[resname]
+                                coords = []
+                                for atom_name in ring_atom_names:
+                                    if chain and chain.strip():
+                                        sel = f"{obj} and chain {chain} and resi {resi} and name {atom_name}"
+                                    else:
+                                        sel = f"{obj} and resi {resi} and name {atom_name}"
+                                    try:
+                                        model = cmd.get_model(sel)
+                                        if model.atom:
+                                            coord = model.atom[0].coord
+                                            coords.append((coord[0], coord[1], coord[2]))
+                                    except:
+                                        continue
+                                if len(coords) >= 3:
+                                    x = sum(c[0] for c in coords) / len(coords)
+                                    y = sum(c[1] for c in coords) / len(coords)
+                                    z = sum(c[2] for c in coords) / len(coords)
+                                    return (x, y, z)
+                                return None
+                            
+                            # 配体：使用动态检测
+                            if chain and chain.strip():
+                                sel = f"{obj} and chain {chain} and resi {resi}"
+                            else:
+                                sel = f"{obj} and resi {resi}"
+                            
+                            # 获取配体所有原子
+                            model = cmd.get_model(sel)
+                            if not model.atom:
+                                return None
+                            
+                            atoms = [(a.chain, a.resn, a.resi, a.name, (a.coord[0], a.coord[1], a.coord[2])) 
+                                     for a in model.atom]
+                            
+                            # 检测配体环
+                            detected_rings = detect_ligand_rings(atoms)
+                            if detected_rings:
+                                ring_coords = detected_rings[0]  # 使用第一个检测到的环
+                                x = sum(c[0] for c in ring_coords) / len(ring_coords)
+                                y = sum(c[1] for c in ring_coords) / len(ring_coords)
+                                z = sum(c[2] for c in ring_coords) / len(ring_coords)
+                                return (x, y, z)
+                            return None
+                        
+                        # 计算配体环中心
+                        lig_center = get_ring_center_from_selection(obj_name, lig_chain, lig_resid, lig_resname_int)
+                        # 计算蛋白质环中心
+                        prot_center = get_ring_center_from_selection(obj_name, prot_chain, prot_resid, prot_resname)
+                        
+                        if lig_center and prot_center:
+                            # 创建 pseudoatom 在环中心
+                            pseudo1 = f"pl_centroid_{type_en_clean}_{row_idx}_lig"
+                            pseudo2 = f"pl_centroid_{type_en_clean}_{row_idx}_prot"
+                            
+                            cmd.pseudoatom(pseudo1, pos=lig_center)
+                            cmd.pseudoatom(pseudo2, pos=prot_center)
+                            cmd.hide("everything", pseudo1)
+                            cmd.hide("everything", pseudo2)
+                            
+                            # 使用 pseudoatom 作为选择
+                            sel1 = pseudo1
+                            sel2 = pseudo2
+                            
+                            print(f"[visualize_protein_ligand_3d] ✓ π-π: 使用环中心 {lig_resname_int}-{prot_resname}")
+                        else:
+                            # 回退到原子选择
+                            if lig_atom and lig_atom != "":
+                                sel1 += f" and name {lig_atom}" if "ring" not in str(lig_atom).lower() else ""
+                            if prot_atom and prot_atom != "":
+                                sel2 += f" and name {prot_atom}" if "ring" not in str(prot_atom).lower() else ""
+                            print(f"[visualize_protein_ligand_3d] ⚠️ π-π: 无法计算环中心，使用原子选择")
+                    
+                    except Exception as e:
+                        print(f"[visualize_protein_ligand_3d] ⚠️ π-π 环中心计算失败: {e}")
+                        # 回退到原子选择
+                        if lig_atom and lig_atom != "" and "ring" not in str(lig_atom).lower():
+                            sel1 += f" and name {lig_atom}"
+                        if prot_atom and prot_atom != "" and "ring" not in str(prot_atom).lower():
+                            sel2 += f" and name {prot_atom}"
+                else:
+                    # 非 π 相互作用：使用原子名选择
+                    if lig_atom and lig_atom != "":
+                        sel1 += f" and name {lig_atom}"
+                    if prot_atom and prot_atom != "":
+                        sel2 += f" and name {prot_atom}"
+                
                 # 尝试创建距离对象（参考 PPI 可视化代码）
                 try:
-                    # 检查选择是否有效
-                    if cmd.count_atoms(sel1) == 0:
-                        print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Ligand selection empty: {sel1}")
-                        continue
-                    if cmd.count_atoms(sel2) == 0:
-                        print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Protein selection empty: {sel2}")
-                        continue
+                    # 检查选择是否有效（pseudoatom 不需要检查）
+                    is_pseudoatom = sel1.startswith("pl_centroid_") or sel2.startswith("pl_centroid_")
+                    
+                    if not is_pseudoatom:
+                        if cmd.count_atoms(sel1) == 0:
+                            print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Ligand selection empty: {sel1}")
+                            continue
+                        if cmd.count_atoms(sel2) == 0:
+                            print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Protein selection empty: {sel2}")
+                            continue
 
-                    # 创建距离对象（不使用 mode 参数，与 PPI 代码保持一致）
                     # Debug output for the first few interactions
                     if idx <= 3:
                         print(f"[visualize_protein_ligand_3d] DEBUG: Creating {dist_name}")
-                        print(f"    sel1: {sel1} (atoms: {cmd.count_atoms(sel1)})")
-                        print(f"    sel2: {sel2} (atoms: {cmd.count_atoms(sel2)})")
+                        print(f"    sel1: {sel1}")
+                        print(f"    sel2: {sel2}")
 
                     # Determine cutoff based on interaction type
                     cutoff = 5.0  # Default
@@ -2736,11 +3051,11 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                     elif "疏水" in interaction_type or "Hydrophobic" in interaction_type:
                         cutoff = 5.5
                     elif "Pi" in interaction_type or "π" in interaction_type:
-                        cutoff = 6.5
+                        cutoff = 7.0  # π 相互作用距离更大
                     elif "金属" in interaction_type or "Metal" in interaction_type:
                         cutoff = 4.0
 
-                    # 创建距离对象（强制 mode=0, 使用动态 cutoff）
+                    # 创建距离对象
                     cmd.distance(dist_name, sel1, sel2, cutoff=cutoff, mode=0)
                     
                     # 强制显示设置

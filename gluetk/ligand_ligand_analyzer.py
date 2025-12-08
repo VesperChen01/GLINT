@@ -217,14 +217,6 @@ def visualize_ligand_interactions(obj_name, interactions):
     """在 PyMOL 中可视化结果"""
     cmd.delete(f"{obj_name}_LL_inter_*")
     
-    # Register custom RGB colors (matching PPI colors)
-    try:
-        cmd.set_color("glue_blue", [64/255.0, 124/255.0, 174/255.0])
-        cmd.set_color("glue_red", [215/255.0, 92/255.0, 93/255.0])
-        cmd.set_color("glue_green", [142/255.0, 186/255.0, 141/255.0])
-    except:
-        pass  # Colors may already be registered
-    
     for i, inter in enumerate(interactions):
         name = f"{obj_name}_LL_inter_{i+1}"
         
@@ -239,7 +231,6 @@ def visualize_ligand_interactions(obj_name, interactions):
             cmd.delete("p1")
             cmd.delete("p2")
             cmd.color("magenta", name)
-            cmd.set("dash_color", "magenta", name)
         else:
             # 原子连线
             a1 = inter['Atom1']
@@ -251,22 +242,17 @@ def visualize_ligand_interactions(obj_name, interactions):
             
             cmd.distance(name, sel1, sel2)
             
-            # Color mapping (matching PPI scheme)
+            # 颜色
             color_map = {
-                "Hydrogen Bond": "glue_blue",
+                "Hydrogen Bond": "yellow",
                 "Halogen Bond": "cyan",
                 "Metal Coordination": "magenta",
                 "Polar Contact": "orange",
-                "Hydrophobic": "glue_green",
-                "Hydrophobic (Generic)": "glue_green",
-                "Pi-Pi Stacking (Face-to-Face)": "yellow",
-                "Pi-Pi Stacking (Edge-to-Face)": "yellow",
+                "Hydrophobic": "green",
+                "Hydrophobic (Generic)": "lime",
             }
             col = color_map.get(inter['Type'], "white")
             cmd.color(col, name)
-            cmd.set("dash_color", col, name)  # CRITICAL: Set dash color explicitly
-            cmd.set("dash_width", 2.5, name)
-            cmd.set("dash_gap", 0.3, name)
             
     print(f"[GlueTK] Visualized {len(interactions)} interactions.")
 

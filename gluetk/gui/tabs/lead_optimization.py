@@ -311,6 +311,24 @@ class LeadOptimizationTab(CommonTab):
                 self.log(f"  Ligand: {ligand_used}")
                 self.log(f"  Interactions found: {n}")
                 self.parent_window.current_pl_result = result
+                
+                # ✅ 添加 3D 可视化
+                if n > 0:
+                    try:
+                        try: from ...interaction_analyzer import visualize_protein_ligand_3d
+                        except ImportError: from interaction_analyzer import visualize_protein_ligand_3d
+                        
+                        # 获取实际配体名称
+                        actual_ligand = ligand_name
+                        if result.get("ligand_residues"):
+                            actual_ligand = result["ligand_residues"][0].get("resname", ligand_name)
+                        
+                        visualize_protein_ligand_3d(obj_name, result, actual_ligand)
+                        self.log("  3D visualization generated")
+                    except Exception as viz_e:
+                        self.log(f"  3D visualization failed: {viz_e}")
+                        import traceback; traceback.print_exc()
+                
                 QMessageBox.information(self, "Analysis Complete", 
                     f"Ligand: {ligand_used}\nInteractions found: {n}")
             else:

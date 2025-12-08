@@ -285,32 +285,16 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     返回:
         distance_obj_name: 创建的距离对象名称,如果失败则返回None
     """
-    # Register custom RGB colors (matching PPI colors)
-    try:
-        cmd.set_color("glue_blue", [64/255.0, 124/255.0, 174/255.0])
-        cmd.set_color("glue_red", [215/255.0, 92/255.0, 93/255.0])
-        cmd.set_color("glue_green", [142/255.0, 186/255.0, 141/255.0])
-    except:
-        pass  # Colors may already be registered
-    
-    # Interaction type to color mapping (matching PPI scheme)
+    # 相互作用类型到颜色的映射
     color_map = {
-        "氢键": "glue_blue",
-        "Hydrogen Bond": "glue_blue",
-        "盐桥": "glue_red",
-        "Salt Bridge": "glue_red",
-        "疏水相互作用": "glue_green",
-        "Hydrophobic": "glue_green",
-        "π–π 堆积": "yellow",
-        "Pi-Pi": "yellow",
-        "π–阳离子相互作用": "purple",
-        "Cation-Pi": "purple",
+        "氢键": "yellow",
+        "盐桥": "magenta",
+        "疏水相互作用": "green",
+        "π–π 堆积": "orange",
+        "π–阳离子相互作用": "tv_orange",
         "卤素键": "cyan",
-        "Halogen Bond": "cyan",
         "水桥": "lightblue",
-        "Water Bridge": "lightblue",
-        "金属配位": "magenta",
-        "Metal Coordination": "magenta",
+        "金属配位": "purple",
     }
     
     # 获取颜色,默认为灰色
@@ -366,13 +350,12 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
         # 使用 cutoff 参数过滤掉距离过远的错误连接（例如 > 3.8A 的氢键）
         cmd.distance(dist_name, sel1, sel2, cutoff=cutoff)
         
-        # Set distance object display style
-        cmd.hide("labels", dist_name)  # Hide distance labels
-        cmd.color(color, dist_name)     # Set color
-        cmd.set("dash_color", color, dist_name)  # CRITICAL: Set dash color explicitly
-        cmd.set("dash_width", 2.5, dist_name)  # Set line width
-        cmd.set("dash_gap", 0.3, dist_name)    # Set dash gap (0.3 = dense dashes)
-        cmd.set("dash_length", 0.2, dist_name) # Set dash length
+        # 设置距离对象的显示样式
+        cmd.hide("labels", dist_name)  # 隐藏距离标签
+        cmd.color(color, dist_name)     # 设置颜色
+        cmd.set("dash_width", 2.5, dist_name)  # 设置线条粗细
+        cmd.set("dash_gap", 0.3, dist_name)    # 设置虚线间隙(0.3 = 较密集的虚线)
+        cmd.set("dash_length", 0.2, dist_name) # 设置虚线长度
         
         # 确保distance对象可见
         cmd.show("dashes", dist_name)
