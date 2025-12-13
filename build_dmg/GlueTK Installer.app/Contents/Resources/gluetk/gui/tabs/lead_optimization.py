@@ -137,7 +137,12 @@ class LeadOptimizationTab(CommonTab):
         pl_btn_row = QHBoxLayout()
         self.parent_window.pl_analyze_btn = QPushButton("Analyze Protein-Ligand"); self.parent_window.pl_analyze_btn.setObjectName("highlight_btn")
         self.parent_window.pl_analyze_btn.clicked.connect(self.run_pl_analysis)
+        
+        self.parent_window.pl_2d_btn = QPushButton("Generate 2D Diagram")
+        self.parent_window.pl_2d_btn.clicked.connect(self.run_pl_2d_diagram)
+        
         pl_btn_row.addWidget(self.parent_window.pl_analyze_btn)
+        pl_btn_row.addWidget(self.parent_window.pl_2d_btn)
         pl_btn_row.addStretch(1)
         
         layout.addWidget(grp_pl)
@@ -335,6 +340,108 @@ class LeadOptimizationTab(CommonTab):
                 self.log("No interactions found")
         except Exception as e:
             self.on_error(str(e))
+            import traceback; traceback.print_exc()
+
+
+    def run_pl_2d_diagram(self):
+        """Generate 2D Interaction Diagram"""
+        try:
+            # Check for RDKit
+            try:
+                import rdkit
+            except ImportError:
+                QMessageBox.critical(self, "Error", "RDKit is required for 2D diagrams.\nPlease install it: pip install rdkit")
+                return
+
+            # Get parameters
+            obj_name = self.parent_window.pl_obj_combo.currentText()
+            ligand_name = self.parent_window.pl_ligand_name.text().strip()
+            
+            # Try to get data from current result or CSV
+            csv_path = self.parent_window.pl_csv.text().strip()
+            
+            # If no CSV path provided, try to use a temp file from current result
+            if not csv_path and hasattr(self.parent_window, "current_pl_result") and self.parent_window.current_pl_result:
+                # We need to save the current result to a temp CSV if not saved yet
+                # For simplicity, let's ask user to analyze first/provide CSV if they haven't
+                pass
+
+            if not csv_path or not os.path.exists(csv_path):
+                # Try to use the last analysis result if available
+                # But generate_2d_interaction_diagram requires a CSV path currently
+                
+                # If we have a result object, maybe we can save it to temp
+                if hasattr(self.parent_window, "current_pl_result") and self.parent_window.current_pl_result:
+                    import tempfile, csv
+                    result = self.parent_window.current_pl_result
+                    
+                    # Check if result has interactions
+                    interactions = result.get("interactions", [])
+                    if not interactions:
+                        QMessageBox.warning(self, "Warning", "No interactions to plot.")
+                        return
+                        
+                    # Infer ligand name from result if not provided
+                    if not ligand_name and result.get("ligand_residues"):
+                         ligand_name = result["ligand_residues"][0].get("resname", "LIG")
+
+                    # Create temp CSV
+                    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".csv", mode='w', encoding='utf-8-sig')
+                    # Use keys from first item, but ignore extras in others
+                    if interactions:
+                        fieldnames = list(interactions[0].keys())
+                        writer = csv.DictWriter(tmp, fieldnames=fieldnames, extrasaction='ignore')
+                        writer.writeheader()
+                        writer.writerows(interactions)
+                    tmp.close()
+                    csv_path = tmp.name
+                    self.log(f"Using temporary CSV: {csv_path}")
+                else:
+                    QMessageBox.warning(self, "Missing Data", "Please run analysis first (with output CSV) or select an existing CSV file.")
+                    return
+
+            if not ligand_name:
+                QMessageBox.warning(self, "Missing Input", "Please specify the Ligand Name (Residue Name).")
+                return
+
+            # Output path
+            default_name = f"{ligand_name}_2d.png"
+            out_path, _ = QFileDialog.getSaveFileName(self, "Save 2D Diagram", default_name, "PNG Image (*.png)")
+            if not out_path: return
+
+            self.log(f"Generating 2D diagram for {ligand_name}...")
+            
+            try: from ...interaction_2d_plot import generate_2d_interaction_diagram
+            except ImportError: from interaction_2d_plot import generate_2d_interaction_diagram
+            
+            final_path = generate_2d_interaction_diagram(
+                csv_path=csv_path, 
+                ligand_resname=ligand_name, 
+                obj_name=obj_name, 
+                output_path=out_path
+            )
+            
+            if final_path and os.path.exists(final_path):
+                self.log(f"2D Diagram saved: {final_path}")
+                QMessageBox.information(self, "Success", f"2D Diagram saved to:\n{final_path}")
+                
+                 # Try to open the file (Mac/Linux/Windows)
+                try:
+                    import subprocess, platform
+                    if platform.system() == 'Darwin':       # macOS
+                        subprocess.call(('open', final_path))
+                    elif platform.system() == 'Windows':    # Windows
+                        os.startfile(final_path)
+                    else:                                   # linux variants
+                        subprocess.call(('xdg-open', final_path))
+                except:
+                    pass
+            else:
+                self.log("Failed to generate 2D diagram.")
+                QMessageBox.warning(self, "Error", "Failed to generate diagram. See log for details.")
+
+        except Exception as e:
+            self.on_error(f"2D Diagram Error: {str(e)}")
             import traceback; traceback.print_exc()
 
     # --- Browse file helpers ---

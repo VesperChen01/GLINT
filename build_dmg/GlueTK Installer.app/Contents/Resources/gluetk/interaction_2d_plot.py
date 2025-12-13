@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 interaction_2d_plot.py
-生成蛋白质-配体2D相互作用图
+生成蛋白质-配体2D相互作用图 (Clean Visualization Version)
 
-增强版特性：
-- 配体化学结构式
-- 蛋白质残基结构式（氨基酸侧链）
-- 按类别着色（疏水、极性、带电等）
-- 标注具体相互作用原子
+特性：
+- 双分子策略：使用全原子模型映射相互作用，使用重原子模型进行绘图
+- 自动将 H 原子的相互作用重映射到相邻的重原子，避免"线团"混乱
+- 准确的 PDB原子名映射
+- 优化的视觉样式
 """
 
 from __future__ import print_function
@@ -15,12 +15,12 @@ import os
 import csv
 import tempfile
 import math
+import numpy as np
 
-
-# 相互作用颜色方案 (Discovery Studio 风格)
+# 相互作用颜色方案 (Discovery Studio 风格 + GlueTK Consistency)
 DS_STYLE = {
     "Hbond": {
-        "color": "#43A047",      # Green
+        "color": "#43A047",      # Green (Classic DS style for 2D)
         "label": "Hydrogen Bond",
         "style": "--"
     },
@@ -30,18 +30,18 @@ DS_STYLE = {
         "style": "--"
     },
     "Pi": {
-        "color": "#FB8C00",      # Orange (Pi-Cation)
+        "color": "#FB8C00",      # Orange
         "label": "Pi-Interaction",
         "style": "--"
     },
     "PiPi": {
-        "color": "#8E24AA",      # Purple
+        "color": "#FDD835",      # Yellow (Match 3D GlueTK)
         "label": "Pi-Pi Stacking",
         "style": "--"
     },
     "Hydrophobic": {
-        "color": "#F06292",      # Pink (Alkyl/Pi-Alkyl)
-        "label": "Hydrophobic/Alkyl",
+        "color": "#F06292",      # Pink
+        "label": "Hydrophobic",
         "style": "--"
     },
     "Halogen": {
@@ -77,12 +77,7 @@ def get_interaction_style(itype):
 def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj_name=None,
                                      output_path=None, width=1600, height=1200, dpi=150):
     """
-    生成2D相互作用图（Discovery Studio 风格）
-    
-    特性：
-    - 残基显示为圆形气泡
-    - 颜色根据相互作用类型编码（H键绿色，烷基/疏水粉色，盐桥橙色）
-    - 虚线连接
+    生成高精度且清晰的2D相互作用图
     """
     try:
         from rdkit import Chem
@@ -95,279 +90,322 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     try:
         import matplotlib.pyplot as plt
         import matplotlib.patches as mpatches
-        from matplotlib.patches import Circle, FancyArrowPatch, Rectangle
+        from matplotlib.patches import Circle
         from matplotlib.lines import Line2D
         from PIL import Image
     except ImportError:
         print("[2D Diagram] matplotlib and Pillow are required")
         return None
 
-    print(f"[2D Diagram] 2.0 Loaded - Discovery Studio Style")
-    print(f"[2D Diagram] Reading interaction data: {csv_path}")
+    print(f"[2D Diagram] Starting Clean Generation for {ligand_resname}...")
+
+    # 1. 提取配体结构 (PDB格式)
+    # 我们需要加载两次:
+    # mol_map: 带 H (removeHs=False)，用于通过 PDB 原子名查找原子
+    # mol_draw: 不带 H (removeHs=True)，用于清晰绘图
     
-    # 读取相互作用数据
-    interactions = []
-    with open(csv_path, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            if "Ligand_Residue" in row:
-                lig_res = row.get("Ligand_Residue", "").strip()
-                prot_res = row.get("Protein_Residue", "").strip()
-                lig_atom = row.get("Ligand_Atom", "").strip()
-                prot_atom = row.get("Protein_Atom", "").strip()
-            else:
-                res1 = row.get("Residue1", "").strip()
-                res2 = row.get("Residue2", "").strip()
-                if ligand_resname.upper() in res1.upper():
-                    lig_res, prot_res = res1, res2
-                    lig_atom, prot_atom = "", ""
-                elif ligand_resname.upper() in res2.upper():
-                    lig_res, prot_res = res2, res1
-                    lig_atom, prot_atom = "", ""
-                else:
-                    continue
-            
-            interactions.append({
-                "ligand": lig_res,
-                "protein": prot_res,
-                "ligand_atom": lig_atom,
-                "protein_atom": prot_atom,
-                "type": row.get("Interaction", "").strip(),
-                "distance": row.get("Distance", "").strip()
-            })
-
-    if not interactions:
-        print(f"[2D Diagram] No interactions found for ligand '{ligand_resname}'")
-        return None
-
-    print(f"[2D Diagram] Found {len(interactions)} interactions")
-
-    # 提取配体结构
-    mol = None
+    mol_map = None
+    mol_draw = None
+    temp_pdb = None
+    
     if obj_name:
         try:
             from pymol import cmd
-            temp_sdf = tempfile.mktemp(suffix=".sdf")
-            cmd.save(temp_sdf, f"{obj_name} and resn {ligand_resname}", format="sdf")
-            if os.path.exists(temp_sdf):
-                mol = Chem.SDMolSupplier(temp_sdf, removeHs=True)[0] # 移除氢原子，图更清晰
-                os.remove(temp_sdf)
+            temp_pdb = tempfile.mktemp(suffix=".pdb")
+            # 通过 PyMOL 保存 PDB
+            cmd.save(temp_pdb, f"{obj_name} and resn {ligand_resname}", format="pdb")
+            
+            if os.path.exists(temp_pdb):
+                # 1. Mapping Molecule (Explicit H for mapping)
+                mol_map = Chem.MolFromPDBFile(temp_pdb, removeHs=False, sanitize=False)
+                
+                # 2. Drawing Molecule (Implicit H for clean look)
+                mol_draw = Chem.MolFromPDBFile(temp_pdb, removeHs=True, sanitize=False)
+                
+                try:
+                    Chem.SanitizeMol(mol_map)
+                    Chem.SanitizeMol(mol_draw)
+                except:
+                    pass
         except Exception as e:
             print(f"[2D Diagram] Failed to extract ligand from PyMOL: {e}")
+            if temp_pdb and os.path.exists(temp_pdb): os.remove(temp_pdb)
+            return None
+    
+    # 清理临时文件
+    if temp_pdb and os.path.exists(temp_pdb):
+        os.remove(temp_pdb)
 
-    if mol is None:
-        print(f"[2D Diagram] Unable to extract ligand structure")
+    if mol_map is None or mol_draw is None:
+        print(f"[2D Diagram] ❌ Failed to load ligand molecule.")
         return None
+    
+    # 2. 建立原子映射
+    # Step A: 建立 Name -> Atom Object (in mol_map)
+    map_name_to_atom = {}
+    for atom in mol_map.GetAtoms():
+        info = atom.GetPDBResidueInfo()
+        if info:
+            name = info.GetName().strip()
+            map_name_to_atom[name] = atom
 
-    # 生成2D坐标
-    if not mol.GetNumConformers():
-        AllChem.Compute2DCoords(mol)
-    else:
-        # 尝试保留原有构象投影到2D，或者重新生成
-        try:
-            AllChem.GenerateDepictionMatching3DStructure(mol, mol)
-        except:
-            AllChem.Compute2DCoords(mol)
+    # Step B: 建立 Name -> Index (in mol_draw)
+    # 我们的目标是找到 mol_draw 中的对应原子索引
+    # mol_draw 中的原子都是重原子。
+    draw_name_to_idx = {}
+    for atom in mol_draw.GetAtoms():
+        info = atom.GetPDBResidueInfo()
+        if info:
+            name = info.GetName().strip()
+            draw_name_to_idx[name] = atom.GetIdx()
+            
+    print(f"[2D Diagram] Mapping prepared. Heavy atoms in drawing: {len(draw_name_to_idx)}")
 
-    # 创建画布
+    # 3. 读取相互作用数据并关联到 mol_draw 索引
+    interactions = []
+    
+    with open(csv_path, "r", encoding="utf-8-sig") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            lig_atom_name = row.get("Ligand_Atom", "").strip()
+            prot_res = row.get("Protein_Residue", "").strip()
+            itype = row.get("Interaction", "").strip()
+            dist = row.get("Distance", "").strip()
+            
+            if not prot_res: continue
+
+            # --- Resolving Target Atom Index in Clean Molecule ---
+            target_idx = None
+            
+            # Case 1: 直接是重原子，且存在于 mol_draw
+            if lig_atom_name in draw_name_to_idx:
+                target_idx = draw_name_to_idx[lig_atom_name]
+            else:
+                # Case 2: 可能是 H 原子，或者名字没匹配上
+                # 在 mol_map 中找这个原子
+                if lig_atom_name in map_name_to_atom:
+                    map_atom = map_name_to_atom[lig_atom_name]
+                    
+                    # 检查是否为氢原子 (AtomicNum = 1)
+                    if map_atom.GetAtomicNum() == 1:
+                        # 找到相连的重原子 neighbor
+                        neighbors = map_atom.GetNeighbors()
+                        if neighbors:
+                            neighbor = neighbors[0] # H 只有一个邻居
+                            neighbor_info = neighbor.GetPDBResidueInfo()
+                            if neighbor_info:
+                                neighbor_name = neighbor_info.GetName().strip()
+                                # 尝试在 draw mol 中找这个重原子
+                                if neighbor_name in draw_name_to_idx:
+                                    target_idx = draw_name_to_idx[neighbor_name]
+            
+            # 如果还是找不到 (e.g. Ring interaction 标记为 Center)，暂忽略或映射到中心
+            
+            if target_idx is not None:
+                interactions.append({
+                    "protein": prot_res,
+                    "target_idx": target_idx,
+                    "type": itype,
+                    "distance": dist
+                })
+
+    print(f"[2D Diagram] Loaded {len(interactions)} interactions mapped to heavy atoms.")
+
+    # 4. 生成 2D 坐标 (Clean Molecule)
+    try:
+        AllChem.Compute2DCoords(mol_draw)
+    except:
+        pass
+
+    # 绘图设置
+    drawer_w, drawer_h = 1000, 750
+    drawer = rdMolDraw2D.MolDraw2DCairo(drawer_w, drawer_h)
+    
+    opts = drawer.drawOptions()
+    opts.clearBackground = False
+    opts.padding = 0.15      # 增加内边距
+    opts.bondLineWidth = 3   # 加粗化学键
+    opts.baseFontSize = 0.7  # 更大的原子标签 (相对缩放)
+    opts.multipleBondOffset = 0.15
+    
+    # 绘制
+    drawer.DrawMolecule(mol_draw)
+    drawer.FinishDrawing()
+    
+    png_data = drawer.GetDrawingText()
+    
+    # 获取坐标
+    atom_coords = {}
+    for i in range(mol_draw.GetNumAtoms()):
+        pt = drawer.GetDrawCoords(i)
+        atom_coords[i] = (pt.x, pt.y)
+
+    # 计算中心
+    xs = [p[0] for p in atom_coords.values()]
+    ys = [p[1] for p in atom_coords.values()]
+    center_x = sum(xs) / len(xs) if xs else drawer_w/2
+    center_y = sum(ys) / len(ys) if ys else drawer_h/2
+
+    # 5. Matplotlib 组装
     fig = plt.figure(figsize=(width/100, height/100), dpi=dpi)
     ax = fig.add_subplot(111)
-    # 扩大视野以容纳周围的残基
-    ax.set_xlim(-10, 10)
-    ax.set_ylim(-8, 8)
+    
+    tmp_png = tempfile.mktemp(suffix=".png")
+    with open(tmp_png, "wb") as f:
+        f.write(png_data)
+    lig_img = Image.open(tmp_png)
+    
+    ax.imshow(lig_img, origin='upper', extent=[0, drawer_w, 0, drawer_h])
+    os.remove(tmp_png)
+    
+    ax.set_xlim(0, drawer_w)
+    ax.set_ylim(drawer_h, 0)
     ax.axis('off')
-
-    # 绘制配体结构
-    print(f"[2D Diagram] Drawing ligand structure...")
-    # 使用RDKit绘制配体，背景透明
-    dopts = rdMolDraw2D.MolDrawOptions()
-    dopts.clearBackground = False
-    dopts.fixedBondLength = 40
     
-    drawer = rdMolDraw2D.MolDraw2DCairo(800, 600)
-    drawer.SetDrawOptions(dopts)
-    drawer.DrawMolecule(mol)
-    drawer.FinishDrawing()
-
-    temp_img = tempfile.mktemp(suffix=".png")
-    with open(temp_img, "wb") as f:
-        f.write(drawer.GetDrawingText())
-
-    ligand_img = Image.open(temp_img)
-    # 调整配体显示大小和位置
-    ax.imshow(ligand_img, extent=[-4, 4, -3, 3], zorder=10)
-    os.remove(temp_img)
-
-    # 整理残基相互作用
-    residue_interactions = {}
-    residue_styles = {} # 记录每个残基的主要样式（颜色）
-    
-    # 优先级：Hbond > Salt > Pi > Hydrophobic
-    style_priority = {
-        "Hbond": 10, "Salt": 9, "PiPi": 8, "Pi": 7, "Halogen": 6, "Hydrophobic": 5, "VDW": 1
-    }
-
+    # 分组相互作用
+    residue_data = {}
     for inter in interactions:
-        prot_res = inter["protein"].strip()
-        if not prot_res: continue
+        p = inter["protein"]
+        if p not in residue_data: residue_data[p] = []
+        residue_data[p].append(inter)
+
+    # 布局参数
+    label_dist = 140.0 # 距离原子的长度
+    bubble_r = 45.0
+    drawn_bubbles = []
+
+    print(f"[2D Diagram] Placing {len(residue_data)} residue bubbles...")
+
+    for prot_res, inter_list in residue_data.items():
+        # 计算锚点 (所有关联重原子的平均位置)
+        coords = [atom_coords[i["target_idx"]] for i in inter_list if i["target_idx"] in atom_coords]
+        if not coords:
+            anchor_x, anchor_y = center_x, center_y # Fallback
+        else:
+            anchor_x = sum(c[0] for c in coords)/len(coords)
+            anchor_y = sum(c[1] for c in coords)/len(coords)
         
-        # 提取残基名和编号 (e.g. "VAL 103")
-        # 假设格式 "RES ID" 或 "RES:ID"
+        # 向量方向
+        vx, vy = anchor_x - center_x, anchor_y - center_y
+        norm = math.sqrt(vx**2 + vy**2)
+        if norm < 0.1: vx, vy = 1, 0; norm=1
+        dx, dy = vx/norm, vy/norm
+        
+        # 初始位置
+        px = anchor_x + dx * label_dist
+        py = anchor_y + dy * label_dist
+        
+        # 简单的斥力迭代 (防重叠)
+        for _ in range(5):
+            moved = False
+            # 1. Bubble-Bubble Repulsion
+            for (ox, oy, _) in drawn_bubbles:
+                d = math.sqrt((px-ox)**2 + (py-oy)**2)
+                min_d = bubble_r * 2.5
+                if d < min_d:
+                    rx, ry = px-ox, py-oy
+                    rn = math.sqrt(rx**2+ry**2)
+                    if rn < 0.1: rx, ry = 1,0; rn=1
+                    px += (rx/rn)*40
+                    py += (ry/rn)*40
+                    moved = True
+            
+            # 2. Bubble-Atom Repulsion (Optional, avoid overlapping ligand)
+            # 简单检查离中心太近
+            d_center = math.sqrt((px-center_x)**2 + (py-center_y)**2)
+            # 如果进入了配体区域 (假设半径 250)
+            if d_center < 250:
+                 cx, cy = px-center_x, py-center_y
+                 cn = math.sqrt(cx**2+cy**2)
+                 if cn<0.1: cx,cy=1,0; cn=1
+                 px += (cx/cn)*20
+                 py += (cy/cn)*20
+                 moved=True
+                 
+            if not moved: break
+        
+        drawn_bubbles.append((px, py, bubble_r))
+        
+        # 确定优先级最高的颜色
+        best_style = DS_STYLE["VDW"]
+        w_max = 0
+        for i in inter_list:
+            s_name = i["type"]
+            w = 0
+            if "氢键" in s_name or "Hbond" in s_name: w=10
+            elif "盐桥" in s_name or "Salt" in s_name: w=9
+            elif "π-π" in s_name or "PiPi" in s_name: w=8
+            elif "π" in s_name or "Pi" in s_name: w=7
+            
+            if w > w_max:
+                w_max = w
+                best_style = get_interaction_style(s_name)
+        
+        # 绘制气泡
+        # 名字分行
         parts = prot_res.split()
-        if len(parts) >= 2:
-            res_name = parts[0]
-            res_id = parts[1]
-        else:
-            res_name = prot_res
-            res_id = "?"
-            
-        unique_key = prot_res # 使用完整字符串作为键
+        if len(parts) >= 2: txt = f"{parts[0][:3]}\n{parts[1]}"
+        else: txt = prot_res[:3]
         
-        if unique_key not in residue_interactions:
-            residue_interactions[unique_key] = []
-            residue_styles[unique_key] = {"priority": 0, "style": DS_STYLE["VDW"]}
-            
-        residue_interactions[unique_key].append(inter)
-        
-        # 更新残基颜色样式
-        style = get_interaction_style(inter["type"])
-        # 反向查找 key
-        style_key = "VDW"
-        for k, v in DS_STYLE.items():
-            if v == style:
-                style_key = k
-                break
-        
-        prio = style_priority.get(style_key, 0)
-        if prio > residue_styles[unique_key]["priority"]:
-            residue_styles[unique_key] = {"priority": prio, "style": style}
-
-    residues = list(residue_interactions.keys())
-    n_residues = len(residues)
-    radius = 6.0 # 布局半径
-
-    print(f"[2D Diagram] Drawing {n_residues} interacting residues (Discovery Studio style)...")
-
-    # 绘制残基（圆形布局）
-    for i, res_key in enumerate(residues):
-        angle = 2 * math.pi * i / n_residues - math.pi/2
-        # 稍微错开半径，避免太整齐
-        r_offset = 0.2 * (i % 2)
-        x = (radius + r_offset) * math.cos(angle)
-        y = (radius + r_offset) * math.sin(angle) * 0.8 # 压扁一点椭圆
-
-        # 获取样式
-        style = residue_styles[res_key]["style"]
-        bubble_color = style["color"]
-        
-        # 解析显示名称
-        parts = res_key.split()
-        if len(parts) >= 2:
-            res_n = parts[0][:3].upper()
-            res_i = parts[1]
-            display_text = f"{res_n}\n{res_i}"
-        else:
-            display_text = res_key[:3]
-
-        # 1. 绘制圆形气泡
-        circle = Circle((x, y), 0.9, facecolor='white',
-                      edgecolor=bubble_color, linewidth=2.5, alpha=1.0, zorder=20)
+        circle = Circle((px, py), bubble_r, facecolor='white', edgecolor=best_style["color"], linewidth=2, zorder=10)
         ax.add_patch(circle)
+        ax.text(px, py, txt, ha='center', va='center', fontsize=10, fontweight='bold', zorder=11)
         
-        # 2. 内部填充（淡色）
-        circle_fill = Circle((x, y), 0.9, facecolor=bubble_color,
-                           alpha=0.15, zorder=19)
-        ax.add_patch(circle_fill)
-
-        # 3. 文字标签
-        ax.text(x, y, display_text, fontsize=11, fontweight='bold',
-               ha='center', va='center', color='black', zorder=21,
-               multialignment='center')
-
-        # 4. 绘制虚线连接
-        interactions_list = residue_interactions[res_key]
-        
-        # 计算连线起始点（配体侧）
-        # 稍微向外一点，避免穿过配体主体
-        lig_x = 3.0 * math.cos(angle)
-        lig_y = 2.4 * math.sin(angle)
-        
-        for inter in interactions_list:
-            istyle = get_interaction_style(inter["type"])
-            line_color = istyle["color"]
-            dash_style = istyle["style"] # '--' or ':'
+        # 绘制连线
+        for inter in inter_list:
+            if inter["target_idx"] not in atom_coords: continue
+            tx, ty = atom_coords[inter["target_idx"]]
             
-            # 绘制虚线
-            # 终点是圆圈边缘而不是中心
-            # 简单的向量计算
-            dx, dy = x - lig_x, y - lig_y
-            dist_len = math.sqrt(dx*dx + dy*dy)
-            if dist_len > 0:
-                # 缩短终点，停在气泡边缘 (半径 ~0.9)
-                end_x = x - (dx / dist_len) * 0.9
-                end_y = y - (dy / dist_len) * 0.9
+            # 计算连线切点
+            lx, ly = px-tx, py-ty
+            ld = math.sqrt(lx**2+ly**2)
+            if ld > bubble_r:
+                ex = tx + (lx/ld)*(ld-bubble_r)
+                ey = ty + (ly/ld)*(ld-bubble_r)
             else:
-                end_x, end_y = x, y
-
-            line = Line2D([lig_x, end_x], [lig_y, end_y],
-                         color=line_color,
-                         linewidth=1.8,
-                         linestyle=dash_style,
-                         alpha=0.8,
+                ex, ey = px, py
+            
+            style = get_interaction_style(inter["type"])
+            line = Line2D([tx, ex], [ty, ey], 
+                         color=style["color"], 
+                         linestyle=style["style"], 
+                         linewidth=1.8, # Thicker lines
+                         alpha=0.85, 
                          zorder=5)
             ax.add_line(line)
             
-            # 距离标签
-            dist = inter["distance"]
-            if dist and dist != "-" and dist != "0.0":
-                mid_x = (lig_x + end_x) / 2
-                mid_y = (lig_y + end_y) / 2
-                ax.text(mid_x, mid_y, f"{dist}",
-                       fontsize=9, ha='center', va='center',
-                       bbox=dict(boxstyle='round,pad=0.15',
-                               facecolor='white', edgecolor=line_color, linewidth=1, alpha=0.9),
-                       color=line_color, fontweight='bold', zorder=6)
+            # Distance label
+            d_val = inter["distance"]
+            if d_val and d_val not in ["-", ""]:
+                mx, my = (tx+ex)/2, (ty+ey)/2
+                ax.text(mx, my, str(d_val), fontsize=8, color='black', 
+                       bbox=dict(boxstyle='round,pad=0.1', fc='white', ec='none', alpha=0.9),
+                       ha='center', va='center', zorder=6)
 
-    # 添加图例
-    legend_handles = []
-    seen_labels = set()
+    # Legend
+    handles = []
+    seen = set()
+    sort_order = ["Hbond", "Salt", "PiPi", "Pi", "Halogen", "Hydrophobic", "VDW"]
     
-    # 按照优先级排序图例
-    sorted_styles = sorted(DS_STYLE.items(), key=lambda x: style_priority.get(x[0], 0), reverse=True)
-    
-    for key, style in sorted_styles:
-        label = style["label"]
-        if label not in seen_labels:
-            # 组合图例：圆形 + 颜色 + 虚线
-            # 这里简单用Patch代表颜色
-            patch = mpatches.Patch(color=style["color"], label=label, alpha=0.6)
-            legend_handles.append(patch)
-            seen_labels.add(label)
-
-    ax.legend(handles=legend_handles, loc='upper right',
-              title="Interaction Types", fontsize=9,
-              framealpha=0.9, edgecolor='gray')
-
-    # 添加标题
-    ax.text(0, 7.5, f"{ligand_resname} Interaction Diagram",
-           fontsize=16, fontweight='bold', ha='center',
-           bbox=dict(boxstyle='round,pad=0.4', facecolor='white', edgecolor='none', alpha=0.9))
-
-    # 保存
-    if output_path is None:
-        output_path = f"{ligand_resname}_interaction_2d.png"
+    for k in sort_order:
+        s = DS_STYLE[k]
+        if s["label"] not in seen:
+            handles.append(mpatches.Patch(color=s["color"], label=s["label"]))
+            seen.add(s["label"])
+            
+    ax.legend(handles=handles, loc='upper right', bbox_to_anchor=(1.15, 1), fontsize=9, title="Interaction Types")
+    ax.text(drawer_w/2, 40, f"{ligand_resname} Interactions", ha='center', fontsize=16, fontweight='bold')
 
     plt.tight_layout()
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight', facecolor='white')
+    if output_path is None: output_path = f"{ligand_resname}_2d.png"
+    plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
     plt.close()
-
-    print(f"[2D Diagram] Saved to: {output_path}")
+    
+    print(f"[2D Diagram] ✅ Saved standard clean diagram to {output_path}")
     return output_path
 
-
-# PyMOL命令注册
 try:
     from pymol import cmd
     cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
-except Exception:
+except:
     pass

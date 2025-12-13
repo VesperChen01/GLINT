@@ -2793,8 +2793,8 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         "SaltBridge": "orange",
         "疏水相互作用": "gray",    # 疏水：灰色（如果显示）
         "Hydrophobic": "gray",
-        "π–π 堆积": "green",      # π-π堆积：绿色
-        "PiPi": "green",
+        "π–π 堆积": "yellow",     # π-π堆积：黄色
+        "PiPi": "yellow",
         "π–阳离子相互作用": "magenta",  # π-阳离子：品红
         "PiCation": "magenta",
         "金属配位": "violet",      # 金属配位：紫罗兰
@@ -2830,8 +2830,16 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         interactions_by_type[itype].append(inter)
     
     # 对每种类型按距离排序（短距离优先）
+    def safe_distance(x):
+        """安全获取距离值，处理 '-' 等非数字情况"""
+        d = x.get("Distance", "999")
+        try:
+            return float(d)
+        except (ValueError, TypeError):
+            return 999.0  # 非数字距离放到最后
+    
     for itype in interactions_by_type:
-        interactions_by_type[itype].sort(key=lambda x: float(x.get("Distance", "999")))
+        interactions_by_type[itype].sort(key=safe_distance)
     
     # 设置每种相互作用类型的默认显示数量（专业筛选策略）
     if max_interactions_per_type is None:
@@ -3014,6 +3022,13 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                         sel1 += f" and name {lig_atom}"
                     if prot_atom and prot_atom != "":
                         sel2 += f" and name {prot_atom}"
+                
+                # 设置颜色（在创建距离对象之前确定颜色）
+                interaction_color = None
+                for key, color in color_map.items():
+                    if key in interaction_type or key == type_en:
+                        interaction_color = color
+                        break
                 
                 # 尝试创建距离对象（参考 PPI 可视化代码）
                 try:
