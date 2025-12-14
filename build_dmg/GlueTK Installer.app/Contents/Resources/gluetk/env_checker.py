@@ -30,6 +30,22 @@ REQUIRED_PACKAGES = [
     ("PyQt5", "PyQt5", "pyqt5"),
 ]
 
+# 可选但推荐的 Python 包 (import_name, display_name, pip_name, description)
+OPTIONAL_PACKAGES = [
+    ("pyhmmer", "pyhmmer", "pyhmmer", "C2H2 锌指 HMM 检测（提高精度）"),
+    ("haddock", "HADDOCK3", "haddock3", "Protein-Protein Docking Engine"),
+]
+
+# Pfam HMM 文件配置
+HMM_FILES = {
+    "zf-C2H2": {
+        "pfam_id": "PF00096",
+        "url": "https://www.ebi.ac.uk/interpro/wwwapi//entry/pfam/PF00096?annotation=hmm",
+        "local_name": "zf-C2H2.hmm",
+        "description": "C2H2 zinc finger domain HMM",
+    },
+}
+
 # 必需的命令行工具
 REQUIRED_COMMANDS = [
     ("vina", "AutoDock Vina"),
@@ -361,6 +377,222 @@ class EnvironmentChecker:
             self.log(f"\n✅ 所有 GUI 功能测试通过")
             return True
     
+    # ========== 可选依赖检测与安装 ==========
+    
+    def check_optional_packages(self) -> Dict[str, bool]:
+        """
+        检查可选 Python 包
+        
+        Returns:
+            Dict[str, bool]: {包名: 是否已安装}
+        """
+        self.log("\n📦 检查可选 Python 包:")
+        status = {}
+        
+        for import_name, display_name, _, description in OPTIONAL_PACKAGES:
+            try:
+                __import__(import_name)
+                self.log(f"  ✓ {display_name} - {description}")
+                status[display_name] = True
+            except ImportError:
+                self.log(f"  ✗ {display_name} (未安装) - {description}")
+                status[display_name] = False
+        
+        return status
+    
+    def install_optional_package(self, package_name: str) -> bool:
+        """
+        安装可选包
+        
+        Args:
+            package_name: 包的显示名称
+            
+        Returns:
+            bool: 是否安装成功
+        """
+        pip_name = None
+        for _, display_name, pip, _ in OPTIONAL_PACKAGES:
+            if display_name == package_name:
+                pip_name = pip
+                break
+        
+        if not pip_name:
+            self.log(f"  ✗ 未知的可选包: {package_name}")
+            return False
+        
+        return self._install_pip_package(pip_name)
+    
+    def install_all_optional_packages(self) -> Dict[str, bool]:
+        """
+        安装所有可选包
+        
+        Returns:
+            Dict[str, bool]: {包名: 是否安装成功}
+        """
+        self.log("\n📦 安装可选 Python 包...")
+        results = {}
+        
+        for import_name, display_name, pip_name, description in OPTIONAL_PACKAGES:
+            try:
+                __import__(import_name)
+                self.log(f"  ✓ {display_name} 已安装")
+                results[display_name] = True
+            except ImportError:
+                self.log(f"  安装 {display_name} ({description})...")
+                if self._install_pip_package(pip_name):
+                    self.log(f"  ✅ {display_name} 安装成功")
+                    results[display_name] = True
+                else:
+                    self.log(f"  ✗ {display_name} 安装失败")
+                    results[display_name] = False
+        
+        return results
+    
+    # ========== HMM 文件管理 ==========
+    
+    def get_hmm_data_dir(self) -> str:
+        """
+        获取 HMM 数据目录路径
+        
+        Returns:
+            str: 数据目录路径
+        """
+        # 优先使用插件目录下的 data 文件夹
+        plugin_dir = os.path.dirname(os.path.abspath(__file__))
+        data_dir = os.path.join(plugin_dir, "data")
+        
+        if not os.path.exists(data_dir):
+            try:
+                os.makedirs(data_dir, exist_ok=True)
+            except Exception:
+                # 回退到用户目录
+                data_dir = os.path.join(os.path.expanduser("~"), ".gluetk", "data")
+                os.makedirs(data_dir, exist_ok=True)
+        
+        return data_dir
+    
+    def check_hmm_files(self) -> Dict[str, bool]:
+        """
+        检查 HMM 文件是否存在
+        
+        Returns:
+            Dict[str, bool]: {HMM名称: 是否存在}
+        """
+        self.log("\n🔬 检查 HMM Profile 文件:")
+        data_dir = self.get_hmm_data_dir()
+        status = {}
+        
+        for name, info in HMM_FILES.items():
+            local_path = os.path.join(data_dir, info["local_name"])
+            if os.path.exists(local_path):
+                self.log(f"  ✓ {name} ({info['pfam_id']}) - {info['description']}")
+                status[name] = True
+            else:
+                self.log(f"  ✗ {name} ({info['pfam_id']}) - 未下载")
+                status[name] = False
+        
+        return status
+    
+    def download_hmm_file(self, hmm_name: str) -> bool:
+        """
+        下载单个 HMM 文件
+        
+        Args:
+            hmm_name: HMM 名称（如 "zf-C2H2"）
+            
+        Returns:
+            bool: 是否下载成功
+        """
+        if hmm_name not in HMM_FILES:
+            self.log(f"  ✗ 未知的 HMM: {hmm_name}")
+            return False
+        
+        info = HMM_FILES[hmm_name]
+        data_dir = self.get_hmm_data_dir()
+        local_path = os.path.join(data_dir, info["local_name"])
+        
+        if os.path.exists(local_path):
+            self.log(f"  ✓ {hmm_name} 已存在")
+            return True
+        
+        self.log(f"  下载 {hmm_name} ({info['pfam_id']})...")
+        
+        try:
+            import urllib.request
+            
+            # 下载 HMM 文件
+            urllib.request.urlretrieve(info["url"], local_path)
+            
+            # 验证文件
+            if os.path.exists(local_path) and os.path.getsize(local_path) > 100:
+                self.log(f"  ✅ {hmm_name} 下载成功: {local_path}")
+                return True
+            else:
+                self.log(f"  ✗ {hmm_name} 下载失败: 文件无效")
+                if os.path.exists(local_path):
+                    os.remove(local_path)
+                return False
+                
+        except Exception as e:
+            self.log(f"  ✗ {hmm_name} 下载失败: {e}")
+            return False
+    
+    def download_all_hmm_files(self) -> Dict[str, bool]:
+        """
+        下载所有 HMM 文件
+        
+        Returns:
+            Dict[str, bool]: {HMM名称: 是否下载成功}
+        """
+        self.log("\n🔬 下载 HMM Profile 文件...")
+        results = {}
+        
+        for name in HMM_FILES:
+            results[name] = self.download_hmm_file(name)
+        
+        return results
+    
+    def setup_c2h2_detection(self) -> bool:
+        """
+        一键设置 C2H2 锌指检测环境
+        
+        包括：
+        1. 安装 pyhmmer
+        2. 下载 zf-C2H2 HMM 文件
+        
+        Returns:
+            bool: 是否全部成功
+        """
+        self.log("\n" + "=" * 60)
+        self.log("🔧 设置 C2H2 锌指检测环境")
+        self.log("=" * 60)
+        
+        success = True
+        
+        # 1. 安装 pyhmmer
+        try:
+            import pyhmmer
+            self.log("  ✓ pyhmmer 已安装")
+        except ImportError:
+            self.log("  安装 pyhmmer...")
+            if self._install_pip_package("pyhmmer"):
+                self.log("  ✅ pyhmmer 安装成功")
+            else:
+                self.log("  ⚠️ pyhmmer 安装失败，将使用 regex 回退方案")
+                success = False
+        
+        # 2. 下载 HMM 文件
+        if not self.download_hmm_file("zf-C2H2"):
+            self.log("  ⚠️ HMM 文件下载失败，将使用 regex 回退方案")
+            success = False
+        
+        if success:
+            self.log("\n✅ C2H2 检测环境设置完成（HMM 模式）")
+        else:
+            self.log("\n⚠️ C2H2 检测可用（regex 模式），HMM 模式需要手动配置")
+        
+        return success
+    
     # ========== 安装指南 ==========
     
     def get_conda_install_url(self) -> str:
@@ -589,11 +821,14 @@ conda activate {ENV_NAME}
 📦 安装所有依赖（Vina 可选，推荐用 pip 安装）:
 
 # 核心栈（不含 Vina）
-conda install -c conda-forge rdkit scipy matplotlib pillow \
+conda install -c conda-forge rdkit scipy matplotlib pillow \\
     numpy pandas seaborn pyqt openbabel -y
 
 # 可选：在激活环境中安装 Vina + Meeko
 pip install vina meeko
+
+# 可选：C2H2 锌指检测 HMM 支持
+pip install pyhmmer
 """
         
         # 使用说明
@@ -720,6 +955,24 @@ def get_dependency_status() -> Dict[str, bool]:
     """
     checker = EnvironmentChecker(log_callback=None)
     return checker.check_all_dependencies()
+
+
+def setup_c2h2_detection(log_callback=None) -> bool:
+    """
+    一键设置 C2H2 锌指检测环境（便捷函数）
+    
+    包括：
+    1. 安装 pyhmmer
+    2. 下载 zf-C2H2 HMM 文件
+    
+    Args:
+        log_callback: 日志回调函数
+        
+    Returns:
+        bool: 是否全部成功
+    """
+    checker = EnvironmentChecker(log_callback=log_callback)
+    return checker.setup_c2h2_detection()
 
 
 # ========== 命令行接口 ==========

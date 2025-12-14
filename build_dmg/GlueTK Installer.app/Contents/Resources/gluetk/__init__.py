@@ -4,13 +4,13 @@ GlueTK - PyMOL Plugin for Molecular Glue Analysis
 Molecular Glue vs PROTAC Classification Toolkit
 
 Author: Vesper
-Version: v0.1.3-beta
+Version: v0.1.4-beta
 """
 
 from __future__ import print_function
 import locale
 
-__version__ = "v0.1.3-beta"
+__version__ = "v0.1.4-beta"
 __author__ = "Vesper"
 
 # ---- 环境依赖检查 ----
@@ -78,6 +78,9 @@ def _register_commands():
             validate_g_motif_geometry,
             degron_annotate
         )
+        
+        # C2H2 锌指蛋白检测
+        from .c2h2_finder import find_c2h2_domains
         
         # 分子胶设计分析（Ternary complex 建模）
         from .glue_design_analyzer import (
@@ -172,6 +175,9 @@ def _register_commands():
         cmd.extend("validate_crbn_hbonds", validate_crbn_hbonds)
         cmd.extend("validate_g_motif_geometry", validate_g_motif_geometry)
         cmd.extend("degron_annotate", degron_annotate)
+        
+        # C2H2 锌指蛋白检测命令
+        cmd.extend("find_c2h2_domains", find_c2h2_domains)
         
         # 分子胶设计分析命令
         cmd.extend("align_gloop_for_modeling", align_gloop_for_modeling)

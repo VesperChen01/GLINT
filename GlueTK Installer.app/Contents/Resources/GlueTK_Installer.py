@@ -24,14 +24,21 @@ ENV_NAME = "gluetk"
 PYTHON_VERSION = "3.9"
 DEFAULT_INSTALL_PATH = os.path.expanduser("~/.pymol/startup/gluetk")
 
-# 包含 Vina 和 Meeko 的完整依赖列表
+# 包含 Vina / Meeko / PyMOL / HADDOCK3 的完整依赖列表
+# 说明：
+# - HADDOCK3 官方 PyPI（pip install haddock3）在 macOS 上可能触发本地编译并失败（例如 -march=native）。
+# - 因此这里优先走 conda。
+# - HADDOCK3 的 conda 构建目前在 bioconda 提供（包名：haddock_biobb），可提供 haddock3 CLI/模块。
+# - autodock-vina 在 conda 频道中不稳定，改用 pip 安装 vina-split
 CONDA_PACKAGES = [
-    "rdkit", "scipy", "matplotlib", "pillow", "numpy", 
+    "rdkit", "scipy", "matplotlib", "pillow", "numpy",
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
-    "autodock-vina", "meeko"
+    "meeko",
+    "haddock_biobb"
 ]
 
-PIP_PACKAGES = ["requests"]
+# Pip 包：requests + vina-split（AutoDock Vina 的 pip 封装）
+PIP_PACKAGES = ["requests", "vina-split"]
 
 def get_gluetk_source_dir():
     """获取 GlueTK 源码目录"""
@@ -67,6 +74,7 @@ class InstallerApp:
         self.conda_ok = False
         self.env_ok = False
         self.conda_exe = None  # Store detected conda path
+        self.env_path = None   # Store full path to conda env (force standard conda base)
         
         self._build_ui()
         # Fix for macOS Dark Mode / Blank Screen
@@ -207,16 +215,22 @@ class InstallerApp:
             self._log("  Conda: Not found in PATH or standard locations")
             return
             
-        # 2. Check Environment
+        # 2. Check Environment（强制使用 conda base/envs 下的环境，避免误用 PyMOL.app 内的 gluetk）
         try:
-            result = subprocess.run([self.conda_exe, "env", "list"], capture_output=True, text=True, timeout=10)
-            if ENV_NAME in result.stdout:
+            base_result = subprocess.run([self.conda_exe, "info", "--base"], capture_output=True, text=True, timeout=10)
+            conda_base = base_result.stdout.strip() if base_result.returncode == 0 else ""
+            if not conda_base:
+                raise Exception("Cannot determine conda base")
+
+            self.env_path = os.path.join(conda_base, "envs", ENV_NAME)
+
+            if os.path.isdir(self.env_path):
                 self.env_status.configure(text="✅ Exists", foreground="green")
                 self.env_ok = True
-                self._log(f"  Environment '{ENV_NAME}': Exists")
+                self._log(f"  Environment '{ENV_NAME}': {self.env_path}")
             else:
                 self.env_status.configure(text="⚠️ Will create", foreground="orange")
-                self._log(f"  Environment '{ENV_NAME}': Will be created")
+                self._log(f"  Environment '{ENV_NAME}': Will be created at {self.env_path}")
         except Exception as e:
             self.env_status.configure(text="❓ Unknown", foreground="gray")
             self._log(f"  Environment check failed: {e}")
@@ -237,25 +251,46 @@ class InstallerApp:
             # 1. Conda Env
             self._log("\n[1/5] Checking conda environment...")
             self.progress["value"] = 20
+            
+            # 确保 env_path 已设置（防止 None 错误）
+            if not self.env_path:
+                try:
+                    base_result = subprocess.run([self.conda_exe, "info", "--base"], capture_output=True, text=True, timeout=10)
+                    conda_base = base_result.stdout.strip() if base_result.returncode == 0 else ""
+                    if conda_base:
+                        self.env_path = os.path.join(conda_base, "envs", ENV_NAME)
+                    else:
+                        raise Exception("Cannot determine conda base directory")
+                except Exception as e:
+                    raise Exception(f"Failed to determine environment path: {e}")
+            
             if not self.env_ok:
-                self._log(f"  Creating environment '{ENV_NAME}'...")
-                # Use full conda path
-                result = subprocess.run([self.conda_exe, "create", "-n", ENV_NAME, f"python={PYTHON_VERSION}", "-y"], capture_output=True, text=True)
+                self._log(f"  Creating environment at {self.env_path}...")
+                # 强制使用 -p 指定路径，避免与 PyMOL.app 内同名环境冲突
+                result = subprocess.run([self.conda_exe, "create", "-p", self.env_path, f"python={PYTHON_VERSION}", "-y"], capture_output=True, text=True)
                 if result.returncode != 0:
                     self._log(f"  Error: {result.stderr}")
+                    raise Exception(result.stderr.strip() or "conda create failed")
                 else:
                     self._log("  ✅ Environment created")
             else:
-                self._log("  Environment already exists")
+                self._log(f"  Environment already exists: {self.env_path}")
                 
             # 2. Dependencies
             if self.install_deps.get():
                 self._log("\\n[2/5] Installing dependencies (conda)...")
                 self.progress["value"] = 40
                 pkg_str = " ".join(CONDA_PACKAGES)
-                # Use full conda path and list args instead of shell=True for better safety/stability
-                self._log(f"  Running: conda install -n {ENV_NAME} -c conda-forge {pkg_str}")
-                cmd = [self.conda_exe, "install", "-n", ENV_NAME, "-c", "conda-forge", "-y"] + CONDA_PACKAGES
+                # 使用 conda-forge + bioconda，并启用 libmamba solver（更稳定）
+                self._log(f"  Running: conda install -p {self.env_path} -c conda-forge -c bioconda {pkg_str}")
+                cmd = [
+                    self.conda_exe, "install",
+                    "-p", self.env_path,
+                    "-c", "conda-forge",
+                    "-c", "bioconda",
+                    "--solver=libmamba",
+                    "-y",
+                ] + CONDA_PACKAGES
                 
                 # Run without shell=True
                 result = subprocess.run(cmd, capture_output=True, text=True)
@@ -263,18 +298,29 @@ class InstallerApp:
                 if result.returncode == 0:
                     self._log("  ✅ Conda packages installed")
                 else:
-                    self._log(f"  ⚠️ Some packages may have failed")
+                    # 输出更可诊断的信息，并中止（否则后续一定检测不到）
+                    if result.stdout:
+                        self._log("  ---- conda stdout ----")
+                        self._log(result.stdout.strip()[-4000:])
+                    if result.stderr:
+                        self._log("  ---- conda stderr ----")
+                        self._log(result.stderr.strip()[-4000:])
+                    raise Exception("Conda dependency installation failed")
                 
-                # 验证 PyMOL 是否安装成功
-                pymol_check = subprocess.run([self.conda_exe, "run", "-n", ENV_NAME, "which", "pymol"], 
+                # 验证 PyMOL 是否安装成功（我们强制使用 conda PyMOL）
+                pymol_check = subprocess.run([self.conda_exe, "run", "-p", self.env_path, "which", "pymol"],
                                             capture_output=True, text=True)
                 if pymol_check.returncode != 0:
-                    self._log("  ⚠️ PyMOL not installed in conda, will check system PyMOL.app")
+                    raise Exception("Conda PyMOL (pymol-open-source) not found in gluetk env")
                 
                 # 2b. Pip dependencies inside the environment
                 if PIP_PACKAGES:
                     self._log("\\n[2b/5] Installing pip packages inside environment...")
-                    pip_cmd = [self.conda_exe, "run", "-n", ENV_NAME, "python", "-m", "pip", "install", "--upgrade"] + PIP_PACKAGES
+                    env_pip = os.path.join(self.env_path, "bin", "pip") if self.env_path else None
+                    if env_pip and os.path.exists(env_pip):
+                        pip_cmd = [env_pip, "install", "--upgrade", "--disable-pip-version-check"] + PIP_PACKAGES
+                    else:
+                        pip_cmd = [self.conda_exe, "run", "-p", self.env_path, "python", "-m", "pip", "install", "--upgrade", "--disable-pip-version-check"] + PIP_PACKAGES
                     self._log(f"  Running: {' '.join(pip_cmd)}")
                     pip_result = subprocess.run(pip_cmd, capture_output=True, text=True)
                     if pip_result.returncode == 0:
@@ -365,56 +411,38 @@ class InstallerApp:
                 conda_exe_str = self.conda_exe or ""
                 launcher_script = os.path.join(macos, "launcher")
                 
-                # 检测 PyMOL 安装方式
-                pymol_app_path = "/Applications/PyMOL.app/Contents/MacOS/PyMOL"
-                has_pymol_app = os.path.exists(pymol_app_path) and os.access(pymol_app_path, os.X_OK)
-                
-                # 检查 conda 环境中是否有 pymol
+                # 强制统一：永远使用 conda 环境里的 PyMOL（pymol-open-source）
                 has_conda_pymol = False
                 try:
-                    check_result = subprocess.run([self.conda_exe, "run", "-n", ENV_NAME, "which", "pymol"],
+                    check_result = subprocess.run([self.conda_exe, "run", "-p", self.env_path, "which", "pymol"],
                                                 capture_output=True, text=True, timeout=5)
                     has_conda_pymol = (check_result.returncode == 0)
                 except:
                     pass
-                
+
                 with open(launcher_script, "w") as f:
-                    if has_pymol_app:
-                        # 使用系统 PyMOL.app
-                        self._log("  Using system PyMOL.app")
+                    if has_conda_pymol:
+                        self._log("  Using conda PyMOL (forced)")
+                        env_path_str = self.env_path or ""
                         f.write(f'''#!/bin/bash
-# GlueTK Launcher (PyMOL.app + conda dependencies)
-
-# 激活 conda 环境以加载依赖
-export CONDA_EXE="{conda_exe_str}"
-eval "$(\$CONDA_EXE shell.bash hook)" 2>/dev/null
-conda activate {ENV_NAME} 2>/dev/null || true
-
-# 使用系统 PyMOL
-"{pymol_app_path}" -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
-''')
-                    elif has_conda_pymol:
-                        # 使用 conda PyMOL
-                        self._log("  Using conda PyMOL")
-                        f.write(f'''#!/bin/bash
-# GlueTK Launcher (conda pymol)
+# GlueTK Launcher (FORCED conda pymol-open-source)
 
 CONDA_EXE="{conda_exe_str}"
-if [ -n "$CONDA_EXE" ] && [ -x "$CONDA_EXE" ]; then
-  echo "Starting GlueTK via conda env {ENV_NAME}..."
-  "$CONDA_EXE" run -n {ENV_NAME} pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
+ENV_PATH="{env_path_str}"
+if [ -n "$CONDA_EXE" ] && [ -x "$CONDA_EXE" ] && [ -n "$ENV_PATH" ] && [ -d "$ENV_PATH" ]; then
+  echo "Starting GlueTK via conda env: $ENV_PATH"
+  "$CONDA_EXE" run -p "$ENV_PATH" pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
 else
-  osascript -e 'display alert "Error" message "Conda not found. Please reinstall GlueTK."'
+  osascript -e 'display alert "Error" message "Conda env gluetk not found. Please re-run GlueTK Installer to create it."'
   exit 1
 fi
 ''')
                     else:
-                        # 没有找到 PyMOL，创建错误提示启动器
-                        self._log("  ⚠️ PyMOL not found! Creating error handler launcher")
+                        self._log("  ⚠️ Conda PyMOL not found (pymol-open-source install may have failed)")
                         f.write(f'''#!/bin/bash
-# GlueTK Launcher (PyMOL not found)
+# GlueTK Launcher (conda pymol missing)
 
-osascript -e 'display alert "PyMOL Not Found" message "Please install PyMOL.app from https://pymol.org/ or run the installer again to install conda PyMOL." buttons {{"OK"}}'
+osascript -e 'display alert "PyMOL Missing" message "Conda PyMOL (pymol-open-source) was not found in the gluetk environment. Please re-run the installer with dependency installation enabled." buttons {"OK"}'
 exit 1
 ''')
                 

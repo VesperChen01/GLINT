@@ -239,6 +239,7 @@ class GlueTKDialog(QDialog):
         # List of combos to update
         combos = [
             getattr(self, "obj_combo_gm", None),
+            getattr(self, "obj_combo_c2h2", None),  # C2H2 Zinc Finger
             getattr(self, "obj_combo_apbs", None),
             getattr(self, "pocket_obj_combo", None),
             getattr(self, "ppi_obj_combo", None),

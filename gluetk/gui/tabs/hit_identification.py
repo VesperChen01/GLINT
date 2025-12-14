@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Hit Identification Tab: Binding Site Detection, Vina Docking, HDOCK
+Hit Identification Tab: Binding Site Detection, Vina Docking, HADDOCK3
 """
 import os
 from typing import Optional
@@ -9,14 +9,16 @@ try:
     from PyQt5.QtCore import Qt
     from PyQt5.QtWidgets import (
         QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-        QGroupBox, QScrollArea, QFrame, QFileDialog, QMessageBox
+        QGroupBox, QScrollArea, QFrame, QFileDialog, QMessageBox,
+        QComboBox, QCheckBox
     )
 except ImportError:
     try:
         from PyQt6.QtCore import Qt
         from PyQt6.QtWidgets import (
             QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-            QGroupBox, QScrollArea, QFrame, QFileDialog, QMessageBox
+            QGroupBox, QScrollArea, QFrame, QFileDialog, QMessageBox,
+            QComboBox, QCheckBox
         )
     except ImportError:
         raise RuntimeError("PyQt5 or PyQt6 must be installed.")
@@ -60,7 +62,7 @@ class HitIdentificationTab(CommonTab):
         # 2. Vina Docking
         layout.addWidget(self._create_vina_docking_card())
         
-        # 3. HDOCK (Protein-Protein Docking)
+        # 3. HADDOCK3 (Protein-Protein Docking)
         layout.addWidget(self._create_hdock_card())
         
         layout.addStretch(1)
@@ -71,8 +73,8 @@ class HitIdentificationTab(CommonTab):
         main_layout.addWidget(scroll_area)
 
     def _create_hdock_card(self) -> QWidget:
-        """创建 HDOCK 蛋白-蛋白对接卡片"""
-        card = QGroupBox("HDOCK - Protein-Protein Docking")
+        """创建 HADDOCK3 蛋白-蛋白对接卡片"""
+        card = QGroupBox("HADDOCK3 - Protein-Protein Docking")
         layout = QVBoxLayout(card)
         layout.setSpacing(10)
         layout.setContentsMargins(16, 20, 16, 16)
@@ -113,8 +115,71 @@ class HitIdentificationTab(CommonTab):
         lig_layout.addWidget(self.parent_window.hdock_lig_browse)
         layout.addLayout(lig_layout)
         
+        # Docking mode
+        mode_layout = QHBoxLayout()
+        mode_layout.setSpacing(8)
+        self.parent_window.haddock_mode = QComboBox()
+        self.parent_window.haddock_mode.addItems([
+            "Blind docking (Random AIR)",
+            "Blind docking (Centroid)",
+            "Blind docking (Surface)",
+            "Pocket-constrained (Residue AIR)"
+        ])
+        self.parent_window.haddock_mode.setMinimumHeight(32)
+        mode_layout.addWidget(QLabel("Mode:"))
+        mode_layout.addWidget(self.parent_window.haddock_mode, 1)
+        layout.addLayout(mode_layout)
+        
+        # Auto passive expansion (only for pocket-constrained)
+        self.parent_window.haddock_auto_passive = QCheckBox("Auto expand passive residues (6.5 Å)")
+        self.parent_window.haddock_auto_passive.setChecked(True)
+        layout.addWidget(self.parent_window.haddock_auto_passive)
+        
+        # Receptor/Ligand site residues
+        rsite_layout = QHBoxLayout()
+        rsite_layout.setSpacing(8)
+        self.parent_window.hdock_rsite = QLineEdit()
+        self.parent_window.hdock_rsite.setPlaceholderText("Rec site residues, e.g., 195:A,203-206:A")
+        self.parent_window.hdock_rsite.setMinimumHeight(32)
+        rsite_layout.addWidget(QLabel("Rec site:"))
+        rsite_layout.addWidget(self.parent_window.hdock_rsite, 1)
+        layout.addLayout(rsite_layout)
+
+        lsite_layout = QHBoxLayout()
+        lsite_layout.setSpacing(8)
+        self.parent_window.hdock_lsite = QLineEdit()
+        self.parent_window.hdock_lsite.setPlaceholderText("Lig site residues, e.g., 108:B,120-123:B")
+        self.parent_window.hdock_lsite.setMinimumHeight(32)
+        lsite_layout.addWidget(QLabel("Lig site:"))
+        lsite_layout.addWidget(self.parent_window.hdock_lsite, 1)
+        layout.addLayout(lsite_layout)
+        
+        # Output directory (optional)
+        out_layout = QHBoxLayout()
+        out_layout.setSpacing(8)
+        self.parent_window.hdock_output = QLineEdit()
+        self.parent_window.hdock_output.setPlaceholderText("Output dir (default: same as receptor)")
+        self.parent_window.hdock_output.setMinimumHeight(32)
+        self.parent_window.hdock_out_browse = QPushButton("Browse")
+        self.parent_window.hdock_out_browse.setObjectName("browse_btn")
+        self.parent_window.hdock_out_browse.setMinimumHeight(32)
+        self.parent_window.hdock_out_browse.clicked.connect(self.browse_hdock_output)
+        out_layout.addWidget(QLabel("Output:"))
+        out_layout.addWidget(self.parent_window.hdock_output, 1)
+        out_layout.addWidget(self.parent_window.hdock_out_browse)
+        layout.addLayout(out_layout)
+        
+        # Toggle visibility by mode
+        def _toggle_mode(idx: int):
+            text = self.parent_window.haddock_mode.currentText()
+            pocket_mode = text.startswith("Pocket-constrained")
+            for w in (self.parent_window.hdock_rsite, self.parent_window.hdock_lsite, self.parent_window.haddock_auto_passive):
+                w.setEnabled(pocket_mode)
+        self.parent_window.haddock_mode.currentIndexChanged.connect(_toggle_mode)
+        _toggle_mode(self.parent_window.haddock_mode.currentIndex())
+        
         # Run button
-        self.parent_window.hdock_run_btn = QPushButton("Run HDOCK")
+        self.parent_window.hdock_run_btn = QPushButton("Run HADDOCK3")
         self.parent_window.hdock_run_btn.setObjectName("primary_btn")
         self.parent_window.hdock_run_btn.setMinimumHeight(36)
         self.parent_window.hdock_run_btn.clicked.connect(self.run_hdock)
@@ -275,6 +340,10 @@ class HitIdentificationTab(CommonTab):
         fn, _ = QFileDialog.getOpenFileName(self, "Select Ligand PDB (POI)", "", "PDB (*.pdb)")
         if fn: self.parent_window.hdock_ligand.setText(fn)
 
+    def browse_hdock_output(self):
+        fn = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        if fn: self.parent_window.hdock_output.setText(fn)
+
     def run_hdock(self):
         rec = self.parent_window.hdock_receptor.text().strip()
         lig = self.parent_window.hdock_ligand.text().strip()
@@ -287,43 +356,79 @@ class HitIdentificationTab(CommonTab):
             QMessageBox.warning(self, "Warning", "Selected files do not exist.")
             return
             
-        self.log(f"Starting HDOCK...")
+        self.log(f"Starting HADDOCK3...")
         self.log(f"   Receptor: {os.path.basename(rec)}")
         self.log(f"   Ligand: {os.path.basename(lig)}")
         
         try:
-            from ...hdock_integration import check_hdock_available, HDockRunner
-            hdock_path = check_hdock_available()
-            
-            if not hdock_path:
-                QMessageBox.warning(self, "Error", "HDOCKlite not found. Please ensure 'HDOCKlite-v1.1' is in the plugin directory.")
+            from ...haddock3_integration import check_haddock3_available, Haddock3Runner
+            info = check_haddock3_available()
+            if not info.get('available'):
+                QMessageBox.warning(
+                    self,
+                    "Error",
+                    "HADDOCK3 未检测到。请在与 PyMOL 相同的 Python/环境中安装后重启:\n\n"
+                    "1) pip:    python -m pip install -U haddock3\n"
+                    "2) conda:  conda install -c conda-forge -c haddocking haddock3"
+                )
                 return
                 
-            runner = HDockRunner(hdock_path)
+            runner = Haddock3Runner()
             
             self.parent_window.hdock_run_btn.setEnabled(False)
-            self.parent_window.hdock_run_btn.setText("Running HDOCK...")
+            self.parent_window.hdock_run_btn.setText("Running HADDOCK3...")
             self.parent_window.repaint()
             
-            result = runner.run_docking(rec, lig)
+            rsite = getattr(self.parent_window, 'hdock_rsite', None)
+            rsite_txt = rsite.text().strip() if rsite else ""
+            lsite = getattr(self.parent_window, 'hdock_lsite', None)
+            lsite_txt = lsite.text().strip() if lsite else ""
+
+            # Map UI mode to runner mode
+            mode_map = {
+                "Blind docking (Random AIR)": "blind_ranair",
+                "Blind docking (Centroid)": "blind_cm",
+                "Blind docking (Surface)": "blind_surf",
+                "Pocket-constrained (Residue AIR)": "air_from_residues",
+            }
+            mode_txt = self.parent_window.haddock_mode.currentText()
+            mode = mode_map.get(mode_txt, 'blind_ranair')
+            expand_passive = self.parent_window.haddock_auto_passive.isChecked()
+            
+            # 获取输出目录(可选)
+            output_dir = self.parent_window.hdock_output.text().strip() or None
+            
+            result = runner.run_docking(
+                rec, lig,
+                output_dir=output_dir,
+                rsite=(rsite_txt or None), lsite=(lsite_txt or None),
+                mode=mode, expand_passive=expand_passive
+            )
             
             self.parent_window.hdock_run_btn.setEnabled(True)
-            self.parent_window.hdock_run_btn.setText("Run HDOCK")
+            self.parent_window.hdock_run_btn.setText("Run HADDOCK3")
             
-            if result['success']:
-                self.log("HDOCK complete!")
+            if result.get('success'):
+                self.log("HADDOCK3 complete!")
+                # 显示路径回退警告(如果有)
+                if result.get('warning'):
+                    self.log(f"   ⚠️  {result['warning']}")
                 self.log(f"   Models: {result['models_pdb']}")
                 
                 from pymol import cmd
-                cmd.load(result['models_pdb'], "hdock_models")
-                self.log("   Loaded 'hdock_models' into PyMOL")
-                QMessageBox.information(self, "Success", "Docking complete. Top 10 models loaded.")
+                cmd.load(result['models_pdb'], "haddock3_models")
+                self.log("   Loaded 'haddock3_models' into PyMOL")
+                
+                msg = "Docking complete. Top models loaded."
+                if result.get('warning'):
+                    msg += f"\n\n⚠️  {result['warning']}"
+                QMessageBox.information(self, "Success", msg)
             else:
-                self.log(f"HDOCK failed: {result['error']}")
-                QMessageBox.critical(self, "Error", f"HDOCK failed: {result['error']}")
+                self.log(f"HADDOCK3 failed: {result.get('error')}")
+                QMessageBox.critical(self, "Error", f"HADDOCK3 failed: {result.get('error')}")
                 
         except Exception as e:
             self.log(f"Error: {e}")
             self.on_error(str(e))
             self.parent_window.hdock_run_btn.setEnabled(True)
-            self.parent_window.hdock_run_btn.setText("Run HDOCK")
+            self.parent_window.hdock_run_btn.setText("Run HADDOCK3")

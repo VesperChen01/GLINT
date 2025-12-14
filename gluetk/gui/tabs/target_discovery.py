@@ -25,7 +25,7 @@ except ImportError:
 
 from ..utils import t
 from .common import CommonTab
-from ..workers import GMotifWorker
+from ..workers import GMotifWorker, C2H2Worker, SurfaceAnalysisWorker
 
 try:
     from ...open_targets_api import search_disease
@@ -40,9 +40,12 @@ class TargetDiscoveryTab(CommonTab):
         super().__init__(parent)
         self._gmotif_hits = []
         self._last_gmotif_csv = None
+        self._c2h2_hits = []
+        self._last_c2h2_csv = None
         
         # Remove proxies for methods implemented here to avoid shadowing
-        for attr in ['start_gmotif', 'render_gmotif_with_esp', 'browse_gm_pdb', 'browse_gm_out_csv']:
+        for attr in ['start_gmotif', 'render_gmotif_with_esp', 'browse_gm_pdb', 'browse_gm_out_csv',
+                     'start_c2h2', 'browse_c2h2_pdb', 'browse_c2h2_out_csv']:
             if attr in self.__dict__:
                 del self.__dict__[attr]
         
@@ -126,6 +129,111 @@ class TargetDiscoveryTab(CommonTab):
         layout.addWidget(grp_gm)
         layout.addLayout(gm_btn_row)
         
+        # 3. C2H2 Zinc Finger Detection
+        grp_c2h2 = QGroupBox("C2H2 Zinc Finger Detection")
+        c2h2_grid = QGridLayout(grp_c2h2)
+        c2h2_grid.setColumnStretch(1, 1); c2h2_grid.setColumnStretch(3, 1)
+        c2h2_grid.setHorizontalSpacing(8); c2h2_grid.setVerticalSpacing(10)
+        
+        # Row 0: Target Object / PDB File
+        c2h2_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.obj_combo_c2h2 = QComboBox(); self.parent_window.obj_combo_c2h2.setMinimumHeight(32)
+        self.parent_window.refresh_obj_c2h2 = QPushButton(t("refresh")); self.parent_window.refresh_obj_c2h2.clicked.connect(self.refresh_objects)
+        r0_c2h2 = QHBoxLayout(); r0_c2h2.addWidget(self.parent_window.obj_combo_c2h2, 1); r0_c2h2.addWidget(self.parent_window.refresh_obj_c2h2)
+        c2h2_grid.addLayout(r0_c2h2, 0, 1)
+        
+        c2h2_grid.addWidget(QLabel("PDB File (opt):"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.c2h2_pdb = QLineEdit(); self.parent_window.c2h2_pdb_browse = QPushButton(t("browse"))
+        self.parent_window.c2h2_pdb_browse.clicked.connect(self.browse_c2h2_pdb)
+        r0b_c2h2 = QHBoxLayout(); r0b_c2h2.addWidget(self.parent_window.c2h2_pdb, 1); r0b_c2h2.addWidget(self.parent_window.c2h2_pdb_browse)
+        c2h2_grid.addLayout(r0b_c2h2, 0, 3)
+        
+        # Row 1: Turn RMSD / Global RMSD
+        c2h2_grid.addWidget(QLabel("Turn RMSD (\u00c5):"), 1, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.c2h2_turn_rmsd = QLineEdit("2.0")
+        self.parent_window.c2h2_turn_rmsd.setToolTip("局部 turn 对齐 RMSD 阈值（更敏感）")
+        c2h2_grid.addWidget(self.parent_window.c2h2_turn_rmsd, 1, 1)
+        
+        c2h2_grid.addWidget(QLabel("Global RMSD (\u00c5):"), 1, 2, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.c2h2_global_rmsd = QLineEdit("3.5")
+        self.parent_window.c2h2_global_rmsd.setToolTip("全局 fold check RMSD 阈值")
+        c2h2_grid.addWidget(self.parent_window.c2h2_global_rmsd, 1, 3)
+        
+        # Row 2: Checkboxes
+        self.parent_window.c2h2_require_turn_gly = QCheckBox("Require Turn Gly")
+        self.parent_window.c2h2_require_turn_gly.setChecked(False)  # 默认不做 hard filter
+        self.parent_window.c2h2_require_turn_gly.setToolTip("要求 turn 区域有关键 Gly（启用会降低召回）")
+        c2h2_grid.addWidget(self.parent_window.c2h2_require_turn_gly, 2, 1)
+        
+        self.parent_window.c2h2_skip_low_complexity = QCheckBox("Skip Low-Complexity")
+        self.parent_window.c2h2_skip_low_complexity.setChecked(False)  # 默认保留但降权
+        self.parent_window.c2h2_skip_low_complexity.setToolTip("跳过 polyQ 等低复杂度区域（启用会降低召回）")
+        c2h2_grid.addWidget(self.parent_window.c2h2_skip_low_complexity, 2, 3)
+        
+        # Row 3: Output CSV
+        c2h2_grid.addWidget(QLabel("Output CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.c2h2_out_csv = QLineEdit()
+        self.parent_window.c2h2_out_browse = QPushButton(t("browse")); self.parent_window.c2h2_out_browse.clicked.connect(self.browse_c2h2_out_csv)
+        r3_c2h2 = QHBoxLayout(); r3_c2h2.addWidget(self.parent_window.c2h2_out_csv, 1); r3_c2h2.addWidget(self.parent_window.c2h2_out_browse)
+        c2h2_grid.addLayout(r3_c2h2, 3, 1, 1, 3)
+        
+        # C2H2 Buttons
+        c2h2_btn_row = QHBoxLayout()
+        self.parent_window.c2h2_btn = QPushButton("Find Zinc Fingers"); self.parent_window.c2h2_btn.setObjectName("highlight_btn")
+        self.parent_window.c2h2_btn.clicked.connect(self.start_c2h2)
+        self.parent_window.c2h2_btn_render = QPushButton("Render C2H2 + ESP"); self.parent_window.c2h2_btn_render.setObjectName("highlight_btn")
+        self.parent_window.c2h2_btn_render.clicked.connect(self.render_c2h2_with_esp)
+        c2h2_btn_row.addWidget(self.parent_window.c2h2_btn); c2h2_btn_row.addWidget(self.parent_window.c2h2_btn_render); c2h2_btn_row.addStretch(1)
+        
+        layout.addWidget(grp_c2h2)
+        layout.addLayout(c2h2_btn_row)
+        
+        layout.addWidget(grp_c2h2)
+        layout.addLayout(c2h2_btn_row)
+        
+        # 4. Surface Analysis
+        grp_surf = QGroupBox("Protein Surface Analysis")
+        surf_grid = QGridLayout(grp_surf)
+        surf_grid.setColumnStretch(1, 1); surf_grid.setColumnStretch(3, 1)
+        surf_grid.setHorizontalSpacing(8); surf_grid.setVerticalSpacing(10)
+        
+        # Row 0: Target Object
+        surf_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.obj_combo_surf = QComboBox(); self.parent_window.obj_combo_surf.setMinimumHeight(32)
+        self.parent_window.refresh_obj_surf = QPushButton(t("refresh")); self.parent_window.refresh_obj_surf.clicked.connect(self.refresh_objects)
+        r0_surf = QHBoxLayout(); r0_surf.addWidget(self.parent_window.obj_combo_surf, 1); r0_surf.addWidget(self.parent_window.refresh_obj_surf)
+        surf_grid.addLayout(r0_surf, 0, 1)
+
+        # Row 0: Output CSV
+        surf_grid.addWidget(QLabel("Output CSV:"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.surf_out_csv = QLineEdit()
+        self.parent_window.surf_out_browse = QPushButton(t("browse"))
+        self.parent_window.surf_out_browse.clicked.connect(self.browse_surf_out_csv)
+        r0b_surf = QHBoxLayout(); r0b_surf.addWidget(self.parent_window.surf_out_csv, 1); r0b_surf.addWidget(self.parent_window.surf_out_browse)
+        surf_grid.addLayout(r0b_surf, 0, 3)
+        
+        # Row 1: Description
+        desc_label = QLabel("Detects electrostatic and hydrophobic patches on the surface.")
+        desc_label.setStyleSheet("color: gray; font-style: italic;")
+        surf_grid.addWidget(desc_label, 1, 1, 1, 3)
+        
+        # Buttons
+        surf_btn_row = QHBoxLayout()
+        self.parent_window.surf_btn = QPushButton("Analyze Surface")
+        self.parent_window.surf_btn.setObjectName("highlight_btn")
+        self.parent_window.surf_btn.clicked.connect(self.start_surface_analysis)
+        
+        self.parent_window.surf_vis_btn = QPushButton("Visualize Patches")
+        self.parent_window.surf_vis_btn.setObjectName("highlight_btn")
+        self.parent_window.surf_vis_btn.clicked.connect(self.render_surface_patches)
+        
+        surf_btn_row.addWidget(self.parent_window.surf_btn)
+        surf_btn_row.addWidget(self.parent_window.surf_vis_btn)
+        surf_btn_row.addStretch(1)
+        
+        layout.addWidget(grp_surf)
+        layout.addLayout(surf_btn_row)
+
         layout.addStretch(1)
         scroll_area.setWidget(content_widget)
         
@@ -286,4 +394,200 @@ class TargetDiscoveryTab(CommonTab):
         cmd.color(ramp_name, obj)
         self.log("Showing full-protein electrostatic surface")
 
+    # --- C2H2 Zinc Finger Logic ---
+    def browse_c2h2_pdb(self):
+        fn, _ = QFileDialog.getOpenFileName(self, t("select_pdb"), "", "PDB (*.pdb *.cif);;All Files (*)")
+        if fn: self.parent_window.c2h2_pdb.setText(fn); self.parent_window.update_enablement()
+
+    def browse_c2h2_out_csv(self):
+        fn, _ = QFileDialog.getSaveFileName(self, t("select_outcsv"), "", "CSV (*.csv);;All Files (*)")
+        if fn: self.parent_window.c2h2_out_csv.setText(fn); self.parent_window.update_enablement()
+
+    def start_c2h2(self):
+        """Start C2H2 zinc finger detection"""
+        obj = self.parent_window.obj_combo_c2h2.currentText().strip()
+        pdb = self.parent_window.c2h2_pdb.text().strip() or None
+        outcsv = self.parent_window.c2h2_out_csv.text().strip() or None
+        if not obj or obj == t("no_object"):
+            QMessageBox.warning(self, t("title"), t("no_object")); return
+        
+        try:
+            turn_rmsd = float(self.parent_window.c2h2_turn_rmsd.text().strip() or "2.0")
+        except Exception:
+            turn_rmsd = 2.0
+        try:
+            global_rmsd = float(self.parent_window.c2h2_global_rmsd.text().strip() or "3.5")
+        except Exception:
+            global_rmsd = 3.5
+        
+        require_turn_gly = self.parent_window.c2h2_require_turn_gly.isChecked()
+        skip_low_complexity = self.parent_window.c2h2_skip_low_complexity.isChecked()
+        
+        self.parent_window.c2h2_btn.setEnabled(False)
+        self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
+        self.parent_window.c2h2_thread = C2H2Worker(
+            obj, pdb, turn_rmsd, global_rmsd, require_turn_gly, skip_low_complexity, outcsv
+        )
+        self.parent_window.c2h2_thread.progress.connect(self.log)
+        self.parent_window.c2h2_thread.error.connect(self.on_error)
+        self.parent_window.c2h2_thread.finished.connect(self.on_finished_c2h2)
+        self.parent_window.c2h2_thread.start()
+
+    def on_finished_c2h2(self, hits: List[Tuple], out_csv_path: str):
+        """Handle C2H2 detection completion"""
+        self._c2h2_hits = hits or []
+        self._last_c2h2_csv = out_csv_path
+        
+        # Count by status
+        n_pass = sum(1 for h in hits if h[6] == "pass")
+        n_candidate = sum(1 for h in hits if h[6] == "candidate")
+        
+        self.log(f"✅ C2H2 detection complete: {len(hits)} domains found ({n_pass} pass, {n_candidate} candidate)")
+        if os.path.exists(out_csv_path):
+            self.parent_window.c2h2_out_csv.setText(out_csv_path)
+            self.log(f"   Saved to: {os.path.basename(out_csv_path)}")
+        self.parent_window.progress_bar.setVisible(False); self.parent_window.progress_bar.setRange(0, 1)
+        self.parent_window.c2h2_btn.setEnabled(True)
+
+    def render_c2h2_with_esp(self):
+        """Render C2H2 domains with electrostatic surface"""
+        try:
+            obj = self.parent_window.obj_combo_c2h2.currentText().strip()
+            if not obj or obj == t("no_object"):
+                QMessageBox.warning(self, t("title"), t("no_object")); return
+
+            from pymol import cmd
+            
+            # Generate ESP
+            grid = 1.0
+            vmin, v0, vmax = -5.0, 0.0, 5.0
+            if hasattr(self.parent_window, "apbs_grid"):
+                try: grid = float(self.parent_window.apbs_grid.text().strip() or "1.0")
+                except: pass
+            if hasattr(self.parent_window, "apbs_range"):
+                try: vmin, v0, vmax = [float(x) for x in self.parent_window.apbs_range.text().split(",")]
+                except: pass
+
+            map_name = f"{obj}_esp_map"
+            ramp_name = f"{obj}_esp_ramp"
+            cmd.map_new(map_name, "coulomb", grid, obj)
+            cmd.ramp_new(ramp_name, map_name, [vmin, v0, vmax], ["blue", "white", "red"])
+            
+            cmd.hide("everything", obj)
+            cmd.show("cartoon", obj)
+            cmd.set("cartoon_transparency", 0.3, obj)
+
+            # Show surface around C2H2 domains
+            if self._last_c2h2_csv and os.path.exists(self._last_c2h2_csv):
+                try:
+                    import csv
+                    c2h2_regions = []
+                    with open(self._last_c2h2_csv, "r", encoding="utf-8") as f:
+                        reader = csv.DictReader(f)
+                        for r in reader:
+                            chain = r.get("Chain", "")
+                            start = r.get("Domain_Start", "")
+                            end = r.get("Domain_End", "")
+                            if chain and start and end:
+                                c2h2_regions.append((chain, start, end))
+
+                    if c2h2_regions:
+                        c2h2_selections = [f"(chain {ch} and resi {st}-{ed})" for ch, st, ed in c2h2_regions]
+                        all_c2h2_sel = " or ".join(c2h2_selections)
+                        surface_sel_name = "c2h2_surface_area"
+                        cmd.select(surface_sel_name, f"byres ({obj} within 8 of ({all_c2h2_sel}))")
+                        cmd.show("surface", surface_sel_name)
+                        cmd.set("surface_quality", 1, surface_sel_name)
+                        cmd.set("transparency", 0.2, surface_sel_name)
+                        cmd.color(ramp_name, surface_sel_name)
+                        self.log(f"Electrostatic surface shown around {len(c2h2_regions)} C2H2 domains (8 \u00c5 region)")
+                    else:
+                        self._show_full_surface_esp(obj, ramp_name)
+                except Exception as e:
+                    self.log(f"ESP around C2H2 failed: {e}")
+                    self._show_full_surface_esp(obj, ramp_name)
+            else:
+                self._show_full_surface_esp(obj, ramp_name)
+
+            cmd.set("ambient", 0.2)
+            cmd.set("spec_power", 80)
+            cmd.orient(obj)
+            
+            self.log(f"Rendered: C2H2 + ESP (grid={grid} \u00c5)")
+            
+        except Exception as e:
+            self.on_error(str(e))
+
+    # --- Surface Analysis Logic ---
+    def browse_surf_out_csv(self):
+        fn, _ = QFileDialog.getSaveFileName(self, t("select_outcsv"), "", "CSV (*.csv);;All Files (*)")
+        if fn: self.parent_window.surf_out_csv.setText(fn)
+
+    def start_surface_analysis(self):
+        """Start Surface Analysis"""
+        obj = self.parent_window.obj_combo_surf.currentText().strip()
+        outcsv = self.parent_window.surf_out_csv.text().strip() or None
+        
+        if not obj or obj == t("no_object"):
+            QMessageBox.warning(self, t("title"), t("no_object")); return
+            
+        self.parent_window.surf_btn.setEnabled(False)
+        self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
+        
+        self.parent_window.surf_thread = SurfaceAnalysisWorker(obj, outcsv)
+        self.parent_window.surf_thread.progress.connect(self.log)
+        self.parent_window.surf_thread.error.connect(self.on_error)
+        self.parent_window.surf_thread.finished.connect(self.on_finished_surface)
+        self.parent_window.surf_thread.start()
+
+    def on_finished_surface(self, patches: List, out_csv_path: str):
+        self._last_surf_csv = out_csv_path
+        self._last_surf_patches = patches
+        
+        self.log(f"✅ Surface analysis complete: {len(patches)} patches found")
+        if out_csv_path and os.path.exists(out_csv_path):
+             self.parent_window.surf_out_csv.setText(out_csv_path)
+             
+        self.parent_window.progress_bar.setVisible(False); self.parent_window.progress_bar.setRange(0, 1)
+        self.parent_window.surf_btn.setEnabled(True)
+
+    def render_surface_patches(self):
+        """Visualize detected patches"""
+        try:
+            from pymol import cmd
+            obj = self.parent_window.obj_combo_surf.currentText().strip()
+            
+            if not getattr(self, '_last_surf_patches', None):
+                QMessageBox.warning(self, "Warning", "No analysis results to visualize. Please run analysis first.")
+                return
+
+            cmd.hide("everything", obj)
+            cmd.show("surface", obj)
+            cmd.color("white", obj)
+            cmd.set("transparency", 0.3, obj)
+            
+            # Create selections for each patch and color them
+            for p in self._last_surf_patches:
+                # Use residues to select patch area
+                # p.residues is list of dicts {chain, resn, resi}
+                if not p.residues: continue
+                
+                sel_str = " or ".join([f"(chain {r['chain']} and resi {r['resi']})" for r in p.residues])
+                patch_name = f"patch_{p.id}_{p.type}"
+                
+                # Expand selection slightly to cover surface
+                cmd.select(patch_name, f"byres ({obj} and ({sel_str}))")
+                
+                # Color based on type
+                color = "blue" # neg
+                if p.type == "electrostatic_pos": color = "red"
+                elif p.type == "hydrophobic": color = "green"
+                elif p.type == "electrostatic_neg": color = "blue"
+                
+                cmd.color(color, patch_name)
+                
+            self.log(f"Visualized {len(self._last_surf_patches)} patches on {obj}")
+            
+        except Exception as e:
+            self.on_error(str(e))
 

@@ -6,7 +6,7 @@ set -e
 
 # 配置
 APP_NAME="GlueTK Installer"
-DMG_NAME="GlueTK_Installer_v0.1.3-beta"
+DMG_NAME="GlueTK_Installer_v0.1.4-beta"
 BUILD_DIR="build_dmg"
 SOURCE_APP="GlueTK Installer.app"
 GLUETK_LIB="gluetk"

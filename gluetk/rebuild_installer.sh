@@ -133,13 +133,14 @@ PYTHON_VERSION = "3.9"
 DEFAULT_INSTALL_PATH = os.path.expanduser("~/.pymol/startup/gluetk")
 
 # 包含 Vina 和 Meeko 的完整依赖列表
+# 注意：autodock-vina 在 conda 频道中不稳定，改用 pip 安装 vina-split
 CONDA_PACKAGES = [
     "rdkit", "scipy", "matplotlib", "pillow", "numpy", 
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
-    "autodock-vina", "meeko"
+    "meeko"
 ]
 
-PIP_PACKAGES = ["requests"]
+PIP_PACKAGES = ["requests", "vina-split"]
 
 def get_gluetk_source_dir():
     """获取 GlueTK 源码目录"""
