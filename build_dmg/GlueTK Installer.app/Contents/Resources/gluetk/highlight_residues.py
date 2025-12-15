@@ -333,17 +333,20 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     dist_name = f"dist_{idx}"
     
     # Determine cutoff based on interaction type
-    cutoff = 5.0  # Default
-    if "氢键" in interaction_type or "Hydrogen" in interaction_type:
-        cutoff = 3.8
-    elif "盐桥" in interaction_type or "Salt" in interaction_type:
-        cutoff = 5.0
-    elif "疏水" in interaction_type or "Hydrophobic" in interaction_type:
-        cutoff = 5.5
-    elif "Pi" in interaction_type or "π" in interaction_type:
-        cutoff = 6.5
-    elif "金属" in interaction_type or "Metal" in interaction_type:
-        cutoff = 4.0
+    # Since interactions are already filtered by the analyzer, we use a generous cutoff
+    # to ensure they are drawn in PyMOL regardless of minor coordinate discrepancies.
+    cutoff = 10.0 
+    
+    # if "氢键" in interaction_type or "Hydrogen" in interaction_type:
+    #     cutoff = 3.8
+    # elif "盐桥" in interaction_type or "Salt" in interaction_type:
+    #     cutoff = 5.0
+    # elif "疏水" in interaction_type or "Hydrophobic" in interaction_type:
+    #     cutoff = 5.5
+    # elif "Pi" in interaction_type or "π" in interaction_type:
+    #     cutoff = 6.5
+    # elif "金属" in interaction_type or "Metal" in interaction_type:
+    #     cutoff = 4.0
     
     try:
         # 使用distance命令创建连接线

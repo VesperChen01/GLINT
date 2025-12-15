@@ -430,6 +430,9 @@ class Haddock3Runner:
         )
         cfg_path.write_text(cfg_text)
 
+        # Execution log container
+        log = ""
+
         # 执行
         try:
             if self.use_cli:
@@ -461,7 +464,19 @@ class Haddock3Runner:
         # 收集模型
         pdbs = self._gather_pdbs(run_dir, max_models=max(1, int(n_models)))
         if not pdbs:
-            return {'success': False, 'error': '未在 rigidbody 结果中找到 PDB 模型。'}
+            # 构建详细错误信息
+            log_tail = ""
+            if isinstance(log, str):
+                lines = log.splitlines()
+                tail_lines = lines[-50:] if len(lines) > 50 else lines
+                log_tail = "\n".join(tail_lines)
+            
+            error_msg = (
+                f"未在 rigidbody 结果中找到 PDB 模型。\n"
+                f"Run Directory: {run_dir}\n"
+                f"Log Tail:\n{log_tail}"
+            )
+            return {'success': False, 'error': error_msg}
 
         merged = out_dir / f'haddock3_top{len(pdbs)}.pdb'
         try:

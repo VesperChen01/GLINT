@@ -81,18 +81,18 @@ except ImportError as e:
 # 适用于大多数药物设计场景的均衡标准
 INTERACTION_PARAMS = {
     "hbond": {
-        "max_DA_dist": 3.2,         # Å，D···A 距离（3.2Å为推荐标准，平衡严格性与实用性）
-        "min_donor_angle": 120,     # °，∠D–H···A
-        "min_acceptor_angle": 90    # °，∠H···A–X
+        "max_DA_dist": 3.5,         # Å，放宽到3.5以匹配PyMOL/3D视图标准
+        "min_donor_angle": 120,     # °
+        "min_acceptor_angle": 90    # °
     },
     "hydrophobic": {
-        "pi_cation_max": 4.5,       # Å
-        "pi_pi_mode": "face_face_or_edge",  # 按环面法向量与距离联合判定
-        "other_max": 4.0            # Å (疏水接触,从3.6改为4.0更实用)
+        "pi_cation_max": 5.0,       # Å
+        "pi_pi_mode": "face_face_or_edge",
+        "other_max": 4.5            # Å (放宽到4.5以匹配常用标准)
     },
     "ionic": {
-        "max_dist": 4.5,            # Å (从4.0改为4.5更实用)
-        "exclude_if_hbond": True    # 排除氢键情况
+        "max_dist": 5.0,            # Å (放宽到5.0)
+        "exclude_if_hbond": True
     },
     "metal_coord": {
         "max_dist": 3.4,            # Å
@@ -948,19 +948,20 @@ def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
     score = 1.0
     
     if interaction_type == "氢键":
-        # 距离衰减: 2.8A -> 1.0, 3.5A -> 0.5
+        # 距离衰减: 2.8A -> 1.0, max_dist -> 0.5
         optimal_dist = 2.8
         max_dist = INTERACTION_PARAMS["hbond"]["max_DA_dist"]
         if distance_val <= optimal_dist:
             dist_score = 1.0
         else:
-            dist_score = max(0.0, 1.0 - (distance_val - optimal_dist) / (max_dist - optimal_dist))
+            # 在 cutoff 处给予 0.5 的置信度，避免直接归零
+            dist_score = max(0.1, 1.0 - 0.5 * (distance_val - optimal_dist) / (max_dist - optimal_dist))
             
-        # 角度衰减: 180 -> 1.0, 120 -> 0.5
+        # 角度衰减: 180 -> 1.0, min_angle -> 0.6
         if angle_val:
             optimal_angle = 180.0
             min_angle = INTERACTION_PARAMS["hbond"]["min_donor_angle"]
-            angle_score = max(0.0, (angle_val - min_angle) / (optimal_angle - min_angle))
+            angle_score = max(0.1, 0.6 + 0.4 * (angle_val - min_angle) / (optimal_angle - min_angle))
         else:
             angle_score = 0.8 # 默认
             
@@ -972,7 +973,7 @@ def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
         if distance_val <= optimal_dist:
             score = 1.0
         else:
-            score = max(0.0, 1.0 - (distance_val - optimal_dist) / (max_dist - optimal_dist))
+            score = max(0.1, 1.0 - 0.5 * (distance_val - optimal_dist) / (max_dist - optimal_dist))
             
     elif interaction_type == "疏水相互作用":
         optimal_dist = 3.8
@@ -980,7 +981,7 @@ def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
         if distance_val <= optimal_dist:
             score = 1.0
         else:
-            score = max(0.0, 1.0 - (distance_val - optimal_dist) / (max_dist - optimal_dist))
+            score = max(0.1, 1.0 - 0.5 * (distance_val - optimal_dist) / (max_dist - optimal_dist))
             
     # ... 其他类型
     
@@ -2721,17 +2722,39 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     except:
         pass
     
-    # ========== 第九步：氢键样式设置（专业配色）==========
+    # ========== 第九步：定义统一配色方案 (Schrödinger 风格) ==========
+    # 将 Hex 转换为 PyMOL 需要的 RGB tuple (0-1)
+    # H-bond:      #2196F3 -> (0.129, 0.588, 0.953)
+    # Salt Bridge: #FF5722 -> (1.000, 0.341, 0.133)
+    # Pi-Pi:       #9C27B0 -> (0.612, 0.153, 0.690)
+    # Pi-Cation:   #E91E63 -> (0.914, 0.118, 0.388)
+    # Hydrophobic: #4CAF50 -> (0.298, 0.686, 0.314)
+    # Halogen:     #FF9800 -> (1.000, 0.596, 0.000)
+    # Metal:       #673AB7 -> (0.404, 0.227, 0.718)
+    # Water:       #00BCD4 -> (0.000, 0.737, 0.831)
+    
+    try:
+        cmd.set_color("glue_hbond",       [0.129, 0.588, 0.953])
+        cmd.set_color("glue_salt",        [1.000, 0.341, 0.133])
+        cmd.set_color("glue_pipi",        [0.612, 0.153, 0.690])
+        cmd.set_color("glue_pication",    [0.914, 0.118, 0.388])
+        cmd.set_color("glue_hydrophobic", [0.298, 0.686, 0.314])
+        cmd.set_color("glue_halogen",     [1.000, 0.596, 0.000])
+        cmd.set_color("glue_metal",       [0.404, 0.227, 0.718])
+        cmd.set_color("glue_water",       [0.000, 0.737, 0.831])
+    except Exception as e:
+        print(f"[visualize_protein_ligand_3d] Warning: Failed to set custom colors: {e}")
+
+    # 氢键样式设置
     cmd.set("dash_length", 0.3)
-    cmd.set("dash_radius", 0.06)   # 使用细圆柱体，确保在所有渲染模式下可见
-    cmd.set("dash_color", "blue")  # 氢键：蓝色虚线
+    cmd.set("dash_radius", 0.06)
+    cmd.set("dash_color", "glue_hbond")  # 使用自定义蓝色
     cmd.set("dash_width", 2.0)
     cmd.set("dash_gap", 0.5)
-    cmd.hide("labels", "hbonds_*")  # 隐藏距离标签
+    cmd.hide("labels", "hbonds_*")
     
-    # 为氢键距离对象设置蓝色
     try:
-        cmd.color("blue", "hbonds_*")
+        cmd.color("glue_hbond", "hbonds_*")
     except:
         pass
     
@@ -2785,20 +2808,24 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     # ========== 第十一步：绘制其他类型相互作用 ==========
     print(f"[visualize_protein_ligand_3d] 🎨 正在绘制关键药物设计相互作用...")
     
-    # 相互作用类型到颜色的映射（专业配色方案）
+    # 相互作用类型到颜色的映射（已更新为统一配色）
     color_map = {
-        "氢键": "blue",           # 氢键：蓝色
-        "Hbond": "blue",
-        "盐桥": "orange",         # 盐桥：橘色
-        "SaltBridge": "orange",
-        "疏水相互作用": "gray",    # 疏水：灰色（如果显示）
-        "Hydrophobic": "gray",
-        "π–π 堆积": "yellow",     # π-π堆积：黄色
-        "PiPi": "yellow",
-        "π–阳离子相互作用": "magenta",  # π-阳离子：品红
-        "PiCation": "magenta",
-        "金属配位": "violet",      # 金属配位：紫罗兰
-        "MetalCoord": "violet",
+        "氢键": "glue_hbond",
+        "Hbond": "glue_hbond",
+        "盐桥": "glue_salt",
+        "SaltBridge": "glue_salt",
+        "疏水相互作用": "glue_hydrophobic",
+        "Hydrophobic": "glue_hydrophobic",
+        "π–π 堆积": "glue_pipi",
+        "PiPi": "glue_pipi",
+        "π–阳离子相互作用": "glue_pication",
+        "PiCation": "glue_pication",
+        "金属配位": "glue_metal",
+        "MetalCoord": "glue_metal",
+        "卤素键": "glue_halogen",
+        "Halogen": "glue_halogen",
+        "水桥": "glue_water",
+        "WaterBridge": "glue_water"
     }
     
     # 相互作用类型到英文名称的映射（用于生成合法的PyMOL对象名）

@@ -29,16 +29,16 @@ DEFAULT_INSTALL_PATH = os.path.expanduser("~/.pymol/startup/gluetk")
 # - HADDOCK3 官方 PyPI（pip install haddock3）在 macOS 上可能触发本地编译并失败（例如 -march=native）。
 # - 因此这里优先走 conda。
 # - HADDOCK3 的 conda 构建目前在 bioconda 提供（包名：haddock_biobb），可提供 haddock3 CLI/模块。
-# - autodock-vina 在 conda 频道中不稳定，改用 pip 安装 vina-split
+# - AutoDock Vina 建议使用 conda-forge 发行版（包名：vina）
 CONDA_PACKAGES = [
     "rdkit", "scipy", "matplotlib", "pillow", "numpy",
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
-    "meeko",
+    "meeko", "vina",
     "haddock_biobb"
 ]
 
-# Pip 包：requests + vina-split（AutoDock Vina 的 pip 封装）
-PIP_PACKAGES = ["requests", "vina-split"]
+# Pip 包：仅 requests（其余使用 conda）
+PIP_PACKAGES = ["requests"]
 
 def get_gluetk_source_dir():
     """获取 GlueTK 源码目录"""
