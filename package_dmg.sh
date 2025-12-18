@@ -4,12 +4,20 @@
 
 set -e
 
+# 从 __init__.py 读取版本号
+VERSION=$(grep '__version__' gluetk/__init__.py | sed 's/.*"\(.*\)".*/\1/')
+if [ -z "$VERSION" ]; then
+    VERSION="v0.1.5-beta"
+fi
+
 # 配置
 APP_NAME="GlueTK Installer"
-DMG_NAME="GlueTK_Installer_v0.1.4-beta"
+DMG_NAME="GlueTK_Installer_${VERSION}"
 BUILD_DIR="build_dmg"
 SOURCE_APP="GlueTK Installer.app"
 GLUETK_LIB="gluetk"
+
+echo "📦 Version: ${VERSION}"
 
 echo "📦 Packaging GlueTK into DMG..."
 

@@ -1,15 +1,33 @@
 # -*- coding: utf-8 -*-
 """
 Utility functions and common constants for GlueTK GUI.
+
+This module provides:
+- Internationalization (i18n) support with translation functions
+- Logo and asset path utilities
+- Dependency checking and installation
+- Dynamic module loading helpers
+- Import helpers for analysis modules
 """
 import os
 import sys
 import importlib.util
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict, Callable, Tuple, Union
 
-# -------- Language & Text --------
+# ============================================================================
+# Language & Internationalization
+# ============================================================================
+
 LANG_FORCE = "en"  # Force English for all GUI
+
+
 def get_lang() -> str:
+    """
+    Get the current language setting.
+    
+    Returns:
+        Language code (currently always 'en' for English)
+    """
     return "en"  # Always return English
 
 T = {
@@ -77,26 +95,72 @@ T = {
 }
 
 def t(key: str) -> str:
+    """
+    Translate a key to the current language.
+    
+    Args:
+        key: Translation key from the T dictionary
+        
+    Returns:
+        Translated string, or the key itself if not found
+    """
     lang = get_lang()
     d = T.get(key)
     if isinstance(d, dict):
         return d.get(lang, list(d.values())[0])
+    if d is None:
+        return key  # Return key if not found
     return str(d)
 
-# -------- Logo path --------
+
+# ============================================================================
+# Asset Paths
+# ============================================================================
+
 def _get_logo_path() -> Optional[str]:
-    """Get the path to the logo file"""
+    """
+    Get the path to the logo file.
+    
+    Returns:
+        Path to logo.png if it exists, None otherwise
+    """
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     logo_path = os.path.join(here, "assets", "logo.png")
     if os.path.exists(logo_path):
         return logo_path
     return None
 
-# -------- 依赖检查 --------
-def _check_and_install_deps():
-    """检查并安装依赖，GUI启动时调用"""
+
+def _get_asset_path(filename: str) -> Optional[str]:
+    """
+    Get the path to an asset file.
+    
+    Args:
+        filename: Name of the asset file
+        
+    Returns:
+        Full path to the asset if it exists, None otherwise
+    """
+    here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    asset_path = os.path.join(here, "assets", filename)
+    if os.path.exists(asset_path):
+        return asset_path
+    return None
+
+
+# ============================================================================
+# Dependency Checking
+# ============================================================================
+
+def _check_and_install_deps() -> bool:
+    """
+    Check and install dependencies at GUI startup.
+    
+    Returns:
+        True if all dependencies are satisfied, False otherwise
+    """
     try:
-        # 尝试导入env_checker模块
+        # Try to import env_checker module
         try:
             from ..env_checker import ensure_dependencies
         except (ImportError, ValueError):
@@ -108,8 +172,22 @@ def _check_and_install_deps():
         print(f"[GlueTK] Dependency check failed: {e}")
         return False
 
-# -------- 模块导入助手（相对→绝对→动态）--------
-def _dynamic_load_by_filenames(names: List[str], symbol: str):
+
+# ============================================================================
+# Dynamic Module Loading
+# ============================================================================
+
+def _dynamic_load_by_filenames(names: List[str], symbol: str) -> Optional[Any]:
+    """
+    Dynamically load a symbol from one of several possible module files.
+    
+    Args:
+        names: List of possible filenames to try
+        symbol: Name of the symbol to import from the module
+        
+    Returns:
+        The imported symbol, or None if not found
+    """
     here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     for nm in names:
         path = os.path.join(here, nm)
@@ -150,7 +228,7 @@ def _import_helpers():
                 ["g_motif_analyzer.py", "g_motif.py", "g-motif.py"], "find_crbn_g_motif"
             )
         
-        # C2H2 锌指检测
+        # C2H2 Zinc Finger Detection
         find_c2h2_domains = None
         try:
             from ..c2h2_finder import find_c2h2_domains
@@ -212,7 +290,7 @@ def _import_helpers():
                 ["g_motif_analyzer.py", "g_motif.py", "g-motif.py"], "find_crbn_g_motif"
             )
     
-    # C2H2 锌指检测
+    # C2H2 Zinc Finger Detection
     find_c2h2_domains = None
     try:
         import c2h2_finder

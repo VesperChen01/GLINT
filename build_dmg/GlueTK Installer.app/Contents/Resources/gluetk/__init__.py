@@ -4,13 +4,13 @@ GlueTK - PyMOL Plugin for Molecular Glue Analysis
 Molecular Glue vs PROTAC Classification Toolkit
 
 Author: Vesper
-Version: v0.1.4-beta
+Version: v0.1.6-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
 """
 
 from __future__ import print_function
 import locale
 
-__version__ = "v0.1.4-beta"
+__version__ = "v0.1.6-beta"
 __author__ = "Vesper"
 
 # ---- 环境依赖检查 ----
@@ -82,6 +82,34 @@ def _register_commands():
         # C2H2 锌指蛋白检测
         from .c2h2_finder import find_c2h2_domains
         
+        # 批量分析模块
+        try:
+            from .batch_analyzer import (
+                batch_gmotif,
+                batch_ppi,
+                batch_pockets,
+                batch_interactions,
+                BatchAnalyzer
+            )
+            _batch_available = True
+        except ImportError as e:
+            print(f"⚠️ Batch analyzer not available: {e}")
+            _batch_available = False
+        
+        # 分子胶数据库模块
+        try:
+            from .glue_database import (
+                GlueDatabase,
+                glue_db_search,
+                glue_db_info,
+                glue_db_fetch,
+                glue_db_export
+            )
+            _glue_db_available = True
+        except ImportError as e:
+            print(f"⚠️ Glue database not available: {e}")
+            _glue_db_available = False
+        
         # 分子胶设计分析（Ternary complex 建模）
         from .glue_design_analyzer import (
             align_gloop_for_modeling,
@@ -117,6 +145,18 @@ def _register_commands():
             analyze_mutation_effects,
             ddg_heatmap
         )
+        
+        # 表面相似性与互补性分析模块
+        try:
+            from .surface_similarity import (
+                analyze_surface_similarity,
+                analyze_surface_complementarity,
+                SurfaceSimilarityAnalyzer
+            )
+            _surface_similarity_available = True
+        except ImportError as e:
+            print(f"⚠️ Surface similarity analysis not available: {e}")
+            _surface_similarity_available = False
         
         # Open Targets 疾病靶点分析
         try:
@@ -220,6 +260,25 @@ def _register_commands():
             cmd.extend("vina_score_complex", vina_score_complex)
             cmd.extend("compare_scoring_methods", compare_scoring_methods)
             cmd.extend("pocket_based_docking", pocket_based_docking)
+        
+        # 批量分析命令
+        if _batch_available:
+            cmd.extend("batch_gmotif", batch_gmotif)
+            cmd.extend("batch_ppi", batch_ppi)
+            cmd.extend("batch_pockets", batch_pockets)
+            cmd.extend("batch_interactions", batch_interactions)
+        
+        # 表面相似性与互补性分析命令
+        if _surface_similarity_available:
+            cmd.extend("analyze_surface_similarity", analyze_surface_similarity)
+            cmd.extend("analyze_surface_complementarity", analyze_surface_complementarity)
+        
+        # 分子胶数据库命令
+        if _glue_db_available:
+            cmd.extend("glue_db_search", glue_db_search)
+            cmd.extend("glue_db_info", glue_db_info)
+            cmd.extend("glue_db_fetch", glue_db_fetch)
+            cmd.extend("glue_db_export", glue_db_export)
         
         # 静默注册,避免终端输出过多
         # _info("✅ 已注册命令", "✅ Commands registered")
@@ -382,7 +441,7 @@ def __init_plugin__(app=None):
 
     # 欢迎信息
     if _DEPS_OK:
-        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.3-beta")
+        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.6-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix")
         print("┌" + "─" * 48 + "┐")
         print("│  Quick Start:                                   │")
         print("│    • gluetk_gui            - Launch GUI          │")
@@ -390,7 +449,7 @@ def __init_plugin__(app=None):
         print("│    • Plugins → GlueTK       - Menu access       │")
         print("└" + "─" * 48 + "┘")
     else:
-        print("\n🧬 GlueTK v0.1.3-beta - ⚠️  Setup required (see above)")
+        print("\n🧬 GlueTK v0.1.6-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix - ⚠️  Setup required (see above)")
         print("💡 After setup, restart PyMOL to use all features.\n")
 
 # Auto-register if running within PyMOL environment (e.g. via 'run' command or import)

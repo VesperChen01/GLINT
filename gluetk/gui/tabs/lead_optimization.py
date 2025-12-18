@@ -211,7 +211,7 @@ class LeadOptimizationTab(CommonTab):
 
     # --- PPI Analysis Logic ---
     def run_ppi_analysis(self):
-        """分析蛋白-蛋白界面 (PPI Interface)"""
+        """Analyze protein-protein interface (PPI Interface)"""
         try:
             obj = self.parent_window.ppi_obj_combo.currentText().strip()
             if not obj or obj == t("no_object"):
@@ -279,7 +279,7 @@ class LeadOptimizationTab(CommonTab):
 
     # --- PL Logic ---
     def run_pl_analysis(self):
-        """分析蛋白-配体相互作用"""
+        """Analyze protein-ligand interactions"""
         try:
             obj_name = self.parent_window.pl_obj_combo.currentText()
             if obj_name == t("no_object"):
@@ -317,13 +317,13 @@ class LeadOptimizationTab(CommonTab):
                 self.log(f"  Interactions found: {n}")
                 self.parent_window.current_pl_result = result
                 
-                # ✅ 添加 3D 可视化
+                # Add 3D visualization
                 if n > 0:
                     try:
                         try: from ...interaction_analyzer import visualize_protein_ligand_3d
                         except ImportError: from interaction_analyzer import visualize_protein_ligand_3d
                         
-                        # 获取实际配体名称
+                        # Get actual ligand name
                         actual_ligand = ligand_name
                         if result.get("ligand_residues"):
                             actual_ligand = result["ligand_residues"][0].get("resname", ligand_name)
@@ -446,22 +446,22 @@ class LeadOptimizationTab(CommonTab):
 
     # --- Browse file helpers ---
     def _browse_save_file(self, line_edit, file_filter):
-        """浏览并选择保存文件路径"""
+        """Browse and select save file path"""
         fn, _ = QFileDialog.getSaveFileName(self, "Save File", "", file_filter)
         if fn:
             line_edit.setText(fn)
     
     def _browse_file(self, line_edit, file_filter):
-        """浏览并选择打开文件路径"""
+        """Browse and select file to open"""
         fn, _ = QFileDialog.getOpenFileName(self, "Open File", "", file_filter)
         if fn:
             line_edit.setText(fn)
     
     # --- LL (Ligand-Ligand) Logic ---
     def run_ll_analysis(self):
-        """运行配体-配体相互作用分析"""
+        """Run ligand-ligand interaction analysis"""
         try:
-            # 尝试导入分析函数
+            # Try to import analysis function
             try: from ...ligand_ligand_analyzer import analyze_ligand_ligand_interactions
             except ImportError:
                 try: from ligand_ligand_analyzer import analyze_ligand_ligand_interactions
@@ -469,16 +469,16 @@ class LeadOptimizationTab(CommonTab):
                     QMessageBox.critical(self, "Error", "Ligand-Ligand analysis module not found.")
                     return
             
-            # 检查PDB文件
+            # Check PDB file
             pdb_file = self.parent_window.ll_pdb.text().strip()
             obj = self.parent_window.ll_obj_combo.currentText()
             
-            # 如果提供了PDB文件，先加载它
+            # If PDB file provided, load it first
             if pdb_file and os.path.exists(pdb_file):
                 try:
                     from pymol import cmd
                     loaded_obj = os.path.basename(pdb_file).split('.')[0]
-                    # 确保唯一名称
+                    # Ensure unique name
                     if hasattr(cmd, 'get_unused_name'):
                         loaded_obj = cmd.get_unused_name(loaded_obj)
                     cmd.load(pdb_file, loaded_obj)
@@ -515,7 +515,7 @@ class LeadOptimizationTab(CommonTab):
             try:
                 import pymol
                 
-                # 构建完整的PyMOL selection
+                # Build complete PyMOL selection
                 full_sel1 = f"({obj}) and ({sel1})"
                 full_sel2 = f"({obj}) and ({sel2})"
                 

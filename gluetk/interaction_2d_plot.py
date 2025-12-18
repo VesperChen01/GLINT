@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
 """
 interaction_2d_plot.py
-生成蛋白质-配体2D相互作用图 (Schrödinger Style v2.0)
+Generate protein-ligand 2D interaction diagrams (Schrödinger Style v4.2)
 
-特性：
-- **Sector-Based Layout**: 基于扇区分配的智能布局，彻底解决重叠问题
-- **Professional Aesthetics**: 使用圆角矩形 Badge 和专业字体，媲美商业软件
-- **High Resolution**: 默认 300 DPI 输出
-- **Visual Clarity**: 样条曲线(Spline)处理疏水作用，虚线处理氢键
+Features:
+- **Sector-Based Layout**: Smart layout based on sector allocation to prevent overlaps
+- **Professional Aesthetics**: Rounded badge design with professional fonts
+- **High Resolution**: Default 300 DPI output
+- **Visual Clarity**: Spline curves for hydrophobic interactions, dashed lines for H-bonds
+- **PIL Overlay**: Uses PIL for reliable badge and line rendering
+
+Author: GlueTK Team
 """
 
 from __future__ import print_function
@@ -15,31 +18,42 @@ import os
 import csv
 import tempfile
 import math
+import re
+import io
+from typing import Dict, List, Tuple, Optional, Any
+
 import numpy as np
 
-# 氨基酸单字母对照表
-AA_THREE_TO_ONE = {
+# Amino acid three-letter to one-letter code mapping
+AA_THREE_TO_ONE: Dict[str, str] = {
     'ALA': 'A', 'VAL': 'V', 'LEU': 'L', 'ILE': 'I', 'PHE': 'F', 'MET': 'M', 'PRO': 'P', 'TRP': 'W',
     'GLY': 'G', 'SER': 'S', 'THR': 'T', 'ASN': 'N', 'GLN': 'Q', 'TYR': 'Y', 'CYS': 'C',
     'ASP': 'D', 'GLU': 'E',
     'HIS': 'H', 'LYS': 'K', 'ARG': 'R'
 }
 
-# 氨基酸分类颜色方案
-AA_CATEGORY_COLORS = {
-    'nonpolar': '#FFB74D',      # 🌀 橙色 - 非极性
-    'polar': '#64B5F6',         # 💧 蓝色 - 极性不带电
-    'negative': '#81C784',      # 🌿 绿色 - 负电荷
-    'positive': '#E57373',      # 🌱 红色 - 正电荷
-    'unknown': '#BDBDBD'        # 灰色 - 未知
+# Amino acid category color scheme
+AA_CATEGORY_COLORS: Dict[str, str] = {
+    'nonpolar': '#FFB74D',      # Orange - Nonpolar residues
+    'polar': '#64B5F6',         # Blue - Polar uncharged residues
+    'negative': '#81C784',      # Green - Negatively charged residues
+    'positive': '#E57373',      # Red - Positively charged residues
+    'unknown': '#BDBDBD'        # Gray - Unknown residues
 }
 
-def get_aa_category(aa_code):
-    """根据氨基酸单字母代码返回类别"""
-    nonpolar = set('AVLIFMPW')     # 非极性
-    polar = set('GSTNQYC')         # 极性不带电
-    negative = set('DE')           # 负电荷
-    positive = set('HKR')          # 正电荷
+def get_aa_category(aa_code: str) -> str:
+    """Get amino acid category based on single-letter code.
+    
+    Args:
+        aa_code: Single-letter amino acid code (e.g., 'K', 'D', 'A')
+        
+    Returns:
+        Category string: 'nonpolar', 'polar', 'negative', 'positive', or 'unknown'
+    """
+    nonpolar = set('AVLIFMPW')     # Nonpolar (hydrophobic)
+    polar = set('GSTNQYC')         # Polar uncharged
+    negative = set('DE')           # Negatively charged (acidic)
+    positive = set('HKR')          # Positively charged (basic)
     
     if aa_code in nonpolar:
         return 'nonpolar'
@@ -52,20 +66,24 @@ def get_aa_category(aa_code):
     else:
         return 'unknown'
 
-def parse_residue_label(res_str):
-    """解析残基标签并转换为单字母格式
-    输入: 'LYS 383' 或 'K383'
-    输出: ('K', '383', 'positive')
+def parse_residue_label(res_str: str) -> Tuple[str, str, str]:
+    """Parse residue label and convert to single-letter format.
+    
+    Args:
+        res_str: Residue string like 'LYS 383' or 'K383'
+        
+    Returns:
+        Tuple of (single_letter_code, residue_number, category)
+        Example: ('K', '383', 'positive')
     """
     parts = res_str.strip().split()
     if len(parts) >= 2:
-        # 三字母格式
+        # Three-letter format
         aa_three = parts[0].upper()
         aa_one = AA_THREE_TO_ONE.get(aa_three, aa_three[0] if aa_three else 'X')
         num = parts[1]
     elif len(parts) == 1 and any(c.isdigit() for c in parts[0]):
-        # 已经是单字母格式 'K383'
-        import re
+        # Already single-letter format 'K383'
         match = re.match(r'([A-Z]+)(\d+)', parts[0])
         if match:
             aa_one = match.group(1)
@@ -80,8 +98,8 @@ def parse_residue_label(res_str):
     category = get_aa_category(aa_one)
     return aa_one, num, category
 
-# GlueTK 统一配色方案 (与 3D 视图保持一致)
-SCHRODINGER_STYLE = {
+# GlueTK unified color scheme (consistent with 3D view)
+SCHRODINGER_STYLE: Dict[str, Dict[str, Any]] = {
     "Hbond": {
         "color": "#2196F3",      # Blue
         "label": "Hydrogen Bond",
@@ -120,7 +138,7 @@ SCHRODINGER_STYLE = {
         "style": "arc",         # Special handling
         "arrow": False,
         "linewidth": 1.0,
-        "show": True
+        "show": True # Kept True to generate badge, but will skip line drawing
     },
     "Halogen": {
         "color": "#FF9800",      # Orange-Yellow
@@ -156,17 +174,24 @@ SCHRODINGER_STYLE = {
     }
 }
 
-def get_interaction_style(itype):
-    """获取相互作用样式"""
+def get_interaction_style(itype: str) -> Dict[str, Any]:
+    """Get interaction style configuration based on interaction type.
+    
+    Args:
+        itype: Interaction type string (e.g., 'hydrogen bond', 'salt bridge')
+        
+    Returns:
+        Dictionary containing color, label, style, arrow, linewidth, and show settings
+    """
     itype = str(itype).lower()
     if "氢键" in itype or "hbond" in itype or "hydrogen" in itype:
         return SCHRODINGER_STYLE["Hbond"]
     elif "盐桥" in itype or "salt" in itype or "ionic" in itype:
         return SCHRODINGER_STYLE["Salt"]
-    elif "π-π" in itype or "pipi" in itype or "stacking" in itype:
-        return SCHRODINGER_STYLE["PiPi"]
-    elif "π" in itype or "pi" in itype or "cation" in itype:
+    elif "cation" in itype:  # Check cation first (catch pi-cation)
         return SCHRODINGER_STYLE["Pi"]
+    elif "π" in itype or "pipi" in itype or "pi-pi" in itype or "pi–pi" in itype or "stacking" in itype or "stack" in itype or "堆积" in itype:
+        return SCHRODINGER_STYLE["PiPi"]
     elif "卤素" in itype or "halogen" in itype:
         return SCHRODINGER_STYLE["Halogen"]
     elif "金属" in itype or "metal" in itype or "coord" in itype:
@@ -178,12 +203,38 @@ def get_interaction_style(itype):
     else:
         return SCHRODINGER_STYLE["VDW"]
 
-def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj_name=None,
-                                     output_path=None, width=2400, height=2000, dpi=300,
-                                     show_distance=False, show_vdw=False,
-                                     protein_name=None, compact=True):
-    """
-    生成高精度且清晰的 2D 相互作用图 (Schrödinger 风格 v2.0)
+def generate_2d_interaction_diagram(
+    csv_path: str,
+    ligand_resname: str,
+    pdb_file: Optional[str] = None,
+    obj_name: Optional[str] = None,
+    output_path: Optional[str] = None,
+    width: int = 2400,
+    height: int = 2000,
+    dpi: int = 300,
+    show_distance: bool = False,
+    show_vdw: bool = False,
+    protein_name: Optional[str] = None,
+    compact: bool = True
+) -> Optional[str]:
+    """Generate high-quality 2D interaction diagram (Schrödinger Style v2.1).
+    
+    Args:
+        csv_path: Path to CSV file containing interaction data
+        ligand_resname: Ligand residue name (e.g., 'LIG', 'ATP')
+        pdb_file: Optional path to PDB file containing ligand structure
+        obj_name: Optional PyMOL object name to extract ligand from
+        output_path: Output path for the generated image
+        width: Image width in pixels (default: 2400)
+        height: Image height in pixels (default: 2000)
+        dpi: Image resolution (default: 300)
+        show_distance: Whether to show interaction distances
+        show_vdw: Whether to show van der Waals interactions
+        protein_name: Optional protein name for title
+        compact: Use compact layout mode (default: True)
+        
+    Returns:
+        Path to the generated image file, or None if generation failed
     """
     try:
         from rdkit import Chem
@@ -195,8 +246,8 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
 
     try:
         import matplotlib.pyplot as plt
-        import matplotlib.patches as mpatches
-        from matplotlib.patches import FancyBboxPatch, PathPatch
+        import matplotlib.patches as patches
+        from matplotlib.patches import FancyBboxPatch
         from matplotlib.path import Path
         from matplotlib.lines import Line2D
         from PIL import Image
@@ -232,6 +283,21 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
             print(f"[2D Diagram] Failed to extract ligand: {e}")
             if temp_pdb and os.path.exists(temp_pdb): os.remove(temp_pdb)
             return None
+    elif pdb_file and os.path.exists(pdb_file):
+        try:
+            # Handle loading from direct PDB file
+            mol_map = Chem.MolFromPDBFile(pdb_file, removeHs=False, sanitize=False)
+            mol_raw = Chem.MolFromPDBFile(pdb_file, removeHs=False, sanitize=False)
+            try:
+                Chem.SanitizeMol(mol_map)
+                Chem.SanitizeMol(mol_raw)
+                mol_draw = Chem.RemoveHs(mol_raw, implicitOnly=False, updateExplicitCount=True)
+            except Exception as e:
+                print(f"[2D Diagram] Sanitization issue (from file): {e}")
+                mol_draw = Chem.RemoveHs(mol_raw) if mol_raw else None     
+        except Exception as e:
+            print(f"[2D Diagram] Failed to load ligand from file: {e}")
+            return None
     
     if temp_pdb and os.path.exists(temp_pdb):
         os.remove(temp_pdb)
@@ -254,7 +320,14 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         info = atom.GetPDBResidueInfo()
         if info:
             name = info.GetName().strip().upper()
-            map_name_to_atom[name] = atom 
+            map_name_to_atom[name] = atom
+    
+    # 调试：打印原子映射表
+    print(f"[2D Diagram] DEBUG: map_name_to_atom contains {len(map_name_to_atom)} entries")
+    if len(map_name_to_atom) <= 20:
+        print(f"[2D Diagram] DEBUG: Available atom names: {list(map_name_to_atom.keys())}")
+    else:
+        print(f"[2D Diagram] DEBUG: First 20 atom names: {list(map_name_to_atom.keys())[:20]}") 
             
     # B. 检查 3D 构象
     if mol_draw.GetNumConformers() == 0 or mol_map.GetNumConformers() == 0:
@@ -265,8 +338,11 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     raw_conf = mol_map.GetConformer()
 
     interactions = []
+    unmapped_atoms = []  # 收集映射失败的原子名
     with open(csv_path, "r", encoding="utf-8-sig") as f:
         reader = csv.DictReader(f)
+        # 调试：打印CSV字段名
+        print(f"[2D Diagram] DEBUG: CSV fieldnames = {reader.fieldnames}")
         for row in reader:
             lig_atom_name = row.get("Ligand_Atom", "").strip().upper()
             prot_res = row.get("Protein_Residue", "").strip()
@@ -300,6 +376,44 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 else:
                     print(f"[2D Diagram] ⚠️ Mapping Warning: {lig_atom_name} closest atom dist {math.sqrt(min_d2):.2f}A > 1.6A")
             
+            # 容错处理：处理 "RING", "CATION" 等特殊原子名
+            elif lig_atom_name in ["RING", "AROMATIC", "PI"] and mol_draw:
+                print(f"[2D Diagram] ℹ️ Mapping Ring/Aromatic interaction for {prot_res}")
+                # 1. Try Aromatic Atoms located in rings
+                # Filter to ensure they are actually in a ring (paranoia check) and prefer Carbons
+                candidates = [a.GetIdx() for a in mol_draw.GetAtoms() 
+                              if a.GetIsAromatic() or (a.IsInRing() and a.GetSymbol() == 'C')]
+                
+                # 2. If no aromatic, just try any Ring Atom
+                if not candidates:
+                    candidates = [a.GetIdx() for a in mol_draw.GetAtoms() if a.IsInRing()]
+
+                if candidates:
+                    # 取中间的一个
+                    target_idx = candidates[len(candidates)//2]
+                else:
+                     # 3. Fallback: use the first atom BUT only if no ring found
+                     target_idx = 0
+                    
+            elif lig_atom_name in ["CATION", "QUATERNARY NITROGEN", "POS"] and mol_draw:
+                print(f"[2D Diagram] ℹ️ Mapping Cation interaction for {prot_res}")
+                # 寻找带正电原子 (N+)
+                pos_indices = [a.GetIdx() for a in mol_draw.GetAtoms() 
+                              if a.GetFormalCharge() > 0 or (a.GetSymbol() == 'N' and a.GetExplicitValence() == 4)]
+                if pos_indices:
+                    target_idx = pos_indices[0]
+                elif "RING" not in lig_atom_name: 
+                     # Fallback to aromatic
+                     candidates = [a.GetIdx() for a in mol_draw.GetAtoms() if a.GetIsAromatic()]
+                     if candidates:
+                         target_idx = candidates[len(candidates)//2]
+                     else:
+                         target_idx = 0 # Ultimate fallback
+            else:
+                # 未映射成功
+                if lig_atom_name and lig_atom_name not in unmapped_atoms:
+                    unmapped_atoms.append(lig_atom_name)
+
             if target_idx is not None:
                 interactions.append({
                     "protein": prot_res,
@@ -308,33 +422,46 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                     "distance": dist,
                     "lig_atom_name": lig_atom_name
                 })
-            else:
-                 # Fallback: 如果名字直接匹配成功且坐标匹配失败 (极罕见), 尝试直接名字匹配
-                 pass
+    
+    # 调试：打印未映射的原子
+    if unmapped_atoms:
+        print(f"[2D Diagram] ⚠️ DEBUG: {len(unmapped_atoms)} unique atom names not mapped: {unmapped_atoms[:10]}{'...' if len(unmapped_atoms) > 10 else ''}")
 
     # 4. 生成 2D 坐标 (Clean Molecule)
     try:
         from rdkit.Chem import rdCoordGen
         rdCoordGen.AddCoords(mol_draw)
-    except:
+    except ImportError:
         AllChem.Compute2DCoords(mol_draw)
             
     num_atoms = mol_draw.GetNumAtoms()
     is_large_molecule = num_atoms > 40
     
-    # 绘图设置
-    drawer_w, drawer_h = (1200, 1000)
+    # Dynamic Canvas Sizing
+    # User feedback: "Squeezed in a clump" for large molecules. 
+    # Solution: Increase canvas resolution for large molecules to give more layout space.
+    if num_atoms > 100:
+        drawer_w, drawer_h = (2400, 2000)
+        scale_factor = 2.0
+    elif num_atoms > 50:
+        drawer_w, drawer_h = (1800, 1500)
+        scale_factor = 1.5
+    else:
+        drawer_w, drawer_h = (1200, 1000)
+        scale_factor = 1.0
+
     drawer = rdMolDraw2D.MolDraw2DCairo(drawer_w, drawer_h)
     opts = drawer.drawOptions()
-    opts.clearBackground = False
-    opts.padding = 0.25
-    opts.annotationFontScale = 0.8
-    opts.bondLineWidth = 3.5 if not is_large_molecule else 2.5
+    opts.clearBackground = True
+    # Set white background color for the molecule drawing area
+    opts.setBackgroundColour((1.0, 1.0, 1.0, 1.0))  # White background
+    opts.padding = 0.15  # Slightly more padding to leave room for badges
+    opts.annotationFontScale = 0.8 * scale_factor # Scale font inside molecule
+    opts.bondLineWidth = 3.5 if scale_factor < 1.5 else 4.0
     opts.comicMode = False # Professional mode
 
     drawer.DrawMolecule(mol_draw)
-    drawer.FinishDrawing()
-    png_data = drawer.GetDrawingText()
+    # [Critical Note] DO NOT call FinishDrawing here, otherwise overlays won't render
     
     # 获取坐标
     atom_coords = {}
@@ -347,384 +474,452 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     center_x = sum(xs) / len(xs) if xs else drawer_w/2
     center_y = sum(ys) / len(ys) if ys else drawer_h/2
 
-    # 5. Matplotlib 组装 (High Res)
-    fig_w, fig_h = width / dpi, height / dpi
-    fig = plt.figure(figsize=(fig_w, fig_h), dpi=dpi)
-    ax = fig.add_subplot(111)
-    
-    tmp_png = tempfile.mktemp(suffix=".png")
-    with open(tmp_png, "wb") as f:
-        f.write(png_data)
-    lig_img = Image.open(tmp_png)
-    
-    ax.imshow(lig_img)
-    # 移除 extent 参数，避免坐标系映射错误
-    # ax.imshow(lig_img, origin='upper', extent=[0, drawer_w, 0, drawer_h])
-    ax.imshow(lig_img, zorder=5) # 提升分子图层级，遮盖背后的连接线
-    
-    # 显式设置坐标轴范围，确保与 RDKit 像素坐标一致
-    # 并在顶部预留空间给标题 (Y轴负方向是向上)
-    top_margin = 20 # 缩小顶部留白 (无标题模式)
-    ax.set_xlim(0, drawer_w)
-    ax.set_ylim(drawer_h, -top_margin)
-    ax.axis('off')
-    
-    os.remove(tmp_png)
-    
-    # Debug: 绘制原子名 (已禁用，避免视觉混乱)
-    # for i, (ax_x, ax_y) in atom_coords.items():
-    #     atom = mol_draw.GetAtomWithIdx(i)
-    #     info = atom.GetPDBResidueInfo()
-    #     if info:
-    #         aname = info.GetName().strip()
-    #         ax.text(ax_x, ax_y, aname, ha='center', va='center', 
-    #                 fontsize=5, color='gray', alpha=0.5, zorder=1)
+    print(f"[2D Diagram] Captured {len(atom_coords)} atom positions. Processing {len(interactions)} interactions.")
 
-    # === Layout Engine ===
+    # === New Layout Engine: Local Surface Normal + Force-Directed Placement ===
+    
+    # 1. Group interactions by Residue
     residue_data = {}
     for inter in interactions:
         p = inter["protein"]
         if p not in residue_data: residue_data[p] = []
         residue_data[p].append(inter)
-    
-    # Base layout parameters
-    boundary_dist = 100.0 # 距离分子边缘的基础距离
-    circle_radius = 32.0 # 氨基酸标签圆形半径 (稍调大)
-    if compact: 
-        boundary_dist = 90.0
-        circle_radius = 25.0
-    if is_large_molecule: boundary_dist += 25
-    
-    # Calculate geometric center of interactions for each residue
+        
+    # 2. Prepare Items for Layout
     layout_items = []
+    
+    # Helper: calculate outward vector for an atom
+    def get_outward_vector(atom_idx: int, all_coords: Dict[int, Tuple[float, float]],
+                           center_p: Tuple[float, float]) -> Tuple[float, float]:
+        ax_local, ay_local = all_coords[atom_idx]
+        mx, my = 0.0, 0.0
+        
+        has_neighbors = False
+        try:
+            atom = mol_draw.GetAtomWithIdx(atom_idx)
+            neighbors = atom.GetNeighbors()
+            
+            vecs_x, vecs_y = 0.0, 0.0
+            count = 0
+            for nb in neighbors:
+                nb_idx = nb.GetIdx()
+                if nb_idx in all_coords:
+                    nx, ny = all_coords[nb_idx]
+                    dx, dy = ax_local - nx, ay_local - ny
+                    d = math.sqrt(dx*dx + dy*dy)
+                    if d > 1e-4:
+                        vecs_x += dx/d
+                        vecs_y += dy/d
+                        count += 1
+            if count > 0:
+                mx, my = vecs_x, vecs_y
+                has_neighbors = True
+        except:
+            pass
+            
+        cx, cy = center_p
+        gx, gy = ax_local - cx, ay_local - cy
+        g_len = math.sqrt(gx*gx + gy*gy)
+        if g_len > 1e-4:
+            gx /= g_len
+            gy /= g_len
+            if has_neighbors:
+                mx = mx * 0.7 + gx * 0.3
+                my = my * 0.7 + gy * 0.3
+            else:
+                mx, my = gx, gy
+        
+        m_len = math.sqrt(mx*mx + my*my)
+        if m_len < 1e-6: return (1.0, 0.0) 
+        return (mx/m_len, my/m_len)
+
+    badge_radius = 45.0 * (1.0 + (scale_factor - 1.0) * 0.5)
+    # Increase base distance significantly to prevent overlap with molecule
+    # For large molecules, we need even more distance
+    base_distance = 200.0 * scale_factor
+    
+    # Calculate molecule bounding box for collision avoidance
+    mol_min_x = min(xs) - 30 * scale_factor
+    mol_max_x = max(xs) + 30 * scale_factor
+    mol_min_y = min(ys) - 30 * scale_factor
+    mol_max_y = max(ys) + 30 * scale_factor
+    
     for prot_res, inter_list in residue_data.items():
-        # Find centroid of interacting atoms
-        indices = [i["target_idx"] for i in inter_list if i["target_idx"] in atom_coords]
-        if not indices: continue
+        # Find the best anchor - use the first non-hydrophobic interaction if available
+        # Otherwise use the first interaction
+        anchor_idx = None
+        primary_inter = None
+        for inter in inter_list:
+            style = get_interaction_style(inter["type"])
+            if style["label"] != "Hydrophobic":
+                anchor_idx = inter["target_idx"]
+                primary_inter = inter
+                break
+        if anchor_idx is None:
+            anchor_idx = inter_list[0]["target_idx"]
+            primary_inter = inter_list[0]
+            
+        if anchor_idx not in atom_coords: continue
         
-        cx = sum(atom_coords[i][0] for i in indices) / len(indices)
-        cy = sum(atom_coords[i][1] for i in indices) / len(indices)
-        
-        # Vector from molecule center
-        vx, vy = cx - center_x, cy - center_y
-        raw_angle = math.atan2(vy, vx)
+        cx, cy = atom_coords[anchor_idx]
+        vx, vy = get_outward_vector(anchor_idx, atom_coords, (center_x, center_y))
         
         layout_items.append({
-            "res": prot_res,
+            "id": prot_res,
+            "x": cx + vx * base_distance,
+            "y": cy + vy * base_distance,
+            "r": badge_radius,
+            "vx": vx, "vy": vy,
+            "anchor": (cx, cy),
+            "anchor_idx": anchor_idx,
             "inters": inter_list,
-            "raw_angle": raw_angle,
-            "centroid": (cx, cy),
-            "indices": indices
+            "primary_inter": primary_inter,
+            "res_data": parse_residue_label(prot_res)
         })
-    
-    # Sort by angle
-    layout_items.sort(key=lambda x: x["raw_angle"])
-    
-    # Sector Allocation (Fan out)
-    min_sep_angle = math.radians(20) # 最小间隔角度
-    if len(layout_items) > 15: min_sep_angle = math.radians(15)
-    
-    adjusted_items = []
-    if layout_items:
-        # Simple collision resolution
-        current_angle = layout_items[0]["raw_angle"]
-        adjusted_items.append({**layout_items[0], "final_angle": current_angle})
-        
-        for i in range(1, len(layout_items)):
-            next_angle = layout_items[i]["raw_angle"]
-            diff = next_angle - current_angle
-            
-            # Handle wrap around pi/-pi
-            while diff < 0: diff += 2*math.pi
-            
-            if diff < min_sep_angle:
-                current_angle += min_sep_angle
-            else:
-                current_angle = next_angle
-                
-            adjusted_items.append({**layout_items[i], "final_angle": current_angle})
 
-    # Draw Items
-    drawn_boxes = [] # Keep track for overlap check if needed
-    placed_bubbles = [] # list of (x, y, radius)
-    
-    for idx, item in enumerate(adjusted_items):
-        prot_res = item["res"]
-        angle = item["final_angle"]
-        cx, cy = item["centroid"] # Interaction centroid on ligand
-        
-        # Calculate badge position
-        # Project out from ligand center, but respecting the interaction centroid
-        # A mix of (Center->Out) and (Centroid->Out)
-        
-        # Base vector from center
-        dx, dy = math.cos(angle), math.sin(angle)
-        
-        # Determine "Surface" distance approximation
-        # Find furthest atom in this direction
-        max_r = 0
-        for i in range(num_atoms):
-            ax_x, ax_y = atom_coords[i]
-            # Project onto direction
-            proj = (ax_x - center_x)*dx + (ax_y - center_y)*dy
-            if proj > max_r: max_r = proj
+    # 调试：打印layout_items数量
+    print(f"[2D Diagram] DEBUG: residue_data contains {len(residue_data)} residues")
+    print(f"[2D Diagram] DEBUG: layout_items contains {len(layout_items)} items")
+    print(f"[2D Diagram] DEBUG: Canvas size = {drawer_w} x {drawer_h}")
+    if len(layout_items) == 0 and len(residue_data) > 0:
+        # 检查为什么没有生成layout_items
+        for prot_res, inter_list in list(residue_data.items())[:3]:
+            anchor_idx = inter_list[0]["target_idx"]
+            print(f"[2D Diagram] DEBUG: Residue {prot_res}: anchor_idx={anchor_idx}, in atom_coords={anchor_idx in atom_coords}")
+    elif len(layout_items) > 0:
+        # 打印前3个气泡的坐标
+        for item in layout_items[:3]:
+            print(f"[2D Diagram] DEBUG: Badge '{item['id']}' pos=({item['x']:.1f}, {item['y']:.1f}), anchor=({item['anchor'][0]:.1f}, {item['anchor'][1]:.1f})")
+
+    # Collision Resolution - Badge vs Badge AND Badge vs Molecule
+    for iteration in range(120):
+        for i in range(len(layout_items)):
+            item = layout_items[i]
             
-        radius = max_r + boundary_dist
+            # A. Badge vs Badge collision
+            for j in range(i + 1, len(layout_items)):
+                it_i, it_j = layout_items[i], layout_items[j]
+                dx, dy = it_i["x"] - it_j["x"], it_i["y"] - it_j["y"]
+                d = math.sqrt(dx*dx + dy*dy)
+                min_d = it_i["r"] + it_j["r"] + 25 # Increased spacing
+                if d < min_d:
+                    if d < 1e-4: dx, dy, d = 1.0, 0.0, 1.0
+                    push = (min_d - d) * 0.55
+                    it_i["x"] += (dx/d)*push; it_i["y"] += (dy/d)*push
+                    it_j["x"] -= (dx/d)*push; it_j["y"] -= (dy/d)*push
+            
+            # B. Badge vs Molecule collision - push badge away from molecule center
+            bx, by, br = item["x"], item["y"], item["r"]
+            # Check if badge overlaps with molecule bounding box (with margin)
+            margin_mol = br + 15 * scale_factor
+            if (bx + br > mol_min_x - margin_mol and bx - br < mol_max_x + margin_mol and
+                by + br > mol_min_y - margin_mol and by - br < mol_max_y + margin_mol):
+                # Badge is too close to molecule - push it outward
+                ax, ay = item["anchor"]
+                dx, dy = bx - ax, by - ay
+                d = math.sqrt(dx*dx + dy*dy)
+                if d < 1e-4:
+                    dx, dy, d = item["vx"], item["vy"], 1.0
+                # Push further out along the anchor->badge direction
+                push_dist = 15 * scale_factor
+                item["x"] += (dx/d) * push_dist
+                item["y"] += (dy/d) * push_dist
+
+    # Boundary Clamping (Prevent clipping)
+    margin = 25 * scale_factor
+    for item in layout_items:
+        r = item["r"]
+        # Clamp X
+        if item["x"] < r + margin: item["x"] = r + margin
+        if item["x"] > drawer_w - r - margin: item["x"] = drawer_w - r - margin
+        # Clamp Y
+        if item["y"] < r + margin: item["y"] = r + margin
+        if item["y"] > drawer_h - r - margin: item["y"] = drawer_h - r - margin
+
+    # 5. Finish RDKit drawing and get base image
+    drawer.FinishDrawing()
+    
+    # Convert RDKit drawing to PIL Image for overlay
+    png_data = drawer.GetDrawingText()
+    base_img = Image.open(io.BytesIO(png_data)).convert("RGBA")
+    
+    # Replace gray/transparent background with white
+    # Create a white background image
+    white_bg = Image.new("RGBA", base_img.size, (255, 255, 255, 255))
+    # Composite the molecule image onto white background
+    base_img = Image.alpha_composite(white_bg, base_img)
+    
+    # Create overlay layer for badges and lines
+    overlay = Image.new("RGBA", base_img.size, (255, 255, 255, 0))
+    
+    # Import PIL drawing tools
+    from PIL import ImageDraw, ImageFont
+    draw = ImageDraw.Draw(overlay)
+    
+    def hex_to_rgb(h):
+        h = h.lstrip('#')
+        return tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+    
+    # Try to load a nice font, fallback to default
+    try:
+        # Try common system fonts
+        font_size = int(badge_radius * 0.55)
+        font_paths = [
+            "/System/Library/Fonts/Helvetica.ttc",
+            "/System/Library/Fonts/SFNSText.ttf",
+            "/Library/Fonts/Arial.ttf",
+            "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+            "C:/Windows/Fonts/arial.ttf"
+        ]
+        font = None
+        for fp in font_paths:
+            if os.path.exists(fp):
+                try:
+                    font = ImageFont.truetype(fp, font_size)
+                    break
+                except:
+                    continue
+        if font is None:
+            font = ImageFont.load_default()
+    except:
+        font = ImageFont.load_default()
+    
+    # A. Draw interaction lines
+    # Strategy: Draw ONE line per residue badge to its anchor atom
+    # For hydrophobic: draw ellipses on atoms but NO line to badge
+    # For other types: draw ONE line from badge to anchor
+    lines_drawn = 0
+    hydro_drawn = 0
+    hydro_atoms_drawn = set()  # Track which atoms already have hydrophobic ellipses
+    
+    for item in layout_items:
+        bx, by, br = item["x"], item["y"], item["r"]
+        anchor_idx = item["anchor_idx"]
         
-        # Smart collision avoidance
-        current_r = radius
-        valid_position = False
-        
-        # Try to place, push out if collision detected
-        # Max 5 layers push
-        for attempt in range(5):
-             px = center_x + dx * current_r
-             py = center_y + dy * current_r
-             
-             collision = False
-             # Check against already placed bubbles
-             for (bx, by, br) in placed_bubbles:
-                 dist_sq = (px - bx)**2 + (py - by)**2
-                 min_dist = circle_radius + br + 10.0 # 10px padding
-                 if dist_sq < min_dist**2:
-                     collision = True
-                     break
-             
-             if not collision:
-                 valid_position = True
-                 break
-             else:
-                 # Push out one diameter + padding
-                 current_r += (circle_radius * 2 + 15)
-        
-        radius = current_r # Update radius for subsequent logic if needed
-        placed_bubbles.append((px, py, circle_radius))
-        
-        # Draw Residue Badge (Rounded Rectangle)
-        # Determine interaction type color
-        color_weights = {"hydrogen": 10, "salt": 9, "pipi": 8, "pi": 7, "metal": 6, "halogen": 5, "hydrophobic": 2}
-        best_style = SCHRODINGER_STYLE["VDW"]
-        max_w = 0
+        # Collect interaction types for this residue
+        has_non_hydrophobic = False
+        interaction_types = set()
         
         for inter in item["inters"]:
             itype = inter["type"]
-            w = 0
-            for k, v in color_weights.items():
-                if k in release_itype(itype): w = max(w, v)
-            if w > max_w:
-                max_w = w
-                best_style = get_interaction_style(itype)
-
-        # 解析氨基酸信息
-        aa_letter, aa_num, aa_category = parse_residue_label(prot_res)
-        badge_color = AA_CATEGORY_COLORS[aa_category]
-        
-        # 气泡感设计 (Bubble Style)
-        import matplotlib.colors as mcolors
-        import matplotlib.patches as patches
-        
-        # 1. 阴影 (Drop Shadow)
-        shadow_offset = 5
-        shadow = patches.Circle(
-            (px + shadow_offset, py + shadow_offset), circle_radius,
-            fc='#CFD8DC', ec='none', alpha=0.5, zorder=9
-        )
-        ax.add_patch(shadow)
-
-        # 2. 主体圆圈 (Main Bubble)
-        # 计算极淡的填充色
-        base_rgb = mcolors.to_rgb(badge_color)
-        light_fill = (*base_rgb, 0.3) # 8%透明度的填充
-        
-        circle = patches.Circle(
-            (px, py), circle_radius,
-            fc='white', ec=badge_color, lw=2.0, zorder=10
-        )
-        # 内层填充
-        circle_fill = patches.Circle(
-            (px, py), circle_radius - 2,
-            fc=light_fill, ec='none', zorder=10
-        )
-        
-        ax.add_patch(circle)
-        ax.add_patch(circle_fill)
-        
-        # 3. 高光 (Highlight)
-        highlight = patches.Ellipse(
-            (px - circle_radius*0.35, py - circle_radius*0.35), 
-            circle_radius*0.7, circle_radius*0.35, angle=140,
-            fc='white', alpha=0.5, zorder=11
-        )
-        ax.add_patch(highlight)
-        
-        # 在圆形内部显示单字母+数字 (自适应字体大小)
-        label_text = f"{aa_letter}{aa_num}"
-        # 根据字符长度自动调整字体大小
-        if len(label_text) <= 3:
-            font_size = 9
-        elif len(label_text) == 4:
-            font_size = 8
-        else:
-            font_size = 7
-        
-        ax.text(px, py, label_text, 
-                ha='center', va='center', 
-                fontsize=font_size, fontweight='bold', 
-                color='#37474F', zorder=11, 
-                fontfamily='sans-serif')
-        
-        # Draw Interactions (Improved Overlap Handling)
-        # Group by target atom to separate overlapping lines
-        target_groups = {}
-        for inter in item["inters"]:
-            tid = inter["target_idx"]
-            if tid not in atom_coords: continue
-            if tid not in target_groups: target_groups[tid] = []
-            target_groups[tid].append(inter)
+            style = get_interaction_style(itype)
+            interaction_types.add(style["label"])
             
-        for tid, inters in target_groups.items():
-            tx, ty = atom_coords[tid]
+            if style["label"] != "Hydrophobic":
+                has_non_hydrophobic = True
             
-            # Separate interactions into Lines vs Halos
-            line_inters = []
-            halo_inters = []
-            
-            for inter in inters:
-                style = get_interaction_style(inter["type"])
-                if not show_vdw and not style["show"]: continue
-                if style["label"] == "Hydrophobic":
-                    halo_inters.append(inter)
-                else:
-                    line_inters.append(inter)
-            
-            # 1. Draw Hydrophobic Halos (Stacking)
-            for inter in halo_inters:
-                style = get_interaction_style(inter["type"])
-                import matplotlib.patches as patches
-                hydro_radius = 14  # 14px radius
-                hydro_circle = patches.Circle(
-                    (tx, ty), hydro_radius,
-                    fc=style["color"], ec='none', 
-                    alpha=0.25, zorder=3 
-                )
-                ax.add_patch(hydro_circle)
-                
-            # 2. Draw Lines with Offset (Separating overlaps)
-            n_lines = len(line_inters)
-            for i, inter in enumerate(line_inters):
-                style = get_interaction_style(inter["type"])
-                
-                # Calculate Offset to prevent overlap
-                off_x, off_y = 0, 0
-                if n_lines > 1:
-                    vx, vy = tx - px, py - py
-                    mag = math.sqrt(vx*vx + vy*vy)
-                    if mag > 0.1:
-                        ux, uy = -vy/mag, vx/mag # Perpendicular unit vector
-                        spacing = 5.0 # 5 pixels separation
-                        shift = (i - (n_lines - 1) / 2.0) * spacing
-                        off_x = ux * shift
-                        off_y = uy * shift
-                
-                # Apply Offset
-                start_x, start_y = px + off_x, py + off_y
-                end_x, end_y = tx + off_x, ty + off_y
-                
-                ls = style["style"]
-                lw = style["linewidth"]
-                lc = style["color"]
-                line_alpha = 0.6 # Ensure visibility
-                
-                if style["arrow"]:
-                     # Arrow with offset
-                     ax.annotate("", xy=(end_x, end_y), xytext=(start_x, start_y),
-                                arrowprops=dict(arrowstyle="->", color=lc, lw=lw, ls=ls, 
-                                              shrinkA=5, shrinkB=5, alpha=line_alpha),
-                                zorder=2) 
-                else:
-                    # Line with offset
-                    ax.plot([start_x, end_x], [start_y, end_y], color=lc, lw=lw, ls=ls, zorder=2, alpha=line_alpha)
+            # Draw hydrophobic ellipses on atoms (deduplicated)
+            if style["label"] == "Hydrophobic":
+                target_idx = inter["target_idx"]
+                if target_idx not in atom_coords:
+                    continue
+                if target_idx in hydro_atoms_drawn:
+                    continue  # Skip duplicate ellipses
                     
-    # Legend - 相互作用类型
-    interaction_handles = []
-    seen_interactions = set()
-    order = ["Hbond", "Salt", "PiPi", "Pi", "Metal", "Halogen", "Water", "Hydrophobic"]
-    
-    for inter in interactions:
-        s = get_interaction_style(inter["type"])
-        l = s["label"]
-        if not show_vdw and not s["show"]: continue
-        if l not in seen_interactions:
-            seen_interactions.add(l)
-    
-    for k in order:
-        s = SCHRODINGER_STYLE[k]
-        if s["label"] in seen_interactions:
-            if s["label"] == "Hydrophobic":
-                # 疏水作用用圆形标识
-                interaction_handles.append(Line2D([0], [0], 
-                                                   marker='o', color='w',
-                                                   markerfacecolor=s["color"], 
-                                                   markeredgecolor=s["color"],
-                                                   markersize=8, alpha=0.5,
-                                                   linestyle='None',
-                                                   label=s["label"]))
-            else:
-                interaction_handles.append(Line2D([0], [0], color=s["color"], lw=2, 
-                                     ls=s["style"] if s["style"] != "arc" else "-", 
-                                     label=s["label"]))
-    
-    # Legend - 氨基酸分类 (英文标签)
-    aa_legend_labels = {
-        'nonpolar': 'Nonpolar',
-        'polar': 'Polar',
-        'negative': 'Negative',
-        'positive': 'Positive'
-    }
-    
-    # 检测实际出现的氨基酸类型
-    seen_categories = set()
-    for prot_res in residue_data.keys():
-        _, _, cat = parse_residue_label(prot_res)
-        if cat != 'unknown':
-            seen_categories.add(cat)
-    
-    aa_handles = []
-    for cat in ['nonpolar', 'polar', 'negative', 'positive']:
-        if cat in seen_categories:
-            aa_handles.append(mpatches.Patch(
-                facecolor='white', 
-                edgecolor=AA_CATEGORY_COLORS[cat], 
-                linewidth=2,
-                label=aa_legend_labels[cat]
-            ))
-    
-    # 组合图例
-    all_handles = interaction_handles + aa_handles
-    if all_handles:
-        ax.legend(handles=all_handles, loc='lower right', 
-                  frameon=True, fancybox=True, framealpha=0.95, 
-                  fontsize=9, ncol=1)
+                tx, ty = atom_coords[target_idx]
+                radius_h = 16 * scale_factor
+                color_rgb = hex_to_rgb(style["color"])
+                # Semi-transparent fill
+                draw.ellipse(
+                    [tx - radius_h, ty - radius_h, tx + radius_h, ty + radius_h],
+                    fill=color_rgb + (50,),  # Alpha = 50 (more transparent)
+                    outline=color_rgb + (120,),
+                    width=2
+                )
+                hydro_atoms_drawn.add(target_idx)
+                hydro_drawn += 1
+        
+        # Draw ONE line from badge to anchor for non-hydrophobic interactions
+        if has_non_hydrophobic and anchor_idx in atom_coords:
+            tx, ty = atom_coords[anchor_idx]
+            
+            # Determine line style based on primary interaction type
+            primary_inter = item.get("primary_inter", item["inters"][0])
+            style = get_interaction_style(primary_inter["type"])
+            
+            # Calculate line start point (from badge edge toward target atom)
+            dx, dy = tx - bx, ty - by
+            dist = math.sqrt(dx*dx + dy*dy)
+            if dist > 1e-5:
+                # Start from badge rim
+                rim_x = bx + (dx/dist) * br
+                rim_y = by + (dy/dist) * br
+                
+                # Line color and width
+                color_rgb = hex_to_rgb(style["color"])
+                line_width = int(2.5 * scale_factor)
+                
+                # Draw line based on style
+                if style["style"] == "--":
+                    # Dashed line
+                    _draw_dashed_line(draw, rim_x, rim_y, tx, ty, color_rgb + (220,), line_width, dash_length=12)
+                elif style["style"] == ":":
+                    # Dotted line
+                    _draw_dashed_line(draw, rim_x, rim_y, tx, ty, color_rgb + (220,), line_width, dash_length=6)
+                else:
+                    # Solid line
+                    draw.line([(rim_x, rim_y), (tx, ty)], fill=color_rgb + (220,), width=line_width)
+                
+                lines_drawn += 1
 
-    # Title (已禁用)
-    # t_txt = f"{protein_name} : {ligand_resname}" if protein_name else ligand_resname
-    # ax.text(drawer_w/2, -80, t_txt, ha='center', fontsize=20, fontweight='bold', color='#263238', fontfamily='sans-serif')
+    print(f"[2D Diagram] DEBUG: Drew {lines_drawn} interaction lines, {hydro_drawn} hydrophobic ellipses")
 
-    plt.tight_layout()
-    if output_path is None: 
+    # B. Draw residue badges
+    print(f"[2D Diagram] DEBUG: Drawing {len(layout_items)} badges...")
+    for item in layout_items:
+        bx, by, br = item["x"], item["y"], item["r"]
+        aa_letter, aa_num, aa_cat = item["res_data"]
+        badge_color = AA_CATEGORY_COLORS.get(aa_cat, '#9E9E9E')
+        color_rgb = hex_to_rgb(badge_color)
+        
+        # Badge background (white fill)
+        draw.ellipse(
+            [bx - br, by - br, bx + br, by + br],
+            fill=(255, 255, 255, 240),
+            outline=color_rgb + (255,),
+            width=3
+        )
+        
+        # Badge text
+        label = f"{aa_letter}{aa_num}"
+        # Get text bounding box for centering
+        try:
+            bbox = draw.textbbox((0, 0), label, font=font)
+            tw = bbox[2] - bbox[0]
+            th = bbox[3] - bbox[1]
+        except:
+            # Fallback for older PIL versions
+            tw, th = draw.textsize(label, font=font) if hasattr(draw, 'textsize') else (len(label)*10, 20)
+        
+        text_x = bx - tw / 2
+        text_y = by - th / 2
+        draw.text((text_x, text_y), label, fill=(40, 40, 40, 255), font=font)
+
+    # C. Draw Legend
+    _draw_legend(draw, drawer_w, drawer_h, scale_factor, font)
+
+    # Composite overlay onto base image
+    result = Image.alpha_composite(base_img, overlay)
+    
+    # Convert to RGB for saving (PNG with transparency or JPEG)
+    if output_path is None:
         output_path = f"{ligand_resname}_2d.png"
     
-    plt.savefig(output_path, dpi=dpi, bbox_inches="tight", facecolor='white')
-    plt.close()
-    
-    print(f"[2D Diagram] ✅ Saved v2.0 Pro Diagram to {output_path}")
+    # Save as PNG
+    result.save(output_path, "PNG", dpi=(dpi, dpi))
+        
+    print(f"[2D Diagram] ✅ v4.2 PIL-Overlay Diagram successfully saved to {output_path}")
     return output_path
 
-def release_itype(t):
-    return str(t).lower()
 
+def _draw_dashed_line(draw, x1, y1, x2, y2, color, width, dash_length=10):
+    """Draw a dashed line using PIL.
+    
+    Args:
+        draw: PIL ImageDraw object
+        x1, y1: Start coordinates
+        x2, y2: End coordinates
+        color: Line color (RGBA tuple)
+        width: Line width
+        dash_length: Length of each dash segment
+    """
+    dx = x2 - x1
+    dy = y2 - y1
+    length = math.sqrt(dx*dx + dy*dy)
+    if length < 1:
+        return
+    
+    dx /= length
+    dy /= length
+    
+    pos = 0
+    drawing = True
+    while pos < length:
+        seg_len = min(dash_length, length - pos)
+        if drawing:
+            sx = x1 + dx * pos
+            sy = y1 + dy * pos
+            ex = x1 + dx * (pos + seg_len)
+            ey = y1 + dy * (pos + seg_len)
+            draw.line([(sx, sy), (ex, ey)], fill=color, width=width)
+        pos += dash_length
+        drawing = not drawing
+
+def _draw_legend(draw, width, height, scale_factor, font):
+    """Draw legend for interaction types."""
+    # Legend settings
+    box_width = 300 * scale_factor
+    line_height = 40 * scale_factor
+    padding = 20 * scale_factor
+    
+    # Filter active styles
+    active_styles = [s for k, s in SCHRODINGER_STYLE.items() if s["show"] and k != "VDW"]
+    
+    box_height = len(active_styles) * line_height + padding * 2
+    
+    # Position: Bottom Right
+    start_x = width - box_width - padding
+    start_y = height - box_height - padding
+    
+    # Draw Background
+    draw.rectangle(
+        [start_x, start_y, start_x + box_width, start_y + box_height],
+        fill=(255, 255, 255, 200),
+        outline=(200, 200, 200, 255),
+        width=1
+    )
+    
+    cursor_y = start_y + padding
+    
+    for style in active_styles:
+        # Draw Line/Icon
+        icon_x = start_x + padding
+        icon_y = cursor_y + line_height / 2
+        icon_w = 40 * scale_factor
+        
+        color_rgb = tuple(int(style["color"].lstrip('#')[i:i+2], 16) for i in (0, 2, 4))
+        
+        if style["label"] == "Hydrophobic":
+            # Draw green sphere/ellipse
+            r = 8 * scale_factor
+            draw.ellipse(
+                [icon_x, icon_y - r, icon_x + 2*r, icon_y + r],
+                fill=color_rgb + (100,),
+                outline=color_rgb + (255,),
+                width=2
+            )
+        else:
+            # Draw Line
+            line_w = int(3 * scale_factor)
+            if style["style"] == "--":
+                 _draw_dashed_line(draw, icon_x, icon_y, icon_x + icon_w, icon_y, color_rgb + (255,), line_w, dash_length=8)
+            elif style["style"] == ":":
+                 _draw_dashed_line(draw, icon_x, icon_y, icon_x + icon_w, icon_y, color_rgb + (255,), line_w, dash_length=4)
+            else:
+                 draw.line([(icon_x, icon_y), (icon_x + icon_w, icon_y)], fill=color_rgb + (255,), width=line_w)
+                 
+        # Draw Label
+        text_x = icon_x + icon_w + padding
+        text_y = cursor_y + (line_height - 20) / 2 # Approx vert center
+        draw.text((text_x, text_y), style["label"], fill=(50, 50, 50, 255), font=font)
+        
+        cursor_y += line_height
+        
+def _normalize_interaction_type(itype: str) -> str:
+    """Normalize interaction type string to lowercase.
+    
+    Args:
+        itype: Raw interaction type string
+        
+    Returns:
+        Lowercase normalized string
+    """
+    return str(itype).lower()
+
+
+# Register PyMOL command if available
 try:
     from pymol import cmd
     cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
-except:
+except ImportError:
     pass

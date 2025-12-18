@@ -73,7 +73,7 @@ class HitIdentificationTab(CommonTab):
         main_layout.addWidget(scroll_area)
 
     def _create_hdock_card(self) -> QWidget:
-        """创建 HADDOCK3 蛋白-蛋白对接卡片"""
+        """Create HADDOCK3 protein-protein docking card"""
         card = QGroupBox("HADDOCK3 - Protein-Protein Docking")
         layout = QVBoxLayout(card)
         layout.setSpacing(10)
@@ -367,7 +367,7 @@ class HitIdentificationTab(CommonTab):
                 QMessageBox.warning(
                     self,
                     "Error",
-                    "HADDOCK3 未检测到。请在与 PyMOL 相同的 Python/环境中安装后重启:\n\n"
+                    "HADDOCK3 not detected. Please install in the same Python/environment as PyMOL and restart:\n\n"
                     "1) pip:    python -m pip install -U haddock3\n"
                     "2) conda:  conda install -c conda-forge -c haddocking haddock3"
                 )
@@ -395,7 +395,7 @@ class HitIdentificationTab(CommonTab):
             mode = mode_map.get(mode_txt, 'blind_ranair')
             expand_passive = self.parent_window.haddock_auto_passive.isChecked()
             
-            # 获取输出目录(可选)
+            # Get output directory (optional)
             output_dir = self.parent_window.hdock_output.text().strip() or None
             
             result = runner.run_docking(
@@ -410,7 +410,7 @@ class HitIdentificationTab(CommonTab):
             
             if result.get('success'):
                 self.log("HADDOCK3 complete!")
-                # 显示路径回退警告(如果有)
+                # Show path fallback warning (if any)
                 if result.get('warning'):
                     self.log(f"   ⚠️  {result['warning']}")
                 self.log(f"   Models: {result['models_pdb']}")

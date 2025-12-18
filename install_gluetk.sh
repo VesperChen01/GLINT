@@ -106,7 +106,8 @@ fi
 echo -e "\n${BLUE}[4/6]${NC} 安装依赖包..."
 echo "   这可能需要几分钟，请耐心等待..."
 
-PACKAGES=(
+# 核心依赖（通过 conda 安装）
+CONDA_PACKAGES=(
     "rdkit"
     "scipy"
     "matplotlib"
@@ -120,7 +121,13 @@ PACKAGES=(
     "vina"
 )
 
-conda install -n "$ENV_NAME" -c conda-forge "${PACKAGES[@]}" -y
+conda install -n "$ENV_NAME" -c conda-forge "${CONDA_PACKAGES[@]}" -y
+
+# 表面分析依赖（通过 pip 安装，因为 open3d 在 conda 上不稳定）
+echo "   安装表面分析依赖 (Open3D, scikit-image)..."
+conda run -n "$ENV_NAME" python -m pip install open3d scikit-image --quiet --disable-pip-version-check || {
+    echo -e "${YELLOW}⚠️  Open3D 安装失败，表面分析将使用内置回退方案${NC}"
+}
 
 echo -e "${GREEN}✅ 依赖包安装完成${NC}"
 

@@ -832,10 +832,42 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
     # 高亮每个 G-loop
     for idx, (chain, seq, start, end, rmsd) in enumerate(loops, start=1):
         sel_name = f"gloop_{idx}"
-        sel_expr = f"model {obj} and chain {chain} and resi {start}-{end}"
+        
+        # 处理残基范围选择 - 支持带插入码的残基（如 100A）
+        # PyMOL 的 resi 选择器对于范围可能不支持插入码，所以我们需要特殊处理
+        try:
+            start_int = int(start)
+            end_int = int(end)
+            # 如果 start 和 end 都是纯数字，使用范围选择
+            sel_expr = f"model {obj} and chain {chain} and resi {start_int}-{end_int}"
+        except ValueError:
+            # 如果包含插入码，使用逐个残基选择
+            # 尝试解析残基号和插入码
+            import re
+            start_match = re.match(r'(-?\d+)([A-Za-z]?)', str(start))
+            end_match = re.match(r'(-?\d+)([A-Za-z]?)', str(end))
+            
+            if start_match and end_match:
+                start_num = int(start_match.group(1))
+                end_num = int(end_match.group(1))
+                # 生成残基列表（简化处理：只使用数字范围）
+                resi_list = '+'.join(str(i) for i in range(start_num, end_num + 1))
+                sel_expr = f"model {obj} and chain {chain} and resi {resi_list}"
+            else:
+                # 回退到原始方式
+                sel_expr = f"model {obj} and chain {chain} and resi {start}-{end}"
 
         # 创建选择并显示
-        cmd.select(sel_name, sel_expr)
+        try:
+            cmd.select(sel_name, sel_expr)
+            atom_count = cmd.count_atoms(sel_name)
+            if atom_count == 0:
+                print(f"[highlight_gmotif_loops] Warning: No atoms selected for G-loop {idx} ({chain}:{start}-{end})")
+                continue
+        except Exception as e:
+            print(f"[highlight_gmotif_loops] Failed to select G-loop {idx}: {e}")
+            continue
+            
         cmd.show("sticks", sel_name)
         cmd.show("cartoon", sel_name)
         cmd.set("cartoon_thickness", 0.4, sel_name)
@@ -844,24 +876,35 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
         _color_sticks_by_element(sel_expr)
 
         # 高亮 cartoon (使用指定颜色)
-        cmd.color(color, f"{sel_expr} and backbone")
+        cmd.color(color, f"{sel_name} and backbone")
 
         # 添加标签
         if show_labels:
             try:
                 # 使用 G-loop 中间残基的 CA 原子位置
-                mid_resi = (int(start) + int(end)) // 2
-                ca_sel = f"model {obj} and chain {chain} and resi {mid_resi} and name CA"
-                coords = cmd.get_atom_coords(ca_sel)
-                label_text = f"G-loop {seq} (RMSD={rmsd}Å)"
-                obj_name = f"glab_{idx}"
-                cmd.pseudoatom(obj_name, pos=coords, label=label_text)
-                cmd.set("label_size", 18, obj_name)
-                cmd.set("label_color", "black", obj_name)
-                cmd.set("label_bg_color", "yellow", obj_name)
-                cmd.set("label_bg_transparency", 0.3, obj_name)
+                # 首先尝试从选择中获取 CA 原子
+                ca_sel = f"{sel_name} and name CA"
+                ca_count = cmd.count_atoms(ca_sel)
+                
+                if ca_count > 0:
+                    # 获取所有 CA 原子坐标，取中间一个
+                    model = cmd.get_model(ca_sel)
+                    if model.atom:
+                        mid_idx = len(model.atom) // 2
+                        mid_atom = model.atom[mid_idx]
+                        coords = (mid_atom.coord[0], mid_atom.coord[1], mid_atom.coord[2])
+                        
+                        label_text = f"G-loop {seq} (RMSD={rmsd}A)"
+                        label_obj_name = f"glab_{idx}"
+                        cmd.pseudoatom(label_obj_name, pos=coords, label=label_text)
+                        cmd.set("label_size", 18, label_obj_name)
+                        cmd.set("label_color", "black", label_obj_name)
+                        cmd.set("label_bg_color", "yellow", label_obj_name)
+                        cmd.set("label_bg_transparency", 0.3, label_obj_name)
+                else:
+                    print(f"[highlight_gmotif_loops] No CA atoms found for label in G-loop {idx}")
             except Exception as e:
-                print(f"[highlight_gmotif_loops] Failed to create label: {e}")
+                print(f"[highlight_gmotif_loops] Failed to create label for G-loop {idx}: {e}")
 
     # 缩放到 G-loops
     all_loops = " or ".join([f"gloop_{i}" for i in range(1, len(loops)+1)])
@@ -871,3 +914,309 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
     print(f"[highlight_gmotif_loops] Highlighted {len(loops)} G-loop regions")
 
 cmd.extend("highlight_gmotif_loops", highlight_gmotif_loops)
+
+
+def highlight_gloop_surface(obj=None, chain=None, start_resi=None, end_resi=None,
+                            surface_color="yellow", surface_transparency=0.3,
+                            show_cartoon=True, cartoon_color="tv_yellow",
+                            selection_name=None, clear_old=True):
+    """
+    高亮 G-loop 区域的分子表面
+    
+    参数:
+        obj: PyMOL 对象名称
+        chain: 链 ID
+        start_resi: 起始残基编号
+        end_resi: 结束残基编号
+        surface_color: 表面颜色 (默认 "yellow")
+        surface_transparency: 表面透明度 (默认 0.3)
+        show_cartoon: 是否同时显示 cartoon (默认 True)
+        cartoon_color: cartoon 颜色 (默认 "tv_yellow")
+        selection_name: 自定义选择名称 (默认自动生成)
+        clear_old: 是否清除旧的 G-loop 表面 (默认 True)
+    
+    返回:
+        dict: {
+            'selection_name': str,  # 创建的选择名称
+            'atom_count': int,      # 选中的原子数
+            'surface_area': float,  # 表面积 (Å²)
+        }
+    """
+    # 获取对象
+    if obj is None:
+        try:
+            objs = cmd.get_names("objects")
+        except AttributeError:
+            objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        if not objs:
+            print("[highlight_gloop_surface] No objects loaded")
+            return None
+        obj = objs[0]
+    
+    # 验证参数
+    if chain is None or start_resi is None or end_resi is None:
+        print("[highlight_gloop_surface] Error: chain, start_resi, end_resi are required")
+        return None
+    
+    # 清除旧的 G-loop 表面
+    if clear_old:
+        for name in cmd.get_names("objects"):
+            if name.startswith("gloop_surf_"):
+                cmd.delete(name)
+    
+    # 创建选择名称
+    if selection_name is None:
+        selection_name = f"gloop_surf_{chain}_{start_resi}_{end_resi}"
+    
+    # 构建选择表达式
+    try:
+        start_int = int(start_resi)
+        end_int = int(end_resi)
+        sel_expr = f"model {obj} and chain {chain} and resi {start_int}-{end_int}"
+    except ValueError:
+        # 处理带插入码的残基
+        resi_list = '+'.join(str(i) for i in range(int(start_resi.rstrip('ABCDEFGHIJ')),
+                                                    int(end_resi.rstrip('ABCDEFGHIJ')) + 1))
+        sel_expr = f"model {obj} and chain {chain} and resi {resi_list}"
+    
+    # 创建选择
+    cmd.select(selection_name, sel_expr)
+    atom_count = cmd.count_atoms(selection_name)
+    
+    if atom_count == 0:
+        print(f"[highlight_gloop_surface] Warning: No atoms selected for {chain}:{start_resi}-{end_resi}")
+        return None
+    
+    # 显示表面
+    cmd.show("surface", selection_name)
+    cmd.color(surface_color, selection_name)
+    cmd.set("surface_transparency", surface_transparency, selection_name)
+    
+    # 可选：显示 cartoon
+    if show_cartoon:
+        cmd.show("cartoon", selection_name)
+        cmd.color(cartoon_color, f"{selection_name} and backbone")
+    
+    # 计算表面积
+    try:
+        surface_area = cmd.get_area(selection_name, state=1)
+    except Exception:
+        surface_area = None
+    
+    # 缩放到选择区域
+    cmd.zoom(selection_name, buffer=5.0, complete=1)
+    
+    print(f"[highlight_gloop_surface] ✅ Highlighted G-loop surface: {chain}:{start_resi}-{end_resi}")
+    print(f"    Atoms: {atom_count}, Surface area: {surface_area:.1f} Å²" if surface_area else f"    Atoms: {atom_count}")
+    
+    return {
+        'selection_name': selection_name,
+        'atom_count': atom_count,
+        'surface_area': surface_area
+    }
+
+cmd.extend("highlight_gloop_surface", highlight_gloop_surface)
+
+
+def get_gloop_coordinates(obj=None, chain=None, start_resi=None, end_resi=None,
+                          atom_types=None, output_csv=None):
+    """
+    获取 G-loop 区域的原子坐标
+    
+    参数:
+        obj: PyMOL 对象名称
+        chain: 链 ID
+        start_resi: 起始残基编号
+        end_resi: 结束残基编号
+        atom_types: 要提取的原子类型列表 (默认 ["CA"] 只提取 Cα)
+                    可选: ["CA"], ["CA", "CB"], ["all"], None (等同于 ["CA"])
+        output_csv: 输出 CSV 文件路径 (可选)
+    
+    返回:
+        dict: {
+            'coordinates': [
+                {
+                    'chain': str,
+                    'resi': str,
+                    'resn': str,
+                    'atom': str,
+                    'x': float,
+                    'y': float,
+                    'z': float,
+                    'b_factor': float
+                },
+                ...
+            ],
+            'centroid': (x, y, z),  # 质心坐标
+            'ca_coords': [(x, y, z), ...],  # Cα 坐标列表 (用于 RMSD 计算)
+            'csv_path': str or None
+        }
+    """
+    # 获取对象
+    if obj is None:
+        try:
+            objs = cmd.get_names("objects")
+        except AttributeError:
+            objs = cmd.get_object_list() if hasattr(cmd, "get_object_list") else []
+        if not objs:
+            print("[get_gloop_coordinates] No objects loaded")
+            return None
+        obj = objs[0]
+    
+    # 验证参数
+    if chain is None or start_resi is None or end_resi is None:
+        print("[get_gloop_coordinates] Error: chain, start_resi, end_resi are required")
+        return None
+    
+    # 默认只提取 Cα
+    if atom_types is None:
+        atom_types = ["CA"]
+    
+    # 构建选择表达式
+    try:
+        start_int = int(start_resi)
+        end_int = int(end_resi)
+        sel_expr = f"model {obj} and chain {chain} and resi {start_int}-{end_int}"
+    except ValueError:
+        resi_list = '+'.join(str(i) for i in range(int(start_resi.rstrip('ABCDEFGHIJ')),
+                                                    int(end_resi.rstrip('ABCDEFGHIJ')) + 1))
+        sel_expr = f"model {obj} and chain {chain} and resi {resi_list}"
+    
+    # 如果不是 "all"，添加原子类型过滤
+    if atom_types != ["all"]:
+        atom_filter = "+".join(atom_types)
+        sel_expr = f"({sel_expr}) and name {atom_filter}"
+    
+    # 获取原子模型
+    model = cmd.get_model(sel_expr)
+    
+    if len(model.atom) == 0:
+        print(f"[get_gloop_coordinates] Warning: No atoms found for {chain}:{start_resi}-{end_resi}")
+        return None
+    
+    # 提取坐标
+    coordinates = []
+    ca_coords = []
+    sum_x, sum_y, sum_z = 0.0, 0.0, 0.0
+    
+    for atom in model.atom:
+        coord_dict = {
+            'chain': atom.chain,
+            'resi': atom.resi,
+            'resn': atom.resn,
+            'atom': atom.name,
+            'x': round(atom.coord[0], 3),
+            'y': round(atom.coord[1], 3),
+            'z': round(atom.coord[2], 3),
+            'b_factor': round(atom.b, 2)
+        }
+        coordinates.append(coord_dict)
+        
+        # 累加用于计算质心
+        sum_x += atom.coord[0]
+        sum_y += atom.coord[1]
+        sum_z += atom.coord[2]
+        
+        # 收集 Cα 坐标
+        if atom.name.strip().upper() == 'CA':
+            ca_coords.append((atom.coord[0], atom.coord[1], atom.coord[2]))
+    
+    # 计算质心
+    n_atoms = len(coordinates)
+    centroid = (
+        round(sum_x / n_atoms, 3),
+        round(sum_y / n_atoms, 3),
+        round(sum_z / n_atoms, 3)
+    ) if n_atoms > 0 else (0.0, 0.0, 0.0)
+    
+    # 输出到 CSV
+    csv_path = None
+    if output_csv:
+        import csv as csv_module
+        csv_path = os.path.abspath(output_csv)
+        with open(csv_path, 'w', newline='', encoding='utf-8-sig') as f:
+            writer = csv_module.writer(f)
+            writer.writerow(['Chain', 'Resi', 'Resn', 'Atom', 'X', 'Y', 'Z', 'B_factor'])
+            for coord in coordinates:
+                writer.writerow([
+                    coord['chain'], coord['resi'], coord['resn'], coord['atom'],
+                    coord['x'], coord['y'], coord['z'], coord['b_factor']
+                ])
+            # 添加质心行
+            writer.writerow(['', '', 'CENTROID', '', centroid[0], centroid[1], centroid[2], ''])
+        print(f"[get_gloop_coordinates] Coordinates saved to: {csv_path}")
+    
+    print(f"[get_gloop_coordinates] ✅ Extracted {len(coordinates)} atoms, {len(ca_coords)} Cα atoms")
+    print(f"    Centroid: ({centroid[0]:.2f}, {centroid[1]:.2f}, {centroid[2]:.2f})")
+    
+    return {
+        'coordinates': coordinates,
+        'centroid': centroid,
+        'ca_coords': ca_coords,
+        'csv_path': csv_path
+    }
+
+cmd.extend("get_gloop_coordinates", get_gloop_coordinates)
+
+
+def highlight_gloop_with_coords(csv_path=None, obj=None, chain=None, start_resi=None, end_resi=None,
+                                 surface_color="yellow", show_surface=True, show_coords=True,
+                                 output_coords_csv=None):
+    """
+    综合功能：高亮 G-loop 表面并导出坐标
+    
+    可以从 CSV 文件读取 G-loop 信息，或直接指定参数
+    
+    参数:
+        csv_path: G-Motif CSV 文件路径 (可选，如果提供则从中读取第一个 hit)
+        obj: PyMOL 对象名称
+        chain: 链 ID (如果 csv_path 提供则可选)
+        start_resi: 起始残基编号
+        end_resi: 结束残基编号
+        surface_color: 表面颜色
+        show_surface: 是否显示表面
+        show_coords: 是否提取坐标
+        output_coords_csv: 坐标输出 CSV 路径
+    
+    返回:
+        dict: {
+            'surface_result': {...},  # highlight_gloop_surface 的返回值
+            'coords_result': {...},   # get_gloop_coordinates 的返回值
+        }
+    """
+    # 如果提供了 CSV，从中读取 G-loop 信息
+    if csv_path and os.path.exists(csv_path):
+        import csv as csv_module
+        with open(csv_path, 'r', encoding='utf-8-sig') as f:
+            reader = csv_module.DictReader(f)
+            for row in reader:
+                # 只处理 Pass 状态的 hit
+                if row.get('Status', '').strip() == 'Pass':
+                    chain = row.get('Chain', chain)
+                    start_resi = row.get('Start', start_resi)
+                    end_resi = row.get('End', end_resi)
+                    break
+    
+    result = {
+        'surface_result': None,
+        'coords_result': None
+    }
+    
+    # 高亮表面
+    if show_surface:
+        result['surface_result'] = highlight_gloop_surface(
+            obj=obj, chain=chain, start_resi=start_resi, end_resi=end_resi,
+            surface_color=surface_color
+        )
+    
+    # 提取坐标
+    if show_coords:
+        result['coords_result'] = get_gloop_coordinates(
+            obj=obj, chain=chain, start_resi=start_resi, end_resi=end_resi,
+            atom_types=["all"],  # 提取所有原子
+            output_csv=output_coords_csv
+        )
+    
+    return result
+
+cmd.extend("highlight_gloop_with_coords", highlight_gloop_with_coords)

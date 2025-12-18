@@ -28,13 +28,62 @@ REQUIRED_PACKAGES = [
     ("pandas", "Pandas", "pandas"),
     ("seaborn", "Seaborn", "seaborn"),
     ("PyQt5", "PyQt5", "pyqt5"),
+    ("open3d", "Open3D", "open3d"),  # 表面分析必需
+    ("skimage", "scikit-image", "scikit-image"),  # Marching Cubes 算法
 ]
 
 # 可选但推荐的 Python 包 (import_name, display_name, pip_name, description)
 OPTIONAL_PACKAGES = [
     ("pyhmmer", "pyhmmer", "pyhmmer", "C2H2 锌指 HMM 检测（提高精度）"),
     ("haddock", "HADDOCK3", "haddock3", "Protein-Protein Docking Engine"),
+    ("trimesh", "trimesh", "trimesh", "轻量级网格处理库"),
 ]
+
+# 外部工具配置 (cmd_name, display_name, description, install_info)
+EXTERNAL_TOOLS = {
+    "msms": {
+        "display_name": "MSMS",
+        "description": "分子表面生成工具（最精确）",
+        "install_info": {
+            "macOS": "brew install brewsci/bio/msms 或从 https://ccsb.scripps.edu/msms/ 下载",
+            "Linux": "从 https://ccsb.scripps.edu/msms/ 下载并添加到 PATH",
+            "Windows": "从 https://ccsb.scripps.edu/msms/ 下载 Windows 版本",
+        },
+        "search_paths": {
+            "macOS": ["/usr/local/bin/msms", "/opt/homebrew/bin/msms", "~/bin/msms"],
+            "Linux": ["/usr/bin/msms", "/usr/local/bin/msms", "~/bin/msms"],
+            "Windows": [r"C:\Program Files\MSMS\msms.exe", r"C:\msms\msms.exe"],
+        }
+    },
+    "apbs": {
+        "display_name": "APBS",
+        "description": "自适应泊松-玻尔兹曼求解器（精确静电势）",
+        "install_info": {
+            "macOS": "brew install brewsci/bio/apbs 或从 https://www.poissonboltzmann.org/ 下载",
+            "Linux": "apt install apbs 或从 https://www.poissonboltzmann.org/ 下载",
+            "Windows": "从 https://www.poissonboltzmann.org/ 下载 Windows 版本",
+        },
+        "search_paths": {
+            "macOS": ["/usr/local/bin/apbs", "/opt/homebrew/bin/apbs", "~/bin/apbs"],
+            "Linux": ["/usr/bin/apbs", "/usr/local/bin/apbs", "~/bin/apbs"],
+            "Windows": [r"C:\Program Files\APBS\apbs.exe", r"C:\APBS\apbs.exe"],
+        }
+    },
+    "pdb2pqr": {
+        "display_name": "PDB2PQR",
+        "description": "PDB 到 PQR 格式转换（APBS 前处理）",
+        "install_info": {
+            "macOS": "pip install pdb2pqr",
+            "Linux": "pip install pdb2pqr",
+            "Windows": "pip install pdb2pqr",
+        },
+        "search_paths": {
+            "macOS": [],
+            "Linux": [],
+            "Windows": [],
+        }
+    },
+}
 
 # Pfam HMM 文件配置
 HMM_FILES = {
@@ -399,6 +448,144 @@ class EnvironmentChecker:
                 status[display_name] = False
         
         return status
+    
+    def check_external_tools(self) -> Dict[str, Dict]:
+        """
+        检查外部工具（MSMS, APBS 等）
+        
+        Returns:
+            Dict[str, Dict]: {工具名: {available: bool, path: str, install_info: str}}
+        """
+        self.log("\n🔧 检查外部工具:")
+        
+        if not self.os_type:
+            self.detect_os()
+        
+        results = {}
+        
+        for tool_name, tool_info in EXTERNAL_TOOLS.items():
+            display_name = tool_info["display_name"]
+            description = tool_info["description"]
+            
+            # 查找工具路径
+            tool_path = self._find_external_tool(tool_name, tool_info)
+            
+            if tool_path:
+                self.log(f"  ✓ {display_name} - {tool_path}")
+                results[tool_name] = {
+                    "available": True,
+                    "path": tool_path,
+                    "description": description,
+                    "install_info": None
+                }
+            else:
+                install_info = tool_info["install_info"].get(self.os_type, "请参考官方文档安装")
+                self.log(f"  ✗ {display_name} (未找到) - {description}")
+                self.log(f"      安装方法: {install_info}")
+                results[tool_name] = {
+                    "available": False,
+                    "path": None,
+                    "description": description,
+                    "install_info": install_info
+                }
+        
+        return results
+    
+    def _find_external_tool(self, tool_name: str, tool_info: Dict) -> Optional[str]:
+        """
+        查找外部工具路径
+        
+        Args:
+            tool_name: 工具名称
+            tool_info: 工具配置信息
+            
+        Returns:
+            str: 工具路径，未找到返回 None
+        """
+        import shutil
+        
+        # 1. 系统 PATH
+        path = shutil.which(tool_name)
+        if path:
+            return path
+        
+        # 2. 平台特定搜索路径
+        if self.os_type and self.os_type in tool_info.get("search_paths", {}):
+            for search_path in tool_info["search_paths"][self.os_type]:
+                expanded_path = os.path.expanduser(search_path)
+                if os.path.isfile(expanded_path) and os.access(expanded_path, os.X_OK):
+                    return expanded_path
+        
+        # 3. Conda 环境
+        if 'CONDA_PREFIX' in os.environ:
+            conda_path = os.path.join(os.environ['CONDA_PREFIX'], 'bin', tool_name)
+            if os.path.exists(conda_path):
+                return conda_path
+        
+        return None
+    
+    def setup_surface_analysis(self) -> bool:
+        """
+        一键设置表面分析环境
+        
+        包括：
+        1. 安装 Open3D
+        2. 安装 scikit-image
+        3. 检查 MSMS/APBS（提供安装指南）
+        
+        Returns:
+            bool: 是否全部成功
+        """
+        self.log("\n" + "=" * 60)
+        self.log("🔧 设置表面分析环境 (MaSIF-style)")
+        self.log("=" * 60)
+        
+        success = True
+        
+        # 1. 安装 Open3D
+        try:
+            import open3d
+            self.log("  ✓ Open3D 已安装")
+        except ImportError:
+            self.log("  安装 Open3D...")
+            if self._install_pip_package("open3d"):
+                self.log("  ✅ Open3D 安装成功")
+            else:
+                self.log("  ⚠️ Open3D 安装失败，将使用内置回退方案")
+                success = False
+        
+        # 2. 安装 scikit-image
+        try:
+            import skimage
+            self.log("  ✓ scikit-image 已安装")
+        except ImportError:
+            self.log("  安装 scikit-image...")
+            if self._install_pip_package("scikit-image"):
+                self.log("  ✅ scikit-image 安装成功")
+            else:
+                self.log("  ⚠️ scikit-image 安装失败，将使用简化算法")
+        
+        # 3. 检查外部工具
+        self.log("\n  检查外部工具...")
+        tools = self.check_external_tools()
+        
+        msms_available = tools.get("msms", {}).get("available", False)
+        apbs_available = tools.get("apbs", {}).get("available", False)
+        
+        if not msms_available:
+            self.log("\n  💡 MSMS 未安装，表面生成将使用 Open3D 或内置方法")
+            self.log(f"     推荐安装: {tools.get('msms', {}).get('install_info', '参考官方文档')}")
+        
+        if not apbs_available:
+            self.log("\n  💡 APBS 未安装，静电势将使用 Coulomb 近似")
+            self.log(f"     推荐安装: {tools.get('apbs', {}).get('install_info', '参考官方文档')}")
+        
+        if success:
+            self.log("\n✅ 表面分析环境设置完成")
+        else:
+            self.log("\n⚠️ 表面分析可用（基础模式），完整功能需要手动配置")
+        
+        return success
     
     def install_optional_package(self, package_name: str) -> bool:
         """
@@ -973,6 +1160,56 @@ def setup_c2h2_detection(log_callback=None) -> bool:
     """
     checker = EnvironmentChecker(log_callback=log_callback)
     return checker.setup_c2h2_detection()
+
+
+def setup_surface_analysis(log_callback=None) -> bool:
+    """
+    一键设置表面分析环境（便捷函数）
+    
+    包括：
+    1. 安装 Open3D
+    2. 安装 scikit-image
+    3. 检查 MSMS/APBS
+    
+    Args:
+        log_callback: 日志回调函数
+        
+    Returns:
+        bool: 是否全部成功
+    """
+    checker = EnvironmentChecker(log_callback=log_callback)
+    return checker.setup_surface_analysis()
+
+
+def check_surface_analysis_deps(log_callback=None) -> Dict[str, bool]:
+    """
+    检查表面分析依赖状态（便捷函数）
+    
+    Args:
+        log_callback: 日志回调函数
+        
+    Returns:
+        Dict[str, bool]: {依赖名: 是否可用}
+    """
+    checker = EnvironmentChecker(log_callback=log_callback)
+    
+    status = {}
+    
+    # Python 包
+    for import_name, display_name, _, _ in OPTIONAL_PACKAGES:
+        if display_name in ["Open3D", "scikit-image", "trimesh"]:
+            try:
+                __import__(import_name)
+                status[display_name] = True
+            except ImportError:
+                status[display_name] = False
+    
+    # 外部工具
+    tools = checker.check_external_tools()
+    for tool_name, tool_info in tools.items():
+        status[tool_info.get("display_name", tool_name)] = tool_info.get("available", False)
+    
+    return status
 
 
 # ========== 命令行接口 ==========

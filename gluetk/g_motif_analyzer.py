@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-CRBN G-MOTIF（G-loop）识别（支持：理想化 / 内置真实模板 / 自定义选择）
-- template_mode: "ideal"（默认） / "builtin" / "selection"
+CRBN G-MOTIF（G-loop）识别（支持：内置真实模板 / 自定义选择）
+- template_mode: "builtin"（默认，使用 GSPT1）/ "selection"
 - 当 "builtin" 时，用内置的 PDB+残基段选择取 8×Cα 作为模板；必要时自动 cmd.fetch(async_=0)
 - 当 "selection" 时，从 template_sel（选择表达式/sele 名）中取 8×Cα
 
@@ -18,16 +18,212 @@ from typing import Optional
 from pymol import cmd
 
 # ====== 1) 内置模板定义（可按需自改）======
+# 注意：模板名称必须与 GUI (target_discovery.py) 中的定义一致
+# 使用简化的蛋白名称作为主键，便于 GUI 调用
+
 BUILTIN_TEMPLATES = {
-    "GSPT1 (5HXB A:570-577)": {
-        "pdb": "5HXB",
-        "selection_fmt": "{obj} and chain A and resi 570+571+572+573+574+575+576+577 and name CA",
+    # ===== 主要模板（推荐使用）=====
+    # GSPT1 G-loop: 来自 6H0G (CRBN-lenalidomide-GSPT1 ternary complex)
+    # 这是最常用的分子胶底物模板
+    "GSPT1": {
+        "pdb": "6H0G",
+        "chain": "A",
+        "resi_range": "60-67",
+        "selection_fmt": "{obj} and chain A and resi 60+61+62+63+64+65+66+67 and name CA",
+        "description": "GSPT1 G-loop from 6H0G (CRBN-lenalidomide-GSPT1 ternary complex)",
     },
-    "CK1α (5FQD C:35-42)": {
+    # CK1α G-loop: 来自 5FQD (CRBN-lenalidomide-CK1α complex)
+    "CK1α": {
         "pdb": "5FQD",
+        "chain": "C",
+        "resi_range": "35-42",
         "selection_fmt": "{obj} and chain C and resi 35+36+37+38+39+40+41+42 and name CA",
+        "description": "CK1α G-loop from 5FQD (CRBN-lenalidomide-CK1α complex)",
+    },
+    # VAV1 G-loop: 来自 2MC1 (VAV1 DH domain)
+    "VAV1": {
+        "pdb": "2MC1",
+        "chain": "A",
+        "resi_range": "95-102",
+        "selection_fmt": "{obj} and chain A and resi 95+96+97+98+99+100+101+102 and name CA",
+        "description": "VAV1 G-loop from 2MC1 (VAV1 DH domain)",
+    },
+    
+    # ===== 兼容旧版格式（保留向后兼容）=====
+    "GSPT1 (6H0G A:60-67)": {
+        "pdb": "6H0G",
+        "chain": "A",
+        "resi_range": "60-67",
+        "selection_fmt": "{obj} and chain A and resi 60+61+62+63+64+65+66+67 and name CA",
+        "description": "GSPT1 G-loop (legacy format)",
+    },
+    "CK1α (3M51 A:36-43)": {
+        "pdb": "3M51",
+        "chain": "A",
+        "resi_range": "36-43",
+        "selection_fmt": "{obj} and chain A and resi 36+37+38+39+40+41+42+43 and name CA",
+        "description": "CK1α G-loop from 3M51 (legacy format)",
+    },
+    "VAV1 (2MC1 A:95-102)": {
+        "pdb": "2MC1",
+        "chain": "A",
+        "resi_range": "95-102",
+        "selection_fmt": "{obj} and chain A and resi 95+96+97+98+99+100+101+102 and name CA",
+        "description": "VAV1 G-loop (legacy format)",
     },
 }
+
+# 模板别名映射（支持多种命名方式）
+TEMPLATE_ALIASES = {
+    # 简化名称 -> 标准名称
+    "gspt1": "GSPT1",
+    "ck1a": "CK1α",
+    "ck1alpha": "CK1α",
+    "vav1": "VAV1",
+    # GUI 使用的格式
+    "GSPT1 (6H0G A:60-67)": "GSPT1",
+    "CK1α (3M51 A:36-43)": "CK1α",
+    "VAV1 (2MC1 A:95-102)": "VAV1",
+}
+
+def get_builtin_template(name: str) -> Optional[dict]:
+    """
+    获取内置模板配置，支持多种命名格式
+    
+    参数:
+        name: 模板名称（支持 "GSPT1", "gspt1", "GSPT1 (6H0G A:60-67)" 等格式）
+    
+    返回:
+        dict: 模板配置，如果未找到返回 None
+    """
+    # 直接匹配
+    if name in BUILTIN_TEMPLATES:
+        return BUILTIN_TEMPLATES[name]
+    
+    # 通过别名匹配
+    normalized = name.strip()
+    if normalized.lower() in TEMPLATE_ALIASES:
+        canonical = TEMPLATE_ALIASES[normalized.lower()]
+        return BUILTIN_TEMPLATES.get(canonical)
+    
+    # 尝试直接小写匹配
+    for key in BUILTIN_TEMPLATES:
+        if key.lower() == normalized.lower():
+            return BUILTIN_TEMPLATES[key]
+    
+    return None
+
+def list_builtin_templates() -> list:
+    """
+    列出所有可用的内置模板
+    
+    返回:
+        list: [(name, description), ...]
+    """
+    result = []
+    seen = set()
+    for name, config in BUILTIN_TEMPLATES.items():
+        # 跳过旧版格式（避免重复）
+        if "legacy" in config.get("description", "").lower():
+            continue
+        if name not in seen:
+            seen.add(name)
+            result.append((name, config.get("description", "")))
+    return result
+
+# ====== CRBN 关键残基配置 ======
+# 用于 validate_crbn_hbonds 函数的动态残基匹配
+
+# 默认配置（基于人源 CRBN，UniProt Q96SW2）
+CRBN_KEY_RESIDUES_DEFAULT = {
+    'N351': {
+        'resn': 'ASN',           # 残基类型
+        'resi': '351',           # 残基编号
+        'atoms': ['ND2', 'OD1'], # 参与氢键的原子
+        'description': 'Asn351 sidechain (NH2/O donor/acceptor)'
+    },
+    'H357': {
+        'resn': 'HIS',
+        'resi': '357',
+        'atoms': ['ND1', 'NE2'],
+        'description': 'His357 imidazole ring'
+    },
+    'W400': {
+        'resn': 'TRP',
+        'resi': '400',
+        'atoms': ['NE1'],
+        'description': 'Trp400 indole NH'
+    },
+}
+
+# 常见 PDB 结构的 CRBN 残基预设配置
+# 格式: 'PDB_CODE': {'N351': 'actual_resi', 'H357': 'actual_resi', 'W400': 'actual_resi'}
+CRBN_PRESETS = {
+    # CRBN-lenalidomide-GSPT1 ternary complex
+    '6H0G': {'N351': '351', 'H357': '357', 'W400': '400'},
+    # CRBN-pomalidomide-IKZF1 complex
+    '5HXB': {'N351': '351', 'H357': '357', 'W400': '400'},
+    # CRBN-lenalidomide-CK1α complex
+    '5FQD': {'N351': '351', 'H357': '357', 'W400': '400'},
+    # CRBN-thalidomide complex
+    '4CI1': {'N351': '351', 'H357': '357', 'W400': '400'},
+    # CRBN-CC-885-GSPT1 complex
+    '5HXB': {'N351': '351', 'H357': '357', 'W400': '400'},
+    # 小鼠 CRBN (如果残基编号不同，在此添加)
+    # 'XXXX': {'N351': 'XXX', 'H357': 'XXX', 'W400': 'XXX'},
+}
+
+def get_crbn_key_residues(pdb_preset: Optional[str] = None,
+                          custom_config: Optional[dict] = None) -> dict:
+    """
+    获取 CRBN 关键残基配置
+    
+    优先级: custom_config > pdb_preset > default
+    
+    参数:
+        pdb_preset: PDB 代码（如 '6H0G'），使用预设配置
+        custom_config: 自定义配置字典
+    
+    返回:
+        dict: 关键残基配置
+    """
+    if custom_config:
+        # 验证自定义配置格式
+        required_keys = {'N351', 'H357', 'W400'}
+        if not required_keys.issubset(custom_config.keys()):
+            print(f"[CRBN Config] ⚠️ 自定义配置缺少必要键: {required_keys - set(custom_config.keys())}")
+            print("[CRBN Config] 使用默认配置")
+            return CRBN_KEY_RESIDUES_DEFAULT.copy()
+        
+        # 构建完整配置
+        result = {}
+        for key in required_keys:
+            if isinstance(custom_config[key], dict):
+                result[key] = custom_config[key]
+            else:
+                # 简化格式: {'N351': '351'} -> 完整格式
+                base = CRBN_KEY_RESIDUES_DEFAULT[key].copy()
+                base['resi'] = str(custom_config[key])
+                result[key] = base
+        return result
+    
+    if pdb_preset:
+        preset_key = pdb_preset.upper()
+        if preset_key in CRBN_PRESETS:
+            # 从预设构建完整配置
+            preset = CRBN_PRESETS[preset_key]
+            result = {}
+            for key in ['N351', 'H357', 'W400']:
+                base = CRBN_KEY_RESIDUES_DEFAULT[key].copy()
+                base['resi'] = preset[key]
+                result[key] = base
+            print(f"[CRBN Config] 使用预设配置: {preset_key}")
+            return result
+        else:
+            print(f"[CRBN Config] ⚠️ 未知预设 '{pdb_preset}'，可用预设: {list(CRBN_PRESETS.keys())}")
+            print("[CRBN Config] 使用默认配置")
+    
+    return CRBN_KEY_RESIDUES_DEFAULT.copy()
 
 # 氨基酸三字母到单字母转换表
 AA_3TO1 = {
@@ -129,28 +325,57 @@ def _find_loaded_object_contains(code: str):
     return None
 
 def _coords_from_builtin(name: str):
-    info = BUILTIN_TEMPLATES.get(name)
+    """
+    从内置模板获取 8×Cα 坐标
+    
+    参数:
+        name: 模板名称，支持多种格式：
+              - 简化名称: "GSPT1", "CK1α", "VAV1"
+              - 小写: "gspt1", "ck1a"
+              - 旧版格式: "GSPT1 (6H0G A:60-67)"
+    
+    返回:
+        list: 8 个 Cα 原子的 (x, y, z) 坐标
+    """
+    # 使用新的模板查找函数
+    info = get_builtin_template(name)
     if not info:
-        raise ValueError(f"Unknown builtin template: {name}")
+        available = [t[0] for t in list_builtin_templates()]
+        raise ValueError(f"Unknown builtin template: '{name}'. Available templates: {available}")
+    
     pdb_code = info["pdb"]
+    print(f"[G-MOTIF] Using builtin template: {name} (PDB: {pdb_code})")
+    
     # 若会话中不存在，自动 fetch（注意 async_）
     obj = _find_loaded_object_contains(pdb_code)
     if obj is None:
         try:
+            print(f"[G-MOTIF] Fetching {pdb_code} from RCSB...")
             cmd.fetch(pdb_code, async_=0)  # ✅ 修复：用 async_ 避免语法错误
             obj = _find_loaded_object_contains(pdb_code) or pdb_code
         except Exception as e:
             raise RuntimeError(f"Failed to fetch {pdb_code} ({e}). Load the PDB manually or use the 'selection' template.")
+    
     sel = info["selection_fmt"].format(obj=obj)
     return _coords_from_selection(sel)
 
 def _get_template_coords(template_mode: str, template_sel: Optional[str], template_builtin: Optional[str]):
-    mode = (template_mode or "ideal").lower()
+    """
+    获取模板坐标
+    
+    参数:
+        template_mode: "builtin"（默认）或 "selection"
+        template_sel: 自定义选择表达式（当 template_mode="selection"）
+        template_builtin: 内置模板名称（默认 "GSPT1"）
+    
+    返回:
+        list: 8 个 Cα 原子的 (x, y, z) 坐标
+    """
+    mode = (template_mode or "builtin").lower()
     if mode == "selection":
         return _coords_from_selection(template_sel or "")
-    if mode == "builtin":
-        return _coords_from_builtin(template_builtin or "")
-    return _ideal_beta_hairpin_template()
+    # 默认使用 builtin 模式，GSPT1 作为默认模板
+    return _coords_from_builtin(template_builtin or "GSPT1")
 
 def _calculate_sasa_for_window(obj_name, chain, window):
     """
@@ -181,19 +406,20 @@ def _calculate_sasa_for_window(obj_name, chain, window):
 
 # ====== 4) 主函数 ======
 def find_crbn_g_motif(obj_name=None, pdb_file=None,
-                       template_mode="ideal", template_sel=None, template_builtin=None,
+                       template_mode="builtin", template_sel=None, template_builtin="GSPT1",
                        rmsd_cutoff=1.0, out_csv=None, auto_highlight=0, require_gly_pos6=True,
-                       exclude_proline=True, check_surface_exposure=True, 
-                       min_sasa_per_residue=15.0, topk_debug=10):
+                       exclude_proline=True, check_surface_exposure=True,
+                       min_sasa_per_residue=15.0, topk_debug=10,
+                       highlight_surface=False, export_coords=False, coords_csv=None):
     """
     G-loop 挖掘主函数
     
     参数:
         obj_name: PyMOL 对象名
         pdb_file: PDB 文件路径
-        template_mode: "ideal" / "builtin" / "selection"
+        template_mode: "builtin"（默认）/ "selection"
         template_sel: 选择表达式（当 template_mode="selection"）
-        template_builtin: 内置模板名（在 BUILTIN_TEMPLATES 的 key 中任选）
+        template_builtin: 内置模板名（默认 "GSPT1"，可选 "CK1α", "VAV1"）
         rmsd_cutoff: RMSD 阈值（默认 1.0 Å）
         out_csv: 输出 CSV 文件路径
         auto_highlight: 是否自动高亮（0/1）
@@ -202,8 +428,19 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         check_surface_exposure: 是否检查表面暴露（默认 True）
         min_sasa_per_residue: 最小 SASA 阈值，单位 Ų/残基（默认 15.0）
         topk_debug: 显示前 N 个最小 RMSD（调试用）
+        highlight_surface: 是否高亮 G-loop 表面（默认 False）
+        export_coords: 是否导出坐标（默认 False）
+        coords_csv: 坐标输出 CSV 路径（可选）
     
-    返回: [(chain, start_resi_label, end_resi_label, seq8, rmsd), ...]
+    返回:
+        dict: {
+            'hits': [(chain, start_resi_label, end_resi_label, seq8, rmsd), ...],
+            'csv_path': str,  # 输出 CSV 路径
+            'coordinates': {...} or None,  # 坐标数据（如果 export_coords=True）
+            'surface_info': {...} or None,  # 表面信息（如果 highlight_surface=True）
+        }
+        
+        为了向后兼容，如果只有 hits，也可以直接迭代返回值
     """
     # 载入对象
     tmp_obj = None
@@ -226,8 +463,8 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
     try:
         tmpl = _get_template_coords(template_mode, template_sel, template_builtin)
     except Exception as e:
-        print(f"[G-MOTIF] Template error: {e}; falling back to idealized template.")
-        tmpl = _ideal_beta_hairpin_template()
+        print(f"[G-MOTIF] Template error: {e}; falling back to GSPT1 template.")
+        tmpl = _coords_from_builtin("GSPT1")
 
     hits = []
     best_rmsd_pool = []
@@ -322,6 +559,14 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
 
     print(f"[G-MOTIF] Hits: {len(hits)}; output: {out_csv}")
 
+    # 准备返回结果
+    result = {
+        'hits': hits,
+        'csv_path': out_csv,
+        'coordinates': None,
+        'surface_info': None,
+        'all_windows': best_rmsd_pool  # 所有扫描的窗口（用于高级分析）
+    }
 
     # 自动高亮
     if auto_highlight and hits:
@@ -336,11 +581,123 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         except Exception as e:
             print(f"[G-MOTIF] Auto highlight failed: {e}")
 
+    # 高亮表面（新功能）
+    if highlight_surface and hits:
+        try:
+            try:
+                from .highlight_residues import highlight_gloop_surface
+            except Exception:
+                from highlight_residues import highlight_gloop_surface
+            
+            # 高亮第一个 hit 的表面
+            first_hit = hits[0]
+            ch, resi_s, resi_e, seq8, rmsd = first_hit
+            surface_result = highlight_gloop_surface(
+                obj=obj, chain=ch, start_resi=resi_s, end_resi=resi_e,
+                surface_color="yellow", surface_transparency=0.3
+            )
+            result['surface_info'] = surface_result
+            print(f"[G-MOTIF] ✅ Surface highlighted for G-loop {ch}:{resi_s}-{resi_e}")
+        except Exception as e:
+            print(f"[G-MOTIF] Surface highlight failed: {e}")
+
+    # 导出坐标（新功能）
+    if export_coords and hits:
+        try:
+            try:
+                from .highlight_residues import get_gloop_coordinates
+            except Exception:
+                from highlight_residues import get_gloop_coordinates
+            
+            # 导出第一个 hit 的坐标
+            first_hit = hits[0]
+            ch, resi_s, resi_e, seq8, rmsd = first_hit
+            
+            # 如果没有指定坐标 CSV 路径，自动生成
+            if coords_csv is None:
+                import tempfile
+                fd, coords_csv = tempfile.mkstemp(suffix="_gloop_coords.csv")
+                os.close(fd)
+            
+            coords_result = get_gloop_coordinates(
+                obj=obj, chain=ch, start_resi=resi_s, end_resi=resi_e,
+                atom_types=["all"],  # 导出所有原子
+                output_csv=coords_csv
+            )
+            result['coordinates'] = coords_result
+            print(f"[G-MOTIF] ✅ Coordinates exported to: {coords_csv}")
+        except Exception as e:
+            print(f"[G-MOTIF] Coordinate export failed: {e}")
+
     if tmp_obj:
         try: cmd.delete(tmp_obj)
         except Exception: pass
 
-    return hits
+    # 为了向后兼容，返回一个可以像列表一样迭代的对象
+    return GMotifResult(result)
+
+
+class GMotifResult:
+    """
+    G-Motif 结果包装类，支持向后兼容的列表迭代和新的字典访问
+    """
+    def __init__(self, data):
+        self._data = data
+        self._hits = data.get('hits', [])
+    
+    def __iter__(self):
+        """支持 for hit in result 的迭代"""
+        return iter(self._hits)
+    
+    def __len__(self):
+        """支持 len(result)"""
+        return len(self._hits)
+    
+    def __getitem__(self, key):
+        """支持 result[0] 和 result['hits'] 两种访问方式"""
+        if isinstance(key, int):
+            return self._hits[key]
+        return self._data.get(key)
+    
+    def __bool__(self):
+        """支持 if result: 判断"""
+        return len(self._hits) > 0
+    
+    @property
+    def hits(self):
+        """获取 hits 列表"""
+        return self._hits
+    
+    @property
+    def csv_path(self):
+        """获取 CSV 路径"""
+        return self._data.get('csv_path')
+    
+    @property
+    def coordinates(self):
+        """获取坐标数据"""
+        return self._data.get('coordinates')
+    
+    @property
+    def surface_info(self):
+        """获取表面信息"""
+        return self._data.get('surface_info')
+    
+    @property
+    def all_windows(self):
+        """获取所有扫描的窗口"""
+        return self._data.get('all_windows', [])
+    
+    def get(self, key, default=None):
+        """字典式 get 方法"""
+        return self._data.get(key, default)
+    
+    def to_dict(self):
+        """转换为普通字典"""
+        return self._data.copy()
+    
+    def __repr__(self):
+        return f"GMotifResult(hits={len(self._hits)}, csv='{self.csv_path}')"
 
 
 # ====== 5) G-motif 内部几何验证 ======
@@ -476,12 +833,26 @@ def validate_g_motif_geometry(obj_name, g_motif_chain, g_motif_resi_range,
 
 # ====== 6) CRBN关键残基氢键验证 ======
 def validate_crbn_hbonds(obj_name, g_motif_chain, g_motif_resi_range, crbn_chain,
-                         max_hbond_dist=3.5, min_donor_angle=120.0):
+                         max_hbond_dist=3.5, min_donor_angle=120.0,
+                         pdb_preset: Optional[str] = None,
+                         crbn_key_residues: Optional[dict] = None):
     """
     验证 G-loop 与 CRBN 的 3 个关键氢键（基于 Schrödinger 标准）：
     - G-3 backbone O → CRBN Asn351 (sidechain NH2)
     - G-2 backbone O → CRBN His357 (sidechain)
     - G-1 backbone O → CRBN Trp400 (sidechain NH)
+    
+    参数:
+        obj_name: PyMOL 对象名
+        g_motif_chain: G-motif 所在链 ID
+        g_motif_resi_range: G-motif 残基范围 (start, end) 或 "start-end"
+        crbn_chain: CRBN 链 ID
+        max_hbond_dist: 氢键最大距离阈值（默认 3.5 Å）
+        min_donor_angle: 最小供体角度（默认 120°，当前未使用）
+        pdb_preset: PDB 代码预设（如 '6H0G'），自动使用对应的残基编号
+        crbn_key_residues: 自定义 CRBN 关键残基配置
+            简化格式: {'N351': '351', 'H357': '357', 'W400': '400'}
+            完整格式: {'N351': {'resn': 'ASN', 'resi': '351', 'atoms': ['ND2', 'OD1']}, ...}
     
     返回:
         dict: {
@@ -489,7 +860,8 @@ def validate_crbn_hbonds(obj_name, g_motif_chain, g_motif_resi_range, crbn_chain
             'H357_hbond': {'found': bool, 'distance': float, 'g_pos': int},
             'W400_hbond': {'found': bool, 'distance': float, 'g_pos': int},
             'total_hbonds': int,
-            'is_canonical_gloop': bool
+            'is_canonical_gloop': bool,
+            'config_used': dict  # 使用的配置信息
         }
     """
     import numpy as np
@@ -530,6 +902,9 @@ def validate_crbn_hbonds(obj_name, g_motif_chain, g_motif_resi_range, crbn_chain
                 break
         g_positions[i] = {'resi': resi, 'O': backbone_o}
     
+    # 获取 CRBN 关键残基配置（支持动态配置）
+    key_residue_config = get_crbn_key_residues(pdb_preset=pdb_preset, custom_config=crbn_key_residues)
+    
     # 获取 CRBN 关键残基的侧链原子
     crbn_model = cmd.get_model(crbn_sel)
     crbn_key_atoms = {'N351': [], 'H357': [], 'W400': []}
@@ -540,18 +915,17 @@ def validate_crbn_hbonds(obj_name, g_motif_chain, g_motif_resi_range, crbn_chain
         aname = (a.name or '').strip().upper()
         coord = np.array([a.coord[0], a.coord[1], a.coord[2]])
         
-        # Asn351 sidechain (ND2, OD1)
-        if resn == 'ASN' and '351' in resi_str:
-            if aname in ('ND2', 'OD1'):
-                crbn_key_atoms['N351'].append(('ASN351', aname, coord))
-        # His357 sidechain (ND1, NE2)
-        elif resn == 'HIS' and '357' in resi_str:
-            if aname in ('ND1', 'NE2'):
-                crbn_key_atoms['H357'].append(('HIS357', aname, coord))
-        # Trp400 sidechain (NE1)
-        elif resn == 'TRP' and '400' in resi_str:
-            if aname == 'NE1':
-                crbn_key_atoms['W400'].append(('TRP400', aname, coord))
+        # 动态匹配 CRBN 关键残基
+        for key in ['N351', 'H357', 'W400']:
+            config = key_residue_config[key]
+            expected_resn = config['resn']
+            expected_resi = config['resi']
+            expected_atoms = config['atoms']
+            
+            # 匹配残基类型和编号
+            if resn == expected_resn and expected_resi in resi_str:
+                if aname in expected_atoms:
+                    crbn_key_atoms[key].append((f"{resn}{resi_str}", aname, coord))
     
     # 检查 3 个氢键
     result = {
@@ -559,7 +933,13 @@ def validate_crbn_hbonds(obj_name, g_motif_chain, g_motif_resi_range, crbn_chain
         'H357_hbond': {'found': False, 'distance': None, 'g_pos': -2},
         'W400_hbond': {'found': False, 'distance': None, 'g_pos': -1},
         'total_hbonds': 0,
-        'is_canonical_gloop': False
+        'is_canonical_gloop': False,
+        'config_used': {
+            'N351_resi': key_residue_config['N351']['resi'],
+            'H357_resi': key_residue_config['H357']['resi'],
+            'W400_resi': key_residue_config['W400']['resi'],
+            'preset': pdb_preset or 'default'
+        }
     }
     
     # G-3 (index 5) → N351
@@ -596,9 +976,20 @@ def validate_crbn_hbonds(obj_name, g_motif_chain, g_motif_resi_range, crbn_chain
     print("\n" + "=" * 70)
     print("CRBN G-loop 氢键验证 (CRBN-G-loop H-bond Validation)")
     print("=" * 70)
-    for key, label in [('N351_hbond', 'G-3 → Asn351'),
-                        ('H357_hbond', 'G-2 → His357'),
-                        ('W400_hbond', 'G-1 → Trp400')]:
+    print(f"配置: {result['config_used']['preset']} "
+          f"(N351={result['config_used']['N351_resi']}, "
+          f"H357={result['config_used']['H357_resi']}, "
+          f"W400={result['config_used']['W400_resi']})")
+    print("-" * 70)
+    
+    # 动态生成标签
+    n351_label = f"G-3 → Asn{key_residue_config['N351']['resi']}"
+    h357_label = f"G-2 → His{key_residue_config['H357']['resi']}"
+    w400_label = f"G-1 → Trp{key_residue_config['W400']['resi']}"
+    
+    for key, label in [('N351_hbond', n351_label),
+                        ('H357_hbond', h357_label),
+                        ('W400_hbond', w400_label)]:
         hb = result[key]
         status = "✅" if hb['found'] else "❌"
         dist_str = f"{hb['distance']} Å" if hb['distance'] else "N/A"

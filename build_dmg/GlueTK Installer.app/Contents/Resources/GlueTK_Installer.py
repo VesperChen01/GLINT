@@ -24,21 +24,23 @@ ENV_NAME = "gluetk"
 PYTHON_VERSION = "3.9"
 DEFAULT_INSTALL_PATH = os.path.expanduser("~/.pymol/startup/gluetk")
 
-# 包含 Vina / Meeko / PyMOL / HADDOCK3 的完整依赖列表
+# 包含 Vina / Meeko / PyMOL / HADDOCK3 / 表面分析 的完整依赖列表
 # 说明：
 # - HADDOCK3 官方 PyPI（pip install haddock3）在 macOS 上可能触发本地编译并失败（例如 -march=native）。
 # - 因此这里优先走 conda。
 # - HADDOCK3 的 conda 构建目前在 bioconda 提供（包名：haddock_biobb），可提供 haddock3 CLI/模块。
 # - AutoDock Vina 建议使用 conda-forge 发行版（包名：vina）
+# - 表面分析模块需要 scikit-image（marching cubes）
 CONDA_PACKAGES = [
     "rdkit", "scipy", "matplotlib", "pillow", "numpy",
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
     "meeko", "vina",
-    "haddock_biobb"
+    "haddock_biobb",
+    "scikit-image"  # 表面分析：marching cubes 算法
 ]
 
-# Pip 包：仅 requests（其余使用 conda）
-PIP_PACKAGES = ["requests"]
+# Pip 包：requests + open3d（open3d 在 conda 上不稳定，推荐 pip）
+PIP_PACKAGES = ["requests", "open3d"]
 
 def get_gluetk_source_dir():
     """获取 GlueTK 源码目录"""
