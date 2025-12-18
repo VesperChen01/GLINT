@@ -62,7 +62,10 @@ class InstallerApp:
         self.root.minsize(700, 750)
         self.root.resizable(True, True)
         
-        # 设置窗口图标
+        # Configure better fonts and styling
+        self._configure_styles()
+        
+        # Set window icon
         self._set_icon()
         
         self.install_path = tk.StringVar(value=DEFAULT_INSTALL_PATH)
@@ -76,8 +79,65 @@ class InstallerApp:
         self._build_ui()
         self._center_window()
         
-        # 延迟启动环境检查
+        # Delayed environment check
         self.root.after(500, lambda: threading.Thread(target=self._check_environment, daemon=True).start())
+    
+    def _configure_styles(self):
+        """Configure better fonts and styles for Windows"""
+        style = ttk.Style()
+        
+        # Try to use a modern theme
+        available_themes = style.theme_names()
+        if 'vista' in available_themes:
+            style.theme_use('vista')
+        elif 'winnative' in available_themes:
+            style.theme_use('winnative')
+        elif 'clam' in available_themes:
+            style.theme_use('clam')
+        
+        # Define better fonts - use Microsoft YaHei for Chinese support, fallback to Segoe UI
+        # These fonts look much better on Windows
+        self.title_font = ("Microsoft YaHei UI", 22, "bold")
+        self.subtitle_font = ("Microsoft YaHei UI", 11)
+        self.normal_font = ("Microsoft YaHei UI", 10)
+        self.small_font = ("Microsoft YaHei UI", 9)
+        self.mono_font = ("Cascadia Code", 9)  # Better monospace font
+        
+        # Fallback fonts if Microsoft YaHei is not available
+        try:
+            import tkinter.font as tkfont
+            available_fonts = tkfont.families()
+            
+            if "Microsoft YaHei UI" not in available_fonts:
+                if "Microsoft YaHei" in available_fonts:
+                    self.title_font = ("Microsoft YaHei", 22, "bold")
+                    self.subtitle_font = ("Microsoft YaHei", 11)
+                    self.normal_font = ("Microsoft YaHei", 10)
+                    self.small_font = ("Microsoft YaHei", 9)
+                elif "Segoe UI" in available_fonts:
+                    self.title_font = ("Segoe UI", 22, "bold")
+                    self.subtitle_font = ("Segoe UI", 11)
+                    self.normal_font = ("Segoe UI", 10)
+                    self.small_font = ("Segoe UI", 9)
+            
+            if "Cascadia Code" not in available_fonts:
+                if "Consolas" in available_fonts:
+                    self.mono_font = ("Consolas", 9)
+                else:
+                    self.mono_font = ("Courier New", 9)
+        except:
+            pass
+        
+        # Configure ttk styles with better fonts
+        style.configure("TLabel", font=self.normal_font)
+        style.configure("TButton", font=self.normal_font, padding=6)
+        style.configure("TCheckbutton", font=self.normal_font)
+        style.configure("TEntry", font=self.normal_font)
+        style.configure("TLabelframe", font=self.normal_font)
+        style.configure("TLabelframe.Label", font=self.normal_font)
+        
+        # Configure root window background
+        self.root.configure(bg='#f0f0f0')
     
     def _set_icon(self):
         """设置窗口图标"""
@@ -101,96 +161,102 @@ class InstallerApp:
         self.root.geometry(f"{w}x{h}+{x}+{y}")
     
     def _build_ui(self):
-        """构建用户界面"""
-        # 主框架
+        """Build user interface with improved fonts"""
+        # Main frame
         main = ttk.Frame(self.root, padding=20)
         main.pack(fill=tk.BOTH, expand=True)
         
-        # 标题
+        # Title section
         title_frame = ttk.Frame(main)
-        title_frame.pack(fill=tk.X, pady=(0, 10))
+        title_frame.pack(fill=tk.X, pady=(0, 15))
         
-        title = ttk.Label(title_frame, text="🧬 GlueTK Installer", 
-                         font=("Segoe UI", 24, "bold"))
+        title = ttk.Label(title_frame, text="🧬 GlueTK Installer",
+                         font=self.title_font)
         title.pack()
         
-        subtitle = ttk.Label(title_frame, 
+        subtitle = ttk.Label(title_frame,
                             text="PyMOL Plugin for Molecular Glue Analysis",
-                            font=("Segoe UI", 11), foreground="gray")
-        subtitle.pack()
+                            font=self.subtitle_font, foreground="#666666")
+        subtitle.pack(pady=(5, 0))
         
         version = ttk.Label(title_frame, text="Version: v0.1.6-beta",
-                           font=("Segoe UI", 9), foreground="gray")
-        version.pack()
+                           font=self.small_font, foreground="#888888")
+        version.pack(pady=(3, 0))
         
-        # 环境状态
-        status_frame = ttk.LabelFrame(main, text="Environment Status", padding=10)
+        # Environment Status section
+        status_frame = ttk.LabelFrame(main, text=" Environment Status ", padding=12)
         status_frame.pack(fill=tk.X, pady=(0, 15))
         
-        # Conda 状态行
+        # Conda status row
         conda_row = ttk.Frame(status_frame)
-        conda_row.pack(fill=tk.X, pady=3)
-        ttk.Label(conda_row, text="Conda:", width=20).pack(side=tk.LEFT)
-        self.conda_status = ttk.Label(conda_row, text="⏳ Checking...", foreground="orange")
+        conda_row.pack(fill=tk.X, pady=5)
+        ttk.Label(conda_row, text="Conda:", font=self.normal_font, width=22).pack(side=tk.LEFT)
+        self.conda_status = ttk.Label(conda_row, text="⏳ Checking...",
+                                      font=self.normal_font, foreground="#E67E22")
         self.conda_status.pack(side=tk.LEFT, padx=10)
-        self.conda_install_btn = ttk.Button(conda_row, text="Download Miniconda", 
+        self.conda_install_btn = ttk.Button(conda_row, text="Download Miniconda",
                                             command=self._install_conda, state=tk.DISABLED)
         self.conda_install_btn.pack(side=tk.RIGHT)
         
-        # 环境状态行
+        # Environment status row
         env_row = ttk.Frame(status_frame)
-        env_row.pack(fill=tk.X, pady=3)
-        ttk.Label(env_row, text=f"Conda Env '{ENV_NAME}':", width=20).pack(side=tk.LEFT)
-        self.env_status = ttk.Label(env_row, text="⏳ Checking...", foreground="orange")
+        env_row.pack(fill=tk.X, pady=5)
+        ttk.Label(env_row, text=f"Conda Env '{ENV_NAME}':",
+                  font=self.normal_font, width=22).pack(side=tk.LEFT)
+        self.env_status = ttk.Label(env_row, text="⏳ Checking...",
+                                    font=self.normal_font, foreground="#E67E22")
         self.env_status.pack(side=tk.LEFT, padx=10)
         
-        # 安装路径
-        path_frame = ttk.LabelFrame(main, text="Installation Path", padding=10)
+        # Installation Path section
+        path_frame = ttk.LabelFrame(main, text=" Installation Path ", padding=12)
         path_frame.pack(fill=tk.X, pady=(0, 15))
         
         path_row = ttk.Frame(path_frame)
         path_row.pack(fill=tk.X)
-        self.path_entry = ttk.Entry(path_row, textvariable=self.install_path, width=60)
+        self.path_entry = ttk.Entry(path_row, textvariable=self.install_path,
+                                    width=60, font=self.normal_font)
         self.path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(path_row, text="Browse...", command=self._browse_path).pack(side=tk.RIGHT, padx=(10, 0))
         
-        path_note = ttk.Label(path_frame, 
+        path_note = ttk.Label(path_frame,
                              text="📌 GlueTK will be installed here. PyMOL loads plugins from ~/.pymol/startup/",
-                             font=("Segoe UI", 9), foreground="gray")
-        path_note.pack(anchor=tk.W, pady=(5, 0))
+                             font=self.small_font, foreground="#888888")
+        path_note.pack(anchor=tk.W, pady=(8, 0))
         
-        # 选项
-        opts_frame = ttk.LabelFrame(main, text="Options", padding=10)
+        # Options section
+        opts_frame = ttk.LabelFrame(main, text=" Options ", padding=12)
         opts_frame.pack(fill=tk.X, pady=(0, 15))
         
-        ttk.Checkbutton(opts_frame, text="Install/Update dependencies (conda packages + PyMOL)", 
-                       variable=self.install_deps).pack(anchor=tk.W)
-        ttk.Checkbutton(opts_frame, text="Create desktop shortcut", 
-                       variable=self.create_shortcut).pack(anchor=tk.W)
+        ttk.Checkbutton(opts_frame, text="Install/Update dependencies (conda packages + PyMOL)",
+                       variable=self.install_deps).pack(anchor=tk.W, pady=3)
+        ttk.Checkbutton(opts_frame, text="Create desktop shortcut",
+                       variable=self.create_shortcut).pack(anchor=tk.W, pady=3)
         
-        # 进度区域
-        progress_frame = ttk.LabelFrame(main, text="Progress", padding=10)
+        # Progress section
+        progress_frame = ttk.LabelFrame(main, text=" Progress ", padding=12)
         progress_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
         
         self.progress = ttk.Progressbar(progress_frame, mode="determinate", length=500)
         self.progress.pack(fill=tk.X, pady=(0, 10))
         
-        # 日志文本框
+        # Log text area with better styling
         log_frame = ttk.Frame(progress_frame)
         log_frame.pack(fill=tk.BOTH, expand=True)
         
         self.log_text = tk.Text(log_frame, height=12, state=tk.DISABLED,
-                               font=("Consolas", 9), bg="#1e1e1e", fg="#d4d4d4")
+                               font=self.mono_font, bg="#1a1a2e", fg="#eaeaea",
+                               insertbackground="#ffffff", selectbackground="#3d5a80",
+                               relief=tk.FLAT, padx=10, pady=8)
         scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scrollbar.set)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
-        # 按钮区域
+        # Button section
         btn_frame = ttk.Frame(main)
-        btn_frame.pack(fill=tk.X)
+        btn_frame.pack(fill=tk.X, pady=(5, 0))
         
-        self.install_btn = ttk.Button(btn_frame, text="🚀 Install GlueTK", 
+        self.install_btn = ttk.Button(btn_frame, text="🚀 Install GlueTK",
                                       command=self._start_install, width=20)
         self.install_btn.pack(side=tk.RIGHT, padx=(10, 0))
         
