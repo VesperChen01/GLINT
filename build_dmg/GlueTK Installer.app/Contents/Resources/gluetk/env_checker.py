@@ -37,6 +37,8 @@ OPTIONAL_PACKAGES = [
     ("pyhmmer", "pyhmmer", "pyhmmer", "C2H2 锌指 HMM 检测（提高精度）"),
     ("haddock", "HADDOCK3", "haddock3", "Protein-Protein Docking Engine"),
     ("trimesh", "trimesh", "trimesh", "轻量级网格处理库"),
+    ("pdb2pqr", "PDB2PQR", "pdb2pqr", "蛋白结构准备（EC分析必需）"),
+    ("apbs", "APBS Python", "apbs", "泊松-玻尔兹曼求解器 Python API"),
 ]
 
 # 外部工具配置 (cmd_name, display_name, description, install_info)
@@ -57,31 +59,33 @@ EXTERNAL_TOOLS = {
     },
     "apbs": {
         "display_name": "APBS",
-        "description": "自适应泊松-玻尔兹曼求解器（精确静电势）",
+        "description": "自适应泊松-玻尔兹曼求解器（精确静电势，EC分析必需）",
         "install_info": {
-            "macOS": "brew install brewsci/bio/apbs 或从 https://www.poissonboltzmann.org/ 下载",
-            "Linux": "apt install apbs 或从 https://www.poissonboltzmann.org/ 下载",
-            "Windows": "从 https://www.poissonboltzmann.org/ 下载 Windows 版本",
+            "macOS": "pip install apbs 或 brew install brewsci/bio/apbs",
+            "Linux": "pip install apbs 或 apt install apbs",
+            "Windows": "pip install apbs 或从 https://www.poissonboltzmann.org/ 下载",
         },
         "search_paths": {
             "macOS": ["/usr/local/bin/apbs", "/opt/homebrew/bin/apbs", "~/bin/apbs"],
             "Linux": ["/usr/bin/apbs", "/usr/local/bin/apbs", "~/bin/apbs"],
             "Windows": [r"C:\Program Files\APBS\apbs.exe", r"C:\APBS\apbs.exe"],
-        }
+        },
+        "python_module": "apbs",  # 也可以通过 Python API 使用
     },
     "pdb2pqr": {
         "display_name": "PDB2PQR",
-        "description": "PDB 到 PQR 格式转换（APBS 前处理）",
+        "description": "PDB 到 PQR 格式转换（EC分析必需）",
         "install_info": {
             "macOS": "pip install pdb2pqr",
             "Linux": "pip install pdb2pqr",
             "Windows": "pip install pdb2pqr",
         },
         "search_paths": {
-            "macOS": [],
-            "Linux": [],
+            "macOS": ["/usr/local/bin/pdb2pqr", "/opt/homebrew/bin/pdb2pqr"],
+            "Linux": ["/usr/bin/pdb2pqr", "/usr/local/bin/pdb2pqr"],
             "Windows": [],
-        }
+        },
+        "python_module": "pdb2pqr",  # 推荐通过 Python API 使用
     },
 }
 
@@ -451,10 +455,10 @@ class EnvironmentChecker:
     
     def check_external_tools(self) -> Dict[str, Dict]:
         """
-        检查外部工具（MSMS, APBS 等）
+        检查外部工具（MSMS, APBS, PDB2PQR 等）
         
         Returns:
-            Dict[str, Dict]: {工具名: {available: bool, path: str, install_info: str}}
+            Dict[str, Dict]: {工具名: {available: bool, path: str, python_api: bool, install_info: str}}
         """
         self.log("\n🔧 检查外部工具:")
         
@@ -467,14 +471,31 @@ class EnvironmentChecker:
             display_name = tool_info["display_name"]
             description = tool_info["description"]
             
-            # 查找工具路径
+            # 首先检查 Python API 是否可用
+            python_api_available = False
+            python_module = tool_info.get("python_module")
+            if python_module:
+                try:
+                    __import__(python_module)
+                    python_api_available = True
+                except ImportError:
+                    pass
+            
+            # 查找命令行工具路径
             tool_path = self._find_external_tool(tool_name, tool_info)
             
-            if tool_path:
-                self.log(f"  ✓ {display_name} - {tool_path}")
+            if python_api_available or tool_path:
+                if python_api_available and tool_path:
+                    self.log(f"  ✓ {display_name} - Python API + CLI ({tool_path})")
+                elif python_api_available:
+                    self.log(f"  ✓ {display_name} - Python API 可用")
+                else:
+                    self.log(f"  ✓ {display_name} - {tool_path}")
+                
                 results[tool_name] = {
                     "available": True,
                     "path": tool_path,
+                    "python_api": python_api_available,
                     "description": description,
                     "install_info": None
                 }
@@ -485,6 +506,7 @@ class EnvironmentChecker:
                 results[tool_name] = {
                     "available": False,
                     "path": None,
+                    "python_api": False,
                     "description": description,
                     "install_info": install_info
                 }
@@ -777,6 +799,95 @@ class EnvironmentChecker:
             self.log("\n✅ C2H2 检测环境设置完成（HMM 模式）")
         else:
             self.log("\n⚠️ C2H2 检测可用（regex 模式），HMM 模式需要手动配置")
+        
+        return success
+    
+    def setup_ec_analysis(self) -> bool:
+        """
+        一键设置电性互补性（EC）分析环境
+        
+        包括：
+        1. 安装 PDB2PQR (Python API)
+        2. 检查/安装 APBS
+        3. 确保 NumPy, SciPy, RDKit 可用
+        
+        Returns:
+            bool: 是否全部成功
+        """
+        self.log("\n" + "=" * 60)
+        self.log("🔧 设置电性互补性（EC）分析环境")
+        self.log("=" * 60)
+        
+        success = True
+        
+        # 1. 检查核心依赖
+        self.log("\n  检查核心依赖...")
+        core_deps = [("numpy", "NumPy"), ("scipy", "SciPy"), ("rdkit", "RDKit")]
+        for import_name, display_name in core_deps:
+            try:
+                __import__(import_name)
+                self.log(f"  ✓ {display_name} 已安装")
+            except ImportError:
+                self.log(f"  ✗ {display_name} 未安装 - EC分析需要此依赖")
+                success = False
+        
+        # 2. 安装 PDB2PQR
+        self.log("\n  检查 PDB2PQR...")
+        try:
+            import pdb2pqr
+            self.log("  ✓ PDB2PQR Python API 已安装")
+        except ImportError:
+            self.log("  安装 PDB2PQR...")
+            if self._install_pip_package("pdb2pqr"):
+                self.log("  ✅ PDB2PQR 安装成功")
+            else:
+                self.log("  ⚠️ PDB2PQR 安装失败，将使用简化的PQR转换")
+        
+        # 3. 检查 APBS
+        self.log("\n  检查 APBS...")
+        apbs_available = False
+        
+        # 检查 Python API
+        try:
+            import apbs
+            self.log("  ✓ APBS Python API 已安装")
+            apbs_available = True
+        except ImportError:
+            self.log("  ✗ APBS Python API 未安装")
+        
+        # 检查命令行工具
+        import shutil
+        apbs_path = shutil.which('apbs')
+        if apbs_path:
+            self.log(f"  ✓ APBS CLI 可用: {apbs_path}")
+            apbs_available = True
+        else:
+            self.log("  ✗ APBS CLI 未找到")
+        
+        if not apbs_available:
+            self.log("\n  💡 APBS 未安装，EC分析将无法运行")
+            self.log("     推荐安装方法:")
+            if self.os_type == "macOS":
+                self.log("     - pip install apbs")
+                self.log("     - 或 brew install brewsci/bio/apbs")
+            elif self.os_type == "Linux":
+                self.log("     - pip install apbs")
+                self.log("     - 或 apt install apbs")
+            else:
+                self.log("     - pip install apbs")
+                self.log("     - 或从 https://www.poissonboltzmann.org/ 下载")
+            success = False
+        
+        # 4. 总结
+        if success:
+            self.log("\n✅ EC分析环境设置完成")
+            self.log("   可以使用以下功能:")
+            self.log("   - calculate_ligand_ec: 蛋白-配体EC分析")
+            self.log("   - analyze_ternary_ec: 三元复合物（分子胶）EC分析")
+            self.log("   - compare_ligand_ec: 多配体EC比较（SAR分析）")
+            self.log("   - calculate_ec_hotspots: EC热点识别")
+        else:
+            self.log("\n⚠️ EC分析环境部分可用，完整功能需要手动配置")
         
         return success
     
@@ -1179,6 +1290,76 @@ def setup_surface_analysis(log_callback=None) -> bool:
     """
     checker = EnvironmentChecker(log_callback=log_callback)
     return checker.setup_surface_analysis()
+
+
+def setup_ec_analysis(log_callback=None) -> bool:
+    """
+    一键设置电性互补性（EC）分析环境（便捷函数）
+    
+    包括：
+    1. 安装 PDB2PQR (Python API)
+    2. 检查/安装 APBS
+    3. 确保 NumPy, SciPy, RDKit 可用
+    
+    Args:
+        log_callback: 日志回调函数
+        
+    Returns:
+        bool: 是否全部成功
+    """
+    checker = EnvironmentChecker(log_callback=log_callback)
+    return checker.setup_ec_analysis()
+
+
+def check_ec_analysis_deps(log_callback=None) -> Dict[str, bool]:
+    """
+    检查EC分析依赖状态（便捷函数）
+    
+    Args:
+        log_callback: 日志回调函数
+        
+    Returns:
+        Dict[str, bool]: {依赖名: 是否可用}
+    """
+    checker = EnvironmentChecker(log_callback=log_callback)
+    
+    status = {}
+    
+    # 核心 Python 包
+    core_packages = [
+        ("numpy", "NumPy"),
+        ("scipy", "SciPy"),
+        ("rdkit", "RDKit"),
+    ]
+    
+    for import_name, display_name in core_packages:
+        try:
+            __import__(import_name)
+            status[display_name] = True
+        except ImportError:
+            status[display_name] = False
+    
+    # EC 专用包
+    ec_packages = [
+        ("pdb2pqr", "PDB2PQR"),
+        ("apbs", "APBS Python"),
+    ]
+    
+    for import_name, display_name in ec_packages:
+        try:
+            __import__(import_name)
+            status[display_name] = True
+        except ImportError:
+            status[display_name] = False
+    
+    # 外部工具（命令行）
+    tools = checker.check_external_tools()
+    for tool_name in ["apbs", "pdb2pqr"]:
+        tool_info = tools.get(tool_name, {})
+        cli_name = f"{tool_info.get('display_name', tool_name)} CLI"
+        status[cli_name] = tool_info.get("path") is not None
+    
+    return status
 
 
 def check_surface_analysis_deps(log_callback=None) -> Dict[str, bool]:

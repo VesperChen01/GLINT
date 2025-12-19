@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-Lead Optimization: PPI, Glue, Ternary, Mutation
+Lead Optimization: PPI, Glue, Ternary, Mutation, Electrostatic Complementarity
 """
 import os
 import traceback
@@ -199,7 +199,69 @@ class LeadOptimizationTab(CommonTab):
         layout.addWidget(grp_ll)
         layout.addLayout(ll_btn_row)
         
-        # 4. Mutation Analysis
+        # 4. Electrostatic Complementarity (EC) Analysis
+        grp_ec = QGroupBox("Electrostatic Complementarity (EC) Analysis")
+        ec_grid = QGridLayout(grp_ec)
+        ec_grid.setColumnStretch(1, 1); ec_grid.setColumnStretch(3, 1)
+        ec_grid.setHorizontalSpacing(8); ec_grid.setVerticalSpacing(10)
+        
+        ec_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.ec_obj_combo = QComboBox(); self.parent_window.ec_obj_combo.setMinimumWidth(150); self.parent_window.ec_obj_combo.setMinimumHeight(36)
+        self.parent_window.ec_refresh_btn = QPushButton(t("refresh")); self.parent_window.ec_refresh_btn.clicked.connect(self.refresh_objects)
+        r0_ec = QHBoxLayout(); r0_ec.addWidget(self.parent_window.ec_obj_combo, 1); r0_ec.addWidget(self.parent_window.ec_refresh_btn)
+        ec_grid.addLayout(r0_ec, 0, 1)
+        
+        ec_grid.addWidget(QLabel("Ligand/Glue Name:"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.ec_ligand_name = QLineEdit(); self.parent_window.ec_ligand_name.setPlaceholderText("e.g. LIG, CC885")
+        ec_grid.addWidget(self.parent_window.ec_ligand_name, 0, 3)
+        
+        ec_grid.addWidget(QLabel("Analysis Mode:"), 1, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.ec_mode_combo = QComboBox()
+        self.parent_window.ec_mode_combo.addItems(["Protein-Ligand EC", "Ternary Complex EC (Molecular Glue)"])
+        self.parent_window.ec_mode_combo.currentIndexChanged.connect(self._on_ec_mode_changed)
+        ec_grid.addWidget(self.parent_window.ec_mode_combo, 1, 1)
+        
+        ec_grid.addWidget(QLabel("pH:"), 1, 2, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.ec_ph = QLineEdit("7.4")
+        ec_grid.addWidget(self.parent_window.ec_ph, 1, 3)
+        
+        # Ternary-specific options (initially hidden)
+        ec_grid.addWidget(QLabel("Protein A Chains:"), 2, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.ec_protein_a_chains = QLineEdit(); self.parent_window.ec_protein_a_chains.setPlaceholderText("e.g. A (E3 ligase)")
+        ec_grid.addWidget(self.parent_window.ec_protein_a_chains, 2, 1)
+        
+        ec_grid.addWidget(QLabel("Protein B Chains:"), 2, 2, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.ec_protein_b_chains = QLineEdit(); self.parent_window.ec_protein_b_chains.setPlaceholderText("e.g. B (Substrate)")
+        ec_grid.addWidget(self.parent_window.ec_protein_b_chains, 2, 3)
+        
+        ec_grid.addWidget(QLabel("Surface Density:"), 3, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.ec_surface_density = QLineEdit("10.0"); self.parent_window.ec_surface_density.setPlaceholderText("Points/Ų")
+        ec_grid.addWidget(self.parent_window.ec_surface_density, 3, 1)
+        
+        ec_grid.addWidget(QLabel("Output Directory:"), 3, 2, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.ec_output_dir = QLineEdit(); self.parent_window.ec_output_dir.setPlaceholderText("Optional (temp dir if blank)")
+        self.parent_window.ec_output_btn = QPushButton(t("browse"))
+        self.parent_window.ec_output_btn.clicked.connect(self._browse_ec_output_dir)
+        r3_ec = QHBoxLayout(); r3_ec.addWidget(self.parent_window.ec_output_dir, 1); r3_ec.addWidget(self.parent_window.ec_output_btn)
+        ec_grid.addLayout(r3_ec, 3, 3)
+        
+        self.parent_window.ec_visualize = QCheckBox("Visualize EC Map in PyMOL")
+        self.parent_window.ec_visualize.setChecked(True)
+        ec_grid.addWidget(self.parent_window.ec_visualize, 4, 1)
+        
+        ec_btn_row = QHBoxLayout()
+        self.parent_window.ec_analyze_btn = QPushButton("Calculate EC"); self.parent_window.ec_analyze_btn.setObjectName("highlight_btn")
+        self.parent_window.ec_analyze_btn.clicked.connect(self.run_ec_analysis)
+        ec_btn_row.addWidget(self.parent_window.ec_analyze_btn)
+        ec_btn_row.addStretch(1)
+        
+        layout.addWidget(grp_ec)
+        layout.addLayout(ec_btn_row)
+        
+        # Initially hide ternary-specific fields
+        self._on_ec_mode_changed(0)
+        
+        # 5. Mutation Analysis
         layout.addWidget(self._create_mutation_analysis_card())
         
         layout.addStretch(1)
@@ -553,6 +615,164 @@ class LeadOptimizationTab(CommonTab):
                     QMessageBox.critical(self, "PyMOL Error", str(e))
                 return
                 
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback; traceback.print_exc()
+    
+    # --- EC Analysis Logic ---
+    def _on_ec_mode_changed(self, index):
+        """Show/hide ternary-specific fields based on mode selection"""
+        is_ternary = (index == 1)
+        self.parent_window.ec_protein_a_chains.setEnabled(is_ternary)
+        self.parent_window.ec_protein_b_chains.setEnabled(is_ternary)
+        
+        if is_ternary:
+            self.parent_window.ec_protein_a_chains.setPlaceholderText("e.g. A (E3 ligase) - Required")
+            self.parent_window.ec_protein_b_chains.setPlaceholderText("e.g. B (Substrate) - Required")
+        else:
+            self.parent_window.ec_protein_a_chains.setPlaceholderText("Not used in this mode")
+            self.parent_window.ec_protein_b_chains.setPlaceholderText("Not used in this mode")
+    
+    def _browse_ec_output_dir(self):
+        """Browse for EC output directory"""
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Output Directory")
+        if dir_path:
+            self.parent_window.ec_output_dir.setText(dir_path)
+    
+    def run_ec_analysis(self):
+        """Run Electrostatic Complementarity analysis"""
+        try:
+            obj_name = self.parent_window.ec_obj_combo.currentText()
+            if obj_name == t("no_object") or not obj_name:
+                QMessageBox.warning(self, "Warning", "Please select a structure object")
+                return
+            
+            ligand_name = self.parent_window.ec_ligand_name.text().strip()
+            if not ligand_name:
+                QMessageBox.warning(self, "Warning", "Please specify the ligand/glue residue name")
+                return
+            
+            mode = self.parent_window.ec_mode_combo.currentIndex()
+            ph = float(self.parent_window.ec_ph.text().strip() or "7.4")
+            surface_density = float(self.parent_window.ec_surface_density.text().strip() or "10.0")
+            output_dir = self.parent_window.ec_output_dir.text().strip() or None
+            visualize = self.parent_window.ec_visualize.isChecked()
+            
+            self.log(f"Starting EC analysis for {obj_name}...")
+            self.log(f"  Ligand/Glue: {ligand_name}")
+            self.log(f"  Mode: {'Ternary Complex' if mode == 1 else 'Protein-Ligand'}")
+            self.log(f"  pH: {ph}")
+            
+            # Import EC calculator
+            try:
+                from ...ligand_ec_calculator import calculate_ligand_ec, analyze_ternary_ec
+            except ImportError:
+                try:
+                    from ligand_ec_calculator import calculate_ligand_ec, analyze_ternary_ec
+                except ImportError:
+                    QMessageBox.critical(self, "Error",
+                        "EC Calculator module not found.\n\n"
+                        "Please ensure ligand_ec_calculator.py is installed.")
+                    return
+            
+            if mode == 0:
+                # Protein-Ligand EC
+                result = calculate_ligand_ec(
+                    obj_name=obj_name,
+                    ligand_resname=ligand_name,
+                    output_dir=output_dir,
+                    ph=ph,
+                    surface_density=surface_density,
+                    visualize=visualize
+                )
+                
+                if result:
+                    ec_score = result.get('ec_score', 0)
+                    ec_stats = result.get('ec_statistics', {})
+                    
+                    self.log(f"EC Analysis Complete:")
+                    self.log(f"  EC Score: {ec_score:.4f}")
+                    self.log(f"  EC Mean: {ec_stats.get('ec_mean', 0):.4f}")
+                    self.log(f"  Positive EC fraction: {ec_stats.get('ec_positive_fraction', 0)*100:.1f}%")
+                    
+                    # Interpretation
+                    if ec_score > 0.3:
+                        interpretation = "Strong electrostatic complementarity - favorable binding"
+                    elif ec_score > 0:
+                        interpretation = "Moderate electrostatic complementarity"
+                    else:
+                        interpretation = "Poor electrostatic complementarity - potential clash"
+                    
+                    self.log(f"  Interpretation: {interpretation}")
+                    
+                    QMessageBox.information(self, "EC Analysis Complete",
+                        f"EC Score: {ec_score:.4f}\n"
+                        f"EC Mean: {ec_stats.get('ec_mean', 0):.4f}\n"
+                        f"Positive EC: {ec_stats.get('ec_positive_fraction', 0)*100:.1f}%\n\n"
+                        f"{interpretation}\n\n"
+                        f"Output: {result.get('output_dir', 'N/A')}")
+                else:
+                    self.log("EC analysis failed")
+                    QMessageBox.warning(self, "Error", "EC analysis failed. Check the log for details.")
+            
+            else:
+                # Ternary Complex EC (Molecular Glue)
+                protein_a_chains = self.parent_window.ec_protein_a_chains.text().strip()
+                protein_b_chains = self.parent_window.ec_protein_b_chains.text().strip()
+                
+                if not protein_a_chains or not protein_b_chains:
+                    QMessageBox.warning(self, "Warning",
+                        "For ternary complex analysis, please specify both Protein A and Protein B chains")
+                    return
+                
+                protein_a_list = [c.strip() for c in protein_a_chains.split(",")]
+                protein_b_list = [c.strip() for c in protein_b_chains.split(",")]
+                
+                self.log(f"  Protein A chains: {protein_a_list}")
+                self.log(f"  Protein B chains: {protein_b_list}")
+                
+                result = analyze_ternary_ec(
+                    obj_name=obj_name,
+                    glue_resname=ligand_name,
+                    protein_a_chains=protein_a_list,
+                    protein_b_chains=protein_b_list,
+                    output_dir=output_dir,
+                    ph=ph,
+                    surface_density=surface_density,
+                    visualize=visualize
+                )
+                
+                if result and 'combined' in result:
+                    combined = result['combined']
+                    ec_a = combined.get('ec_a_glue', 0)
+                    ec_b = combined.get('ec_b_glue', 0)
+                    ec_combined = combined.get('ec_combined_score', 0)
+                    
+                    self.log(f"Ternary EC Analysis Complete:")
+                    self.log(f"  EC(A-Glue): {ec_a:.4f}")
+                    self.log(f"  EC(B-Glue): {ec_b:.4f}")
+                    self.log(f"  Combined EC: {ec_combined:.4f}")
+                    
+                    # Interpretation
+                    if ec_combined > 0.3:
+                        interpretation = "Strong complementarity - favorable glue binding"
+                    elif ec_combined > 0:
+                        interpretation = "Moderate complementarity"
+                    else:
+                        interpretation = "Poor complementarity - potential clash"
+                    
+                    self.log(f"  Interpretation: {interpretation}")
+                    
+                    QMessageBox.information(self, "Ternary EC Analysis Complete",
+                        f"EC(Protein A - Glue): {ec_a:.4f}\n"
+                        f"EC(Protein B - Glue): {ec_b:.4f}\n"
+                        f"Combined EC Score: {ec_combined:.4f}\n\n"
+                        f"{interpretation}\n\n"
+                        f"Output: {result.get('output_dir', 'N/A')}")
+                else:
+                    self.log("Ternary EC analysis failed or incomplete")
+                    QMessageBox.warning(self, "Error", "Ternary EC analysis failed. Check the log for details.")
+                    
         except Exception as e:
             self.on_error(str(e))
             import traceback; traceback.print_exc()

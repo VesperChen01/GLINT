@@ -298,6 +298,7 @@ class GlueTKDialog(QDialog):
             getattr(self, "obj_combo_surf", None),  # Surface Analysis
             getattr(self, "obj_combo_sim1", None),  # Surface Similarity Object 1
             getattr(self, "obj_combo_sim2", None),  # Surface Similarity Object 2
+            getattr(self, "ec_obj_combo", None),  # EC Analysis
         ]
         
         for cb in combos:

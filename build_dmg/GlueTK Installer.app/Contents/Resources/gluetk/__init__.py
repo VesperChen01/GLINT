@@ -4,13 +4,13 @@ GlueTK - PyMOL Plugin for Molecular Glue Analysis
 Molecular Glue vs PROTAC Classification Toolkit
 
 Author: Vesper
-Version: v0.1.6-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
+Version: v0.1.8-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
 """
 
 from __future__ import print_function
 import locale
 
-__version__ = "v0.1.6-beta"
+__version__ = "v0.1.8-beta"
 __author__ = "Vesper"
 
 # ---- 环境依赖检查 ----
@@ -118,6 +118,25 @@ def _register_commands():
             analyze_electrostatic_environment,
             comprehensive_glue_design_analysis
         )
+        
+        # 配体电性互补性分析 (Electrostatic Complementarity)
+        try:
+            from .ligand_ec_calculator import (
+                calculate_ligand_ec,
+                analyze_ternary_ec,
+                compare_ligand_ec,
+                analyze_multiconformer_ec,
+                calculate_ec_hotspots,
+                analyze_substituent_ec_effect,
+                ECCalculator,
+                DXGrid,
+                LigandSurfaceSampler,
+                GasteigerChargeCalculator
+            )
+            _ec_available = True
+        except ImportError as e:
+            print(f"⚠️ EC Calculator not available: {e}")
+            _ec_available = False
         
         # 口袋检测与分析
         from .pocket_detector import detect_pockets, compare_pockets
@@ -280,6 +299,15 @@ def _register_commands():
             cmd.extend("glue_db_fetch", glue_db_fetch)
             cmd.extend("glue_db_export", glue_db_export)
         
+        # 配体电性互补性分析命令
+        if _ec_available:
+            cmd.extend("calculate_ligand_ec", calculate_ligand_ec)
+            cmd.extend("analyze_ternary_ec", analyze_ternary_ec)
+            cmd.extend("compare_ligand_ec", compare_ligand_ec)
+            cmd.extend("analyze_multiconformer_ec", analyze_multiconformer_ec)
+            cmd.extend("calculate_ec_hotspots", calculate_ec_hotspots)
+            cmd.extend("analyze_substituent_ec_effect", analyze_substituent_ec_effect)
+        
         # 静默注册,避免终端输出过多
         # _info("✅ 已注册命令", "✅ Commands registered")
     except Exception as e:
@@ -441,7 +469,7 @@ def __init_plugin__(app=None):
 
     # 欢迎信息
     if _DEPS_OK:
-        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.6-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix")
+        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.8-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix")
         print("┌" + "─" * 48 + "┐")
         print("│  Quick Start:                                   │")
         print("│    • gluetk_gui            - Launch GUI          │")
@@ -449,7 +477,7 @@ def __init_plugin__(app=None):
         print("│    • Plugins → GlueTK       - Menu access       │")
         print("└" + "─" * 48 + "┘")
     else:
-        print("\n🧬 GlueTK v0.1.6-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix - ⚠️  Setup required (see above)")
+        print("\n🧬 GlueTK v0.1.8-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix - ⚠️  Setup required (see above)")
         print("💡 After setup, restart PyMOL to use all features.\n")
 
 # Auto-register if running within PyMOL environment (e.g. via 'run' command or import)
