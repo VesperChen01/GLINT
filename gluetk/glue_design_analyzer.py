@@ -578,9 +578,11 @@ def comprehensive_glue_design_analysis(
             f.write("3. G-motif 验证\n")
             f.write("-"*80 + "\n")
             geom = results['geometry']
-            f.write(f"中心 Gly: {'✅' if geom['central_gly_confirmed'] else '❌'}\n")
+            f.write(f"G-loop 类型: {geom.get('gloop_type', 'Unknown')} (Gly @ 位置 {geom.get('gly_position', '?')})\n")
+            f.write(f"甘氨酸确认: {'✅' if geom.get('gly_confirmed', False) else '❌'}\n")
             f.write(f"α-turn 氢键: {'✅' if geom['has_alpha_turn_hbond'] else '❌'} ({geom['alpha_turn_distance']} Å)\n")
-            f.write(f"RMSD: {geom['rmsd_to_gspt1']} Å\n")
+            f.write(f"  {geom.get('alpha_turn_description', '')}\n")
+            f.write(f"RMSD vs {geom.get('template_used', 'template')}: {geom.get('rmsd_to_template', 'N/A')} Å\n")
             f.write(f"有效几何: {'✅' if geom['is_valid_geometry'] else '❌'}\n\n")
         
         if exit_vectors:

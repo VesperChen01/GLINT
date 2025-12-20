@@ -170,14 +170,14 @@ class GMotifWorker(QThread):
         obj_name: str,
         pdb_file: Optional[str],
         rmsd: float,
-        require_gly: bool,
+        require_gly_pos: str,
         out_csv: Optional[str],
         template_mode: str,
         template_sel: Optional[str],
         template_builtin: Optional[str],
         highlight_surface: bool = False,
         export_coords: bool = False,
-        exclude_proline: bool = True,
+        exclude_proline: bool = False,
         check_surface_exposure: bool = True,
         min_sasa: float = 15.0
     ):
@@ -188,14 +188,14 @@ class GMotifWorker(QThread):
             obj_name: Name of the PyMOL object to analyze
             pdb_file: Optional path to PDB file
             rmsd: RMSD cutoff for template matching (Å)
-            require_gly: Whether to require glycine at position 6
+            require_gly_pos: Glycine position requirement ("6,3", "6", "3", or None)
             out_csv: Optional path for CSV output
             template_mode: Template selection mode ('builtin' or 'selection')
             template_sel: PyMOL selection for custom template
             template_builtin: Name of built-in template (GSPT1, CK1α, VAV1)
             highlight_surface: Whether to highlight G-loop surface
             export_coords: Whether to export coordinates
-            exclude_proline: Whether to exclude proline-containing loops
+            exclude_proline: Whether to exclude proline-containing loops (default: False)
             check_surface_exposure: Whether to check surface accessibility
             min_sasa: Minimum SASA per residue (Å²)
         """
@@ -203,7 +203,7 @@ class GMotifWorker(QThread):
         self.obj_name = obj_name
         self.pdb_file = pdb_file
         self.rmsd = rmsd
-        self.require_gly = require_gly
+        self.require_gly_pos = require_gly_pos
         self.out_csv = out_csv
         self.template_mode = template_mode
         self.template_sel = template_sel
@@ -233,7 +233,7 @@ class GMotifWorker(QThread):
                 rmsd_cutoff=float(self.rmsd),
                 out_csv=out_csv_path,
                 auto_highlight=1,  # Enable auto-highlight
-                require_gly_pos6=bool(self.require_gly),
+                require_gly_pos=self.require_gly_pos,
                 exclude_proline=bool(self.exclude_proline),
                 check_surface_exposure=bool(self.check_surface_exposure),
                 min_sasa_per_residue=float(self.min_sasa),
