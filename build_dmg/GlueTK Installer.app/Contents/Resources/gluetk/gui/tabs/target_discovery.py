@@ -92,14 +92,23 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.gm_rmsd = QLineEdit("3.5")
         gm_grid.addWidget(self.parent_window.gm_rmsd, 1, 1)
         
-        self.parent_window.gm_require_gly = QCheckBox(t("require_gly")); self.parent_window.gm_require_gly.setChecked(True)
-        gm_grid.addWidget(self.parent_window.gm_require_gly, 1, 3)
+        # Glycine position requirement dropdown
+        gm_grid.addWidget(QLabel("Require Gly:"), 1, 2, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.gm_require_gly_pos = QComboBox()
+        self.parent_window.gm_require_gly_pos.addItems([
+            "Pos 6 or 3 (default)",  # "6,3"
+            "Pos 6 only",             # "6"
+            "Pos 3 only",             # "3"
+            "No requirement"          # None
+        ])
+        self.parent_window.gm_require_gly_pos.setToolTip("Require glycine at specific position(s) in the 8-residue window")
+        gm_grid.addWidget(self.parent_window.gm_require_gly_pos, 1, 3)
         
         # Row 2: Template selection (only real templates, removed idealized templates)
         gm_grid.addWidget(QLabel("Template:"), 2, 0, Qt.AlignmentFlag.AlignRight)
         self.parent_window.gm_template_mode = QComboBox()
         # Template options: GSPT1 (default), CK1α, VAV1, custom selection
-        self.parent_window.gm_template_mode.addItems(["GSPT1 (6H0G)", "CK1α (5FQD)", "VAV1 (2MC1)", "From Selection"])
+        self.parent_window.gm_template_mode.addItems(["GSPT1 (5HXB)", "CK1α (5FQD)", "VAV1 (9NFR)", "From Selection"])
         gm_grid.addWidget(self.parent_window.gm_template_mode, 2, 1)
         
         gm_grid.addWidget(QLabel("Selection:"), 2, 2, Qt.AlignmentFlag.AlignRight)
@@ -397,7 +406,16 @@ class TargetDiscoveryTab(CommonTab):
             rmsd = float(self.parent_window.gm_rmsd.text().strip() or "3.5")
         except Exception:
             rmsd = 3.5
-        require_gly = self.parent_window.gm_require_gly.isChecked()
+        
+        # Parse glycine position requirement from dropdown
+        gly_pos_idx = self.parent_window.gm_require_gly_pos.currentIndex()
+        require_gly_pos_map = {
+            0: "6,3",   # Pos 6 or 3 (default)
+            1: "6",     # Pos 6 only
+            2: "3",     # Pos 3 only
+            3: None     # No requirement
+        }
+        require_gly_pos = require_gly_pos_map.get(gly_pos_idx, "6,3")
         
         # New options
         highlight_surface = self.parent_window.gm_highlight_surface.isChecked()
@@ -418,7 +436,7 @@ class TargetDiscoveryTab(CommonTab):
 
         self.parent_window.gm_btn.setEnabled(False)
         self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
-        self.parent_window.gmotif_thread = GMotifWorker(obj, pdb, rmsd, require_gly, outcsv,
+        self.parent_window.gmotif_thread = GMotifWorker(obj, pdb, rmsd, require_gly_pos, outcsv,
                                         template_mode, template_sel, template_builtin,
                                         highlight_surface, export_coords)
         self.parent_window.gmotif_thread.progress.connect(self.log)

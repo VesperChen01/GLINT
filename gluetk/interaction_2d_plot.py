@@ -1,434 +1,1205 @@
 # -*- coding: utf-8 -*-
 """
 interaction_2d_plot.py
-生成蛋白质-配体2D相互作用图 (Clean Visualization Version)
+蛋白质-配体 2D 相互作用图生成器 (Discovery Studio 风格)
 
 特性：
-- 双分子策略：使用全原子模型映射相互作用，使用重原子模型进行绘图
-- 自动将 H 原子的相互作用重映射到相邻的重原子，避免"线团"混乱
-- 准确的 PDB原子名映射
-- 优化的视觉样式
+- 基于 3D 坐标的精确原子/环映射
+- 使用 RDKit CoordGen 实现先进的 2D 布局
+- 支持大环分子的优雅展示
+- 与 3D 视图同步的配色方案 (Schrödinger 风格)
+- 精确的 Pi-相互作用环中心连接
+- 与 interaction_analyzer.py 的 3D 可视化完全一致的配色和类型定义
 """
 
-from __future__ import print_function
 import os
 import csv
 import tempfile
 import math
 import numpy as np
+import re
+from PIL import Image
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.patches import Circle
+from matplotlib.lines import Line2D
 
-# 相互作用颜色方案 (Discovery Studio 风格 + GlueTK Consistency)
-DS_STYLE = {
-    "Hbond": {
-        "color": "#43A047",      # Green (Classic DS style for 2D)
-        "label": "Hydrogen Bond",
-        "style": "--"
-    },
-    "Salt": {
-        "color": "#F4511E",      # Deep Orange
-        "label": "Salt Bridge",
-        "style": "--"
-    },
-    "Pi": {
-        "color": "#FB8C00",      # Orange
-        "label": "Pi-Interaction",
-        "style": "--"
-    },
-    "PiPi": {
-        "color": "#FDD835",      # Yellow (Match 3D GlueTK)
-        "label": "Pi-Pi Stacking",
-        "style": "--"
-    },
-    "Hydrophobic": {
-        "color": "#F06292",      # Pink
-        "label": "Hydrophobic",
-        "style": "--"
-    },
-    "Halogen": {
-        "color": "#00ACC1",      # Cyan
-        "label": "Halogen Bond",
-        "style": "--"
-    },
-    "VDW": {
-        "color": "#C5E1A5",      # Light Green
-        "label": "van der Waals",
-        "style": ":"
-    }
+try:
+    from rdkit import Chem
+    from rdkit.Chem import AllChem, rdDepictor
+    from rdkit.Chem.Draw import rdMolDraw2D
+except ImportError:
+    print("[GlueTK] RDKit required for 2D plotting.")
+
+# ============================================================================
+# 残基类型分类 (与 3D 视图一致)
+# ============================================================================
+RESIDUE_TYPES = {
+    'ALA': 'hydrophobic', 'VAL': 'hydrophobic', 'LEU': 'hydrophobic',
+    'ILE': 'hydrophobic', 'MET': 'hydrophobic', 'PHE': 'hydrophobic',
+    'TRP': 'hydrophobic', 'PRO': 'hydrophobic',
+    'SER': 'polar', 'THR': 'polar', 'ASN': 'polar', 'GLN': 'polar',
+    'TYR': 'polar', 'CYS': 'polar',
+    'ASP': 'negative', 'GLU': 'negative',
+    'LYS': 'positive', 'ARG': 'positive', 'HIS': 'positive',
+    'GLY': 'nonpolar',
 }
 
-def get_interaction_style(itype):
-    """获取相互作用样式"""
-    itype = itype.lower()
-    if "氢键" in itype or "hbond" in itype or "hydrogen" in itype:
-        return DS_STYLE["Hbond"]
-    elif "盐桥" in itype or "salt" in itype or "ionic" in itype:
-        return DS_STYLE["Salt"]
-    elif "π-π" in itype or "pipi" in itype or "stacking" in itype:
-        return DS_STYLE["PiPi"]
-    elif "π" in itype or "pi" in itype or "cation" in itype:
-        return DS_STYLE["Pi"]
-    elif "卤素" in itype or "halogen" in itype:
-        return DS_STYLE["Halogen"]
-    elif "疏水" in itype or "hydrophobic" in itype or "alkyl" in itype:
-        return DS_STYLE["Hydrophobic"]
-    else:
-        return DS_STYLE["VDW"]
+# Discovery Studio 风格颜色方案 (残基气泡)
+DS_RESIDUE_STYLE = {
+    'hydrophobic': {'facecolor': '#C5E1A5', 'edgecolor': '#4CAF50', 'textcolor': '#2E7D32'},
+    'nonpolar':    {'facecolor': '#FFE0B2', 'edgecolor': '#FF9800', 'textcolor': '#E65100'},
+    'polar':       {'facecolor': '#BBDEFB', 'edgecolor': '#2196F3', 'textcolor': '#1565C0'},
+    'negative':    {'facecolor': '#A5D6A7', 'edgecolor': '#388E3C', 'textcolor': '#1B5E20'},
+    'positive':    {'facecolor': '#FFCDD2', 'edgecolor': '#E57373', 'textcolor': '#C62828'},
+}
 
-def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj_name=None,
-                                     output_path=None, width=1600, height=1200, dpi=150):
+# ============================================================================
+# 统一配色方案 (与 interaction_analyzer.py visualize_protein_ligand_3d 完全一致)
+# Schrödinger 风格 - Hex 颜色值
+# ============================================================================
+UNIFIED_INTERACTION_COLORS = {
+    'hbond':       '#2196F3',  # 蓝色 - 氢键
+    'salt':        '#FF5722',  # 橙红色 - 盐桥
+    'pipi':        '#9C27B0',  # 紫色 - π-π 堆积
+    'pication':    '#E91E63',  # 粉色 - π-阳离子
+    'hydrophobic': '#4CAF50',  # 绿色 - 疏水相互作用
+    'halogen':     '#FF9800',  # 橙色 - 卤素键
+    'metal':       '#673AB7',  # 深紫色 - 金属配位
+    'water':       '#00BCD4',  # 青色 - 水桥
+    'other':       '#9E9E9E',  # 灰色 - 其他
+}
+
+# 相互作用连线样式 (与 3D 视图同步)
+INTERACTION_LINE_STYLE = {
+    'hbond':      {'color': UNIFIED_INTERACTION_COLORS['hbond'],      'linewidth': 2.0, 'linestyle': '--', 'label': 'Hydrogen Bond'},
+    'salt':       {'color': UNIFIED_INTERACTION_COLORS['salt'],       'linewidth': 2.5, 'linestyle': '-',  'label': 'Salt Bridge'},
+    'pipi':       {'color': UNIFIED_INTERACTION_COLORS['pipi'],       'linewidth': 2.0, 'linestyle': '--', 'label': 'Pi-Pi Stacking'},
+    'pication':   {'color': UNIFIED_INTERACTION_COLORS['pication'],   'linewidth': 2.0, 'linestyle': '--', 'label': 'Pi-Cation'},
+    'hydrophobic':{'color': UNIFIED_INTERACTION_COLORS['hydrophobic'],'linewidth': 1.5, 'linestyle': ':',  'label': 'Hydrophobic'},
+    'halogen':    {'color': UNIFIED_INTERACTION_COLORS['halogen'],    'linewidth': 2.0, 'linestyle': '--', 'label': 'Halogen Bond'},
+    'metal':      {'color': UNIFIED_INTERACTION_COLORS['metal'],      'linewidth': 2.5, 'linestyle': '-',  'label': 'Metal Coordination'},
+    'water':      {'color': UNIFIED_INTERACTION_COLORS['water'],      'linewidth': 2.0, 'linestyle': '--', 'label': 'Water Bridge'},
+    'other':      {'color': UNIFIED_INTERACTION_COLORS['other'],      'linewidth': 1.5, 'linestyle': ':',  'label': 'Other'},
+}
+
+# ============================================================================
+# 相互作用类型映射 (中英文统一，与 3D 视图一致)
+# ============================================================================
+INTERACTION_TYPE_MAP = {
+    # 中文 -> 内部类型
+    '氢键': 'hbond',
+    '盐桥': 'salt',
+    'π–π 堆积': 'pipi',
+    'π–阳离子相互作用': 'pication',
+    '疏水相互作用': 'hydrophobic',
+    '卤素键': 'halogen',
+    '金属配位': 'metal',
+    '水桥': 'water',
+    # 英文 -> 内部类型
+    'hydrogen bond': 'hbond',
+    'hbond': 'hbond',
+    'h-bond': 'hbond',
+    'salt bridge': 'salt',
+    'saltbridge': 'salt',
+    'pi-pi': 'pipi',
+    'pi-pi stacking': 'pipi',
+    'stacking': 'pipi',
+    'pi-cation': 'pication',
+    'cation-pi': 'pication',
+    'hydrophobic': 'hydrophobic',
+    'alkyl': 'hydrophobic',
+    'halogen': 'halogen',
+    'halogen bond': 'halogen',
+    'metal': 'metal',
+    'metal coordination': 'metal',
+    'metalcoord': 'metal',
+    'water bridge': 'water',
+    'waterbridge': 'water',
+}
+
+def get_residue_style(resname):
     """
-    生成高精度且清晰的2D相互作用图
+    获取残基的显示样式
+    
+    参数:
+        resname: 残基名称 (3字母代码)
+    
+    返回:
+        (style_dict, res_type): 样式字典和残基类型
+    """
+    resname = resname.upper()[:3]
+    res_type = RESIDUE_TYPES.get(resname, 'polar')
+    return DS_RESIDUE_STYLE[res_type], res_type
+
+
+def normalize_interaction_type(itype):
+    """
+    将相互作用类型标准化为内部类型名
+    
+    支持中英文混合输入，与 3D 视图 (interaction_analyzer.py) 完全一致
+    
+    参数:
+        itype: 相互作用类型字符串 (中文或英文)
+    
+    返回:
+        str: 标准化的内部类型名 ('hbond', 'salt', 'pipi', 等)
+    """
+    if not itype:
+        return 'other'
+    
+    itype_lower = itype.lower().strip()
+    
+    # 首先尝试精确匹配
+    if itype_lower in INTERACTION_TYPE_MAP:
+        return INTERACTION_TYPE_MAP[itype_lower]
+    
+    # 然后尝试部分匹配 (按优先级顺序)
+    # 氢键
+    if '氢键' in itype or 'hbond' in itype_lower or 'hydrogen' in itype_lower or 'h-bond' in itype_lower:
+        return 'hbond'
+    # 盐桥
+    if '盐桥' in itype or 'salt' in itype_lower:
+        return 'salt'
+    # π-π 堆积
+    if 'π–π' in itype or 'π-π' in itype or 'pi-pi' in itype_lower or 'pipi' in itype_lower or 'stacking' in itype_lower:
+        return 'pipi'
+    # π-阳离子
+    if 'π–阳离子' in itype or 'π-阳离子' in itype or 'pi-cation' in itype_lower or 'pication' in itype_lower or 'cation-pi' in itype_lower:
+        return 'pication'
+    # 金属配位
+    if '金属' in itype or 'metal' in itype_lower:
+        return 'metal'
+    # 水桥
+    if '水桥' in itype or 'water' in itype_lower:
+        return 'water'
+    # 卤素键
+    if '卤素' in itype or 'halogen' in itype_lower:
+        return 'halogen'
+    # 疏水相互作用 (最后检查，因为很多类型名称可能包含相关词)
+    if '疏水' in itype or 'hydrophobic' in itype_lower or 'alkyl' in itype_lower:
+        return 'hydrophobic'
+    
+    return 'other'
+
+
+def get_interaction_line_style(itype):
+    """
+    获取相互作用的连线样式
+    
+    与 3D 视图 (interaction_analyzer.py visualize_protein_ligand_3d) 使用相同的配色方案
+    
+    参数:
+        itype: 相互作用类型字符串 (中文或英文)
+    
+    返回:
+        dict: 包含 color, linewidth, linestyle, label 的样式字典
+    """
+    normalized_type = normalize_interaction_type(itype)
+    return INTERACTION_LINE_STYLE.get(normalized_type, INTERACTION_LINE_STYLE['other'])
+
+def parse_residue_label(prot_res):
+    parts = prot_res.strip().split()
+    if len(parts) >= 2:
+        return parts[0][:3].upper(), parts[1]
+    m = re.match(r'([A-Za-z]+)(\d+)', prot_res)
+    if m: return m.group(1).upper(), m.group(2)
+    return prot_res[:3].upper(), ""
+
+def clean_pdb_block(pdb_block, ignore_connect=False):
+    """
+    纯文本方式清理 PDB 内容：
+    1. 保留 CONECT 记录 (关键！用于正确的键连接) - 除非 ignore_connect=True
+    2. 移除所有氢原子行 (基于原子名称判断)
+    """
+    lines = pdb_block.split('\n')
+    new_lines = []
+    h_atom_serials = set()  # 记录氢原子的序列号，用于清理 CONECT
+    
+    for line in lines:
+        if line.startswith("ATOM") or line.startswith("HETATM"):
+            # PDB 原子名称在 12-16 列 (0-indexed: 12,13,14,15)
+            # 严格判定：原子符号在 76-78 列 (如果有)，或者基于名称推断
+            # 这里继续沿用名称判断，但增强逻辑
+            atom_name = line[12:16].strip()
+            element = line[76:78].strip().upper()
+            
+            is_h = False
+            # 1. 优先检查元素符号
+            if element == 'H':
+                is_h = True
+            # 2. 如果没有元素符号，检查名称
+            elif not element:
+                # 常见氢原子命名模式
+                if atom_name.startswith("H") and not (len(atom_name) > 1 and atom_name[1].islower() and atom_name[:2] not in ["He", "Hf", "Hg", "Ho", "Hs"]):
+                    # 排除 He, Hf, Hg, Ho, Hs 等元素，其他以 H 开头的通常是氢
+                    # 注意：PDB原子名通常是大写。如果有小写可能是特殊情况。
+                    # 简单规则：如果是 H 开头，且不是 Hg, Hf 等已知元素的缩写
+                    is_h = True
+                elif atom_name[0].isdigit() and len(atom_name) > 1 and atom_name[1] == 'H':
+                    # 如 1H, 2H
+                    is_h = True
+            
+            if is_h:
+                try:
+                    serial = int(line[6:11].strip())
+                    h_atom_serials.add(serial)
+                except:
+                    pass
+                continue
+        new_lines.append(line)
+    
+    # 彻底忽略 CONECT 记录（如果请求）
+    if ignore_connect:
+        final_lines = [line for line in new_lines if not line.startswith("CONECT")]
+        return '\n'.join(final_lines)
+
+    # 清理 CONECT 记录中的氢原子引用
+    if h_atom_serials:
+        final_lines = []
+        for line in new_lines:
+            if line.startswith("CONECT"):
+                parts = line.split()
+                if len(parts) > 1:
+                    try:
+                        main_atom = int(parts[1])
+                        if main_atom in h_atom_serials:
+                            continue  # 跳过以氢原子为主的 CONECT
+                        new_parts = ["CONECT", str(main_atom)]
+                        for p in parts[2:]:
+                            try:
+                                if int(p) not in h_atom_serials:
+                                    new_parts.append(p)
+                            except:
+                                pass
+                        if len(new_parts) > 2:
+                            final_lines.append(" ".join(new_parts))
+                    except:
+                        final_lines.append(line)
+                else:
+                    final_lines.append(line)
+            else:
+                final_lines.append(line)
+        return '\n'.join(final_lines)
+    
+    return '\n'.join(new_lines)
+
+
+def try_load_mol_from_smiles(pdb_file, ligand_resname):
+    """
+    尝试从 PDB 文件中提取配体的 SMILES 并用 RDKit 加载
+    这是处理复杂配体（如多肽）的备用方案
     """
     try:
         from rdkit import Chem
         from rdkit.Chem import AllChem
-        from rdkit.Chem.Draw import rdMolDraw2D
-    except ImportError:
-        print("[2D Diagram] RDKit is required: pip install rdkit")
-        return None
-
-    try:
-        import matplotlib.pyplot as plt
-        import matplotlib.patches as mpatches
-        from matplotlib.patches import Circle
-        from matplotlib.lines import Line2D
-        from PIL import Image
-    except ImportError:
-        print("[2D Diagram] matplotlib and Pillow are required")
-        return None
-
-    print(f"[2D Diagram] Starting Clean Generation for {ligand_resname}...")
-
-    # 1. 提取配体结构 (PDB格式)
-    # 我们需要加载两次:
-    # mol_map: 带 H (removeHs=False)，用于通过 PDB 原子名查找原子
-    # mol_draw: 不带 H (removeHs=True)，用于清晰绘图
+        
+        # 尝试使用 Open Babel 转换 (如果可用)
+        import subprocess
+        import tempfile
+        import shutil
+        
+        # 1) 在当前进程环境中定位 obabel
+        #    优先使用环境变量 OBABEL_BINARY，其次用 shutil.which('obabel')
+        obabel_bin = os.environ.get("OBABEL_BINARY") or shutil.which("obabel")
+        if not obabel_bin:
+            print("[2D Diagram] SMILES fallback skipped: 'obabel' binary not found in PyMOL PATH.")
+            print("             如果已安装，请在 PyMOL 启动环境中设置 OBABEL_BINARY=/full/path/to/obabel")
+            return None
+        
+        # 创建临时文件
+        with tempfile.NamedTemporaryFile(suffix='.smi', delete=False) as tmp:
+            tmp_smi = tmp.name
+        
+        try:
+            # 使用 obabel 将 PDB 转为 SMILES
+            cmd_args = [obabel_bin, pdb_file, "-O", tmp_smi, "-osmi"]
+            print(f"[2D Diagram] Trying Open Babel: {' '.join(cmd_args)}")
+            result = subprocess.run(
+                cmd_args,
+                capture_output=True,
+                text=True,
+                timeout=20,
+            )
+            if result.returncode != 0:
+                print(f"[2D Diagram] Open Babel failed (code={result.returncode}): {result.stderr.strip()}")
+            elif os.path.exists(tmp_smi):
+                with open(tmp_smi, 'r') as f:
+                    smiles_line = f.readline().strip()
+                    if smiles_line:
+                        smiles = smiles_line.split()[0]
+                        mol = Chem.MolFromSmiles(smiles)
+                        if mol:
+                            print(f"[2D Diagram] Loaded via SMILES (Open Babel): {smiles[:80]}...")
+                            # 为后续 2D 布局生成一个合理的 2D 构象
+                            try:
+                                AllChem.Compute2DCoords(mol)
+                            except Exception:
+                                pass
+                            return mol
+        except subprocess.TimeoutExpired:
+            print("[2D Diagram] Open Babel timeout while generating SMILES.")
+        except FileNotFoundError:
+            # 理论上不会走到这里，因为前面已经用 which 检查过
+            print("[2D Diagram] Open Babel executable not found at runtime.")
+        finally:
+            if os.path.exists(tmp_smi):
+                os.remove(tmp_smi)
+    except Exception as e:
+        print(f"[2D Diagram] SMILES fallback failed: {e}")
     
-    mol_map = None
+    return None
+
+
+def rebuild_bonds_by_distance(mol):
+    """
+    基于原子间距离重建分子键连接
+    用于修复 RDKit 自动推断键连接失败的情况
+    
+    使用标准共价键半径来判断原子间是否应该成键
+    """
+    from rdkit import Chem
+    
+    # 标准共价键半径 (Å)
+    COVALENT_RADII = {
+        6: 0.77,   # C
+        7: 0.75,   # N
+        8: 0.73,   # O
+        9: 0.71,   # F
+        15: 1.07,  # P
+        16: 1.05,  # S
+        17: 0.99,  # Cl
+        35: 1.14,  # Br
+        53: 1.33,  # I
+        1: 0.31,   # H
+    }
+    DEFAULT_RADIUS = 0.77
+    
+    if mol.GetNumConformers() == 0:
+        print("[2D Diagram] No conformer available for distance-based bond rebuild")
+        return mol
+    
+    conf = mol.GetConformer()
+    num_atoms = mol.GetNumAtoms()
+    
+    # 创建新的可编辑分子
+    emol = Chem.RWMol(Chem.Mol())
+    
+    # 复制原子
+    atom_map = {}
+    for i in range(num_atoms):
+        atom = mol.GetAtomWithIdx(i)
+        new_idx = emol.AddAtom(Chem.Atom(atom.GetAtomicNum()))
+        atom_map[i] = new_idx
+    
+    # 基于距离添加键
+    # 为了避免多肽折叠时不同片段之间“跨链连线成网”，我们增加一个
+    # 以 PDB 原子序号为基础的局部窗口约束：只允许在序号相差较小的
+    # 原子之间尝试成键（典型情况下这些原子在同一残基或相邻残基）。
+    tolerance = 0.4  # 容差因子
+    
+    # 预先提取 PDB 原子序号（如果存在），否则退回到 RDKit 索引
+    pdb_serials = []
+    for i in range(num_atoms):
+        atom = mol.GetAtomWithIdx(i)
+        info = atom.GetPDBResidueInfo()
+        if info is not None:
+            try:
+                pdb_serials.append(int(info.GetSerialNumber()))
+            except Exception:
+                pdb_serials.append(i)
+        else:
+            pdb_serials.append(i)
+    
+    for i in range(num_atoms):
+        pos_i = conf.GetAtomPosition(i)
+        r_i = COVALENT_RADII.get(mol.GetAtomWithIdx(i).GetAtomicNum(), DEFAULT_RADIUS)
+        
+        for j in range(i + 1, num_atoms):
+            # 关键约束：只在原子序号相差较小的局部范围内尝试成键，
+            # 避免由于多肽折叠导致的远程近距离原子误连。
+            if abs(pdb_serials[i] - pdb_serials[j]) > 6:
+                continue
+            
+            pos_j = conf.GetAtomPosition(j)
+            r_j = COVALENT_RADII.get(mol.GetAtomWithIdx(j).GetAtomicNum(), DEFAULT_RADIUS)
+            
+            # 计算距离
+            dist = ((pos_i.x - pos_j.x)**2 + (pos_i.y - pos_j.y)**2 + (pos_i.z - pos_j.z)**2)**0.5
+            
+            # 判断是否应该成键
+            max_bond_dist = (r_i + r_j) * (1 + tolerance)
+            if dist <= max_bond_dist:
+                try:
+                    emol.AddBond(atom_map[i], atom_map[j], Chem.BondType.SINGLE)
+                except:
+                    pass
+    
+    # 添加构象
+    new_conf = Chem.Conformer(emol.GetNumAtoms())
+    for i in range(num_atoms):
+        pos = conf.GetAtomPosition(i)
+        new_conf.SetAtomPosition(atom_map[i], pos)
+    emol.AddConformer(new_conf, assignId=True)
+    
+    result_mol = emol.GetMol()
+    
+    # 尝试推断键级
+    try:
+        Chem.SanitizeMol(result_mol, Chem.SanitizeFlags.SANITIZE_FINDRADICALS |
+                        Chem.SanitizeFlags.SANITIZE_SETAROMATICITY |
+                        Chem.SanitizeFlags.SANITIZE_SETCONJUGATION |
+                        Chem.SanitizeFlags.SANITIZE_SETHYBRIDIZATION |
+                        Chem.SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
+    except:
+        pass
+    
+    print(f"[2D Diagram] Rebuilt molecule: {result_mol.GetNumAtoms()} atoms, {result_mol.GetNumBonds()} bonds")
+    return result_mol
+
+
+def check_bond_sanity(mol):
+    """
+    检查分子键连接是否合理
+    返回 True 如果键连接看起来正常，False 如果可能有问题
+    """
+    num_atoms = mol.GetNumAtoms()
+    num_bonds = mol.GetNumBonds()
+    
+    if num_atoms == 0:
+        return False
+    
+    # 正常有机分子的键数应该接近原子数
+    # 典型范围: bonds ≈ atoms * 0.8 ~ 1.3 (对于线性分子接近1.0，有环的分子稍高)
+    # 大分子（多肽等）如果出现 bonds/atoms 明显 > 1.2 往往就是“蜘蛛网”式错误连接
+    bond_ratio = num_bonds / num_atoms if num_atoms > 0 else 0
+    
+    print(f"[2D Diagram] Bond sanity check: {num_bonds} bonds / {num_atoms} atoms = {bond_ratio:.2f}")
+    
+    # 分级阈值：对大分子更严格
+    if num_atoms >= 150:
+        ratio_threshold = 1.20
+    elif num_atoms >= 80:
+        ratio_threshold = 1.30
+    else:
+        ratio_threshold = 1.40
+    
+    if bond_ratio > ratio_threshold:
+        print(f"[2D Diagram] ⚠️ Abnormal bond ratio: {bond_ratio:.2f} (bonds={num_bonds}, atoms={num_atoms}, threshold={ratio_threshold:.2f})")
+        return False
+    
+    # 检查是否有原子连接了太多键 (正常最多 4 个，特殊情况如 S, P 可能有 5-6 个)
+    max_degree = 0
+    high_degree_count = 0
+    for atom in mol.GetAtoms():
+        degree = atom.GetDegree()
+        if degree > max_degree:
+            max_degree = degree
+        if degree > 4:
+            high_degree_count += 1
+    
+    # 如果有超过 10% 的原子连接度 > 4，说明有问题
+    if high_degree_count > num_atoms * 0.1:
+        print(f"[2D Diagram] ⚠️ Too many high-degree atoms: {high_degree_count}/{num_atoms}")
+        return False
+    
+    if max_degree > 6:
+        print(f"[2D Diagram] ⚠️ Abnormal max atom degree: {max_degree}")
+        return False
+    
+    return True
+
+def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj_name=None,
+                                     output_path=None, width=1600, height=1200, dpi=150,
+                                     min_confidence=0.8):
+    print(f"[2D Diagram] ========================================")
+    print(f"[2D Diagram] CSV Path: {csv_path}")
+    print(f"[2D Diagram] Ligand: {ligand_resname}")
+    print(f"[2D Diagram] ========================================")
+
+    # 局部工具函数：从 RDKit 分子中提取 3D 坐标和环中心
+    # 必须在函数开始时定义，以便在所有代码路径中都可用
+    def extract_3d_info(mol):
+        coords = {}
+        rings = []
+        if mol and mol.GetNumConformers() > 0:
+            conf = mol.GetConformer()
+            for atom in mol.GetAtoms():
+                idx = atom.GetIdx()
+                pos = conf.GetAtomPosition(idx)
+                coords[idx] = (pos.x, pos.y, pos.z)
+            
+            try:
+                for ri, ring in enumerate(mol.GetRingInfo().AtomRings()):
+                    pts = [conf.GetAtomPosition(aid) for aid in ring]
+                    cen = (
+                        sum(p.x for p in pts) / len(pts),
+                        sum(p.y for p in pts) / len(pts),
+                        sum(p.z for p in pts) / len(pts),
+                    )
+                    rings.append({"id": ri, "coord": cen, "indices": list(ring)})
+            except Exception:
+                pass
+        return coords, rings
+
+    # 1. 提取结构并清理氢原子
     mol_draw = None
-    temp_pdb = None
+    saved_temp_pdb = None  # 初始化变量，避免后续引用错误
     
     if obj_name:
         try:
             from pymol import cmd
             temp_pdb = tempfile.mktemp(suffix=".pdb")
-            # 通过 PyMOL 保存 PDB
-            cmd.save(temp_pdb, f"{obj_name} and resn {ligand_resname}", format="pdb")
+            space = {'c': [], 'r': []}
+            cmd.iterate(f"first ({obj_name} and resn {ligand_resname})", "c.append(chain); r.append(resi)", space=space)
+            sel = f"{obj_name} and resn {ligand_resname}"
+            if space['c']: sel += f" and chain {space['c'][0]} and resi {space['r'][0]}"
+            print(f"[2D Diagram] Extracting: {sel}")
+            cmd.save(temp_pdb, sel)
             
-            if os.path.exists(temp_pdb):
-                # 1. Mapping Molecule (Explicit H for mapping)
-                mol_map = Chem.MolFromPDBFile(temp_pdb, removeHs=False, sanitize=False)
+
+
+            # 保存 temp_pdb 路径供后续使用
+            saved_temp_pdb = temp_pdb
+            
+            # 策略调整：优先使用标准加载 (自动去氢 + 圣化)
+            try:
+                mol_draw = Chem.MolFromPDBFile(temp_pdb, removeHs=True, sanitize=True)
+                if mol_draw:
+                    print(f"[2D Diagram] Standard load: {mol_draw.GetNumAtoms()} atoms, {mol_draw.GetNumBonds()} bonds")
+            except Exception as e:
+                print(f"[2D Diagram] Standard load exception: {e}")
+                mol_draw = None
                 
-                # 2. Drawing Molecule (Implicit H for clean look)
-                mol_draw = Chem.MolFromPDBFile(temp_pdb, removeHs=True, sanitize=False)
-                
+            # 如果标准加载失败，使用终极文本清洗加载
+            if mol_draw is None:
+                print(f"[2D Diagram] Standard load failed, using Text-Based Cleaning...")
                 try:
-                    Chem.SanitizeMol(mol_map)
-                    Chem.SanitizeMol(mol_draw)
-                except:
-                    pass
+                    with open(temp_pdb, 'r') as f:
+                        raw_pdb = f.read()
+                    
+                    
+                    # 关键修复：不保留 CONECT 记录，让 RDKit 基于距离推断键
+                    # 因为 PyMOL 导出的 CONECT 记录可能不完整或有问题
+                    clean_pdb = clean_pdb_block(raw_pdb)
+                    
+                    # 尝试方案1：使用清洗后的 PDB（保留 CONECT）
+                    mol_draw = Chem.MolFromPDBBlock(clean_pdb, removeHs=True, sanitize=False)
+                    
+                    if mol_draw:
+                        print(f"[2D Diagram] Text cleaning load (with CONECT): {mol_draw.GetNumAtoms()} atoms, {mol_draw.GetNumBonds()} bonds")
+                        # 重新计算拓扑
+                        mol_draw.UpdatePropertyCache(strict=False)
+                        # 尝试圣化以获得键级 (如果可能)
+                        try:
+                            Chem.SanitizeMol(mol_draw, Chem.SanitizeFlags.SANITIZE_FINDRADICALS|
+                                           Chem.SanitizeFlags.SANITIZE_SETAROMATICITY|
+                                           Chem.SanitizeFlags.SANITIZE_SETCONJUGATION|
+                                           Chem.SanitizeFlags.SANITIZE_SETHYBRIDIZATION|
+                                           Chem.SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
+                        except: pass
+                    else:
+                        print(f"[2D Diagram] Text cleaning load failed, mol_draw is None")
+                    
+                    # 蜘蛛网检测与修复：如果加载出的分子键太疯狂，优先尝试“丢弃 CONECT 重新加载”
+                    # 真正的“无键 3D 投影”只在后面的统一修复逻辑里触发，避免过早丢失所有键信息。
+                    if mol_draw and not check_bond_sanity(mol_draw):
+                        print(f"[2D Diagram] ⚠️ Detected corrupted CONECT records (Spiderweb). Retrying without CONECT...")
+                        clean_pdb_no_conect = clean_pdb_block(raw_pdb, ignore_connect=True)
+                        mol_retry = Chem.MolFromPDBBlock(clean_pdb_no_conect, removeHs=True, sanitize=False)
+                        if mol_retry:
+                            mol_draw = mol_retry
+                            print(f"[2D Diagram] ✅ Spiderweb fix applied: Used structure without CONECT records.")
+                            mol_draw.UpdatePropertyCache(strict=False)
+                            try:
+                                Chem.SanitizeMol(mol_draw, catchErrors=True)
+                            except Exception:
+                                pass
+                            # 再次检查仅用于日志，是否依然异常由后续统一逻辑处理
+                            check_bond_sanity(mol_draw)
+                        else:
+                            print(f"[2D Diagram] Retry without CONECT failed; keeping original topology for later fixes.")
+
+                except Exception as e:
+                    print(f"[2D Diagram] Text cleaning failed: {e}")
+                    import traceback
+                    traceback.print_exc()
+
+            # 不要删除 temp_pdb，后面可能需要用于 SMILES 转换
+            # if os.path.exists(temp_pdb): os.remove(temp_pdb)
         except Exception as e:
-            print(f"[2D Diagram] Failed to extract ligand from PyMOL: {e}")
-            if temp_pdb and os.path.exists(temp_pdb): os.remove(temp_pdb)
-            return None
+            print(f"[2D Diagram] PyMOL Error: {e}")
+    
+    elif pdb_file and os.path.exists(pdb_file):
+        print(f"[2D Diagram] Loading from PDB file: {pdb_file}")
+        try:
+            # 首先从 PDB 文件中提取配体部分
+            with open(pdb_file, 'r') as f:
+                raw_pdb = f.read()
+            
+            # 提取配体行 (HETATM 或 ATOM 中匹配 ligand_resname 的行)
+            ligand_lines = []
+            conect_lines = []
+            ligand_serials = set()
+            
+            for line in raw_pdb.split('\n'):
+                if line.startswith("HETATM") or line.startswith("ATOM"):
+                    # 残基名称在 17-20 列 (0-indexed: 17,18,19)
+                    resname = line[17:20].strip()
+                    if resname == ligand_resname:
+                        ligand_lines.append(line)
+                        try:
+                            serial = int(line[6:11].strip())
+                            ligand_serials.add(serial)
+                        except:
+                            pass
+                elif line.startswith("CONECT"):
+                    conect_lines.append(line)
+            
+            if not ligand_lines:
+                print(f"[2D Diagram] No ligand '{ligand_resname}' found in PDB file")
+                mol_draw = None
+            else:
+                # 过滤 CONECT 记录，只保留配体原子之间的连接
+                filtered_conect = []
+                for line in conect_lines:
+                    parts = line.split()
+                    if len(parts) > 1:
+                        try:
+                            main_atom = int(parts[1])
+                            if main_atom in ligand_serials:
+                                new_parts = ["CONECT", str(main_atom)]
+                                for p in parts[2:]:
+                                    try:
+                                        if int(p) in ligand_serials:
+                                            new_parts.append(p)
+                                    except:
+                                        pass
+                                if len(new_parts) > 2:
+                                    filtered_conect.append(" ".join(new_parts))
+                        except:
+                            pass
+                
+                # 构建配体 PDB 块
+                ligand_pdb = '\n'.join(ligand_lines + filtered_conect + ['END'])
+                print(f"[2D Diagram] Extracted ligand: {len(ligand_lines)} atoms, {len(filtered_conect)} CONECT records")
+                
+                # 保存临时文件供后续 SMILES 转换使用
+                temp_ligand_pdb = tempfile.mktemp(suffix=".pdb")
+                with open(temp_ligand_pdb, 'w') as f:
+                    f.write(ligand_pdb)
+                saved_temp_pdb = temp_ligand_pdb
+                
+                # 清理氢原子
+                clean_pdb = clean_pdb_block(ligand_pdb)
+                
+                # 尝试加载
+                mol_draw = Chem.MolFromPDBBlock(clean_pdb, removeHs=True, sanitize=True)
+                if not mol_draw:
+                    # 备用方案：不圣化
+                    mol_draw = Chem.MolFromPDBBlock(clean_pdb, removeHs=True, sanitize=False)
+                    if mol_draw:
+                        try:
+                            Chem.SanitizeMol(mol_draw, catchErrors=True)
+                        except: pass
+                
+                if mol_draw:
+                    print(f"[2D Diagram] Loaded ligand: {mol_draw.GetNumAtoms()} atoms, {mol_draw.GetNumBonds()} bonds")
+        except Exception as e:
+            print(f"[2D Diagram] PDB Load Error: {e}")
+            import traceback
+            traceback.print_exc()
+
+    if not mol_draw:
+        print(f"[2D Diagram] Failed to load molecule.")
+        return None
+
+    # 检测大型多肽配体并给出警告
+    num_atoms = mol_draw.GetNumAtoms()
+    is_large_peptide = num_atoms > 50
+    if is_large_peptide:
+        print(f"[2D Diagram] ⚠️ 检测到大型多肽配体 ({num_atoms} 个原子)")
+        print(f"[2D Diagram] ⚠️ 对于大型多肽，2D 相互作用图可能布局不佳")
+        print(f"[2D Diagram] ⚠️ 建议使用 3D 可视化查看相互作用")
+
+    # 再次确认清理 (三层保险：处理可能的残留)
+    try:
+        # 强制移除所有氢原子
+        mol_draw = Chem.RemoveHs(mol_draw)
+        
+        # 再次检查原子序数
+        mw = Chem.RWMol(mol_draw)
+        atoms_to_remove = [i for i in range(mw.GetNumAtoms()) if mw.GetAtomWithIdx(i).GetAtomicNum() <= 1]
+        if atoms_to_remove:
+            atoms_to_remove.sort(reverse=True)
+            for i in atoms_to_remove: mw.RemoveAtom(i)
+        mol_draw = mw.GetMol()
+    except Exception as e: 
+        print(f"[2D Diagram] H Removal Error: {e}")
+    
+    # 2. 提前提取 3D 坐标 (关键！必须在投影到 2D 之前完成)
+    atom_coords_3d = {}
+    ring_centroids_3d = []
+
+    # 初始提取
+    atom_coords_3d, ring_centroids_3d = extract_3d_info(mol_draw)
+    
+    # 检查键连接是否合理，如果有问题则使用 Open Babel SMILES 重建
+    # 但对于大型多肽配体（>50 原子），跳过 SMILES 重建，因为会丢失 3D 坐标导致布局变差
+    bond_sanity_ok = check_bond_sanity(mol_draw)
+    
+    if not bond_sanity_ok and not is_large_peptide:
+        print(f"[2D Diagram] Attempting to fix bond connectivity using Open Babel...")
+        
+        # 使用 Open Babel SMILES 重建分子 (主要方案)
+        pdb_for_smiles = (
+            saved_temp_pdb
+            if 'saved_temp_pdb' in dir() and saved_temp_pdb and os.path.exists(saved_temp_pdb)
+            else pdb_file
+        )
+        mol_from_smiles = try_load_mol_from_smiles(pdb_for_smiles, ligand_resname)
+        if mol_from_smiles and check_bond_sanity(mol_from_smiles):
+            mol_draw = mol_from_smiles
+            # SMILES 重建的分子已经有 2D 坐标，更新 3D 坐标信息
+            atom_coords_3d, ring_centroids_3d = extract_3d_info(mol_draw)
+            print(f"[2D Diagram] ✅ Fixed using Open Babel SMILES reconstruction")
+        else:
+            # 如果 SMILES 方法失败，尝试基于距离重建键
+            if not check_bond_sanity(mol_draw):
+                num_atoms_for_rebuild = mol_draw.GetNumAtoms()
+                print(f"[2D Diagram] Trying distance-based bond inference on {num_atoms_for_rebuild} atoms...")
+                mol_rebuilt = rebuild_bonds_by_distance(mol_draw)
+                if check_bond_sanity(mol_rebuilt):
+                    mol_draw = mol_rebuilt
+                    atom_coords_3d, ring_centroids_3d = extract_3d_info(mol_draw)
+                    print(f"[2D Diagram] ✅ Fixed using distance-based bond rebuild")
+                else:
+                    print(f"[2D Diagram] ⚠️ Bond connectivity issues persist, proceeding with current structure")
+    elif not bond_sanity_ok and is_large_peptide:
+        print(f"[2D Diagram] ⚠️ 跳过 SMILES 重建（大型多肽配体），保留原始 3D 坐标以获得更好的 2D 布局")
     
     # 清理临时文件
-    if temp_pdb and os.path.exists(temp_pdb):
-        os.remove(temp_pdb)
+    if 'saved_temp_pdb' in dir() and saved_temp_pdb and os.path.exists(saved_temp_pdb):
+        os.remove(saved_temp_pdb)
+    
+    # 3. 解析相互作用并匹配 (与 3D 视图一致的置信度过滤)
+    interactions = []
+    interaction_types_found = set()  # 记录找到的相互作用类型，用于动态图例
+    try:
+        with open(csv_path, "r", encoding="utf-8-sig") as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                itype = row.get("Interaction", "").strip()
+                conf_str = row.get("Confidence", "1.0")
+                try:
+                    conf = float(conf_str)
+                except (ValueError, TypeError):
+                    conf = 1.0  # 没有置信度字段时默认视为 1.0
+                if conf < min_confidence:
+                    continue
+                
+                lig_atom_name = row.get("Ligand_Atom", "").strip()
+                prot_res = row.get("Protein_Residue", "").strip()
+                lx, ly, lz = row.get("Ligand_Atom_X"), row.get("Ligand_Atom_Y"), row.get("Ligand_Atom_Z")
+                
+                target_idx, target_type = None, "atom"
+                
+                # 方案1：通过坐标匹配（如果 CSV 中有坐标列）
+                if lx and ly and lz:
+                    try:
+                        lx, ly, lz = float(lx), float(ly), float(lz)
+                    except (ValueError, TypeError):
+                        lx, ly, lz = None, None, None
+                    
+                    if lx is not None:
+                        # 环匹配 (π-π 堆积, π-阳离子)
+                        if "Ring" in lig_atom_name or "Cation" in lig_atom_name:
+                            best_rid, best_rdist = None, float('inf')
+                            for r_data in ring_centroids_3d:
+                                rc = r_data["coord"]
+                                d = ((rc[0]-lx)**2 + (rc[1]-ly)**2 + (rc[2]-lz)**2)**0.5
+                                if d < best_rdist: best_rdist, best_rid = d, r_data["id"]
+                            if best_rid is not None and best_rdist < 0.6:
+                                target_idx, target_type = best_rid, "ring"
+                        
+                        # 原子匹配 (如果环没匹配上或不是环)
+                        if target_idx is None:
+                            best_aid, best_adist = None, float('inf')
+                            for aid, ac in atom_coords_3d.items():
+                                d = ((ac[0]-lx)**2 + (ac[1]-ly)**2 + (ac[2]-lz)**2)**0.5
+                                if d < best_adist: best_adist, best_aid = d, aid
+                            if best_aid is not None and best_adist < 0.3:
+                                target_idx, target_type = best_aid, "atom"
+                
+                # 方案2：通过原子名称匹配（如果 CSV 中没有坐标列）
+                if target_idx is None and lig_atom_name:
+                    # 特殊处理：Ring(...) 或 ring 表示环中心
+                    if lig_atom_name.lower() == "ring" or lig_atom_name.lower().startswith("ring("):
+                        # 对于 π-π 堆积，选择第一个环
+                        if ring_centroids_3d:
+                            target_idx = ring_centroids_3d[0]["id"]
+                            target_type = "ring"
+                            print(f"[2D DEBUG] Matched Ring to ring centroid {target_idx}")
+                    # 特殊处理：Cation(...) 表示阳离子
+                    elif lig_atom_name.lower().startswith("cation("):
+                        # 对于 π-阳离子相互作用，尝试匹配环中心
+                        if ring_centroids_3d:
+                            target_idx = ring_centroids_3d[0]["id"]
+                            target_type = "ring"
+                            print(f"[2D DEBUG] Matched Cation to ring centroid {target_idx}")
+                    else:
+                        # 通过 PDB 原子名称匹配
+                        for aid in range(mol_draw.GetNumAtoms()):
+                            atom = mol_draw.GetAtomWithIdx(aid)
+                            pdb_info = atom.GetPDBResidueInfo()
+                            if pdb_info:
+                                atom_name = pdb_info.GetName().strip()
+                                if atom_name == lig_atom_name:
+                                    target_idx = aid
+                                    target_type = "atom"
+                                    break
+                
+                if target_idx is not None:
+                    # 标准化相互作用类型 (与 3D 视图一致)
+                    normalized_itype = normalize_interaction_type(itype)
+                    
+                    # 特殊处理：Pi-Pi 和 Pi-Cation 应该连接到环中心
+                    # 如果当前匹配的是原子，检查该原子是否属于某个环
+                    if normalized_itype in ['pipi', 'pication'] and target_type == "atom":
+                        atom_idx = target_idx
+                        # 检查该原子是否在已知环中
+                        best_rid = None
+                        for r_data in ring_centroids_3d:
+                            if atom_idx in r_data["indices"]:
+                                best_rid = r_data["id"]
+                                break
+                        
+                        if best_rid is not None:
+                            target_idx = best_rid
+                            target_type = "ring"
+                            print(f"   -> Upgraded {lig_atom_name} to Ring {target_idx} Center")
 
-    if mol_map is None or mol_draw is None:
-        print(f"[2D Diagram] ❌ Failed to load ligand molecule.")
+                    interaction_types_found.add(normalized_itype)
+                    interactions.append({
+                        "res": prot_res,
+                        "idx": target_idx,
+                        "type": target_type,
+                        "itype": itype,
+                        "normalized_itype": normalized_itype,
+                        "confidence": conf
+                    })
+                    print(f"[2D DEBUG] Mapped {lig_atom_name} to {target_type} {target_idx} ({normalized_itype})")
+    except Exception as e:
+        print(f"[2D Diagram] CSV Error: {e}")
+        import traceback
+        traceback.print_exc()
+
+    # 4. 生成 2D 布局 (使用 RDKit CoordGen)
+    try:
+        # 确保使用 CoordGen，而不是基于当前 3D 构象的小幅调整
+        rdDepictor.SetPreferCoordGen(True)
+        rdDepictor.Compute2DCoords(mol_draw)
+    except Exception as e:
+        print(f"[2D Diagram] Layout error (CoordGen failed, falling back to RDKit 2D): {e}")
+        try:
+            AllChem.Compute2DCoords(mol_draw)
+        except Exception as e2:
+            print(f"[2D Diagram] Layout error (fallback failed): {e2}")
+            return None
+    
+    # 动态画布
+    conf_2d = mol_draw.GetConformer()
+    pts = [conf_2d.GetAtomPosition(i) for i in range(mol_draw.GetNumAtoms())]
+    phys_span = max([p.x for p in pts]) - min([p.x for p in pts]) if pts else 10.0
+    dw = int(max(1200, phys_span * 45.0 + 800))
+    dh = int(dw * 0.75)
+    
+    # 限制画布最大像素，防止内存爆炸
+    # 对于大型多肽配体，使用更小的画布
+    if is_large_peptide:
+        max_width = 2000
+        max_height = 1500
+        print(f"[2D Diagram] 大型多肽配体：限制画布大小为 {max_width}x{max_height}")
+    else:
+        max_width = 3000
+        max_height = 2250
+    
+    dw = min(dw, max_width)
+    dh = min(dh, max_height)
+    
+    try:
+        drawer = rdMolDraw2D.MolDraw2DCairo(dw, dh)
+        opts = drawer.drawOptions()
+        opts.padding = 0.15
+        opts.prepareMolsBeforeDrawing = True
+        opts.bondLineWidth = 3.0
+        opts.addStereoAnnotation = False
+        opts.addAtomIndices = False
+        opts.includeAtomTags = False
+        opts.explicitMethyl = False
+        # opts.addHBonds = False # Not supported in some RDKit versions
+        opts.minFontSize = 12
+        
+        # 只有重原子，不显示任何 H
+        drawer.DrawMolecule(mol_draw)
+        drawer.FinishDrawing()
+    except Exception as e:
+        print(f"[2D Diagram] Drawing error: {e}")
         return None
     
-    # Force Explicit Hydrogen Removal for Drawing (Robust Method)
-    try:
-        # Try full sanitization first
-        Chem.SanitizeMol(mol_draw)
-        mol_draw = Chem.RemoveHs(mol_draw)
-    except Exception as e:
-        print(f"[2D Diagram] Warning: Full sanitization failed ({e}), attempting partial sanitization for drawing...")
-        try:
-             # Partial sanitization (skip properties that might fail)
-             mol_draw.UpdatePropertyCache(strict=False)
-             Chem.SanitizeMol(mol_draw, Chem.SanitizeFlags.SANITIZE_FINDRADICALS|Chem.SanitizeFlags.SANITIZE_SETAROMATICITY|Chem.SanitizeFlags.SANITIZE_SETCONJUGATION|Chem.SanitizeFlags.SANITIZE_SETHYBRIDIZATION|Chem.SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
-             mol_draw = Chem.RemoveHs(mol_draw, implicitOnly=False)
-        except Exception as e2:
-             print(f"[2D Diagram] Critical: Failed to remove Hs even with partial sanitization: {e2}")
-             # Last resort: Manually delete H atoms
-             mw = Chem.RWMol(mol_draw)
-             atoms_to_remove = [a.GetIdx() for a in mw.GetAtoms() if a.GetAtomicNum() == 1]
-             atoms_to_remove.sort(reverse=True)
-             for idx in atoms_to_remove:
-                 mw.RemoveAtom(idx)
-             mol_draw = mw.GetMol()
+    # 提取渲染后的像素坐标 (用于连线)
+    px_atoms = {i: (drawer.GetDrawCoords(i).x, drawer.GetDrawCoords(i).y) for i in range(mol_draw.GetNumAtoms())}
+    px_rings = {}
+    for ri, ring in enumerate(mol_draw.GetRingInfo().AtomRings()):
+        r_pts = [px_atoms[aid] for aid in ring]
+        px_rings[ri] = (sum(p[0] for p in r_pts)/len(r_pts), sum(p[1] for p in r_pts)/len(r_pts))
 
+    # 5. Matplotlib 组装 (使用 io.BytesIO 优化内存)
+    import io
     
-    # 2. 建立原子映射
-    # Step A: 建立 Name -> Atom Object (in mol_map)
-    map_name_to_atom = {}
-    for atom in mol_map.GetAtoms():
-        info = atom.GetPDBResidueInfo()
-        if info:
-            name = info.GetName().strip()
-            map_name_to_atom[name] = atom
-
-    # Step B: 建立 Name -> Index (in mol_draw)
-    # 我们的目标是找到 mol_draw 中的对应原子索引
-    # mol_draw 中的原子都是重原子。
-    draw_name_to_idx = {}
-    for atom in mol_draw.GetAtoms():
-        info = atom.GetPDBResidueInfo()
-        if info:
-            name = info.GetName().strip()
-            draw_name_to_idx[name] = atom.GetIdx()
-            
-    print(f"[2D Diagram] Mapping prepared. Heavy atoms in drawing: {len(draw_name_to_idx)}")
-
-    # 3. 读取相互作用数据并关联到 mol_draw 索引
-    interactions = []
+    # 对于大型多肽配体，降低 DPI 以减少内存使用
+    actual_dpi = 100 if is_large_peptide else dpi
+    if is_large_peptide:
+        print(f"[2D Diagram] 大型多肽配体：降低 DPI 为 {actual_dpi} 以减少内存使用")
     
-    with open(csv_path, "r", encoding="utf-8-sig") as f:
-        reader = csv.DictReader(f)
-        for row in reader:
-            lig_atom_name = row.get("Ligand_Atom", "").strip()
-            prot_res = row.get("Protein_Residue", "").strip()
-            itype = row.get("Interaction", "").strip()
-            dist = row.get("Distance", "").strip()
-            
-            if not prot_res: continue
-
-            # --- Resolving Target Atom Index in Clean Molecule ---
-            target_idx = None
-            
-            # Case 1: 直接是重原子，且存在于 mol_draw
-            if lig_atom_name in draw_name_to_idx:
-                target_idx = draw_name_to_idx[lig_atom_name]
-            else:
-                # Case 2: 可能是 H 原子，或者名字没匹配上
-                # 在 mol_map 中找这个原子
-                if lig_atom_name in map_name_to_atom:
-                    map_atom = map_name_to_atom[lig_atom_name]
-                    
-                    # 检查是否为氢原子 (AtomicNum = 1)
-                    if map_atom.GetAtomicNum() == 1:
-                        # 找到相连的重原子 neighbor
-                        neighbors = map_atom.GetNeighbors()
-                        if neighbors:
-                            neighbor = neighbors[0] # H 只有一个邻居
-                            neighbor_info = neighbor.GetPDBResidueInfo()
-                            if neighbor_info:
-                                neighbor_name = neighbor_info.GetName().strip()
-                                # 尝试在 draw mol 中找这个重原子
-                                if neighbor_name in draw_name_to_idx:
-                                    target_idx = draw_name_to_idx[neighbor_name]
-            
-            # 如果还是找不到 (e.g. Ring interaction 标记为 Center)，暂忽略或映射到中心
-            
-            if target_idx is not None:
-                interactions.append({
-                    "protein": prot_res,
-                    "target_idx": target_idx,
-                    "type": itype,
-                    "distance": dist
-                })
-
-    print(f"[2D Diagram] Loaded {len(interactions)} interactions mapped to heavy atoms.")
-
-    # 4. 生成 2D 坐标 (Clean Molecule)
-    try:
-        AllChem.Compute2DCoords(mol_draw)
-    except:
-        pass
-
-    # 绘图设置
-    drawer_w, drawer_h = 1000, 750
-    drawer = rdMolDraw2D.MolDraw2DCairo(drawer_w, drawer_h)
-    
-    opts = drawer.drawOptions()
-    opts.clearBackground = False
-    opts.padding = 0.15      # 增加内边距
-    opts.bondLineWidth = 3   # 加粗化学键
-    opts.baseFontSize = 0.7  # 更大的原子标签 (相对缩放)
-    opts.multipleBondOffset = 0.15
-    
-    # 绘制
-    drawer.DrawMolecule(mol_draw)
-    drawer.FinishDrawing()
-    
-    png_data = drawer.GetDrawingText()
-    
-    # 获取坐标
-    atom_coords = {}
-    for i in range(mol_draw.GetNumAtoms()):
-        pt = drawer.GetDrawCoords(i)
-        atom_coords[i] = (pt.x, pt.y)
-
-    # 计算中心
-    xs = [p[0] for p in atom_coords.values()]
-    ys = [p[1] for p in atom_coords.values()]
-    center_x = sum(xs) / len(xs) if xs else drawer_w/2
-    center_y = sum(ys) / len(ys) if ys else drawer_h/2
-
-    # 5. Matplotlib 组装
-    fig = plt.figure(figsize=(width/100, height/100), dpi=dpi)
+    fig = plt.figure(figsize=(dw/100, dh/100), dpi=actual_dpi)
     ax = fig.add_subplot(111)
+    ax.set_facecolor('white')
     
-    tmp_png = tempfile.mktemp(suffix=".png")
-    with open(tmp_png, "wb") as f:
-        f.write(png_data)
-    lig_img = Image.open(tmp_png)
+    try:
+        with Image.open(io.BytesIO(drawer.GetDrawingText())) as lig_img:
+            ax.imshow(lig_img, origin='upper', extent=[0, dw, dh, 0])
+    except Exception as e:
+        print(f"[2D Diagram] Image assembly error: {e}")
+        plt.close(fig)
+        return None
     
-    ax.imshow(lig_img, origin='upper', extent=[0, drawer_w, 0, drawer_h])
-    os.remove(tmp_png)
+    ax.set_xlim(-50, dw + 50); ax.set_ylim(dh + 50, -50); ax.axis('off')
+
+    # 计算配体中心
+    c_x = sum(p[0] for p in px_atoms.values()) / len(px_atoms)
+    c_y = sum(p[1] for p in px_atoms.values()) / len(px_atoms)
     
-    ax.set_xlim(0, drawer_w)
-    ax.set_ylim(drawer_h, 0)
-    ax.axis('off')
-    
-    # 分组相互作用
-    residue_data = {}
+    # 绘制气泡与连线
+    res_map = {}
     for inter in interactions:
-        p = inter["protein"]
-        if p not in residue_data: residue_data[p] = []
-        residue_data[p].append(inter)
-
-    # 布局参数
-    label_dist = 140.0 # 距离原子的长度
-    bubble_r = 45.0
-    drawn_bubbles = []
-
-    print(f"[2D Diagram] Placing {len(residue_data)} residue bubbles...")
-
-    for prot_res, inter_list in residue_data.items():
-        # 计算锚点 (所有关联重原子的平均位置)
-        coords = [atom_coords[i["target_idx"]] for i in inter_list if i["target_idx"] in atom_coords]
-        if not coords:
-            anchor_x, anchor_y = center_x, center_y # Fallback
-        else:
-            anchor_x = sum(c[0] for c in coords)/len(coords)
-            anchor_y = sum(c[1] for c in coords)/len(coords)
+        res = inter["res"]
+        if res not in res_map: res_map[res] = []
+        res_map[res].append(inter)
+    
+    # 智能布局算法 (基于相互作用点的局部扩展)
+    placed_badges = [] # list of {"x": x, "y": y, "r": radius, "res": res_name}
+    badge_radius = 28.0 # 缩小气泡：比文字稍大即可 (原 55.0 太大)
+    padding = 8.0
+    used_residue_types = set()  # 用于构建 Discovery Studio 风格的残基图例
+    
+    sorted_res = sorted(res_map.items())
+    
+    for i, (res, inters) in enumerate(sorted_res):
+        # 1. 计算该残基所有相互作用点的平均位置 (目标中心)
+        tx_sum, ty_sum = 0, 0
+        count = 0
+        for inter in inters:
+            tid, ttype = inter["idx"], inter["type"]
+            if ttype == "ring" and tid in px_rings:
+                tx, ty = px_rings[tid]
+            elif tid in px_atoms:
+                tx, ty = px_atoms[tid]
+            else:
+                continue
+            tx_sum += tx
+            ty_sum += ty
+            count += 1
         
-        # 向量方向
-        vx, vy = anchor_x - center_x, anchor_y - center_y
-        norm = math.sqrt(vx**2 + vy**2)
-        if norm < 0.1: vx, vy = 1, 0; norm=1
-        dx, dy = vx/norm, vy/norm
+        if count == 0: continue
         
-        # 初始位置
-        px = anchor_x + dx * label_dist
-        py = anchor_y + dy * label_dist
+        target_x, target_y = tx_sum / count, ty_sum / count
         
-        # 简单的斥力迭代 (防重叠)
-        for _ in range(5):
+        # 2. 计算从配体中心指向目标中心的向量
+        vx, vy = target_x - c_x, target_y - c_y
+        dist = math.hypot(vx, vy)
+        
+        # 如果距离太近（比如在中心），默认向上
+        if dist < 1.0:
+            vx, vy = 0, -1 # Y轴向下是正，PyMOL/Cairo坐标系通常左上角为0? Matplotlib是左下角?
+            # 这里的 ax.imshow 用的 extent=[0, dw, dh, 0]，origin='upper'
+            # 说明 y 轴向下增大。
+            # 无论如何，我们只需要一个方向向量。
+            dist = 1.0
+            
+        # 归一化方向向量
+        ux, uy = vx / dist, vy / dist
+        
+        # 3. 初始放置位置：在目标点外侧一定距离
+        # 距离取决于相互作用类型，如果是氢键/卤素键可以近一点，疏水/Pi堆积可以远一点？
+        # 为了整齐，统一距离，但要保证不遮挡
+        standoff = 70.0 # 基础站立距离
+        
+        bx = target_x + ux * standoff
+        by = target_y + uy * standoff
+        
+        # 4. 碰撞检测与解决 (简单的迭代推挤)
+        # 尝试最多 10 轮推挤
+        for _ in range(10):
             moved = False
-            # 1. Bubble-Bubble Repulsion
-            for (ox, oy, _) in drawn_bubbles:
-                d = math.sqrt((px-ox)**2 + (py-oy)**2)
-                min_d = bubble_r * 2.5
-                if d < min_d:
-                    rx, ry = px-ox, py-oy
-                    rn = math.sqrt(rx**2+ry**2)
-                    if rn < 0.1: rx, ry = 1,0; rn=1
-                    px += (rx/rn)*40
-                    py += (ry/rn)*40
+            # 5. 增强的碰撞检测：同时避开其他气泡和配体原子
+            # 检查与已放置气泡的重叠
+            for badge in placed_badges:
+                dx = bx - badge["x"]
+                dy = by - badge["y"]
+                d = math.hypot(dx, dy)
+                min_dist = badge_radius * 2 + padding
+                
+                if d < min_dist:
+                    # 发生重叠，推开 (气泡之间互斥)
+                    if d < 1.0: dx, dy, d = 1.0, 0.0, 1.0 
+                    overlap = min_dist - d
+                    # 只移动当前气泡 (向外推)
+                    push_x = (dx / d) * overlap * 0.8
+                    push_y = (dy / d) * overlap * 0.8
+                    bx += push_x
+                    by += push_y
                     moved = True
             
-            # 2. Bubble-Atom Repulsion (Optional, avoid overlapping ligand)
-            # 简单检查离中心太近
-            d_center = math.sqrt((px-center_x)**2 + (py-center_y)**2)
-            # 如果进入了配体区域 (假设半径 250)
-            if d_center < 250:
-                 cx, cy = px-center_x, py-center_y
-                 cn = math.sqrt(cx**2+cy**2)
-                 if cn<0.1: cx,cy=1,0; cn=1
-                 px += (cx/cn)*20
-                 py += (cy/cn)*20
-                 moved=True
-                 
-            if not moved: break
-        
-        drawn_bubbles.append((px, py, bubble_r))
-        
-        # 确定优先级最高的颜色
-        best_style = DS_STYLE["VDW"]
-        w_max = 0
-        for i in inter_list:
-            s_name = i["type"]
-            w = 0
-            if "氢键" in s_name or "Hbond" in s_name: w=10
-            elif "盐桥" in s_name or "Salt" in s_name: w=9
-            elif "π-π" in s_name or "PiPi" in s_name: w=8
-            elif "π" in s_name or "Pi" in s_name: w=7
+            # 检查与配体原子的重叠 (关键修复！)
+            # 遍历所有配体原子，确保气泡不覆盖它们
+            # 为了效率，可以只检查凸包或者采样点，但原子数不多，直接遍历即可
+            min_atom_dist = badge_radius + 20 # 气泡半径 + 安全边距
             
-            if w > w_max:
-                w_max = w
-                best_style = get_interaction_style(s_name)
-        
-        # 绘制气泡
-        # 名字分行
-        parts = prot_res.split()
-        if len(parts) >= 2: txt = f"{parts[0][:3]}\n{parts[1]}"
-        else: txt = prot_res[:3]
-        
-        circle = Circle((px, py), bubble_r, facecolor='white', edgecolor=best_style["color"], linewidth=2, zorder=10)
-        ax.add_patch(circle)
-        ax.text(px, py, txt, ha='center', va='center', fontsize=10, fontweight='bold', zorder=11)
-        
-        # 绘制连线
-        for inter in inter_list:
-            if inter["target_idx"] not in atom_coords: continue
-            tx, ty = atom_coords[inter["target_idx"]]
             
-            # 计算连线切点
-            lx, ly = px-tx, py-ty
-            ld = math.sqrt(lx**2+ly**2)
-            if ld > bubble_r:
-                ex = tx + (lx/ld)*(ld-bubble_r)
-                ey = ty + (ly/ld)*(ld-bubble_r)
+            for aid, (atom_x, atom_y) in px_atoms.items():
+                dx = bx - atom_x
+                dy = by - atom_y
+                d = math.hypot(dx, dy)
+                
+                if d < min_atom_dist:
+                    # 严重重叠！必须强力推开
+                    # 推开方向：从配体中心向气泡方向 (ux, uy)
+                    # 或者从原子向气泡方向
+                    if d < 1.0: 
+                        # 如果正好重合，沿径向推
+                        push_dir_x, push_dir_y = ux, uy
+                    else:
+                        push_dir_x, push_dir_y = dx/d, dy/d
+                    
+                    overlap = min_atom_dist - d
+                    bx += push_dir_x * overlap * 1.2 # 稍微多推一点
+                    by += push_dir_y * overlap * 1.2
+                    moved = True
+            
+            # 额外的几何约束：确保气泡不"陷入"配体内部 concave 区域并遮挡内部原子
+            # 检查气泡中心到配体中心的距离，不能小于某个阈值(动态)
+            # 或者简单地：气泡必须比它所作用的原子更靠外
+            
+            # 投影检查 (气泡必须位于目标原子沿径向的外侧)
+            vec_c_target = (target_x - c_x, target_y - c_y) # 中心->目标原子
+            vec_c_badge = (bx - c_x, by - c_y) # 中心->气泡
+            
+            # 计算气泡在 (中心->目标) 方向上的投影长度
+            # 如果气泡跑到了目标原子的内侧 (投影长度 < 目标投影长度)，这是不合理的
+            proj_len = (vec_c_badge[0]*ux + vec_c_badge[1]*uy)
+            target_len = (vec_c_target[0]*ux + vec_c_target[1]*uy)
+            
+            min_proj = target_len + badge_radius * 0.8 # 至少要在目标原子外侧
+            if proj_len < min_proj:
+                diff = min_proj - proj_len
+                bx += ux * diff
+                by += uy * diff
+                moved = True
+
+            if not moved:
+                break
+        
+        placed_badges.append({"x": bx, "y": by, "r": badge_radius, "res": res})
+        
+        # 绘制
+        style, res_type = get_residue_style(res)
+        used_residue_types.add(res_type)
+        ax.add_patch(Circle((bx, by), badge_radius, facecolor=style['facecolor'], edgecolor=style['edgecolor'], lw=1.5, zorder=10))
+        r_name, r_num = parse_residue_label(res)
+        # 字体稍小一点以适应小气泡
+        ax.text(bx, by, f"{r_name}\n{r_num}", ha='center', va='center', fontweight='bold', fontsize=8, color=style['textcolor'], zorder=11)
+        
+        # 绘制每个相互作用的连线
+        for inter in inters:
+            tid, ttype = inter["idx"], inter["type"]
+            tx, ty = px_rings[tid] if ttype == "ring" else px_atoms[tid]
+            
+            normalized_itype = inter.get("normalized_itype", normalize_interaction_type(inter["itype"]))
+            ls = INTERACTION_LINE_STYLE.get(normalized_itype, INTERACTION_LINE_STYLE['other'])
+            
+            # 计算截断点：从气泡中心向目标点方向延伸半径长度
+            # 这样线看起来是从气泡边缘发出的
+            angle_to_target = math.atan2(ty - by, tx - bx)
+            sx = bx + badge_radius * math.cos(angle_to_target)
+            sy = by + badge_radius * math.sin(angle_to_target)
+            
+            if normalized_itype == 'hydrophobic':
+                # 用户要求：疏水相互作用不画连线，只显示绿色气泡 (已通过配色方案实现)
+                continue
             else:
-                ex, ey = px, py
-            
-            style = get_interaction_style(inter["type"])
-            line = Line2D([tx, ex], [ty, ey], 
-                         color=style["color"], 
-                         linestyle=style["style"], 
-                         linewidth=1.8, # Thicker lines
-                         alpha=0.85, 
-                         zorder=5)
-            ax.add_line(line)
-            
-            # Distance label
-            d_val = inter["distance"]
-            if d_val and d_val not in ["-", ""]:
-                mx, my = (tx+ex)/2, (ty+ey)/2
-                ax.text(mx, my, str(d_val), fontsize=8, color='black', 
-                       bbox=dict(boxstyle='round,pad=0.1', fc='white', ec='none', alpha=0.9),
-                       ha='center', va='center', zorder=6)
+                ax.plot([sx, tx], [sy, ty], color=ls['color'], lw=ls['linewidth'], ls=ls['linestyle'], zorder=6)
 
-    # Legend
-    handles = []
-    seen = set()
-    sort_order = ["Hbond", "Salt", "PiPi", "Pi", "Halogen", "Hydrophobic", "VDW"]
+    # 图例：Discovery Studio 风格
+    # 1) 相互作用类型连线 (氢键、Pi-Pi、Pi-阳离子等)
+    # 2) 各类残基类型气泡 (Hydrophobic / Nonpolar / Polar / Negative / Positive)
+    legend_handles = []
     
-    for k in sort_order:
-        s = DS_STYLE[k]
-        if s["label"] not in seen:
-            handles.append(mpatches.Patch(color=s["color"], label=s["label"]))
-            seen.add(s["label"])
-            
-    ax.legend(handles=handles, loc='upper right', bbox_to_anchor=(1.15, 1), fontsize=9, title="Interaction Types")
-    ax.text(drawer_w/2, 40, f"{ligand_resname} Interactions", ha='center', fontsize=16, fontweight='bold')
+    # 相互作用类型图例（按优先级顺序）
+    interaction_legend_order = ['hbond', 'pipi', 'pication', 'salt']
+    interaction_labels = {
+        'hbond': 'Hydrogen Bond',
+        'pipi': 'Pi-Pi Stacking',
+        'pication': 'Pi-Cation',
+        'salt': 'Salt Bridge',
+    }
+    
+    for itype in interaction_legend_order:
+        if itype in interaction_types_found:
+            s = INTERACTION_LINE_STYLE.get(itype, INTERACTION_LINE_STYLE['other'])
+            legend_handles.append(
+                Line2D([0], [0], color=s['color'], lw=2, ls=s.get('linestyle', '-'), label=interaction_labels.get(itype, itype))
+            )
+    
+    # 残基类型图例
+    residue_labels = {
+        'hydrophobic': 'Hydrophobic',
+        'nonpolar': 'Nonpolar',
+        'polar': 'Polar',
+        'negative': 'Negative',
+        'positive': 'Positive',
+    }
+    # 按固定顺序展示，使图例稳定
+    residue_order = ['hydrophobic', 'nonpolar', 'polar', 'negative', 'positive']
+    for r_type in residue_order:
+        if r_type in used_residue_types:
+            style = DS_RESIDUE_STYLE[r_type]
+            legend_handles.append(
+                mpatches.Circle(
+                    (0, 0),
+                    radius=6,
+                    facecolor=style['facecolor'],
+                    edgecolor=style['edgecolor'],
+                    linewidth=1.5,
+                    label=residue_labels[r_type],
+                )
+            )
+    
+    if legend_handles:
+        ax.legend(
+            handles=legend_handles,
+            loc='upper left',
+            frameon=True,
+            fontsize=8,
+            fancybox=True,
+            framealpha=0.9,
+            edgecolor='gray',
+        )
 
-    plt.tight_layout()
-    if output_path is None: output_path = f"{ligand_resname}_2d.png"
-    plt.savefig(output_path, dpi=dpi, bbox_inches="tight")
+    if not output_path:
+        output_path = os.path.join(os.path.expanduser("~"), "Desktop", f"{ligand_resname}_2d.png")
+    plt.savefig(output_path, dpi=dpi, bbox_inches='tight', pad_inches=0.1)
     plt.close()
-    
-    print(f"[2D Diagram] ✅ Saved standard clean diagram to {output_path}")
+    print(f"[2D Diagram] ✅ Saved to {output_path}")
     return output_path
-
-try:
-    from pymol import cmd
-    cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
-except:
-    pass

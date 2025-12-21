@@ -127,12 +127,8 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.pl_distance = QLineEdit("4.5")
         pl_grid.addWidget(self.parent_window.pl_distance, 1, 3)
         
-        pl_grid.addWidget(QLabel("Output CSV:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.pl_csv = QLineEdit(); self.parent_window.pl_csv.setPlaceholderText("Optional")
-        self.parent_window.pl_csv_btn = QPushButton(t("browse"))
-        self.parent_window.pl_csv_btn.clicked.connect(lambda: self._browse_save_file(self.parent_window.pl_csv, "CSV (*.csv)"))
-        r2_pl = QHBoxLayout(); r2_pl.addWidget(self.parent_window.pl_csv, 1); r2_pl.addWidget(self.parent_window.pl_csv_btn)
-        pl_grid.addLayout(r2_pl, 2, 1, 1, 3)
+        # Output CSV moved to row 3 to make space for 3D options
+        # See below for new layout positioning
         
         pl_btn_row = QHBoxLayout()
         self.parent_window.pl_analyze_btn = QPushButton("Analyze Protein-Ligand"); self.parent_window.pl_analyze_btn.setObjectName("highlight_btn")
@@ -148,9 +144,27 @@ class LeadOptimizationTab(CommonTab):
         layout.addWidget(grp_pl)
         layout.addLayout(pl_btn_row)
         
-        # Hidden fields for backward compatibility
-        self.parent_window.pl_show_hydrophobic = QCheckBox(); self.parent_window.pl_show_hydrophobic.setVisible(False)
-        self.parent_window.pl_min_confidence = QComboBox(); self.parent_window.pl_min_confidence.setVisible(False)
+        # 3D Visualization Options
+        pl_grid.addWidget(QLabel("Min Confidence:"), 2, 0, Qt.AlignmentFlag.AlignRight)
+        self.parent_window.pl_min_confidence = QComboBox()
+        self.parent_window.pl_min_confidence.addItems(["0.0 (Show All)", "0.5", "0.6", "0.7", "0.8 (High)", "0.9"])
+        self.parent_window.pl_min_confidence.setCurrentText("0.8 (High)")
+        pl_grid.addWidget(self.parent_window.pl_min_confidence, 2, 1)
+
+        self.parent_window.pl_show_hydrophobic = QCheckBox("Show Hydrophobic Interactions")
+        self.parent_window.pl_show_hydrophobic.setChecked(False)
+        pl_grid.addWidget(self.parent_window.pl_show_hydrophobic, 2, 3)
+        
+        # Adjust Output CSV row
+        # Adjust Output CSV row
+        pl_grid.addWidget(QLabel("Output CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight)
+        
+        self.parent_window.pl_csv = QLineEdit(); self.parent_window.pl_csv.setPlaceholderText("Optional")
+        self.parent_window.pl_csv_btn = QPushButton(t("browse"))
+        self.parent_window.pl_csv_btn.clicked.connect(lambda: self._browse_save_file(self.parent_window.pl_csv, "CSV (*.csv)"))
+        
+        r2_pl = QHBoxLayout(); r2_pl.addWidget(self.parent_window.pl_csv, 1); r2_pl.addWidget(self.parent_window.pl_csv_btn)
+        pl_grid.addLayout(r2_pl, 3, 1, 1, 3)
         
         # 3. Ligand-Ligand Interactions
         grp_ll = QGroupBox("Ligand-Ligand Interactions (Small Molecule - Small Molecule)")
@@ -354,6 +368,14 @@ class LeadOptimizationTab(CommonTab):
             distance = float(self.parent_window.pl_distance.text())
             output_csv = self.parent_window.pl_csv.text().strip() or None
             
+            # Get 3D Visualization Options
+            show_hydrophobic = self.parent_window.pl_show_hydrophobic.isChecked()
+            min_conf_str = self.parent_window.pl_min_confidence.currentText().split()[0]
+            try:
+                min_confidence = float(min_conf_str)
+            except:
+                min_confidence = 0.0
+            
             self.log(f"Starting Protein-Ligand analysis for {obj_name}...")
             if ligand_name:
                 self.log(f"  Ligand: {ligand_name}")
@@ -390,8 +412,14 @@ class LeadOptimizationTab(CommonTab):
                         if result.get("ligand_residues"):
                             actual_ligand = result["ligand_residues"][0].get("resname", ligand_name)
                         
-                        visualize_protein_ligand_3d(obj_name, result, actual_ligand)
-                        self.log("  3D visualization generated")
+                        visualize_protein_ligand_3d(
+                            obj_name, 
+                            result, 
+                            actual_ligand, 
+                            show_hydrophobic=show_hydrophobic,
+                            min_confidence=min_confidence
+                        )
+                        self.log(f"  3D visualization generated (Conf>={min_confidence}, Hydrophobic={show_hydrophobic})")
                     except Exception as viz_e:
                         self.log(f"  3D visualization failed: {viz_e}")
                         import traceback; traceback.print_exc()
@@ -466,6 +494,14 @@ class LeadOptimizationTab(CommonTab):
                 QMessageBox.warning(self, "Missing Input", "Please specify the Ligand Name (Residue Name).")
                 return
 
+            # Use the same visualization options as 3D view
+            show_hydrophobic = self.parent_window.pl_show_hydrophobic.isChecked()
+            min_conf_str = self.parent_window.pl_min_confidence.currentText().split()[0]
+            try:
+                min_confidence = float(min_conf_str)
+            except Exception:
+                min_confidence = 0.8
+
             # Output path
             default_name = f"{ligand_name}_2d.png"
             out_path, _ = QFileDialog.getSaveFileName(self, "Save 2D Diagram", default_name, "PNG Image (*.png)")
@@ -480,7 +516,8 @@ class LeadOptimizationTab(CommonTab):
                 csv_path=csv_path, 
                 ligand_resname=ligand_name, 
                 obj_name=obj_name, 
-                output_path=out_path
+                output_path=out_path,
+                min_confidence=min_confidence
             )
             
             if final_path and os.path.exists(final_path):
@@ -501,7 +538,7 @@ class LeadOptimizationTab(CommonTab):
             else:
                 self.log("Failed to generate 2D diagram.")
                 QMessageBox.warning(self, "Error", "Failed to generate diagram. See log for details.")
-
+    #
         except Exception as e:
             self.on_error(f"2D Diagram Error: {str(e)}")
             import traceback; traceback.print_exc()

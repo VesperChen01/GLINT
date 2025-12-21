@@ -513,7 +513,7 @@ def centroid(coords):
     return tuple(sum(c[i] for c in coords)/n for i in range(3))
 
 
-def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7):
+def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7, return_names=False):
     """
     检测配体中的芳香/平面环结构
     
@@ -524,7 +524,11 @@ def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7):
     参数:
         atoms: 原子信息列表 [(chain, resn, resi, name, coord), ...]
         min_ring_size: 最小环大小（默认5，五元环）
+    参数:
+        atoms: 原子信息列表 [(chain, resn, resi, name, coord), ...]
+        min_ring_size: 最小环大小（默认5，五元环）
         max_ring_size: 最大环大小（默认7，七元环）
+        return_names: 是否返回原子名称 (bool)
     
     返回:
         list of lists: 每个内部列表包含一个环的原子坐标 [(x,y,z), ...]
@@ -584,7 +588,11 @@ def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7):
                     ring_coords = [ring_candidates[i][4] for i in path]
                     # 验证共面性
                     if is_planar_ring(ring_coords):
-                        detected_rings.append(ring_coords)
+                        if return_names:
+                            ring_names = [ring_candidates[i][3] for i in path]
+                            detected_rings.append((ring_coords, ring_names))
+                        else:
+                            detected_rings.append(ring_coords)
                 return
             
             if neighbor not in path and neighbor > start:  # 避免重复和回退
@@ -642,7 +650,7 @@ def is_planar_ring(coords, tolerance=0.5):
     return True
 
 
-def ring_atoms(res_name, atoms):
+def ring_atoms(res_name, atoms, return_names=False):
     """
     获取环状结构原子坐标
     
@@ -673,10 +681,13 @@ def ring_atoms(res_name, atoms):
     # 标准残基使用预定义的原子列表
     if res_name in ring_dict:
         coords = [a[4] for a in atoms if a[3].strip() in ring_dict[res_name]]
+        if return_names:
+            names = [a[3].strip() for a in atoms if a[3].strip() in ring_dict[res_name]]
+            return (coords, names) if len(coords) >= 3 else None
         return coords if len(coords) >= 3 else None
     
     # 非标准残基（配体）：使用动态检测
-    detected_rings = detect_ligand_rings(atoms)
+    detected_rings = detect_ligand_rings(atoms, return_names=return_names)
     if detected_rings:
         # 返回第一个检测到的环（可根据需求扩展为返回所有环）
         return detected_rings[0]
@@ -736,11 +747,15 @@ def is_pipi(res1, atoms1, res2, atoms2):
     """
     判断是否为π-π堆积（简单版本，兼容旧代码）
     """
-    r1 = ring_atoms(res1, atoms1)
-    r2 = ring_atoms(res2, atoms2)
+    r1_info = ring_atoms(res1, atoms1, return_names=True)
+    r2_info = ring_atoms(res2, atoms2, return_names=True)
     
-    if not r1 or not r2:
+    if not r1_info or not r2_info:
         return False
+        
+    # Unpack based on return_names=True
+    r1, n1 = r1_info
+    r2, n2 = r2_info
     
     c1, c2 = centroid(r1), centroid(r2)
     d = distance(c1, c2)
@@ -748,14 +763,18 @@ def is_pipi(res1, atoms1, res2, atoms2):
     if not (3.3 <= d <= 6.0):
         return False
     
-    n1 = normal_vector(r1[0], r1[1], r1[2])
-    n2 = normal_vector(r2[0], r2[1], r2[2])
+    n1_vec = normal_vector(r1[0], r1[1], r1[2])
+    n2_vec = normal_vector(r2[0], r2[1], r2[2])
     
-    if n1 is None or n2 is None:
+    if n1_vec is None or n2_vec is None:
         return False
     
-    angle = angle_between(n1, n2)
-    return angle <= 30 or 60 <= angle <= 120
+    angle = angle_between(n1_vec, n2_vec)
+    is_stack = angle <= 30 or 60 <= angle <= 120
+    
+    if is_stack:
+        return (True, n1, n2)
+    return False
 
 def is_pipi_precise(res1, atoms1, res2, atoms2):
     """
@@ -835,26 +854,37 @@ def is_metal_coordination(atom1, atom2):
 
 def is_cationpi(res1, atoms1, res2, atoms2):
     """判断是否为π-阳离子相互作用"""
-    pos_res = {"ARG", "LYS", "HIS"}
-    ring_res = {"PHE", "TYR", "TRP", "HIS", "A", "G", "C", "T", "U"}
+    # Helper to find cation center and names
+    def cation_info(atoms):
+        targets = [a for a in atoms if a[3].strip().startswith(("N", "NZ", "NH", "NE"))]
+        if not targets: return None
+        names = [a[3].strip() for a in targets]
+        # Calculate centroid of these atoms
+        coords = [a[4] for a in targets]
+        cen = centroid(coords)
+        return (cen, names)
+
+    # 1. Check: Res1=Cation, Res2=Ring
+    cat1 = cation_info(atoms1)
+    ring2 = ring_atoms(res2, atoms2, return_names=True)
     
-    def cation_center(atoms):
-        pos_atoms = [a[4] for a in atoms if a[3].strip().startswith(("N", "NZ", "NH", "NE"))]
-        return centroid(pos_atoms) if pos_atoms else None
+    if cat1 and ring2:
+        c1, n1 = cat1
+        r2_coords, n2 = ring2
+        if distance(c1, centroid(r2_coords)) <= 6.0:
+            return (True, n1, n2) # Return (True, CationNames, RingNames)
+
+    # 2. Check: Res2=Cation, Res1=Ring
+    cat2 = cation_info(atoms2)
+    ring1 = ring_atoms(res1, atoms1, return_names=True)
     
-    if res1 in pos_res and res2 in ring_res:
-        cation, ring = cation_center(atoms1), ring_atoms(res2, atoms2)
-    elif res2 in pos_res and res1 in ring_res:
-        cation, ring = cation_center(atoms2), ring_atoms(res1, atoms1)
-    else:
-        return False
-    
-    if not cation or not ring:
-        return False
-    
-    c_ring = centroid(ring)
-    d = distance(cation, c_ring)
-    return d <= 6.0
+    if cat2 and ring1:
+        c2, n2 = cat2
+        r1_coords, n1 = ring1
+        if distance(c2, centroid(r1_coords)) <= 6.0:
+            return (True, n1, n2) # Return (True, RingNames, CationNames)
+            
+    return False
 
 def is_halogen_bond(atom1, atom2, d):
     """
@@ -1781,10 +1811,15 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
 
                     if interaction_type:
                         conf = calculate_confidence_score(interaction_type, d, hb_angle if interaction_type == "氢键" else None)
+                        # 添加配体原子3D坐标，用于2D绘图时的精确映射
+                        lig_coords = lig_atom[4]  # (x, y, z) tuple
                         interactions.append({
                             "Ligand_Chain": lig_chain,
                             "Ligand_Residue": f"{lig_name} {lig_id}",
                             "Ligand_Atom": lig_atom[3],
+                            "Ligand_Atom_X": round(lig_coords[0], 3),
+                            "Ligand_Atom_Y": round(lig_coords[1], 3),
+                            "Ligand_Atom_Z": round(lig_coords[2], 3),
                             "Protein_Chain": prot_chain,
                             "Protein_Residue": f"{prot_name} {prot_id}",
                             "Protein_Atom": prot_atom[3],
@@ -1797,10 +1832,14 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     is_hal, hal_dist, hal_angle = is_halogen_bond(lig_atom, prot_atom, d)
                     if is_hal:
                         conf = calculate_confidence_score("卤素键", hal_dist, hal_angle)
+                        lig_coords = lig_atom[4]
                         interactions.append({
                             "Ligand_Chain": lig_chain,
                             "Ligand_Residue": f"{lig_name} {lig_id}",
                             "Ligand_Atom": lig_atom[3],
+                            "Ligand_Atom_X": round(lig_coords[0], 3),
+                            "Ligand_Atom_Y": round(lig_coords[1], 3),
+                            "Ligand_Atom_Z": round(lig_coords[2], 3),
                             "Protein_Chain": prot_chain,
                             "Protein_Residue": f"{prot_name} {prot_id}",
                             "Protein_Atom": prot_atom[3],
@@ -1810,11 +1849,20 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                         })
 
             # 检查π相互作用
-            if is_pipi(lig_name, lig_atoms, prot_name, prot_atoms):
+            pipi_res = is_pipi(lig_name, lig_atoms, prot_name, prot_atoms)
+            if pipi_res:
+                _, lig_ring_names, prot_ring_names = pipi_res
+                # 计算配体环中心坐标用于2D匹配
+                lig_ring_coords = [a[4] for a in lig_atoms if a[3].strip() in lig_ring_names]
+                lig_cen = centroid(lig_ring_coords) if lig_ring_coords else (0,0,0)
+                
                 interactions.append({
                     "Ligand_Chain": lig_chain,
                     "Ligand_Residue": f"{lig_name} {lig_id}",
-                    "Ligand_Atom": "ring",
+                    "Ligand_Atom": f"Ring({','.join(lig_ring_names)})",
+                    "Ligand_Atom_X": round(lig_cen[0], 3),
+                    "Ligand_Atom_Y": round(lig_cen[1], 3),
+                    "Ligand_Atom_Z": round(lig_cen[2], 3),
                     "Protein_Chain": prot_chain,
                     "Protein_Residue": f"{prot_name} {prot_id}",
                     "Protein_Atom": "ring",
@@ -1823,14 +1871,27 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     "Confidence": 0.9
                 })
 
-            if is_cationpi(lig_name, lig_atoms, prot_name, prot_atoms):
+            cationpi_res = is_cationpi(lig_name, lig_atoms, prot_name, prot_atoms)
+            if cationpi_res:
+                _, lig_part, prot_part = cationpi_res
+                # Determine identifying string (Ring(...) or Cation(...))
+                def fmt(p): 
+                    return f"Ring({','.join(p)})" if len(p) > 2 else f"Cation({','.join(p)})"
+                
+                # 计算配体部分中心坐标
+                lig_part_coords = [a[4] for a in lig_atoms if a[3].strip() in lig_part]
+                lig_cen = centroid(lig_part_coords) if lig_part_coords else (0,0,0)
+                    
                 interactions.append({
                     "Ligand_Chain": lig_chain,
                     "Ligand_Residue": f"{lig_name} {lig_id}",
-                    "Ligand_Atom": "ring/cation",
+                    "Ligand_Atom": fmt(lig_part),
+                    "Ligand_Atom_X": round(lig_cen[0], 3),
+                    "Ligand_Atom_Y": round(lig_cen[1], 3),
+                    "Ligand_Atom_Z": round(lig_cen[2], 3),
                     "Protein_Chain": prot_chain,
                     "Protein_Residue": f"{prot_name} {prot_id}",
-                    "Protein_Atom": "ring/cation",
+                    "Protein_Atom": fmt(prot_part),
                     "Distance": "-",
                     "Interaction": "π–阳离子相互作用",
                     "Confidence": 0.9
@@ -3063,9 +3124,28 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                     is_pseudoatom = sel1.startswith("pl_centroid_") or sel2.startswith("pl_centroid_")
                     
                     if not is_pseudoatom:
+                        # 检查配体选择是否有效，如果无效则尝试不使用链 ID
                         if cmd.count_atoms(sel1) == 0:
-                            print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Ligand selection empty: {sel1}")
-                            continue
+                            # 尝试不使用链 ID 的选择（处理 PDB 文件中配体没有链 ID 的情况）
+                            sel1_no_chain = f"{obj_name} and resi {lig_resid}"
+                            if lig_atom and lig_atom != "" and "ring" not in str(lig_atom).lower():
+                                sel1_no_chain += f" and name {lig_atom}"
+                            if cmd.count_atoms(sel1_no_chain) > 0:
+                                sel1 = sel1_no_chain
+                                print(f"[visualize_protein_ligand_3d] ℹ️ Using selection without chain ID: {sel1}")
+                            else:
+                                # 再尝试只用残基名和原子名（不用残基 ID）
+                                sel1_resname = f"{obj_name} and resn {lig_resname_int}"
+                                if lig_atom and lig_atom != "" and "ring" not in str(lig_atom).lower():
+                                    sel1_resname += f" and name {lig_atom}"
+                                if cmd.count_atoms(sel1_resname) > 0:
+                                    sel1 = sel1_resname
+                                    print(f"[visualize_protein_ligand_3d] ℹ️ Using selection by resname: {sel1}")
+                                else:
+                                    print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Ligand selection empty: {sel1}")
+                                    continue
+                        
+                        # 检查蛋白选择是否有效
                         if cmd.count_atoms(sel2) == 0:
                             print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Protein selection empty: {sel2}")
                             continue

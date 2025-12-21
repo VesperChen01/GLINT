@@ -23,14 +23,14 @@ from pymol import cmd
 
 BUILTIN_TEMPLATES = {
     # ===== 主要模板（推荐使用）=====
-    # GSPT1 G-loop: 来自 6H0G (CRBN-lenalidomide-GSPT1 ternary complex)
+    # GSPT1 G-loop: 来自 5HXB (CRBN-pomalidomide-IKZF1 complex)
     # 这是最常用的分子胶底物模板
     "GSPT1": {
-        "pdb": "6H0G",
+        "pdb": "5HXB",
         "chain": "A",
-        "resi_range": "60-67",
-        "selection_fmt": "{obj} and chain A and resi 60+61+62+63+64+65+66+67 and name CA",
-        "description": "GSPT1 G-loop from 6H0G (CRBN-lenalidomide-GSPT1 ternary complex)",
+        "resi_range": "570-577",
+        "selection_fmt": "{obj} and chain A and resi 570+571+572+573+574+575+576+577 and name CA",
+        "description": "GSPT1 G-loop from 5HXB (CRBN-pomalidomide-IKZF1 complex)",
     },
     # CK1α G-loop: 来自 5FQD (CRBN-lenalidomide-CK1α complex)
     "CK1α": {
@@ -40,35 +40,35 @@ BUILTIN_TEMPLATES = {
         "selection_fmt": "{obj} and chain C and resi 35+36+37+38+39+40+41+42 and name CA",
         "description": "CK1α G-loop from 5FQD (CRBN-lenalidomide-CK1α complex)",
     },
-    # VAV1 G-loop: 来自 2MC1 (VAV1 DH domain)
+    # VAV1 G-loop: 来自 9NFR
     "VAV1": {
-        "pdb": "2MC1",
-        "chain": "A",
-        "resi_range": "95-102",
-        "selection_fmt": "{obj} and chain A and resi 95+96+97+98+99+100+101+102 and name CA",
-        "description": "VAV1 G-loop from 2MC1 (VAV1 DH domain)",
+        "pdb": "9NFR",
+        "chain": "C",
+        "resi_range": "791-798",
+        "selection_fmt": "{obj} and chain C and resi 791+792+793+794+795+796+797+798 and name CA",
+        "description": "VAV1 G-loop from 9NFR",
     },
     
     # ===== 兼容旧版格式（保留向后兼容）=====
-    "GSPT1 (6H0G A:60-67)": {
-        "pdb": "6H0G",
+    "GSPT1 (5HXB A:570-577)": {
+        "pdb": "5HXB",
         "chain": "A",
-        "resi_range": "60-67",
-        "selection_fmt": "{obj} and chain A and resi 60+61+62+63+64+65+66+67 and name CA",
+        "resi_range": "570-577",
+        "selection_fmt": "{obj} and chain A and resi 570+571+572+573+574+575+576+577 and name CA",
         "description": "GSPT1 G-loop (legacy format)",
     },
-    "CK1α (3M51 A:36-43)": {
-        "pdb": "3M51",
-        "chain": "A",
-        "resi_range": "36-43",
-        "selection_fmt": "{obj} and chain A and resi 36+37+38+39+40+41+42+43 and name CA",
-        "description": "CK1α G-loop from 3M51 (legacy format)",
+    "CK1α (5FQD C:35-42)": {
+        "pdb": "5FQD",
+        "chain": "C",
+        "resi_range": "35-42",
+        "selection_fmt": "{obj} and chain C and resi 35+36+37+38+39+40+41+42 and name CA",
+        "description": "CK1α G-loop from 5FQD (legacy format)",
     },
-    "VAV1 (2MC1 A:95-102)": {
-        "pdb": "2MC1",
-        "chain": "A",
-        "resi_range": "95-102",
-        "selection_fmt": "{obj} and chain A and resi 95+96+97+98+99+100+101+102 and name CA",
+    "VAV1 (9NFR C:791-798)": {
+        "pdb": "9NFR",
+        "chain": "C",
+        "resi_range": "791-798",
+        "selection_fmt": "{obj} and chain C and resi 791+792+793+794+795+796+797+798 and name CA",
         "description": "VAV1 G-loop (legacy format)",
     },
 }
@@ -81,9 +81,9 @@ TEMPLATE_ALIASES = {
     "ck1alpha": "CK1α",
     "vav1": "VAV1",
     # GUI 使用的格式
-    "GSPT1 (6H0G A:60-67)": "GSPT1",
-    "CK1α (3M51 A:36-43)": "CK1α",
-    "VAV1 (2MC1 A:95-102)": "VAV1",
+    "GSPT1 (5HXB A:570-577)": "GSPT1",
+    "CK1α (5FQD C:35-42)": "CK1α",
+    "VAV1 (9NFR C:791-798)": "VAV1",
 }
 
 def get_builtin_template(name: str) -> Optional[dict]:
@@ -407,8 +407,8 @@ def _calculate_sasa_for_window(obj_name, chain, window):
 # ====== 4) 主函数 ======
 def find_crbn_g_motif(obj_name=None, pdb_file=None,
                        template_mode="builtin", template_sel=None, template_builtin="GSPT1",
-                       rmsd_cutoff=1.0, out_csv=None, auto_highlight=0, require_gly_pos6=True,
-                       exclude_proline=True, check_surface_exposure=True,
+                       rmsd_cutoff=1.0, out_csv=None, auto_highlight=0, require_gly_pos="6,3",
+                       exclude_proline=False, check_surface_exposure=True,
                        min_sasa_per_residue=15.0, topk_debug=10,
                        highlight_surface=False, export_coords=False, coords_csv=None):
     """
@@ -423,8 +423,12 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         rmsd_cutoff: RMSD 阈值（默认 1.0 Å）
         out_csv: 输出 CSV 文件路径
         auto_highlight: 是否自动高亮（0/1）
-        require_gly_pos6: 是否要求第 6 位为甘氨酸（默认 True）
-        exclude_proline: 是否排除含脯氨酸的窗口（默认 True）
+        require_gly_pos: 要求甘氨酸的位置，可选值：
+            - "6,3" 或 "3,6": 第 6 位或第 3 位为甘氨酸（默认）
+            - "6": 仅第 6 位为甘氨酸
+            - "3": 仅第 3 位为甘氨酸
+            - None 或 "": 不要求甘氨酸
+        exclude_proline: 是否排除含脯氨酸的窗口（默认 False）
         check_surface_exposure: 是否检查表面暴露（默认 True）
         min_sasa_per_residue: 最小 SASA 阈值，单位 Ų/残基（默认 15.0）
         topk_debug: 显示前 N 个最小 RMSD（调试用）
@@ -470,9 +474,24 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
     best_rmsd_pool = []
     by_chain = _collect_ca_by_chain(obj)
     total_windows = 0
-    gly_pos6_windows = 0
+    gly_pos_windows = 0
     proline_excluded_windows = 0
     buried_windows = 0
+    
+    # 解析 require_gly_pos 参数
+    gly_positions = []
+    if require_gly_pos:
+        if isinstance(require_gly_pos, str):
+            # 支持 "6,3" 或 "3,6" 或 "6" 或 "3" 格式
+            for pos in require_gly_pos.replace(" ", "").split(","):
+                try:
+                    gly_positions.append(int(pos))
+                except ValueError:
+                    pass
+        elif isinstance(require_gly_pos, (int, float)):
+            gly_positions.append(int(require_gly_pos))
+        elif isinstance(require_gly_pos, (list, tuple)):
+            gly_positions = [int(p) for p in require_gly_pos]
 
     for ch, rows in by_chain.items():
         seq = [(r[1], r[2], r[3]) for r in rows]  # (resi_label, resn, xyz)
@@ -481,11 +500,18 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         for i in range(0, len(seq) - 7):
             window = seq[i:i+8]
             total_windows += 1
-            # 检查第 6 位是否为甘氨酸
-            if require_gly_pos6:
-                if window[5][1] not in ("GLY", "G"):
+            # 检查指定位置是否为甘氨酸（第 6 位或第 3 位）
+            if gly_positions:
+                has_gly_at_required_pos = False
+                for pos in gly_positions:
+                    # 位置 1-8 对应索引 0-7
+                    idx = pos - 1
+                    if 0 <= idx < 8 and window[idx][1] in ("GLY", "G"):
+                        has_gly_at_required_pos = True
+                        break
+                if not has_gly_at_required_pos:
                     continue
-                gly_pos6_windows += 1
+                gly_pos_windows += 1
             # 检查是否包含脯氨酸（Pro, P）
             if exclude_proline:
                 has_proline = any(w[1] in ("PRO", "P") for w in window)
@@ -512,8 +538,9 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
 
     # 调试输出
     print(f"[G-MOTIF] Total windows: {total_windows}")
-    if require_gly_pos6:
-        print(f"[G-MOTIF] Windows with pos6=Gly: {gly_pos6_windows}")
+    if gly_positions:
+        pos_str = " or ".join([f"pos{p}" for p in gly_positions])
+        print(f"[G-MOTIF] Windows with {pos_str}=Gly: {gly_pos_windows}")
     if exclude_proline:
         print(f"[G-MOTIF] Windows excluded (含脯氨酸): {proline_excluded_windows}")
     if check_surface_exposure:
@@ -702,22 +729,36 @@ class GMotifResult:
 
 # ====== 5) G-motif 内部几何验证 ======
 def validate_g_motif_geometry(obj_name, g_motif_chain, g_motif_resi_range,
-                               max_internal_hbond=3.5, reference_rmsd_threshold=1.0):
+                               max_internal_hbond=3.5, reference_rmsd_threshold=1.0,
+                               template_name: Optional[str] = None):
     """
-    验证 G-motif 内部几何特征（α-turn）：
-    1. 必需氢键：G₋₄ backbone O → G₀ backbone N (α-turn 定义)
-    2. 可选氢键：G₋₄ backbone O → G₊₁ backbone N
-    3. 中心 Gly (G₀) 必须是 GLY
-    4. RMSD 与 GSPT1 G-loop 的相似度
+    验证 G-motif 内部几何特征（α-turn）
+    
+    支持两种 G-loop 类型：
+    - Type A (Gly 在第 6 位): G₋₄ backbone O → G₀ backbone N (索引 1 → 5)
+    - Type B (Gly 在第 3 位): G₀ backbone O → G₊₄ backbone N (索引 2 → 6)
+    
+    参数:
+        obj_name: PyMOL 对象名
+        g_motif_chain: G-motif 所在链 ID
+        g_motif_resi_range: G-motif 残基范围 (start, end) 或 "start-end"
+        max_internal_hbond: 氢键最大距离阈值（默认 3.5 Å）
+        reference_rmsd_threshold: RMSD 阈值（默认 1.0 Å）
+        template_name: 用于 RMSD 比较的模板名称（默认 None，自动检测）
     
     返回:
         dict: {
-            'has_alpha_turn_hbond': bool,  # G₋₄→G₀
+            'gloop_type': str,  # "Type_A" (Gly@6) 或 "Type_B" (Gly@3)
+            'gly_position': int,  # 甘氨酸位置 (3 或 6)
+            'has_alpha_turn_hbond': bool,
             'alpha_turn_distance': float,
-            'has_secondary_hbond': bool,   # G₋₄→G₊₁
+            'alpha_turn_description': str,  # 氢键描述
+            'has_secondary_hbond': bool,
             'secondary_hbond_distance': float,
-            'central_gly_confirmed': bool,
-            'rmsd_to_gspt1': float,
+            'secondary_hbond_description': str,
+            'gly_confirmed': bool,
+            'rmsd_to_template': float,
+            'template_used': str,
             'is_valid_geometry': bool
         }
     """
@@ -750,79 +791,145 @@ def validate_g_motif_geometry(obj_name, g_motif_chain, g_motif_resi_range,
         print(f"[G-motif Geometry] ⚠️ Only {len(sorted_resis)} residues, expected 8")
         return None
     
-    # 映射位置：索引 0-7 对应 G₋₅ 到 G₊₂
-    # G₋₄ = index 1, G₀ = index 5, G₊₁ = index 6
+    # 检测 G-loop 类型：检查第 3 位和第 6 位是否为甘氨酸
+    # 位置 1-8 对应索引 0-7
+    gly_at_pos3 = g_residues[sorted_resis[2]]['resn'] in ('GLY', 'G')  # 索引 2 = 位置 3
+    gly_at_pos6 = g_residues[sorted_resis[5]]['resn'] in ('GLY', 'G')  # 索引 5 = 位置 6
+    
+    # 确定 G-loop 类型
+    if gly_at_pos6:
+        gloop_type = "Type_A"
+        gly_position = 6
+        gly_confirmed = True
+        gly_resn = g_residues[sorted_resis[5]]['resn']
+        # Type A: G₋₄ O → G₀ N (索引 1 → 5)
+        hbond_donor_idx = 1   # G₋₄
+        hbond_acceptor_idx = 5  # G₀
+        secondary_acceptor_idx = 6  # G₊₁
+        alpha_turn_desc = "G₋₄ O → G₀ N (索引 1 → 5)"
+        secondary_desc = "G₋₄ O → G₊₁ N (索引 1 → 6)"
+    elif gly_at_pos3:
+        gloop_type = "Type_B"
+        gly_position = 3
+        gly_confirmed = True
+        gly_resn = g_residues[sorted_resis[2]]['resn']
+        # Type B: G₀ O → G₊₄ N (索引 2 → 6)
+        hbond_donor_idx = 2   # G₀ (位置 3)
+        hbond_acceptor_idx = 6  # G₊₄ (位置 7)
+        secondary_acceptor_idx = 7  # G₊₅ (位置 8)
+        alpha_turn_desc = "G₀ O → G₊₄ N (索引 2 → 6)"
+        secondary_desc = "G₀ O → G₊₅ N (索引 2 → 7)"
+    else:
+        gloop_type = "Unknown"
+        gly_position = 0
+        gly_confirmed = False
+        gly_resn = "N/A"
+        # 默认使用 Type A 逻辑
+        hbond_donor_idx = 1
+        hbond_acceptor_idx = 5
+        secondary_acceptor_idx = 6
+        alpha_turn_desc = "G₋₄ O → G₀ N (default)"
+        secondary_desc = "G₋₄ O → G₊₁ N (default)"
+    
     result = {
+        'gloop_type': gloop_type,
+        'gly_position': gly_position,
         'has_alpha_turn_hbond': False,
         'alpha_turn_distance': None,
+        'alpha_turn_description': alpha_turn_desc,
         'has_secondary_hbond': False,
         'secondary_hbond_distance': None,
-        'central_gly_confirmed': False,
-        'rmsd_to_gspt1': None,
+        'secondary_hbond_description': secondary_desc,
+        'gly_confirmed': gly_confirmed,
+        'rmsd_to_template': None,
+        'template_used': template_name or "auto",
         'is_valid_geometry': False
     }
     
-    # 1. 检查中心 Gly (G₀, index 5)
-    central_resn = g_residues[sorted_resis[5]]['resn']
-    result['central_gly_confirmed'] = (central_resn in ('GLY', 'G'))
-    
-    # 2. 必需氢键：G₋₄ O → G₀ N (index 1 → 5)
-    if 'O' in g_residues[sorted_resis[1]]['atoms'] and 'N' in g_residues[sorted_resis[5]]['atoms']:
-        o_g4 = g_residues[sorted_resis[1]]['atoms']['O']
-        n_g0 = g_residues[sorted_resis[5]]['atoms']['N']
-        dist = np.linalg.norm(o_g4 - n_g0)
+    # 计算主要 α-turn 氢键
+    donor_resi = sorted_resis[hbond_donor_idx]
+    acceptor_resi = sorted_resis[hbond_acceptor_idx]
+    if 'O' in g_residues[donor_resi]['atoms'] and 'N' in g_residues[acceptor_resi]['atoms']:
+        o_donor = g_residues[donor_resi]['atoms']['O']
+        n_acceptor = g_residues[acceptor_resi]['atoms']['N']
+        dist = np.linalg.norm(o_donor - n_acceptor)
         result['alpha_turn_distance'] = round(float(dist), 2)
         result['has_alpha_turn_hbond'] = (dist <= max_internal_hbond)
     
-    # 3. 可选氢键：G₋₄ O → G₊₁ N (index 1 → 6)
-    if 'O' in g_residues[sorted_resis[1]]['atoms'] and 'N' in g_residues[sorted_resis[6]]['atoms']:
-        o_g4 = g_residues[sorted_resis[1]]['atoms']['O']
-        n_g1 = g_residues[sorted_resis[6]]['atoms']['N']
-        dist = np.linalg.norm(o_g4 - n_g1)
-        result['secondary_hbond_distance'] = round(float(dist), 2)
-        result['has_secondary_hbond'] = (dist <= max_internal_hbond)
+    # 计算次级氢键
+    if secondary_acceptor_idx < len(sorted_resis):
+        secondary_resi = sorted_resis[secondary_acceptor_idx]
+        if 'O' in g_residues[donor_resi]['atoms'] and 'N' in g_residues[secondary_resi]['atoms']:
+            o_donor = g_residues[donor_resi]['atoms']['O']
+            n_secondary = g_residues[secondary_resi]['atoms']['N']
+            dist = np.linalg.norm(o_donor - n_secondary)
+            result['secondary_hbond_distance'] = round(float(dist), 2)
+            result['has_secondary_hbond'] = (dist <= max_internal_hbond)
     
-    # 4. RMSD 与 GSPT1 G-loop 比较（使用 Cα）
+    # RMSD 与模板比较（使用 Cα）
     ca_coords = []
     for resi in sorted_resis[:8]:
         if 'CA' in g_residues[resi]['atoms']:
             ca_coords.append(g_residues[resi]['atoms']['CA'])
     
     if len(ca_coords) == 8:
-        # GSPT1 G-loop Cα 坐标（来自 6H0G，近似理想化）
-        gspt1_template = _ideal_beta_hairpin_template()  # 可用真实坐标替换
+        # 获取模板坐标
+        template_coords = None
+        template_used = "idealized"
+        
+        if template_name:
+            # 尝试使用指定的模板
+            try:
+                template_coords = _coords_from_builtin(template_name)
+                template_used = template_name
+            except Exception as e:
+                print(f"[G-motif Geometry] ⚠️ 无法加载模板 '{template_name}': {e}")
+                template_coords = None
+        
+        if template_coords is None:
+            # 使用理想化模板
+            template_coords = _ideal_beta_hairpin_template()
+            template_used = "idealized"
+        
+        result['template_used'] = template_used
+        
         try:
-            rmsd = _kabsch_rmsd(np.array(ca_coords), np.array(gspt1_template))
-            result['rmsd_to_gspt1'] = round(rmsd, 3)
+            rmsd = _kabsch_rmsd(np.array(ca_coords), np.array(template_coords))
+            result['rmsd_to_template'] = round(rmsd, 3)
         except Exception:
             pass
     
-    # 5. 综合判定
+    # 综合判定
     result['is_valid_geometry'] = (
-        result['central_gly_confirmed'] and
+        result['gly_confirmed'] and
         result['has_alpha_turn_hbond'] and
-        (result['rmsd_to_gspt1'] is None or result['rmsd_to_gspt1'] < reference_rmsd_threshold)
+        (result['rmsd_to_template'] is None or result['rmsd_to_template'] < reference_rmsd_threshold)
     )
     
     # 打印结果
     print("\n" + "=" * 70)
     print("G-motif 内部几何验证 (G-motif Internal Geometry Validation)")
     print("=" * 70)
-    gly_status = "✅" if result['central_gly_confirmed'] else "❌"
-    print(f"{gly_status} 中心 Gly (G₀):  {central_resn}")
+    print(f"G-loop 类型: {gloop_type} (Gly @ 位置 {gly_position})")
+    print("-" * 70)
+    
+    gly_status = "✅" if result['gly_confirmed'] else "❌"
+    print(f"{gly_status} 甘氨酸确认:  {gly_resn} @ 位置 {gly_position}")
     
     alpha_status = "✅" if result['has_alpha_turn_hbond'] else "❌"
     alpha_dist = f"{result['alpha_turn_distance']} Å" if result['alpha_turn_distance'] else "N/A"
-    print(f"{alpha_status} α-turn 氢键 (G₋₄→G₀):  {alpha_dist}")
+    print(f"{alpha_status} α-turn 氢键:  {alpha_dist}")
+    print(f"   {alpha_turn_desc}")
     
     if result['secondary_hbond_distance']:
         sec_status = "✅" if result['has_secondary_hbond'] else "➖"
         sec_dist = f"{result['secondary_hbond_distance']} Å"
-        print(f"{sec_status} 次级氢键 (G₋₄→G₊₁):  {sec_dist}")
+        print(f"{sec_status} 次级氢键:  {sec_dist}")
+        print(f"   {secondary_desc}")
     
-    if result['rmsd_to_gspt1']:
-        rmsd_status = "✅" if result['rmsd_to_gspt1'] < reference_rmsd_threshold else "⚠️"
-        print(f"{rmsd_status} RMSD vs GSPT1:  {result['rmsd_to_gspt1']} Å")
+    if result['rmsd_to_template']:
+        rmsd_status = "✅" if result['rmsd_to_template'] < reference_rmsd_threshold else "⚠️"
+        print(f"{rmsd_status} RMSD vs {template_used}:  {result['rmsd_to_template']} Å")
     
     valid_status = "✅ 是" if result['is_valid_geometry'] else "❌ 否"
     print(f"\n有效 α-turn 几何: {valid_status}")
