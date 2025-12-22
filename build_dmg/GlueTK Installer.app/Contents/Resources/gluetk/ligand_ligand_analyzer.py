@@ -35,18 +35,22 @@ except ImportError:
     RDKIT_AVAILABLE = False
 
 def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_csv=None,
-                                     visualize=True, show_hydrophobic=False):
+                                     visualize=True, show_hydrophobic=False,
+                                     exclude_intramolecular=True):
     """
     分析两个选择区域（通常是两个小分子）之间的相互作用
     
     参数:
         obj_name: PyMOL对象名
-        sel1: 选择区域1 (PyMOL selection string, e.g. "resn LIG and chain A")
-        sel2: 选择区域2 (PyMOL selection string, e.g. "resn DRG and chain A")
+        sel1: 选择区域1 (PyMOL selection string, e.g. "resn LIG and chain A and resi 301")
+              支持使用 chain:resi 组合来精确指定分子，例如 "resn UNK and chain A and resi 301"
+        sel2: 选择区域2 (PyMOL selection string, e.g. "resn UNK and chain A and resi 302")
+              对于同名配体(如UNK)，建议使用 chain 和 resi 来区分不同分子
         cutoff: 距离截断 (Å)
         output_csv: 输出CSV路径
         visualize: 是否自动在PyMOL中显示
         show_hydrophobic: 是否显示疏水相互作用（默认False，只显示关键相互作用）
+        exclude_intramolecular: 是否排除分子内相互作用（默认True，只分析不同分子间的相互作用）
     """
     
     # 1. 获取原子信息
@@ -61,7 +65,29 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
         print(f"[GlueTK] ⚠️ Empty selection. Sel1: {len(atoms1)} atoms, Sel2: {len(atoms2)} atoms.")
         return []
 
-    print(f"[GlueTK] Analyzing interactions between {len(atoms1)} atoms (Sel1) and {len(atoms2)} atoms (Sel2)...")
+    # 识别每个选择区域包含的分子（使用 chain:resi 组合）
+    molecules1 = set((a[0], a[2]) for a in atoms1)  # {(chain, resi), ...}
+    molecules2 = set((a[0], a[2]) for a in atoms2)  # {(chain, resi), ...}
+    
+    print(f"[GlueTK] Selection 1: {len(atoms1)} atoms from {len(molecules1)} molecule(s)")
+    for mol in sorted(molecules1):
+        mol_atoms = [a for a in atoms1 if (a[0], a[2]) == mol]
+        resn = mol_atoms[0][1] if mol_atoms else "?"
+        print(f"  - {resn} chain:{mol[0]} resi:{mol[1]} ({len(mol_atoms)} atoms)")
+    
+    print(f"[GlueTK] Selection 2: {len(atoms2)} atoms from {len(molecules2)} molecule(s)")
+    for mol in sorted(molecules2):
+        mol_atoms = [a for a in atoms2 if (a[0], a[2]) == mol]
+        resn = mol_atoms[0][1] if mol_atoms else "?"
+        print(f"  - {resn} chain:{mol[0]} resi:{mol[1]} ({len(mol_atoms)} atoms)")
+    
+    # 检查是否有重叠的分子
+    overlap = molecules1 & molecules2
+    if overlap and exclude_intramolecular:
+        print(f"[GlueTK] ⚠️ Warning: {len(overlap)} molecule(s) appear in both selections")
+        print(f"[GlueTK] Intramolecular interactions will be excluded (exclude_intramolecular=True)")
+        for mol in sorted(overlap):
+            print(f"  - chain:{mol[0]} resi:{mol[1]}")
 
     interactions = []
     
@@ -94,6 +120,13 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
     # --- A. 基于原子的相互作用 (HBond, Halogen, Metal, Basic VdW) ---
     for a1 in atoms1:
         for a2 in atoms2:
+            # 排除分子内相互作用（同一分子内的原子对）
+            if exclude_intramolecular:
+                # 原子格式: (chain, resn, resi, name, coord)
+                # 如果 chain 和 resi 都相同，则认为是同一分子
+                if a1[0] == a2[0] and a1[2] == a2[2]:
+                    continue
+            
             d = distance(a1[4], a2[4])
             
             if d > cutoff:
