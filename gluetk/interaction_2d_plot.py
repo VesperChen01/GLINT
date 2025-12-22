@@ -7,7 +7,7 @@ interaction_2d_plot.py
 - 基于 3D 坐标的精确原子/环映射
 - 使用 RDKit CoordGen 实现先进的 2D 布局
 - 支持大环分子的优雅展示
-- 与 3D 视图同步的配色方案 (Schrödinger 风格)
+- 统一的配色方案 (Schrödinger 风格)
 - 精确的 Pi-相互作用环中心连接
 - 与 interaction_analyzer.py 的 3D 可视化完全一致的配色和类型定义
 """
@@ -32,6 +32,20 @@ try:
 except ImportError:
     print("[GlueTK] RDKit required for 2D plotting.")
 
+# Import unified color scheme
+try:
+    from .color_scheme import (
+        INTERACTION_COLORS_HEX,
+        INTERACTION_LINE_STYLES,
+        RESIDUE_COLORS_HEX,
+    )
+except ImportError:
+    from color_scheme import (
+        INTERACTION_COLORS_HEX,
+        INTERACTION_LINE_STYLES,
+        RESIDUE_COLORS_HEX,
+    )
+
 # ============================================================================
 # 残基类型分类 (与 3D 视图一致)
 # ============================================================================
@@ -46,43 +60,43 @@ RESIDUE_TYPES = {
     'GLY': 'nonpolar',
 }
 
-# Discovery Studio 风格颜色方案 (残基气泡)
+# Discovery Studio 风格颜色方案 (残基气泡) - 使用统一配色
 DS_RESIDUE_STYLE = {
-    'hydrophobic': {'facecolor': '#C5E1A5', 'edgecolor': '#4CAF50', 'textcolor': '#2E7D32'},
-    'nonpolar':    {'facecolor': '#FFE0B2', 'edgecolor': '#FF9800', 'textcolor': '#E65100'},
-    'polar':       {'facecolor': '#BBDEFB', 'edgecolor': '#2196F3', 'textcolor': '#1565C0'},
-    'negative':    {'facecolor': '#A5D6A7', 'edgecolor': '#388E3C', 'textcolor': '#1B5E20'},
-    'positive':    {'facecolor': '#FFCDD2', 'edgecolor': '#E57373', 'textcolor': '#C62828'},
+    'hydrophobic': {
+        'facecolor': RESIDUE_COLORS_HEX['hydrophobic']['face'],
+        'edgecolor': RESIDUE_COLORS_HEX['hydrophobic']['edge'],
+        'textcolor': RESIDUE_COLORS_HEX['hydrophobic']['text']
+    },
+    'nonpolar': {
+        'facecolor': RESIDUE_COLORS_HEX['nonpolar']['face'],
+        'edgecolor': RESIDUE_COLORS_HEX['nonpolar']['edge'],
+        'textcolor': RESIDUE_COLORS_HEX['nonpolar']['text']
+    },
+    'polar': {
+        'facecolor': RESIDUE_COLORS_HEX['polar']['face'],
+        'edgecolor': RESIDUE_COLORS_HEX['polar']['edge'],
+        'textcolor': RESIDUE_COLORS_HEX['polar']['text']
+    },
+    'negative': {
+        'facecolor': RESIDUE_COLORS_HEX['negative']['face'],
+        'edgecolor': RESIDUE_COLORS_HEX['negative']['edge'],
+        'textcolor': RESIDUE_COLORS_HEX['negative']['text']
+    },
+    'positive': {
+        'facecolor': RESIDUE_COLORS_HEX['positive']['face'],
+        'edgecolor': RESIDUE_COLORS_HEX['positive']['edge'],
+        'textcolor': RESIDUE_COLORS_HEX['positive']['text']
+    },
 }
 
 # ============================================================================
-# 统一配色方案 (与 interaction_analyzer.py visualize_protein_ligand_3d 完全一致)
+# 统一配色方案 (使用 color_scheme.py 中的定义)
 # Schrödinger 风格 - Hex 颜色值
 # ============================================================================
-UNIFIED_INTERACTION_COLORS = {
-    'hbond':       '#2196F3',  # 蓝色 - 氢键
-    'salt':        '#FF5722',  # 橙红色 - 盐桥
-    'pipi':        '#9C27B0',  # 紫色 - π-π 堆积
-    'pication':    '#E91E63',  # 粉色 - π-阳离子
-    'hydrophobic': '#4CAF50',  # 绿色 - 疏水相互作用
-    'halogen':     '#FF9800',  # 橙色 - 卤素键
-    'metal':       '#673AB7',  # 深紫色 - 金属配位
-    'water':       '#00BCD4',  # 青色 - 水桥
-    'other':       '#9E9E9E',  # 灰色 - 其他
-}
+UNIFIED_INTERACTION_COLORS = INTERACTION_COLORS_HEX
 
-# 相互作用连线样式 (与 3D 视图同步)
-INTERACTION_LINE_STYLE = {
-    'hbond':      {'color': UNIFIED_INTERACTION_COLORS['hbond'],      'linewidth': 2.0, 'linestyle': '--', 'label': 'Hydrogen Bond'},
-    'salt':       {'color': UNIFIED_INTERACTION_COLORS['salt'],       'linewidth': 2.5, 'linestyle': '-',  'label': 'Salt Bridge'},
-    'pipi':       {'color': UNIFIED_INTERACTION_COLORS['pipi'],       'linewidth': 2.0, 'linestyle': '--', 'label': 'Pi-Pi Stacking'},
-    'pication':   {'color': UNIFIED_INTERACTION_COLORS['pication'],   'linewidth': 2.0, 'linestyle': '--', 'label': 'Pi-Cation'},
-    'hydrophobic':{'color': UNIFIED_INTERACTION_COLORS['hydrophobic'],'linewidth': 1.5, 'linestyle': ':',  'label': 'Hydrophobic'},
-    'halogen':    {'color': UNIFIED_INTERACTION_COLORS['halogen'],    'linewidth': 2.0, 'linestyle': '--', 'label': 'Halogen Bond'},
-    'metal':      {'color': UNIFIED_INTERACTION_COLORS['metal'],      'linewidth': 2.5, 'linestyle': '-',  'label': 'Metal Coordination'},
-    'water':      {'color': UNIFIED_INTERACTION_COLORS['water'],      'linewidth': 2.0, 'linestyle': '--', 'label': 'Water Bridge'},
-    'other':      {'color': UNIFIED_INTERACTION_COLORS['other'],      'linewidth': 1.5, 'linestyle': ':',  'label': 'Other'},
-}
+# 相互作用连线样式 (使用统一的 INTERACTION_LINE_STYLES)
+INTERACTION_LINE_STYLE = INTERACTION_LINE_STYLES
 
 # ============================================================================
 # 相互作用类型映射 (中英文统一，与 3D 视图一致)

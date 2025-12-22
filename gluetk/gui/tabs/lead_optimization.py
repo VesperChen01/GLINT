@@ -176,14 +176,7 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.ll_obj_combo = QComboBox(); self.parent_window.ll_obj_combo.setMinimumWidth(150); self.parent_window.ll_obj_combo.setMinimumHeight(36)
         self.parent_window.ll_refresh_btn = QPushButton(t("refresh")); self.parent_window.ll_refresh_btn.clicked.connect(self.refresh_objects)
         r0_ll = QHBoxLayout(); r0_ll.addWidget(self.parent_window.ll_obj_combo, 1); r0_ll.addWidget(self.parent_window.ll_refresh_btn)
-        ll_grid.addLayout(r0_ll, 0, 1)
-        
-        ll_grid.addWidget(QLabel("PDB File (opt):"), 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ll_pdb = QLineEdit(); self.parent_window.ll_pdb.setPlaceholderText("Load from file...")
-        self.parent_window.ll_pdb_browse = QPushButton(t("browse"))
-        self.parent_window.ll_pdb_browse.clicked.connect(lambda: self._browse_file(self.parent_window.ll_pdb, "PDB Files (*.pdb *.cif *.sdf)"))
-        r0b_ll = QHBoxLayout(); r0b_ll.addWidget(self.parent_window.ll_pdb, 1); r0b_ll.addWidget(self.parent_window.ll_pdb_browse)
-        ll_grid.addLayout(r0b_ll, 0, 3)
+        ll_grid.addLayout(r0_ll, 0, 1, 1, 3)
         
         ll_grid.addWidget(QLabel("Selection 1:"), 1, 0, Qt.AlignmentFlag.AlignRight)
         self.parent_window.ll_sel1 = QLineEdit(); self.parent_window.ll_sel1.setPlaceholderText("e.g. resn LIG1 or resi 100")
@@ -568,33 +561,14 @@ class LeadOptimizationTab(CommonTab):
                     QMessageBox.critical(self, "Error", "Ligand-Ligand analysis module not found.")
                     return
             
-            # Check PDB file
-            pdb_file = self.parent_window.ll_pdb.text().strip()
             obj = self.parent_window.ll_obj_combo.currentText()
-            
-            # If PDB file provided, load it first
-            if pdb_file and os.path.exists(pdb_file):
-                try:
-                    from pymol import cmd
-                    loaded_obj = os.path.basename(pdb_file).split('.')[0]
-                    # Ensure unique name
-                    if hasattr(cmd, 'get_unused_name'):
-                        loaded_obj = cmd.get_unused_name(loaded_obj)
-                    cmd.load(pdb_file, loaded_obj)
-                    obj = loaded_obj
-                    self.log(f"Loaded {pdb_file} as {obj}")
-                    self.refresh_objects()
-                except Exception as e:
-                    QMessageBox.critical(self, "Error", f"Failed to load PDB file: {e}")
-                    return
-            
             sel1 = self.parent_window.ll_sel1.text().strip()
             sel2 = self.parent_window.ll_sel2.text().strip()
             dist_str = self.parent_window.ll_dist.text().strip()
             csv_path = self.parent_window.ll_csv.text().strip() or None
             
             if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Missing Input", "Please select a target object or load a PDB file.")
+                QMessageBox.warning(self, "Missing Input", "Please select a target object.")
                 return
             if not sel1 or not sel2:
                 QMessageBox.warning(self, "Missing Input", "Please define both Selection 1 and Selection 2.")

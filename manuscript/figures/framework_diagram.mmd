@@ -1,0 +1,58 @@
+graph TD
+    %% Global Styles
+    classDef input fill:#f9f9f9,stroke:#333,stroke-width:2px,color:#000
+    classDef core fill:#e1f5fe,stroke:#0277bd,stroke-width:2px,color:#000
+    classDef process fill:#fff9c4,stroke:#fbc02d,stroke-width:2px,color:#000
+    classDef analysis fill:#e0f2f1,stroke:#00695c,stroke-width:2px,color:#000
+    classDef metric fill:#f3e5f5,stroke:#8e24aa,stroke-width:1px,stroke-dasharray: 5 5,color:#000
+    classDef output fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px,color:#000
+
+    %% Nodes
+    User([User Input <br/> PyMOL GUI / CLI]):::input
+    
+    subgraph GlueTK_Plugin [GlueTK Core Plugin]
+        direction TB
+        Load[Structure Preprocessing <br/> Hydrogen / Cleaning]:::core
+        Params[Parameter Configuration <br/> Thresholds / Mode]:::core
+        
+        subgraph Analysis_Engine [Analysis Modules]
+            direction LR
+            PPI[PPI Analyzer <br/> Interface Detection]:::analysis
+            Neo[Neo-Epitope <br/> Identification]:::analysis
+            Pocket[Pocket Informatics <br/> Shape / Druggability]:::analysis
+            Gmotif[G-Motif Detection <br/> CRBN Specific]:::analysis
+        end
+        
+        PPI --> BSA(BSA / Contacts / <br/> Interaction Types):::metric
+        Neo --> Conf(Bridging Atoms / <br/> SASA Change):::metric
+        Pocket --> Shape(Overlap Score / <br/> Volume / Depth):::metric
+        Gmotif --> RMSD(RMSD Profile / <br/> Template Match):::metric
+    end
+
+    Result{Mechanism <br/> Characterization}:::process
+    
+    subgraph Outputs [Data & Visualization]
+        Vis3D[3D Visualization <br/> PyMOL Scenes]:::output
+        Vis2D[2D Interaction <br/> Diagrams]:::output
+        Data[Quantitative Report <br/> CSV / JSON]:::output
+        Design[Design Cues <br/> Growable Vectors]:::output
+    end
+
+    %% Connections
+    User --> Load
+    User --> Params
+    Load --> Analysis_Engine
+    Params --> Analysis_Engine
+    
+    BSA --> Result
+    Conf --> Result
+    Shape --> Result
+    RMSD --> Result
+    
+    Result --> Vis3D
+    Result --> Vis2D
+    Result --> Data
+    Result --> Design
+
+    %% Layout hints
+    linkStyle default stroke:#333,stroke-width:1px

@@ -22,6 +22,20 @@ import tempfile
 from collections import defaultdict
 from pymol import cmd
 
+# Import unified color scheme
+try:
+    from .color_scheme import (
+        INTERACTION_COLORS_PYMOL,
+        PYMOL_COLOR_NAMES,
+        register_pymol_colors,
+    )
+except ImportError:
+    from color_scheme import (
+        INTERACTION_COLORS_PYMOL,
+        PYMOL_COLOR_NAMES,
+        register_pymol_colors,
+    )
+
 # ========== 自动检测RDKit和依赖 ==========
 # 尝试自动安装依赖
 try:
@@ -2783,28 +2797,12 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     except:
         pass
     
-    # ========== 第九步：定义统一配色方案 (Schrödinger 风格) ==========
-    # 将 Hex 转换为 PyMOL 需要的 RGB tuple (0-1)
-    # H-bond:      #2196F3 -> (0.129, 0.588, 0.953)
-    # Salt Bridge: #FF5722 -> (1.000, 0.341, 0.133)
-    # Pi-Pi:       #9C27B0 -> (0.612, 0.153, 0.690)
-    # Pi-Cation:   #E91E63 -> (0.914, 0.118, 0.388)
-    # Hydrophobic: #4CAF50 -> (0.298, 0.686, 0.314)
-    # Halogen:     #FF9800 -> (1.000, 0.596, 0.000)
-    # Metal:       #673AB7 -> (0.404, 0.227, 0.718)
-    # Water:       #00BCD4 -> (0.000, 0.737, 0.831)
-    
+    # ========== 第九步：注册统一配色方案 (使用 color_scheme.py) ==========
+    # 使用统一的 Schrödinger 风格颜色方案
     try:
-        cmd.set_color("glue_hbond",       [0.129, 0.588, 0.953])
-        cmd.set_color("glue_salt",        [1.000, 0.341, 0.133])
-        cmd.set_color("glue_pipi",        [0.612, 0.153, 0.690])
-        cmd.set_color("glue_pication",    [0.914, 0.118, 0.388])
-        cmd.set_color("glue_hydrophobic", [0.298, 0.686, 0.314])
-        cmd.set_color("glue_halogen",     [1.000, 0.596, 0.000])
-        cmd.set_color("glue_metal",       [0.404, 0.227, 0.718])
-        cmd.set_color("glue_water",       [0.000, 0.737, 0.831])
+        register_pymol_colors(cmd)
     except Exception as e:
-        print(f"[visualize_protein_ligand_3d] Warning: Failed to set custom colors: {e}")
+        print(f"[visualize_protein_ligand_3d] Warning: Failed to register custom colors: {e}")
 
     # 氢键样式设置
     cmd.set("dash_length", 0.3)
