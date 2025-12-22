@@ -33,6 +33,13 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import numpy as np
 from scipy.spatial import cKDTree
+
+# Import ligand features module for small molecule support
+try:
+    from .ligand_features import is_ligand, get_ligand_hydrophobicity, get_ligand_charge
+    HAS_LIGAND_FEATURES = True
+except ImportError:
+    HAS_LIGAND_FEATURES = False
 from scipy.spatial.distance import cdist
 from scipy import ndimage
 
@@ -566,24 +573,42 @@ class FeatureExtractor:
         return None
     
     def _precompute_residue_properties(self):
-        """Precompute properties for each residue."""
+        """Precompute properties for each residue, including ligands."""
         self.residue_hydrophobicity = {}
         self.residue_charge = {}
+        self.atom_hydrophobicity = {}  # Per-atom for ligands
+        self.atom_charge = {}  # Per-atom for ligands
         
-        for atom in self.atoms:
+        for i, atom in enumerate(self.atoms):
             key = (atom.get('chain', ''), atom.get('resn', ''), atom.get('resi', ''))
             resn = atom.get('resn', 'ALA')
+            name = atom.get('name', '')
+            elem = atom.get('element', 'C')
             
-            if key not in self.residue_hydrophobicity:
-                self.residue_hydrophobicity[key] = self.HYDROPHOBICITY_SCALE.get(resn, 0.5)
+            # Check if this is a ligand atom
+            is_lig = HAS_LIGAND_FEATURES and is_ligand(resn)
             
-            if key not in self.residue_charge:
-                if resn in ['LYS', 'ARG', 'HIS']:
-                    self.residue_charge[key] = 1.0
-                elif resn in ['ASP', 'GLU']:
-                    self.residue_charge[key] = -1.0
-                else:
+            if is_lig:
+                # Use atom-type based features for ligands
+                self.atom_hydrophobicity[i] = get_ligand_hydrophobicity(name, elem, resn)
+                self.atom_charge[i] = get_ligand_charge(name, elem, resn)
+                # Also set residue-level defaults
+                if key not in self.residue_hydrophobicity:
+                    self.residue_hydrophobicity[key] = 0.5  # Neutral default
+                if key not in self.residue_charge:
                     self.residue_charge[key] = 0.0
+            else:
+                # Standard amino acid handling
+                if key not in self.residue_hydrophobicity:
+                    self.residue_hydrophobicity[key] = self.HYDROPHOBICITY_SCALE.get(resn, 0.5)
+                
+                if key not in self.residue_charge:
+                    if resn in ['LYS', 'ARG', 'HIS']:
+                        self.residue_charge[key] = 1.0
+                    elif resn in ['ASP', 'GLU']:
+                        self.residue_charge[key] = -1.0
+                    else:
+                        self.residue_charge[key] = 0.0
     
     def extract_features(self, mesh: SurfaceMesh, 
                         use_apbs: bool = False) -> List[SurfacePoint]:
@@ -835,16 +860,22 @@ class FeatureExtractor:
         nearest_atom = self.atoms[indices[0]]
         point.nearest_residue = f"{nearest_atom.get('chain', '')}:{nearest_atom.get('resn', '')}:{nearest_atom.get('resi', '')}"
         
-        # Hydrophobicity (weighted average of nearby residues)
+        # Hydrophobicity (weighted average of nearby atoms/residues)
         hydro_sum = 0.0
         weight_sum = 0.0
         
         for idx, dist in zip(indices, distances):
             if dist > 6.0:
                 continue
-            atom = self.atoms[idx]
-            key = (atom.get('chain', ''), atom.get('resn', ''), atom.get('resi', ''))
-            hydro = self.residue_hydrophobicity.get(key, 0.5)
+            
+            # Check if we have atom-level hydrophobicity (for ligands)
+            if idx in self.atom_hydrophobicity:
+                hydro = self.atom_hydrophobicity[idx]
+            else:
+                atom = self.atoms[idx]
+                key = (atom.get('chain', ''), atom.get('resn', ''), atom.get('resi', ''))
+                hydro = self.residue_hydrophobicity.get(key, 0.5)
+            
             weight = 1.0 / (dist + 0.1)
             hydro_sum += hydro * weight
             weight_sum += weight
