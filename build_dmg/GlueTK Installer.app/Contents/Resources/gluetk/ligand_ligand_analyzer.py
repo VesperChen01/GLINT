@@ -35,7 +35,7 @@ except ImportError:
     RDKIT_AVAILABLE = False
 
 def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_csv=None,
-                                     visualize=True):
+                                     visualize=True, show_hydrophobic=False):
     """
     分析两个选择区域（通常是两个小分子）之间的相互作用
     
@@ -46,6 +46,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
         cutoff: 距离截断 (Å)
         output_csv: 输出CSV路径
         visualize: 是否自动在PyMOL中显示
+        show_hydrophobic: 是否显示疏水相互作用（默认False，只显示关键相互作用）
     """
     
     # 1. 获取原子信息
@@ -141,32 +142,33 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                 e2 = get_element_from_atom_name(a2[3])
                 polar_atoms = {'N', 'O', 'S', 'F', 'CL', 'BR', 'I'}
                 if e1 in polar_atoms and e2 in polar_atoms:
-                     interactions.append({
+                    interactions.append({
                         "Type": "Polar Contact",
                         "Atom1": a1, "Atom2": a2, "Distance": d, "Confidence": 0.4,
                         "Details": "Dipole-Dipole"
                     })
-                     continue
+                    continue
 
-            # 3.5 疏水相互作用 (如果有 RDKit 支持)
-            if rdkit_features1 and rdkit_features2:
-                if _is_hydrophobic_atom(a1, rdkit_features1) and _is_hydrophobic_atom(a2, rdkit_features2):
-                    if d <= 4.0: # 疏水截断通常 3.8-4.0
-                         interactions.append({
-                            "Type": "Hydrophobic",
-                            "Atom1": a1, "Atom2": a2, "Distance": d, "Confidence": 0.8,
-                            "Details": "RDKit-verified"
+            # 3.5 疏水相互作用 (如果有 RDKit 支持且用户启用)
+            if show_hydrophobic:
+                if rdkit_features1 and rdkit_features2:
+                    if _is_hydrophobic_atom(a1, rdkit_features1) and _is_hydrophobic_atom(a2, rdkit_features2):
+                        if d <= 4.0: # 疏水截断通常 3.8-4.0
+                            interactions.append({
+                                "Type": "Hydrophobic",
+                                "Atom1": a1, "Atom2": a2, "Distance": d, "Confidence": 0.8,
+                                "Details": "RDKit-verified"
+                            })
+                # 无 RDKit 时的疏水回退 (仅 C-C)
+                elif not RDKIT_AVAILABLE:
+                    elem1 = get_element_from_atom_name(a1[3])
+                    elem2 = get_element_from_atom_name(a2[3])
+                    if elem1 == 'C' and elem2 == 'C' and d <= 3.6:  # 收紧阈值 3.8 -> 3.6
+                        interactions.append({
+                            "Type": "Hydrophobic (Generic)",
+                            "Atom1": a1, "Atom2": a2, "Distance": d, "Confidence": 0.5,
+                            "Details": "C-C contact"
                         })
-            # 无 RDKit 时的疏水回退 (仅 C-C)
-            elif not RDKIT_AVAILABLE:
-                elem1 = get_element_from_atom_name(a1[3])
-                elem2 = get_element_from_atom_name(a2[3])
-                if elem1 == 'C' and elem2 == 'C' and d <= 3.6:  # 收紧阈值 3.8 -> 3.6
-                    interactions.append({
-                        "Type": "Hydrophobic (Generic)",
-                        "Atom1": a1, "Atom2": a2, "Distance": d, "Confidence": 0.5,
-                        "Details": "C-C contact"
-                    })
 
     # --- B. 基于基团的相互作用 (Pi-Pi, Pi-Cation) ---
     if RDKIT_AVAILABLE and rings1 and rings2:
@@ -209,15 +211,39 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
         _save_csv(interactions, output_csv)
         
     if visualize:
-        visualize_ligand_interactions(obj_name, interactions)
+        visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=show_hydrophobic)
         
     return interactions
 
-def visualize_ligand_interactions(obj_name, interactions):
-    """在 PyMOL 中可视化结果"""
+def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False):
+    """
+    在 PyMOL 中可视化结果
+    
+    参数:
+        obj_name: PyMOL对象名
+        interactions: 相互作用列表
+        show_hydrophobic: 是否显示疏水相互作用（默认False）
+    """
     cmd.delete(f"{obj_name}_LL_inter_*")
     
+    # 统计各类型相互作用
+    interaction_counts = {}
+    for inter in interactions:
+        itype = inter['Type']
+        interaction_counts[itype] = interaction_counts.get(itype, 0) + 1
+    
+    # 显示相互作用统计（排除疏水，如果未启用）
+    print(f"[GlueTK] Ligand-Ligand Interaction Summary:")
+    for itype, count in sorted(interaction_counts.items()):
+        if not show_hydrophobic and ("Hydrophobic" in itype or "疏水" in itype):
+            print(f"   {itype}: {count} (hidden - use show_hydrophobic=True to display)")
+        else:
+            print(f"   {itype}: {count}")
+    
     for i, inter in enumerate(interactions):
+        # 跳过疏水相互作用（如果未启用显示）
+        if not show_hydrophobic and ("Hydrophobic" in inter['Type'] or "疏水" in inter['Type']):
+            continue
         name = f"{obj_name}_LL_inter_{i+1}"
         
         if inter.get("IsGroup"):
