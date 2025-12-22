@@ -857,23 +857,22 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
                 # 回退到原始方式
                 sel_expr = f"model {obj} and chain {chain} and resi {start}-{end}"
 
-        # 创建选择并显示
-        try:
-            cmd.select(sel_name, sel_expr)
-            atom_count = cmd.count_atoms(sel_name)
-            if atom_count == 0:
-                print(f"[highlight_gmotif_loops] Warning: No atoms selected for G-loop {idx} ({chain}:{start}-{end})")
-                continue
-        except Exception as e:
-            print(f"[highlight_gmotif_loops] Failed to select G-loop {idx}: {e}")
+        # 检查是否有原子
+        if cmd.count_atoms(sel_expr) == 0:
+            print(f"[highlight_gmotif_loops] Warning: No atoms selected for G-loop {idx} ({chain}:{start}-{end})")
             continue
-            
+
+        # 创建新对象
+        cmd.create(sel_name, sel_expr)
+        
+        # 设置显示
+        cmd.hide("everything", sel_name)
         cmd.show("sticks", sel_name)
         cmd.show("cartoon", sel_name)
         cmd.set("cartoon_thickness", 0.4, sel_name)
 
-        # 按元素着色棍状模型
-        _color_sticks_by_element(sel_expr)
+        # 按元素着色棍状模型 (对新对象)
+        _color_sticks_by_element(sel_name)
 
         # 高亮 cartoon (使用指定颜色)
         cmd.color(color, f"{sel_name} and backbone")
@@ -958,17 +957,17 @@ def highlight_gloop_surface(obj=None, chain=None, start_resi=None, end_resi=None
         print("[highlight_gloop_surface] Error: chain, start_resi, end_resi are required")
         return None
     
-    # 清除旧的 G-loop 表面
+    # 清除旧的 G-loop 表面对象
     if clear_old:
         for name in cmd.get_names("objects"):
             if name.startswith("gloop_surf_"):
                 cmd.delete(name)
     
-    # 创建选择名称
+    # 创建选择名称 (作为新的对象名)
     if selection_name is None:
         selection_name = f"gloop_surf_{chain}_{start_resi}_{end_resi}"
     
-    # 构建选择表达式
+    # 构建源选择表达式
     try:
         start_int = int(start_resi)
         end_int = int(end_resi)
@@ -979,23 +978,29 @@ def highlight_gloop_surface(obj=None, chain=None, start_resi=None, end_resi=None
                                                     int(end_resi.rstrip('ABCDEFGHIJ')) + 1))
         sel_expr = f"model {obj} and chain {chain} and resi {resi_list}"
     
-    # 创建选择
-    cmd.select(selection_name, sel_expr)
-    atom_count = cmd.count_atoms(selection_name)
-    
-    if atom_count == 0:
+    # 检查是否有原子
+    if cmd.count_atoms(sel_expr) == 0:
         print(f"[highlight_gloop_surface] Warning: No atoms selected for {chain}:{start_resi}-{end_resi}")
         return None
+
+    # 创建新对象 (extract/create)
+    cmd.create(selection_name, sel_expr)
     
-    # 显示表面
-    cmd.show("surface", selection_name)
+    # 获取新对象的原子数
+    atom_count = cmd.count_atoms(selection_name)
+    
+    # 设置新对象的显示方式
+    cmd.hide("everything", selection_name) # 隐藏所有默认表示
+    cmd.show("surface", selection_name)     # 只显示表面
+    
+    # 设置颜色和透明度
     cmd.color(surface_color, selection_name)
     cmd.set("surface_transparency", surface_transparency, selection_name)
     
-    # 可选：显示 cartoon
+    # 可选：显示 cartoon (在新对象上)
     if show_cartoon:
         cmd.show("cartoon", selection_name)
-        cmd.color(cartoon_color, f"{selection_name} and backbone")
+        cmd.color(cartoon_color, selection_name)
     
     # 计算表面积
     try:

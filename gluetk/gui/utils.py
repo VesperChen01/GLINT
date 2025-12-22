@@ -228,16 +228,9 @@ def _import_helpers():
                 ["g_motif_analyzer.py", "g_motif.py", "g-motif.py"], "find_crbn_g_motif"
             )
         
-        # C2H2 Zinc Finger Detection
-        find_c2h2_domains = None
-        try:
-            from ..c2h2_finder import find_c2h2_domains
-        except Exception:
-            find_c2h2_domains = _dynamic_load_by_filenames(
-                ["c2h2_finder.py"], "find_c2h2_domains"
-            )
+
         
-        return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions, find_c2h2_domains
+        return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions
     except (ImportError, ValueError):
         pass
         
@@ -275,7 +268,7 @@ def _import_helpers():
         # Raise a warning but return None placeholders if running outside env (e.g. CI)
         print(f"Warning: Helper modules not found: {e}")
         # Return Nones or mock functions to allow GUI to load
-        return (None,) * 15  # 15 items including find_c2h2_domains
+        return (None,) * 14  # 14 items
         
     find_crbn_g_motif = None
     try:
@@ -290,16 +283,6 @@ def _import_helpers():
                 ["g_motif_analyzer.py", "g_motif.py", "g-motif.py"], "find_crbn_g_motif"
             )
     
-    # C2H2 Zinc Finger Detection
-    find_c2h2_domains = None
-    try:
-        import c2h2_finder
-        find_c2h2_domains = c2h2_finder.find_c2h2_domains
-    except Exception:
-        find_c2h2_domains = _dynamic_load_by_filenames(
-            ["c2h2_finder.py"], "find_c2h2_domains"
-        )
-            
     return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions, find_c2h2_domains
 
 # Load helpers immediately
@@ -308,5 +291,4 @@ def _import_helpers():
  analyze_protein_ligand_interactions, visualize_protein_ligand_3d, 
  generate_interaction_network_plot, analyze_ternary_complex, 
  analyze_atom_pair_interactions, visualize_atom_pairs, 
- analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions,
- find_c2h2_domains) = _import_helpers()
+ analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions) = _import_helpers()

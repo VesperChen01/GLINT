@@ -79,8 +79,7 @@ def _register_commands():
             degron_annotate
         )
         
-        # C2H2 锌指蛋白检测
-        from .c2h2_finder import find_c2h2_domains
+
         
         # 批量分析模块
         try:
@@ -235,8 +234,7 @@ def _register_commands():
         cmd.extend("validate_g_motif_geometry", validate_g_motif_geometry)
         cmd.extend("degron_annotate", degron_annotate)
         
-        # C2H2 锌指蛋白检测命令
-        cmd.extend("find_c2h2_domains", find_c2h2_domains)
+
         
         # 分子胶设计分析命令
         cmd.extend("align_gloop_for_modeling", align_gloop_for_modeling)

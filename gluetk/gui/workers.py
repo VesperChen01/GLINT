@@ -29,9 +29,9 @@ from .utils import (
     get_lang, t,
     analyze_pdb_interactions,
     analyze_protein_nucleic_interactions,
-    find_crbn_g_motif,
-    find_c2h2_domains
+    find_crbn_g_motif
 )
+
 
 class AnalysisWorker(QThread):
     """
@@ -259,60 +259,6 @@ class GMotifWorker(QThread):
             self.error.emit(str(e))
 
 
-class C2H2Worker(QThread):
-    """C2H2 Zinc Finger Detection Worker"""
-    progress = pyqtSignal(str)
-    finished = pyqtSignal(list, str)  # (domains, csv_path)
-    error = pyqtSignal(str)
-    
-    def __init__(self, obj_name: str, pdb_file: Optional[str], 
-                 turn_rmsd: float, global_rmsd: float,
-                 require_turn_gly: bool, skip_low_complexity: bool,
-                 out_csv: Optional[str], hmm_profile: Optional[str] = None):
-        super().__init__()
-        self.obj_name = obj_name
-        self.pdb_file = pdb_file
-        self.turn_rmsd = turn_rmsd
-        self.global_rmsd = global_rmsd
-        self.require_turn_gly = require_turn_gly
-        self.skip_low_complexity = skip_low_complexity
-        self.out_csv = out_csv
-        self.hmm_profile = hmm_profile
-        
-    def run(self):
-        try:
-            if find_c2h2_domains is None:
-                raise RuntimeError("find_c2h2_domains not found; ensure c2h2_finder.py exists.")
-            self.progress.emit("[C2H2] Detecting zinc fingers...")
-            
-            
-            out_csv_path = self.out_csv
-            if not out_csv_path:
-                import tempfile
-                fd, out_csv_path = tempfile.mkstemp(suffix="_c2h2.csv")
-                os.close(fd)
-            
-            domains = find_c2h2_domains(
-                obj_name=self.obj_name,
-                pdb_file=self.pdb_file,
-                hmm_profile=self.hmm_profile,
-                turn_rmsd_cutoff=float(self.turn_rmsd),
-                global_rmsd_cutoff=float(self.global_rmsd),
-                require_turn_gly=bool(self.require_turn_gly),
-                skip_low_complexity=bool(self.skip_low_complexity),
-                out_csv=out_csv_path,
-                auto_highlight=True,
-            ) or []
-            
-            # Convert to simple tuple list for GUI processing
-            hits = [(d.chain, d.sequence, d.domain_start, d.domain_end,
-                     d.turn_rmsd if d.turn_rmsd else 0.0, d.priority_score, d.status)
-                    for d in domains]
-            
-            self.progress.emit(f"[C2H2] Done, {len(hits)} zinc fingers found")
-            self.finished.emit(hits, out_csv_path)
-        except Exception as e:
-            self.error.emit(str(e))
 
 class SurfaceAnalysisWorker(QThread):
     """Worker for protein surface analysis"""
