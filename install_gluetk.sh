@@ -258,7 +258,10 @@ else
 
 CONDA_EXE="$CONDA_EXE"
 if [ -n "\$CONDA_EXE" ] && [ -x "\$CONDA_EXE" ]; then
-    echo "Starting GlueTK via conda env $ENV_NAME..."
+    echo "Starting GlueTK via conda env: $ENV_NAME"
+    # Fix OpenMP error on macOS (especially Apple Silicon)
+    export KMP_DUPLICATE_LIB_OK=TRUE
+    export OMP_NUM_THREADS=1
     "\$CONDA_EXE" run -n $ENV_NAME pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
 else
     osascript -e 'display alert "Error" message "Conda not found. Please reinstall GlueTK."'

@@ -8,12 +8,13 @@ a molecular glue discovery and analysis toolkit.
 
 from .main_window import GlueTKDialog
 from .utils import t, get_lang
+from .tabs.common import CommonTab
 from .workers import (
     AnalysisWorker,
+    PNAnalysisWorker,
     GMotifWorker,
-    C2H2Worker,
     SurfaceAnalysisWorker,
-    SurfaceSimilarityWorker,
+    SurfaceSimilarityWorker
 )
 
 __all__ = [
@@ -21,8 +22,10 @@ __all__ = [
     't',
     'get_lang',
     'AnalysisWorker',
+    'CommonTab',
+    'AnalysisWorker',
     'GMotifWorker',
-    'C2H2Worker',
     'SurfaceAnalysisWorker',
     'SurfaceSimilarityWorker',
+    'PNAnalysisWorker',
 ]

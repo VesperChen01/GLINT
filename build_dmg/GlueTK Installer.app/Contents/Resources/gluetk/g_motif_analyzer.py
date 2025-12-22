@@ -40,14 +40,7 @@ BUILTIN_TEMPLATES = {
         "selection_fmt": "{obj} and chain C and resi 35+36+37+38+39+40+41+42 and name CA",
         "description": "CK1α G-loop from 5FQD (CRBN-lenalidomide-CK1α complex)",
     },
-    # VAV1 G-loop: 来自 9NFR
-    "VAV1": {
-        "pdb": "9NFR",
-        "chain": "C",
-        "resi_range": "791-798",
-        "selection_fmt": "{obj} and chain C and resi 791+792+793+794+795+796+797+798 and name CA",
-        "description": "VAV1 G-loop from 9NFR",
-    },
+
     
     # ===== 兼容旧版格式（保留向后兼容）=====
     "GSPT1 (5HXB A:570-577)": {
@@ -585,6 +578,9 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
             w.writerow([ch, seq8, resi_s, resi_e, f"{rmsd:.2f}", status, "G-Motif"])
 
     print(f"[G-MOTIF] Hits: {len(hits)}; output: {out_csv}")
+
+    # Sort hits by RMSD (ascending) so hits[0] is the best one
+    hits.sort(key=lambda x: x[4])
 
     # 准备返回结果
     result = {

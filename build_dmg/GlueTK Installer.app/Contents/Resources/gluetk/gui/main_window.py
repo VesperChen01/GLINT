@@ -288,7 +288,7 @@ class GlueTKDialog(QDialog):
         # List of combos to update
         combos = [
             getattr(self, "obj_combo_gm", None),
-            getattr(self, "obj_combo_c2h2", None),  # C2H2 Zinc Finger
+
             getattr(self, "obj_combo_apbs", None),
             getattr(self, "pocket_obj_combo", None),
             getattr(self, "ppi_obj_combo", None),
@@ -609,18 +609,6 @@ class GlueTKDialog(QDialog):
                 <li><b>Export Coords</b> - Save coordinates to CSV</li>
                 <li><b>Surface Analysis</b> - Analyze electrostatic/hydrophobic patches</li>
             </ul>
-        </div>
-        
-        <div class="feature-box">
-            <div class="feature-title">C2H2 Zinc Finger Detection</div>
-            <p>Find C2H2 zinc finger domains (e.g., IKZF1/3 for lenalidomide targets).</p>
-            <table>
-                <tr><th>Parameter</th><th>Description</th><th>Default</th></tr>
-                <tr><td>Turn RMSD</td><td>Local turn alignment threshold (Å)</td><td>2.0</td></tr>
-                <tr><td>Global RMSD</td><td>Global fold check threshold (Å)</td><td>3.5</td></tr>
-                <tr><td>Require Turn Gly</td><td>Require key Gly in turn region</td><td>✗</td></tr>
-            </table>
-            <p><b>Buttons:</b> Find Zinc Fingers, Render C2H2 + ESP, Highlight Domains</p>
         </div>
         
         <div class="feature-box">

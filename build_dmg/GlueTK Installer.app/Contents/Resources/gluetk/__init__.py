@@ -4,13 +4,13 @@ GlueTK - PyMOL Plugin for Molecular Glue Analysis
 Molecular Glue vs PROTAC Classification Toolkit
 
 Author: Vesper
-Version: v0.1.9-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
+Version: v0.1.11-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
 """
 
 from __future__ import print_function
 import locale
 
-__version__ = "v0.1.9-beta"
+__version__ = "v0.1.11-beta"
 __author__ = "Vesper"
 
 # ---- 环境依赖检查 ----
@@ -79,8 +79,7 @@ def _register_commands():
             degron_annotate
         )
         
-        # C2H2 锌指蛋白检测
-        from .c2h2_finder import find_c2h2_domains
+
         
         # 批量分析模块
         try:
@@ -235,8 +234,7 @@ def _register_commands():
         cmd.extend("validate_g_motif_geometry", validate_g_motif_geometry)
         cmd.extend("degron_annotate", degron_annotate)
         
-        # C2H2 锌指蛋白检测命令
-        cmd.extend("find_c2h2_domains", find_c2h2_domains)
+
         
         # 分子胶设计分析命令
         cmd.extend("align_gloop_for_modeling", align_gloop_for_modeling)
@@ -469,7 +467,7 @@ def __init_plugin__(app=None):
 
     # 欢迎信息
     if _DEPS_OK:
-        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.9-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix")
+        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.11-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix")
         print("┌" + "─" * 48 + "┐")
         print("│  Quick Start:                                   │")
         print("│    • gluetk_gui            - Launch GUI          │")
@@ -477,7 +475,7 @@ def __init_plugin__(app=None):
         print("│    • Plugins → GlueTK       - Menu access       │")
         print("└" + "─" * 48 + "┘")
     else:
-        print("\n🧬 GlueTK v0.1.9-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix - ⚠️  Setup required (see above)")
+        print("\n🧬 GlueTK v0.1.11-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix - ⚠️  Setup required (see above)")
         print("💡 After setup, restart PyMOL to use all features.\n")
 
 # Auto-register if running within PyMOL environment (e.g. via 'run' command or import)
