@@ -56,7 +56,10 @@ class HeroHeader(QWidget):
         self.bg_path = _get_welcome_bg_path()
         
     def paintEvent(self, event):
-        from PyQt5.QtGui import QPainter, QBrush, QColor, QRadialGradient, QLinearGradient
+        try:
+            from PyQt5.QtGui import QPainter, QBrush, QColor, QRadialGradient, QLinearGradient
+        except ImportError:
+            from PyQt6.QtGui import QPainter, QBrush, QColor, QRadialGradient, QLinearGradient
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         

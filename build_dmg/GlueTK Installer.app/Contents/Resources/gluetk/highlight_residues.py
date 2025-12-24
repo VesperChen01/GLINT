@@ -13,6 +13,12 @@ import re
 import math
 from pymol import cmd
 
+# Import unified color scheme
+try:
+    from .color_scheme import INTERACTION_COLORS_HEX
+except ImportError:
+    from color_scheme import INTERACTION_COLORS_HEX
+
 # --- Robust CSV helpers (encoding, delimiter, header normalization) ---
 def _read_csv_robust(csv_path):
     """
@@ -285,16 +291,17 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     返回:
         distance_obj_name: 创建的距离对象名称,如果失败则返回None
     """
-    # 相互作用类型到颜色的映射
+    # 使用统一配色方案
+    # 将 hex 颜色转换为 PyMOL 颜色名称（或直接使用相近的 PyMOL 内置颜色）
     color_map = {
-        "氢键": "yellow",
-        "盐桥": "magenta",
-        "疏水相互作用": "green",
-        "π–π 堆积": "orange",
-        "π–阳离子相互作用": "tv_orange",
-        "卤素键": "cyan",
-        "水桥": "lightblue",
-        "金属配位": "purple",
+        "氢键": "marine",           # 蓝色系 (#2196F3)
+        "盐桥": "tv_red",          # 橙红色 (#FF5722)
+        "疏水相互作用": "green",    # 绿色 (#4CAF50)
+        "π–π 堆积": "purple",      # 紫色 (#9C27B0)
+        "π–阳离子相互作用": "magenta",  # 粉色 (#E91E63)
+        "卤素键": "tv_orange",     # 橙色 (#FF9800)
+        "水桥": "cyan",            # 青色 (#00BCD4)
+        "金属配位": "violet",      # 深紫色 (#673AB7)
     }
     
     # 获取颜色,默认为灰色

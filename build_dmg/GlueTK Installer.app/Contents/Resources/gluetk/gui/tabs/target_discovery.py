@@ -273,10 +273,16 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_use_apbs.setToolTip("Use APBS for accurate electrostatics (slower, requires APBS)")
         sim_grid.addWidget(self.parent_window.sim_use_apbs, 4, 3)
         
-        # Row 5: Description
+        # Row 5: Include Ligands option
+        self.parent_window.sim_include_ligands = QCheckBox("Include Ligands")
+        self.parent_window.sim_include_ligands.setChecked(True)
+        self.parent_window.sim_include_ligands.setToolTip("Include small molecules (HETATM) in surface analysis using atom-type based features")
+        sim_grid.addWidget(self.parent_window.sim_include_ligands, 5, 1)
+        
+        # Row 6: Description
         desc_sim = QLabel("MaSIF-style analysis: geometric (curvature, shape index) + chemical (ESP, hydrophobicity) features")
         desc_sim.setStyleSheet("color: gray; font-style: italic;")
-        sim_grid.addWidget(desc_sim, 5, 1, 1, 3)
+        sim_grid.addWidget(desc_sim, 6, 1, 1, 3)
         
         # Buttons
         sim_btn_row = QHBoxLayout()

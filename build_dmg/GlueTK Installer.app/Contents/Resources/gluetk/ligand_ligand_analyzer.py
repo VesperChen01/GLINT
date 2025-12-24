@@ -26,6 +26,18 @@ from .interaction_analyzer import (
     calculate_angle_three_points
 )
 
+# Import unified color scheme
+try:
+    from .color_scheme import (
+        PYMOL_COLOR_NAMES,
+        register_pymol_colors,
+    )
+except ImportError:
+    from color_scheme import (
+        PYMOL_COLOR_NAMES,
+        register_pymol_colors,
+    )
+
 try:
     from rdkit import Chem
     from rdkit.Chem import AllChem
@@ -273,6 +285,9 @@ def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False
         else:
             print(f"   {itype}: {count}")
     
+    # Register custom colors
+    register_pymol_colors(cmd)
+    
     for i, inter in enumerate(interactions):
         # 跳过疏水相互作用（如果未启用显示）
         if not show_hydrophobic and ("Hydrophobic" in inter['Type'] or "疏水" in inter['Type']):
@@ -301,17 +316,30 @@ def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False
             
             cmd.distance(name, sel1, sel2)
             
-            # 颜色
-            color_map = {
-                "Hydrogen Bond": "yellow",
-                "Halogen Bond": "cyan",
-                "Metal Coordination": "magenta",
-                "Polar Contact": "orange",
-                "Hydrophobic": "green",
-                "Hydrophobic (Generic)": "lime",
-            }
-            col = color_map.get(inter['Type'], "white")
-            cmd.color(col, name)
+            # 使用统一配色方案
+            itype = inter['Type']
+            color_name = "gray50" # default
+            
+            if "Hydrogen Bond" in itype or "氢键" in itype:
+                color_name = PYMOL_COLOR_NAMES['hbond']
+            elif "Halogen Bond" in itype or "卤素键" in itype:
+                color_name = PYMOL_COLOR_NAMES['halogen']
+            elif "Metal" in itype or "金属" in itype:
+                color_name = PYMOL_COLOR_NAMES['metal']
+            elif "Polar" in itype or "极性" in itype:
+                color_name = PYMOL_COLOR_NAMES['other'] # Polar contacts often gray or light blue
+            elif "Hydrophobic" in itype or "疏水" in itype:
+                color_name = PYMOL_COLOR_NAMES['hydrophobic']
+            elif "Pi-Pi" in itype:
+                color_name = PYMOL_COLOR_NAMES['pipi']
+            elif "Pi-Cation" in itype:
+                color_name = PYMOL_COLOR_NAMES['pication']
+                
+            try:
+                cmd.color(color_name, name)
+            except:
+                # Fallback if color name not found (though register_pymol_colors should fix this)
+                cmd.color("gray50", name)
             
     print(f"[GlueTK] Visualized {len(interactions)} interactions.")
 

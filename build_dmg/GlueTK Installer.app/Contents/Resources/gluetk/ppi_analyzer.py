@@ -50,6 +50,20 @@ except ImportError:
         is_pipi, is_cationpi, is_pipi_precise
     )
 
+# Import unified color scheme
+try:
+    from .color_scheme import (
+        INTERACTION_COLORS_PYMOL,
+        PYMOL_COLOR_NAMES,
+        register_pymol_colors,
+    )
+except ImportError:
+    from color_scheme import (
+        INTERACTION_COLORS_PYMOL,
+        PYMOL_COLOR_NAMES,
+        register_pymol_colors,
+    )
+
 # ========== PPI 参数 ==========
 PPI_PARAMS = {
     "interface_distance": 4.5,      # Å, 界面残基判定距离
@@ -562,23 +576,19 @@ def visualize_ppi_interface(obj_name, ppi_result,
         'SER': 'S', 'THR': 'T', 'VAL': 'V', 'TRP': 'W', 'TYR': 'Y'
     }
     
-    # 五种非共价键的配色和样式
-    # 自定义颜色 (RGB列表，范围0-1)
-    glue_red = [215/255.0, 92/255.0, 93/255.0]    # 盐桥
-    glue_blue = [64/255.0, 124/255.0, 174/255.0]  # 氢键
-    glue_green = [142/255.0, 186/255.0, 141/255.0] # 疏水
-    
-    # 注册自定义颜色到PyMOL (避免覆盖标准颜色名)
-    cmd.set_color("glue_red", glue_red)
-    cmd.set_color("glue_blue", glue_blue)
-    cmd.set_color("glue_green", glue_green)
+    # 注册统一配色方案到PyMOL
+    try:
+        register_pymol_colors(cmd)
+    except Exception as e:
+        print(f"[visualize_ppi_interface] Warning: Failed to register colors: {e}")
 
+    # 使用统一的相互作用配色
     INTERACTION_COLORS = {
-        "氢键": {"color": "glue_blue", "width": 2.0, "gap": 0.3},
-        "盐桥": {"color": "glue_red", "width": 2.5, "gap": 0.25},
-        "疏水接触": {"color": "glue_green", "width": 1.5, "gap": 0.35},
-        "π-π堆积": {"color": "yellow", "width": 2.0, "gap": 0.3},
-        "阳离子-π": {"color": "purple", "width": 2.0, "gap": 0.3}
+        "氢键": {"color": PYMOL_COLOR_NAMES['hbond'], "width": 2.0, "gap": 0.3},
+        "盐桥": {"color": PYMOL_COLOR_NAMES['salt'], "width": 2.5, "gap": 0.25},
+        "疏水接触": {"color": PYMOL_COLOR_NAMES['hydrophobic'], "width": 1.5, "gap": 0.35},
+        "π-π堆积": {"color": PYMOL_COLOR_NAMES['pipi'], "width": 2.0, "gap": 0.3},
+        "阳离子-π": {"color": PYMOL_COLOR_NAMES['pication'], "width": 2.0, "gap": 0.3}
     }
     
     if not ppi_result or "interface_interactions" not in ppi_result:

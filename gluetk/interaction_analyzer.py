@@ -244,14 +244,15 @@ def find_hydrogen_or_estimate(donor_atom, acceptor_atom, all_atoms_by_residue):
     """
     查找或估算氢原子位置
     
-    参数:
+    Arguments:
         donor_atom: (chain, resn, resi, name, coord)
         acceptor_atom: (chain, resn, resi, name, coord)
         all_atoms_by_residue: dict {(chain, resn, resi): [atoms]}
     
-    返回:
-        h_coord: 氢原子坐标
+    Returns:
+        h_coord: hydrogen atom coordinates (tuple)
     """
+    import numpy as np
     donor_coord = donor_atom[4]
     acceptor_coord = acceptor_atom[4]
     res_key = (donor_atom[0], donor_atom[1], donor_atom[2])
@@ -1671,12 +1672,13 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
     ligand_residues = []
     protein_residues = []
 
-    # 第一步：收集所有蛋白质残基（无论是否指定配体）
+    # 第一步：收集所有可能的受体残基（蛋白质或核酸）
     for res_key, res_atoms in chain_residues.items():
         chain_id, res_name, res_id = res_key
         mol_type = identify_molecule_type(res_name)
         
-        if mol_type == "protein":
+        # 允许 DNA/RNA 作为受体
+        if mol_type in ["protein", "dna", "rna"]:
             protein_residues.append((res_key, res_atoms))
 
     # 第二步：收集配体残基
@@ -1715,26 +1717,29 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
         print("\nPossible reasons:")
         print("   1) Ligand name mismatch")
         print("   2) Ligand is on a separate chain not included in the object")
+        print("   3) Ligand is a standard residue (or DNA/RNA) but not specified")
         
-        # List all detected non-standard residues (potential ligands)
-        non_standard = {}
+        # List all detected non-standard residues AND potential DNA/RNA ligands
+        candidates = {}
         for res_key in chain_residues.keys():
             chain_id, res_name, res_id = res_key
             mol_type = identify_molecule_type(res_name)
-            if mol_type == "ligand":
-                if res_name not in non_standard:
-                    non_standard[res_name] = []
-                non_standard[res_name].append(f"chain{chain_id}:{res_id}")
+            
+            # Show ligands and DNA/RNA (as they might be the intended ligand)
+            if mol_type in ["ligand", "dna", "rna", "unknown"]:
+                if res_name not in candidates:
+                    candidates[res_name] = []
+                candidates[res_name].append(f"chain{chain_id}:{res_id}({mol_type})")
         
-        if non_standard:
-            print("\nDetected potential ligands:")
-            for resn, locations in sorted(non_standard.items()):
-                print(f"   - {resn}: {', '.join(locations[:5])}")
+        if candidates:
+            print("\nDetected potential ligands (incl. nucleic acids):")
+            for resn, locations in sorted(candidates.items()):
+                print(f"   - {resn}: {', '.join(locations[:3])}...")
             print("\nHow to fix:")
             print("   • Enter one of the names above into 'Ligand Resname'")
             print("   • Ensure the ligand chain is included in the object")
         else:
-            print("\nNo non-standard residues found. Please check:")
+            print("\nNo potential non-standard residues found. Please check:")
             print("   • The PyMOL object is correctly loaded")
             print("   • The ligand is included (use 'show sticks, resn XXX' to verify)")
         
@@ -1742,7 +1747,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
         return None
 
     if not protein_residues:
-        print("[analyze_protein_ligand_interactions] ⚠️ No protein residues found")
+        print("[analyze_protein_ligand_interactions] ⚠️ No receptor residues (Protein/DNA/RNA) found")
         return None
 
     # ✅ 调试打印
@@ -1786,7 +1791,8 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
             centroid_dist = distance(lig_centroid, prot_centroid)
             
             # 放宽距离筛选：配体可能很大，质心距离不代表边缘距离
-            if centroid_dist > 15.0:
+            # 增加到 60.0 以确保覆盖 DNA 长链或大分子配体
+            if centroid_dist > 60.0:
                 continue
             
             checked_pairs += 1
@@ -2709,7 +2715,15 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             ligand_resname = ligand_resnames[0]
             print(f"[visualize_protein_ligand_3d] 📌 自动检测到配体: {ligand_resname}")
         else:
-            print(f"[visualize_protein_ligand_3d] ⚠️ 未找到配体")
+            print(f"[visualize_protein_ligand_3d] ⚠️ 未找到标准非蛋白配体")
+            print(f"                                   (可能是 DNA/RNA 复合物，或者配体是 DNA/RNA)")
+            
+            # 尝试把 DNA/RNA 也当做潜在配体 (如果用户意图如此)
+            potential_nucleic = [r for r in all_resnames if r in {'DA', 'DT', 'DG', 'DC', 'A', 'T', 'G', 'C', 'U'}]
+            if potential_nucleic:
+                print(f"[visualize_protein_ligand_3d] ℹ️ 检测到核酸残基: {potential_nucleic}")
+                print(f"                                   如果其中一个是配体，请显式指定: ligand_resname='{potential_nucleic[0]}'")
+            
             ligand_resname = None
     
     # 定义配体选择

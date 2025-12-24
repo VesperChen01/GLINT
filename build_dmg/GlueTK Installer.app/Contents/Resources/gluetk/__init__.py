@@ -4,23 +4,35 @@ GlueTK - PyMOL Plugin for Molecular Glue Analysis
 Molecular Glue vs PROTAC Classification Toolkit
 
 Author: Vesper
-Version: v0.1.11-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
+Version: v0.1.12-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
 """
 
 from __future__ import print_function
 import locale
 
-__version__ = "v0.1.11-beta"
+__version__ = "v0.1.12-beta"
 __author__ = "Vesper"
 
 # ---- 环境依赖检查 ----
+# 延迟依赖检查，避免在导入时触发 PyQt 崩溃
 _DEPS_OK = False
-try:
-    from .env_checker import ensure_dependencies
-    _DEPS_OK = ensure_dependencies(silent=False)
-except Exception as e:
-    # 在 PyMOL 外运行时可能失败，静默处理
-    pass
+_DEPS_CHECKED = False
+
+def _check_deps_safe():
+    """安全地检查依赖（延迟到实际需要时）"""
+    global _DEPS_OK, _DEPS_CHECKED
+    if _DEPS_CHECKED:
+        return _DEPS_OK
+    
+    try:
+        from .env_checker import ensure_dependencies
+        _DEPS_OK = ensure_dependencies(silent=True)  # 静默检查
+        _DEPS_CHECKED = True
+    except Exception as e:
+        _DEPS_OK = False
+        _DEPS_CHECKED = True
+    
+    return _DEPS_OK
 
 # ---- 语言工具 ----
 def _zh():
@@ -392,17 +404,71 @@ def _import_gui_dialog():
         traceback.print_exc()
         return None
 
+def _check_pyqt_safe():
+    """安全地检查 PyQt 是否可用（使用子进程避免崩溃）"""
+    import subprocess
+    import sys
+    
+    # 使用子进程测试 PyQt 导入
+    test_code = "import PyQt5; print('OK')"
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", test_code],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0 and "OK" in result.stdout:
+            return True
+    except:
+        pass
+    
+    # 尝试 PyQt6
+    test_code = "import PyQt6; print('OK')"
+    try:
+        result = subprocess.run(
+            [sys.executable, "-c", test_code],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        if result.returncode == 0 and "OK" in result.stdout:
+            return True
+    except:
+        pass
+    
+    return False
+
 def gluetk_gui():
     """启动 GlueTK 统一 GUI 窗口（非模态，不阻塞事件循环）"""
     global _dlg
     
+    # 安全地检查 PyQt 是否可用（避免在主进程中导入导致崩溃）
+    print("[GlueTK] Checking PyQt availability...")
+    if not _check_pyqt_safe():
+        _info(
+            "PyQt5/PyQt6 未安装或无法使用，无法启动 GUI",
+            "PyQt5/PyQt6 not installed or unavailable, cannot start GUI"
+        )
+        print("\n💡 Install PyQt5 to use the GUI:")
+        print("   conda install -c conda-forge pyqt --force-reinstall")
+        print("   # or")
+        print("   pip install --force-reinstall PyQt5")
+        print("\n💡 Or try using a fresh conda environment:")
+        print("   conda create -n gluetk_fresh python=3.9 -y")
+        print("   conda activate gluetk_fresh")
+        print("   conda install -c conda-forge pyqt -y")
+        _print_cli_fallback()
+        return
+    
+    print("[GlueTK] PyQt is available, loading GUI...")
     GlueTKDialog = _import_gui_dialog()
     if GlueTKDialog is None:
         _info("GUI 导入失败", "Failed to import GUI module")
         import sys, os
         pkg_dir = os.path.dirname(os.path.realpath(__file__))
         print(f"  Package dir: {pkg_dir}")
-        print(f"  unified_gui.py exists: {os.path.exists(os.path.join(pkg_dir, 'unified_gui.py'))}")
+        print(f"  gui/main_window.py exists: {os.path.exists(os.path.join(pkg_dir, 'gui', 'main_window.py'))}")
         print(f"  sys.path[0:3]: {sys.path[:3]}")
         _print_cli_fallback()
         return
@@ -424,6 +490,10 @@ def gluetk_gui():
     except Exception as e:
         _info(f"GUI 启动失败: {e}", f"GUI start failed: {e}")
         import traceback; traceback.print_exc()
+        print("\n💡 If you see a segmentation fault:")
+        print("   1. Make sure PyQt5 is properly installed in your conda environment")
+        print("   2. Try: conda install -c conda-forge pyqt --force-reinstall")
+        print("   3. Restart PyMOL after reinstalling PyQt5")
         _print_cli_fallback()
 
 # Backward compatibility alias
@@ -447,7 +517,7 @@ def __init_plugin__(app=None):
     3. 总是注册 GUI 命令（用于显示错误信息）
     """
     # 只有依赖检查通过时才注册全部命令
-    if _DEPS_OK:
+    if _check_deps_safe():
         _register_commands()
     
     # 总是注册 GUI 命令
@@ -465,9 +535,9 @@ def __init_plugin__(app=None):
     except Exception as e:
         pass  # 静默处理
 
-    # 欢迎信息
-    if _DEPS_OK:
-        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.11-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix")
+    # 欢迎信息（延迟检查）
+    if _check_deps_safe():
+        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.12-beta")
         print("┌" + "─" * 48 + "┐")
         print("│  Quick Start:                                   │")
         print("│    • gluetk_gui            - Launch GUI          │")
@@ -475,8 +545,8 @@ def __init_plugin__(app=None):
         print("│    • Plugins → GlueTK       - Menu access       │")
         print("└" + "─" * 48 + "┘")
     else:
-        print("\n🧬 GlueTK v0.1.11-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix - ⚠️  Setup required (see above)")
-        print("💡 After setup, restart PyMOL to use all features.\n")
+        print("\n🧬 GlueTK v0.1.12-beta - ⚠️  Some dependencies may be missing")
+        print("💡 Most features are available. Use 'gluetk_gui' to launch GUI.\n")
 
 # Auto-register if running within PyMOL environment (e.g. via 'run' command or import)
 try:

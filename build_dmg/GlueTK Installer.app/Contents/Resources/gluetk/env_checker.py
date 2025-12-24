@@ -1442,9 +1442,12 @@ def mark_initialized():
         pass
 
 
-def _quick_check_deps() -> Tuple[bool, List[str]]:
+def _quick_check_deps(skip_pyqt=True) -> Tuple[bool, List[str]]:
     """
     快速检查依赖（不输出日志）
+    
+    Args:
+        skip_pyqt: 是否跳过 PyQt5 检查（避免导入时崩溃）
     
     Returns:
         (all_ok, missing_list)
@@ -1452,8 +1455,11 @@ def _quick_check_deps() -> Tuple[bool, List[str]]:
     import shutil
     missing = []
     
-    # 检查 Python 包
+    # 检查 Python 包（跳过 PyQt5 以避免崩溃）
     for import_name, display_name, _ in REQUIRED_PACKAGES:
+        # 跳过 PyQt5 检查，因为导入它可能导致崩溃
+        if skip_pyqt and import_name == "PyQt5":
+            continue
         try:
             __import__(import_name)
         except ImportError:
