@@ -672,6 +672,20 @@ class PDB2PQRRunner:
             )
             
             if result.returncode != 0:
+                # Check for "no such option: --keep-chain" and retry without it
+                if "--keep-chain" in result.stderr and "no such option" in result.stderr:
+                    print("[PDB2PQR] ⚠️ '--keep-chain' not supported by this version, retrying without it...")
+                    new_cmd_parts = [p for p in cmd_parts if p != '--keep-chain']
+                    result = subprocess.run(
+                        new_cmd_parts,
+                        capture_output=True,
+                        text=True,
+                        timeout=300
+                    )
+                    if result.returncode == 0 and os.path.exists(output_pqr):
+                        print(f"[PDB2PQR] ✅ Generated (without keep-chain): {output_pqr}")
+                        return True
+                
                 print(f"[PDB2PQR] Error: {result.stderr}")
                 return False
             
@@ -777,6 +791,7 @@ elec
   sdie {APBS_PARAMS['sdie']}
   chgm spl2
   srfm smol
+  srad {PROBE_RADIUS}
   swin 0.3
   sdens 10.0
   temp {APBS_PARAMS['temp']}
@@ -1393,12 +1408,16 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     charge_calc = GasteigerChargeCalculator()
     phi_glue = charge_calc.calculate_potential(glue_mol, surface_points)
     
+    # Create descriptive chain strings for naming
+    chains_a_str = "_".join(protein_a_chains)
+    chains_b_str = "_".join(protein_b_chains)
+    
     # Interface 1: Protein A - Glue
     print("\n" + "="*60)
-    print("Interface 1: Protein A - Glue")
+    print(f"Interface 1: Protein A ({chains_a_str}) - Glue")
     print("="*60)
     
-    protein_a_dir = os.path.join(output_dir, 'protein_a')
+    protein_a_dir = os.path.join(output_dir, f'protein_{chains_a_str}')
     os.makedirs(protein_a_dir, exist_ok=True)
     
     # Extract protein A
@@ -1421,8 +1440,25 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         grid_a = DXGrid(dx_file_a)
         phi_protein_a = grid_a.interpolate(surface_points)
         
+        # Apply distance cutoff: only show EC for points near protein
+        if SCIPY_AVAILABLE:
+            # Get protein A coordinates
+            prot_a_mol = Chem.MolFromPDBFile(protein_a_pdb, removeHs=False)
+            if prot_a_mol:
+                prot_coords = prot_a_mol.GetConformer().GetPositions()
+                tree = cKDTree(prot_coords)
+                dists, _ = tree.query(surface_points)
+                # Points further than 5A are masked (set to 0 EC)
+                mask = dists > 5.0
+                phi_protein_a_masked = phi_protein_a.copy()
+                phi_protein_a_masked[mask] = 0.0
+            else:
+                phi_protein_a_masked = phi_protein_a
+        else:
+            phi_protein_a_masked = phi_protein_a
+
         ec_calc = ECCalculator()
-        ec_a_glue = ec_calc.calculate_ec_local(phi_protein_a, phi_glue)
+        ec_a_glue = ec_calc.calculate_ec_local(phi_protein_a_masked, phi_glue)
         ec_score_a = ec_calc.calculate_ec_score(ec_a_glue)
         ec_stats_a = ec_calc.calculate_ec_statistics(ec_a_glue)
         
@@ -1430,21 +1466,22 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
             'ec_score': ec_score_a,
             'ec_statistics': ec_stats_a,
             'ec_values': ec_a_glue,
-            'phi_protein': phi_protein_a
+            'phi_protein': phi_protein_a,
+            'chains': protein_a_chains
         }
         
         print(f"EC(A-Glue) Score: {ec_score_a:.4f}")
         
-        # Write EC map
-        ec_pdb_a = os.path.join(protein_a_dir, 'ec_map_a_glue.pdb')
+        # Write EC map with chain-based name
+        ec_pdb_a = os.path.join(protein_a_dir, f'ec_map_{chains_a_str}_glue.pdb')
         ECMapWriter.write_pseudo_pdb(ec_pdb_a, surface_points, ec_a_glue)
     
     # Interface 2: Protein B - Glue
     print("\n" + "="*60)
-    print("Interface 2: Protein B - Glue")
+    print(f"Interface 2: Protein B ({chains_b_str}) - Glue")
     print("="*60)
     
-    protein_b_dir = os.path.join(output_dir, 'protein_b')
+    protein_b_dir = os.path.join(output_dir, f'protein_{chains_b_str}')
     os.makedirs(protein_b_dir, exist_ok=True)
     
     # Extract protein B
@@ -1465,7 +1502,22 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         grid_b = DXGrid(dx_file_b)
         phi_protein_b = grid_b.interpolate(surface_points)
         
-        ec_b_glue = ec_calc.calculate_ec_local(phi_protein_b, phi_glue)
+        # Apply distance cutoff
+        if SCIPY_AVAILABLE:
+            prot_b_mol = Chem.MolFromPDBFile(protein_b_pdb, removeHs=False)
+            if prot_b_mol:
+                prot_coords = prot_b_mol.GetConformer().GetPositions()
+                tree = cKDTree(prot_coords)
+                dists, _ = tree.query(surface_points)
+                mask = dists > 5.0
+                phi_protein_b_masked = phi_protein_b.copy()
+                phi_protein_b_masked[mask] = 0.0
+            else:
+                phi_protein_b_masked = phi_protein_b
+        else:
+            phi_protein_b_masked = phi_protein_b
+
+        ec_b_glue = ec_calc.calculate_ec_local(phi_protein_b_masked, phi_glue)
         ec_score_b = ec_calc.calculate_ec_score(ec_b_glue)
         ec_stats_b = ec_calc.calculate_ec_statistics(ec_b_glue)
         
@@ -1473,13 +1525,14 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
             'ec_score': ec_score_b,
             'ec_statistics': ec_stats_b,
             'ec_values': ec_b_glue,
-            'phi_protein': phi_protein_b
+            'phi_protein': phi_protein_b,
+            'chains': protein_b_chains
         }
         
         print(f"EC(B-Glue) Score: {ec_score_b:.4f}")
         
-        # Write EC map
-        ec_pdb_b = os.path.join(protein_b_dir, 'ec_map_b_glue.pdb')
+        # Write EC map with chain-based name
+        ec_pdb_b = os.path.join(protein_b_dir, f'ec_map_{chains_b_str}_glue.pdb')
         ECMapWriter.write_pseudo_pdb(ec_pdb_b, surface_points, ec_b_glue)
     
     # Combined analysis
@@ -1718,11 +1771,13 @@ def _visualize_ec_map(obj_name: str, ec_pdb: str, ligand_resname: str = None):
     cmd.load(ec_pdb, ec_obj)
     
     # Color by B-factor (EC values)
-    cmd.spectrum('b', 'blue_white_red', ec_obj, minimum=-100, maximum=100)
+    # minimum/maximum are scaled to B-factor range (usually -1 to 1 or -100 to 100)
+    cmd.spectrum('b', 'red_white_green', ec_obj, minimum=-100, maximum=100)
     
-    # Show as spheres
+    # Show as spheres with transparency
     cmd.show('spheres', ec_obj)
     cmd.set('sphere_scale', 0.15, ec_obj)
+    cmd.set('sphere_transparency', 0.4, ec_obj)
     
     # Highlight ligand
     if ligand_resname:
@@ -1748,17 +1803,23 @@ def _visualize_ternary_ec(obj_name: str, results: Dict):
     output_dir = results.get('output_dir', '.')
     
     # Load EC maps for both interfaces
-    for interface in ['A_glue', 'B_glue']:
-        if interface in results['interfaces']:
-            subdir = 'protein_a' if interface == 'A_glue' else 'protein_b'
-            ec_pdb = os.path.join(output_dir, subdir, f'ec_map_{interface.lower()}.pdb')
+    for interface_key in ['A_glue', 'B_glue']:
+        if interface_key in results['interfaces']:
+            interface_data = results['interfaces'][interface_key]
+            chains = interface_data.get('chains', [])
+            chains_str = "_".join(chains)
+            
+            subdir = f'protein_{chains_str}'
+            filename = f'ec_map_{chains_str}_glue.pdb'
+            ec_pdb = os.path.join(output_dir, subdir, filename)
             
             if os.path.exists(ec_pdb):
-                ec_obj = f'ec_{interface}'
+                ec_obj = f'ec_{interface_key.lower()}'
                 cmd.load(ec_pdb, ec_obj)
-                cmd.spectrum('b', 'blue_white_red', ec_obj, minimum=-100, maximum=100)
+                cmd.spectrum('b', 'red_white_green', ec_obj, minimum=-100, maximum=100)
                 cmd.show('spheres', ec_obj)
                 cmd.set('sphere_scale', 0.15, ec_obj)
+                cmd.set('sphere_transparency', 0.4, ec_obj)
     
     # Color proteins
     protein_a_chains = results.get('protein_a_chains', [])
@@ -1778,6 +1839,7 @@ def _visualize_ternary_ec(obj_name: str, results: Dict):
     
     print("[Visualization] Ternary EC maps loaded")
     print("[Visualization] Cyan = Protein A, Magenta = Protein B, Orange = Glue")
+    print("[Visualization] Green = complementary (EC > 0), Red = clash (EC < 0)")
 
 
 def _get_element_charge(element: str) -> float:
@@ -2201,9 +2263,10 @@ def _visualize_ec_hotspots(obj_name: str, results: Dict, ligand_resname: str = N
     pos_pdb = os.path.join(output_dir, 'ec_hotspots_positive.pdb')
     if os.path.exists(pos_pdb):
         cmd.load(pos_pdb, 'ec_hotspots_pos')
-        cmd.color('blue', 'ec_hotspots_pos')
+        cmd.color('green', 'ec_hotspots_pos')
         cmd.show('spheres', 'ec_hotspots_pos')
         cmd.set('sphere_scale', 0.2, 'ec_hotspots_pos')
+        cmd.set('sphere_transparency', 0.3, 'ec_hotspots_pos')
     
     # Load negative hotspots
     neg_pdb = os.path.join(output_dir, 'ec_hotspots_negative.pdb')
@@ -2353,9 +2416,10 @@ def analyze_substituent_ec_effect(obj_name: str, ligand_resname: str,
         # Visualize
         if PYMOL_AVAILABLE:
             cmd.load(sub_pdb, 'ec_substituent')
-            cmd.spectrum('b', 'blue_white_red', 'ec_substituent', minimum=-100, maximum=100)
+            cmd.spectrum('b', 'red_white_green', 'ec_substituent', minimum=-100, maximum=100)
             cmd.show('spheres', 'ec_substituent')
             cmd.set('sphere_scale', 0.2, 'ec_substituent')
+            cmd.set('sphere_transparency', 0.4, 'ec_substituent')
     
     return results
 

@@ -7,23 +7,18 @@ import os
 import sys
 from typing import Optional, List, Dict, Tuple, Any
 
-try:
-    from PyQt5.QtCore import Qt, QTimer, QSize, QSettings
-    from PyQt5.QtWidgets import (
-        QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QStackedWidget,
-        QWidget, QPushButton, QLabel, QFrame, QTextEdit, QProgressBar, QMessageBox
-    )
-    from PyQt5.QtGui import QIcon, QPixmap, QColor, QBrush, QRadialGradient, QLinearGradient
-except ImportError:
-    try:
-        from PyQt6.QtCore import Qt, QTimer, QSize, QSettings
-        from PyQt6.QtWidgets import (
-            QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QStackedWidget,
-            QWidget, QPushButton, QLabel, QFrame, QTextEdit, QProgressBar, QMessageBox
-        )
-        from PyQt6.QtGui import QIcon, QPixmap, QColor, QBrush, QRadialGradient, QLinearGradient
-    except ImportError:
-        raise RuntimeError("PyQt5 or PyQt6 must be installed.")
+from .qt_adapter import QtCore, QtWidgets, QtGui, Qt, Signal, Slot, Property
+
+if QtWidgets is None:
+    raise RuntimeError("No Qt binding (PyQt5, PyQt6, PySide2, or PySide6) found.")
+
+# Re-map commonly used classes from submodules for compatibility
+from .qt_adapter import (
+    QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QStackedWidget,
+    QWidget, QPushButton, QLabel, QFrame, QTextEdit, QProgressBar, QMessageBox,
+    QIcon, QPixmap, QColor, QBrush, QRadialGradient, QLinearGradient,
+    QTimer, QSize, QSettings
+)
 
 from .utils import t, get_lang
 from .tabs.target_discovery import TargetDiscoveryTab
@@ -56,10 +51,7 @@ class HeroHeader(QWidget):
         self.bg_path = _get_welcome_bg_path()
         
     def paintEvent(self, event):
-        try:
-            from PyQt5.QtGui import QPainter, QBrush, QColor, QRadialGradient, QLinearGradient
-        except ImportError:
-            from PyQt6.QtGui import QPainter, QBrush, QColor, QRadialGradient, QLinearGradient
+        from .qt_adapter import QPainter, QBrush, QColor, QRadialGradient, QLinearGradient
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         
@@ -395,7 +387,7 @@ class GlueTKDialog(QDialog):
     # --- Simple Pages ---
     def create_welcome_tab(self) -> QWidget:
         """Create a modern, visually stunning welcome page following the scientific showcase concept."""
-        from PyQt5.QtWidgets import QGraphicsDropShadowEffect, QGridLayout, QScrollArea
+        from .qt_adapter import QGraphicsDropShadowEffect, QGridLayout, QScrollArea
         
         main_page = QWidget()
         main_page.setObjectName("welcome_page")
@@ -552,7 +544,7 @@ class GlueTKDialog(QDialog):
 
     def create_readme_tab(self) -> QWidget:
         """Create a comprehensive README tab with GUI documentation."""
-        from PyQt5.QtWidgets import QScrollArea, QTextBrowser
+        from .qt_adapter import QScrollArea, QTextBrowser
         
         w = QWidget()
         layout = QVBoxLayout(w)
@@ -805,7 +797,7 @@ class GlueTKDialog(QDialog):
 
     def create_contact_tab(self) -> QWidget:
         """Create a clean contact page with structured information."""
-        from PyQt5.QtWidgets import QScrollArea, QGridLayout
+        from .qt_adapter import QScrollArea, QGridLayout
         
         main_page = QWidget()
         main_layout = QVBoxLayout(main_page)
@@ -981,7 +973,7 @@ class GlueTKDialog(QDialog):
             
             if os.path.exists(resources_path):
                 # Create a dialog to show resources
-                from PyQt5.QtWidgets import QDialog, QVBoxLayout, QTextBrowser, QPushButton
+                from .qt_adapter import QDialog, QVBoxLayout, QTextBrowser, QPushButton
                 
                 dialog = QDialog(self)
                 dialog.setWindowTitle("Molecular Glue Resources")

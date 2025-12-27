@@ -5,21 +5,10 @@ Visualization Tab Module
 import os
 from typing import Optional
 
-try:
-    from PyQt5.QtCore import Qt
-    from PyQt5.QtWidgets import (
-        QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-        QCheckBox, QComboBox, QGroupBox, QFormLayout, QFileDialog, QMessageBox
-    )
-except ImportError:
-    try:
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import (
-            QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-            QCheckBox, QComboBox, QGroupBox, QFormLayout, QFileDialog, QMessageBox
-        )
-    except ImportError:
-        raise RuntimeError("PyQt5 or PyQt6 must be installed.")
+from ..qt_adapter import (
+    Qt, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QCheckBox, QComboBox, QGroupBox, QFormLayout, QFileDialog, QMessageBox
+)
 
 from .common import CommonTab
 from ..utils import t

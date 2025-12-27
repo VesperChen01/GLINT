@@ -363,12 +363,32 @@ class EnvironmentChecker:
         
         errors = []
         
-        # 测试 PyQt5
+        # 测试 PyQt5 - 使用子进程避免崩溃 (非常重要，在 macOS 上尤其如此)
         try:
-            from PyQt5.QtWidgets import QApplication
-            from PyQt5.QtCore import Qt
-            self.log("  ✓ PyQt5 基础功能")
-        except ImportError as e:
+            import subprocess
+            import os
+            
+            # [macOS Fix] 设置环境变量以避免某些 Qt 绘图引起的崩溃
+            env = os.environ.copy()
+            if sys.platform == "darwin":
+                env["QT_MAC_WANTS_LAYER"] = "1"
+
+            test_code = "from PyQt5.QtWidgets import QApplication; from PyQt5.QtCore import Qt; print('OK')"
+            result = subprocess.run(
+                [sys.executable, "-c", test_code],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                env=env
+            )
+            if result.returncode == 0 and "OK" in result.stdout:
+                self.log("  ✓ PyQt5 基础功能")
+            else:
+                errors.append(f"PyQt5: Subprocess test failed")
+                self.log(f"  ✗ PyQt5: Subprocess test failed")
+                if result.stderr:
+                    self.log(f"    Error: {result.stderr.strip()}")
+        except Exception as e:
             errors.append(f"PyQt5: {e}")
             self.log(f"  ✗ PyQt5: {e}")
         

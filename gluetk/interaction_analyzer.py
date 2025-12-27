@@ -39,7 +39,7 @@ except ImportError:
 # ========== 自动检测RDKit和依赖 ==========
 # 尝试自动安装依赖
 try:
-    from .env_setup import ensure_dependencies
+    from .env_checker import ensure_dependencies
     _deps_checked = ensure_dependencies()
 except Exception:
     _deps_checked = False

@@ -15,15 +15,7 @@ import os
 import traceback
 from typing import Optional, List, Tuple, Dict, Any, Union
 
-try:
-    from PyQt5.QtCore import QThread, pyqtSignal
-    PYQT_VERSION = 5
-except ImportError:
-    try:
-        from PyQt6.QtCore import QThread, pyqtSignal
-        PYQT_VERSION = 6
-    except ImportError:
-        raise RuntimeError("PyQt5 or PyQt6 must be installed.")
+from .qt_adapter import QThread, Signal as pyqtSignal
 
 from .utils import (
     get_lang, t,

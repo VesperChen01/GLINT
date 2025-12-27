@@ -5,23 +5,11 @@ Target Discovery Tab: G-Motif, Disease, Pocket
 import os
 from typing import Optional, List, Tuple, Dict, Any
 
-try:
-    from PyQt5.QtCore import Qt
-    from PyQt5.QtWidgets import (
-        QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-        QCheckBox, QComboBox, QGroupBox, QGridLayout, QScrollArea, QFrame,
-        QFileDialog, QMessageBox
-    )
-except ImportError:
-    try:
-        from PyQt6.QtCore import Qt
-        from PyQt6.QtWidgets import (
-            QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-            QCheckBox, QComboBox, QGroupBox, QGridLayout, QScrollArea, QFrame,
-            QFileDialog, QMessageBox
-        )
-    except ImportError:
-        raise RuntimeError("PyQt5 or PyQt6 must be installed.")
+from ..qt_adapter import (
+    Qt, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QCheckBox, QComboBox, QGroupBox, QGridLayout, QScrollArea, QFrame,
+    QFileDialog, QMessageBox
+)
 
 from ..utils import t
 from .common import CommonTab

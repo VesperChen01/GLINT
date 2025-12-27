@@ -5,25 +5,13 @@ Batch Analysis Tab: Multi-structure analysis
 import os
 from typing import Optional, List
 
-try:
-    from PyQt5.QtCore import Qt, QThread, pyqtSignal
-    from PyQt5.QtWidgets import (
-        QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-        QGroupBox, QScrollArea, QFrame, QFileDialog, QMessageBox,
-        QComboBox, QCheckBox, QTextEdit, QProgressBar, QListWidget,
-        QListWidgetItem, QAbstractItemView, QSpinBox
-    )
-except ImportError:
-    try:
-        from PyQt6.QtCore import Qt, QThread, pyqtSignal
-        from PyQt6.QtWidgets import (
-            QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
-            QGroupBox, QScrollArea, QFrame, QFileDialog, QMessageBox,
-            QComboBox, QCheckBox, QTextEdit, QProgressBar, QListWidget,
-            QListWidgetItem, QAbstractItemView, QSpinBox
-        )
-    except ImportError:
-        raise RuntimeError("PyQt5 or PyQt6 must be installed.")
+from ..qt_adapter import (
+    Qt, QThread, Signal as pyqtSignal,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
+    QGroupBox, QScrollArea, QFrame, QFileDialog, QMessageBox,
+    QComboBox, QCheckBox, QTextEdit, QProgressBar, QListWidget,
+    QListWidgetItem, QAbstractItemView, QSpinBox
+)
 
 from ..utils import t
 from .common import CommonTab

@@ -4,13 +4,13 @@ GlueTK - PyMOL Plugin for Molecular Glue Analysis
 Molecular Glue vs PROTAC Classification Toolkit
 
 Author: Vesper
-Version: v0.1.12-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
+Version: v0.1.13-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
 """
 
 from __future__ import print_function
 import locale
 
-__version__ = "v0.1.12-beta"
+__version__ = "v0.1.13-beta"
 __author__ = "Vesper"
 
 # ---- 环境依赖检查 ----
@@ -404,64 +404,72 @@ def _import_gui_dialog():
         traceback.print_exc()
         return None
 
-def _check_pyqt_safe():
-    """安全地检查 PyQt 是否可用（使用子进程避免崩溃）"""
+def _check_qt_safe():
+    """安全地检查 Qt 是否可用（使用子进程避免崩溃）"""
     import subprocess
     import sys
+    import os
     
-    # 使用子进程测试 PyQt 导入
-    test_code = "import PyQt5; print('OK')"
-    try:
-        result = subprocess.run(
-            [sys.executable, "-c", test_code],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0 and "OK" in result.stdout:
-            return True
-    except:
-        pass
-    
-    # 尝试 PyQt6
-    test_code = "import PyQt6; print('OK')"
-    try:
-        result = subprocess.run(
-            [sys.executable, "-c", test_code],
-            capture_output=True,
-            text=True,
-            timeout=5
-        )
-        if result.returncode == 0 and "OK" in result.stdout:
-            return True
-    except:
-        pass
+    # [macOS Fix] 设置环境变量以避免某些 Qt 绘图引起的崩溃
+    if sys.platform == "darwin":
+        os.environ["QT_MAC_WANTS_LAYER"] = "1"
+        # 兼容性修复：避免 macOS 上的 OpenMP 冲突和多线程驱动问题
+        os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+        if "OMP_NUM_THREADS" not in os.environ:
+            os.environ["OMP_NUM_THREADS"] = "1"
+
+    # 使用子进程测试常见的 Qt 绑定
+    for binding in ["PyQt6", "PySide6", "PyQt5", "PySide2"]:
+        test_code = f"import {binding}; print('OK')"
+        try:
+            result = subprocess.run(
+                [sys.executable, "-c", test_code],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and "OK" in result.stdout:
+                return True
+        except:
+            pass
     
     return False
+
+def _get_qapp():
+    """获取或创建 QApplication 实例 (针对 macOS/PyMOL 优化)"""
+    try:
+        from .gui.qt_adapter import QtWidgets
+        if QtWidgets is None:
+            return None
+        app = QtWidgets.QApplication.instance()
+        if app is None:
+            # 如果 PyMOL 还没初始化 Qt 循环，我们也不强制创建，除非真的需要
+            # 在某些 macOS 环境下，直接创建 QApplication 会导致 Segfault
+            app = QtWidgets.QApplication([])
+        return app
+    except Exception as e:
+        print(f"[GlueTK] Failed to get QApplication: {e}")
+        return None
 
 def gluetk_gui():
     """启动 GlueTK 统一 GUI 窗口（非模态，不阻塞事件循环）"""
     global _dlg
     
     # 安全地检查 PyQt 是否可用（避免在主进程中导入导致崩溃）
-    print("[GlueTK] Checking PyQt availability...")
-    if not _check_pyqt_safe():
+    print("[GlueTK] Checking Qt availability...")
+    if not _check_qt_safe():
         _info(
-            "PyQt5/PyQt6 未安装或无法使用，无法启动 GUI",
-            "PyQt5/PyQt6 not installed or unavailable, cannot start GUI"
+            "Qt 绑定 (PyQt5/6/PySide2/6) 未安装或无法使用，无法启动 GUI",
+            "Qt binding (PyQt5/6/PySide2/6) not installed or unavailable, cannot start GUI"
         )
-        print("\n💡 Install PyQt5 to use the GUI:")
-        print("   conda install -c conda-forge pyqt --force-reinstall")
-        print("   # or")
-        print("   pip install --force-reinstall PyQt5")
-        print("\n💡 Or try using a fresh conda environment:")
-        print("   conda create -n gluetk_fresh python=3.9 -y")
-        print("   conda activate gluetk_fresh")
+        print("\n💡 Install PyQt5 or PyQt6 to use the GUI:")
         print("   conda install -c conda-forge pyqt -y")
+        print("   # or")
+        print("   pip install PyQt5")
         _print_cli_fallback()
         return
     
-    print("[GlueTK] PyQt is available, loading GUI...")
+    print("[GlueTK] Qt is available, loading GUI...")
     GlueTKDialog = _import_gui_dialog()
     if GlueTKDialog is None:
         _info("GUI 导入失败", "Failed to import GUI module")
@@ -474,6 +482,9 @@ def gluetk_gui():
         return
 
     try:
+        # [macOS Fix] 确保获取现有的 QApplication 实例，避免重复初始化导致的 Segfault
+        app = _get_qapp()
+        
         # 已有窗口则激活
         if _dlg is not None:
             try:
@@ -481,6 +492,7 @@ def gluetk_gui():
                 return
             except Exception:
                 _dlg = None
+        
         # 新建并非模态展示
         _dlg = GlueTKDialog()
         _dlg.setModal(False)
@@ -537,7 +549,7 @@ def __init_plugin__(app=None):
 
     # 欢迎信息（延迟检查）
     if _check_deps_safe():
-        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.12-beta")
+        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.13-beta")
         print("┌" + "─" * 48 + "┐")
         print("│  Quick Start:                                   │")
         print("│    • gluetk_gui            - Launch GUI          │")
@@ -545,15 +557,18 @@ def __init_plugin__(app=None):
         print("│    • Plugins → GlueTK       - Menu access       │")
         print("└" + "─" * 48 + "┘")
     else:
-        print("\n🧬 GlueTK v0.1.12-beta - ⚠️  Some dependencies may be missing")
+        print("\n🧬 GlueTK v0.1.13-beta - ⚠️  Some dependencies may be missing")
         print("💡 Most features are available. Use 'gluetk_gui' to launch GUI.\n")
 
 # Auto-register if running within PyMOL environment (e.g. via 'run' command or import)
+# IMPORTANT: Only auto-register in actual PyMOL environment, not in standalone Python
 try:
     import pymol
-    if hasattr(pymol, 'cmd'):
+    if hasattr(pymol, 'cmd') and hasattr(pymol, 'stored'):
+        # Double-check we're in actual PyMOL environment
         # Avoid re-registering if already registered (check one key command)
         if 'gluetk_gui' not in pymol.cmd.keyword:
             __init_plugin__()
-except Exception:
+except Exception as e:
+    # Silently fail if not in PyMOL environment
     pass
