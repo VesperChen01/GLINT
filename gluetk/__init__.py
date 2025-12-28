@@ -4,13 +4,13 @@ GlueTK - PyMOL Plugin for Molecular Glue Analysis
 Molecular Glue vs PROTAC Classification Toolkit
 
 Author: Vesper
-Version: v0.1.13-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
+Version: v0.1.14-beta-contact-immersive-bg-minimalist-contact-height-fix-contact-final-en-fix-contact-final-v2-hotfix-qcolor-contact-redesign-slogan-fix-final-visuals-polished-hotfix-v2-hotfix
 """
 
 from __future__ import print_function
 import locale
 
-__version__ = "v0.1.13-beta"
+__version__ = "v0.1.14-beta"
 __author__ = "Vesper"
 
 # ---- 环境依赖检查 ----
@@ -549,7 +549,7 @@ def __init_plugin__(app=None):
 
     # 欢迎信息（延迟检查）
     if _check_deps_safe():
-        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.13-beta")
+        print("\n🧬 GlueTK - Molecular Glue Analyzer v0.1.14-beta")
         print("┌" + "─" * 48 + "┐")
         print("│  Quick Start:                                   │")
         print("│    • gluetk_gui            - Launch GUI          │")
@@ -557,7 +557,7 @@ def __init_plugin__(app=None):
         print("│    • Plugins → GlueTK       - Menu access       │")
         print("└" + "─" * 48 + "┘")
     else:
-        print("\n🧬 GlueTK v0.1.13-beta - ⚠️  Some dependencies may be missing")
+        print("\n🧬 GlueTK v0.1.14-beta - ⚠️  Some dependencies may be missing")
         print("💡 Most features are available. Use 'gluetk_gui' to launch GUI.\n")
 
 # Auto-register if running within PyMOL environment (e.g. via 'run' command or import)
