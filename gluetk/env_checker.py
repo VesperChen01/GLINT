@@ -37,6 +37,10 @@ OPTIONAL_PACKAGES = [
     ("pyhmmer", "pyhmmer", "pyhmmer", "C2H2 锌指 HMM 检测（提高精度）"),
     ("haddock", "HADDOCK3", "haddock3", "Protein-Protein Docking Engine"),
     ("trimesh", "trimesh", "trimesh", "轻量级网格处理库"),
+]
+
+# EC 分析必需的 Python 包 (import_name, display_name, pip_name, description)
+EC_REQUIRED_PACKAGES = [
     ("pdb2pqr", "PDB2PQR", "pdb2pqr", "蛋白结构准备（EC分析必需）"),
     ("apbs", "APBS Python", "apbs", "泊松-玻尔兹曼求解器 Python API"),
 ]
@@ -885,17 +889,22 @@ class EnvironmentChecker:
             self.log("  ✗ APBS CLI 未找到")
         
         if not apbs_available:
-            self.log("\n  💡 APBS 未安装，EC分析将无法运行")
-            self.log("     推荐安装方法:")
-            if self.os_type == "macOS":
-                self.log("     - pip install apbs")
-                self.log("     - 或 brew install brewsci/bio/apbs")
-            elif self.os_type == "Linux":
-                self.log("     - pip install apbs")
-                self.log("     - 或 apt install apbs")
+            self.log("\n  ⚠️ APBS 未安装，尝试自动安装...")
+            if self._install_pip_package("apbs"):
+                self.log("  ✅ APBS (pip) 安装成功")
+                apbs_available = True
             else:
-                self.log("     - pip install apbs")
-                self.log("     - 或从 https://www.poissonboltzmann.org/ 下载")
+                self.log("  ⚠️ APBS pip 安装失败，EC分析将无法运行")
+                self.log("     推荐安装方法:")
+                if self.os_type == "macOS":
+                    self.log("     - pip install apbs")
+                    self.log("     - 或 brew install brewsci/bio/apbs")
+                elif self.os_type == "Linux":
+                    self.log("     - pip install apbs")
+                    self.log("     - 或 apt install apbs")
+                else:
+                    self.log("     - pip install apbs")
+                    self.log("     - 或从 https://www.poissonboltzmann.org/ 下载")
             success = False
         
         # 4. 总结

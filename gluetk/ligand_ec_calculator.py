@@ -512,25 +512,64 @@ class GasteigerChargeCalculator:
                                         points: np.ndarray) -> np.ndarray:
         """
         Calculate potential from raw coordinates and charges.
-        
+
         Args:
             coords: Nx3 array of atom coordinates
             charges: N array of partial charges
             points: Mx3 array of evaluation points
-            
+
         Returns:
             M array of potential values
         """
         potentials = np.zeros(len(points))
-        
+
         for i, point in enumerate(points):
             distances = np.linalg.norm(coords - point, axis=1)
             distances = np.maximum(distances, 0.1)
             potentials[i] = np.sum(charges / (self.dielectric * distances))
-        
+
         potentials *= 332.0637 / 0.593
-        
+
         return potentials
+
+    def calculate_potential_from_pqr(self, pqr_file: str, points: np.ndarray) -> np.ndarray:
+        """
+        Calculate potential from PQR file (fallback when APBS unavailable).
+
+        Args:
+            pqr_file: Path to PQR file
+            points: Mx3 array of evaluation points
+
+        Returns:
+            M array of potential values
+        """
+        coords = []
+        charges = []
+
+        try:
+            with open(pqr_file, 'r') as f:
+                for line in f:
+                    if line.startswith(('ATOM', 'HETATM')):
+                        # PQR format: x, y, z, charge, radius
+                        x = float(line[30:38])
+                        y = float(line[38:46])
+                        z = float(line[46:54])
+                        charge = float(line[54:62])
+
+                        coords.append([x, y, z])
+                        charges.append(charge)
+        except Exception as e:
+            print(f"[calculate_potential_from_pqr] Error reading PQR: {e}")
+            return np.zeros(len(points))
+
+        if not coords:
+            print(f"[calculate_potential_from_pqr] No atoms found in {pqr_file}")
+            return np.zeros(len(points))
+
+        coords = np.array(coords)
+        charges = np.array(charges)
+
+        return self.calculate_potential_from_coords(coords, charges, points)
 
 
 # Try to import pdb2pqr Python module
@@ -568,11 +607,30 @@ class PDB2PQRRunner:
             path = shutil.which(name)
             if path:
                 return path
-        
+
         # Try Python module
         if PDB2PQR_PYTHON_AVAILABLE:
             return 'python_api'
-        
+
+        # Try conda environment
+        conda_env = os.environ.get('CONDA_PREFIX')
+        if conda_env:
+            conda_path = os.path.join(conda_env, 'bin', 'pdb2pqr')
+            if os.path.exists(conda_path):
+                return conda_path
+
+        # Try common conda locations
+        for conda_dir in [os.path.expanduser('~/miniconda3'), os.path.expanduser('~/anaconda3')]:
+            if os.path.exists(conda_dir):
+                conda_path = os.path.join(conda_dir, 'bin', 'pdb2pqr')
+                if os.path.exists(conda_path):
+                    return conda_path
+
+        # Try homebrew on macOS
+        homebrew_path = '/usr/local/opt/pdb2pqr/bin/pdb2pqr'
+        if os.path.exists(homebrew_path):
+            return homebrew_path
+
         return 'pdb2pqr'  # Hope it's in PATH
     
     def run(self, input_pdb: str, output_pqr: str, ph: float = 7.4,
@@ -739,11 +797,30 @@ class APBSRunner:
         path = shutil.which('apbs')
         if path:
             return path
-        
+
         # Try Python module
         if APBS_PYTHON_AVAILABLE:
             return 'python_api'
-        
+
+        # Try conda environment
+        conda_env = os.environ.get('CONDA_PREFIX')
+        if conda_env:
+            conda_path = os.path.join(conda_env, 'bin', 'apbs')
+            if os.path.exists(conda_path):
+                return conda_path
+
+        # Try common conda locations
+        for conda_dir in [os.path.expanduser('~/miniconda3'), os.path.expanduser('~/anaconda3')]:
+            if os.path.exists(conda_dir):
+                conda_path = os.path.join(conda_dir, 'bin', 'apbs')
+                if os.path.exists(conda_path):
+                    return conda_path
+
+        # Try homebrew on macOS
+        homebrew_path = '/usr/local/opt/apbs/bin/apbs'
+        if os.path.exists(homebrew_path):
+            return homebrew_path
+
         # Common installation locations
         common_paths = [
             '/usr/local/bin/apbs',
@@ -751,11 +828,11 @@ class APBSRunner:
             os.path.expanduser('~/apbs/bin/apbs'),
             'C:\\Program Files\\APBS\\apbs.exe'
         ]
-        
+
         for p in common_paths:
             if os.path.exists(p):
                 return p
-        
+
         return 'apbs'  # Hope it's in PATH
     
     def generate_input(self, pqr_file: str, output_prefix: str,
@@ -1243,26 +1320,33 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     )
     
     dx_file = apbs.run(apbs_input, output_dir)
-    
+
     if dx_file is None:
-        print("[calculate_ligand_ec] ❌ APBS failed")
-        return None
-    
-    # Step 4: Load protein potential grid
-    print("\n[Step 4] Loading protein potential...")
-    protein_grid = DXGrid(dx_file)
+        print("[calculate_ligand_ec] ⚠️ APBS failed, using Coulomb approximation...")
+        # Fallback: Use Coulomb potential from protein charges
+        protein_grid = None
+    else:
+        # Step 4: Load protein potential grid
+        print("\n[Step 4] Loading protein potential...")
+        protein_grid = DXGrid(dx_file)
     
     # Step 5: Generate ligand surface points
     print("\n[Step 5] Generating ligand surface...")
     sampler = LigandSurfaceSampler(density=surface_density)
     surface_points, surface_normals = sampler.sample_molecule(ligand_mol)
-    
+
     # Step 6: Calculate potentials at surface points
     print("\n[Step 6] Calculating potentials...")
-    
-    # Protein potential (from APBS grid)
-    phi_protein = protein_grid.interpolate(surface_points)
-    
+
+    # Protein potential (from APBS grid or Coulomb approximation)
+    if protein_grid is not None:
+        phi_protein = protein_grid.interpolate(surface_points)
+    else:
+        # Fallback: Use Coulomb potential from protein charges
+        print("[calculate_ligand_ec] Using Coulomb approximation for protein potential...")
+        charge_calc_protein = GasteigerChargeCalculator()
+        phi_protein = charge_calc_protein.calculate_potential_from_pqr(protein_pqr, surface_points)
+
     # Ligand potential (Gasteiger charges + Coulomb)
     charge_calc = GasteigerChargeCalculator()
     phi_ligand = charge_calc.calculate_potential(ligand_mol, surface_points)

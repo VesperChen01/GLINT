@@ -129,6 +129,17 @@ conda run -n "$ENV_NAME" python -m pip install open3d scikit-image --quiet --dis
     echo -e "${YELLOW}⚠️  Open3D 安装失败，表面分析将使用内置回退方案${NC}"
 }
 
+# EC 分析依赖（PDB2PQR 和 APBS）
+echo "   安装 EC 分析依赖 (PDB2PQR, APBS)..."
+conda run -n "$ENV_NAME" python -m pip install pdb2pqr apbs --quiet --disable-pip-version-check || {
+    echo -e "${YELLOW}⚠️  PDB2PQR/APBS pip 安装失败，尝试 Homebrew (macOS only)...${NC}"
+    if [ "$(uname -s)" = "Darwin" ]; then
+        if command -v brew &> /dev/null; then
+            brew install brewsci/bio/apbs --quiet 2>/dev/null || echo -e "${YELLOW}⚠️  Homebrew APBS 安装失败${NC}"
+        fi
+    fi
+}
+
 echo -e "${GREEN}✅ 依赖包安装完成${NC}"
 
 # 4b. 检查并安装 GCC (HADDOCK3/CNS 依赖)
@@ -158,6 +169,43 @@ else
         echo -e "${YELLOW}⚠️  HADDOCK3 安装失败，蛋白-蛋白对接功能将不可用${NC}"
         echo "   可稍后手动执行: conda run -n $ENV_NAME python -m pip install -U haddock3"
     fi
+fi
+
+# 4d. 验证 EC 分析依赖
+echo -e "\n${BLUE}[4d]${NC} 验证 EC 分析依赖..."
+EC_DEPS_OK=true
+
+# 检查 PDB2PQR
+if conda run -n "$ENV_NAME" python -c "import pdb2pqr" 2>/dev/null; then
+    echo -e "${GREEN}✅ PDB2PQR Python API 可用${NC}"
+else
+    echo -e "${YELLOW}⚠️  PDB2PQR Python API 不可用${NC}"
+    EC_DEPS_OK=false
+fi
+
+# 检查 APBS
+if conda run -n "$ENV_NAME" python -c "import apbs" 2>/dev/null; then
+    echo -e "${GREEN}✅ APBS Python API 可用${NC}"
+else
+    echo -e "${YELLOW}⚠️  APBS Python API 不可用${NC}"
+    EC_DEPS_OK=false
+fi
+
+# 检查命令行工具
+if command -v apbs &> /dev/null; then
+    echo -e "${GREEN}✅ APBS CLI 可用${NC}"
+else
+    echo -e "${YELLOW}⚠️  APBS CLI 不可用${NC}"
+fi
+
+if command -v pdb2pqr &> /dev/null; then
+    echo -e "${GREEN}✅ PDB2PQR CLI 可用${NC}"
+else
+    echo -e "${YELLOW}⚠️  PDB2PQR CLI 不可用${NC}"
+fi
+
+if [ "$EC_DEPS_OK" = false ]; then
+    echo -e "${YELLOW}💡 提示: 可稍后运行 bash install_ec_dependencies.sh 来完成 EC 分析环境设置${NC}"
 fi
 
 # 5. 复制 GlueTK 文件
