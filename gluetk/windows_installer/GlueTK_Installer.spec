@@ -72,5 +72,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='gluetk/assets/logo.ico',  # 假设会生成 gluetk/assets/logo.ico
+    icon=None,  # Add icon path here if available: icon='path/to/icon.ico'
 )

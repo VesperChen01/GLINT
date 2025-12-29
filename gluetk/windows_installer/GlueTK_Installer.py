@@ -22,19 +22,18 @@ except ImportError:
 
 # 配置
 ENV_NAME = "gluetk"
-PYTHON_VERSION = "3.10" # 更新为 3.10
+PYTHON_VERSION = "3.9"
 DEFAULT_INSTALL_PATH = os.path.join(os.path.expanduser("~"), ".pymol", "startup", "gluetk")
 
-# Conda 依赖包 (与 macOS 版本保持一致)
+# Conda 依赖包
 CONDA_PACKAGES = [
-    "rdkit", "scipy", "matplotlib", "pillow", "numpy=1.26.4", # 指定 numpy 版本
+    "rdkit", "scipy", "matplotlib", "pillow", "numpy",
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
-    "meeko", "vina", "haddock_biobb", "scikit-image", # 添加 haddock_biobb, meeko, vina
-    "pdb2pqr", # 添加 pdb2pqr
+    "requests", "scikit-image"
 ]
 
 # Pip 包 (open3d 在 conda 上不稳定)
-PIP_PACKAGES = ["requests", "open3d"] # 添加 requests
+PIP_PACKAGES = ["open3d"]
 
 
 def get_gluetk_source_dir():
@@ -571,9 +570,6 @@ class InstallerApp:
         with open(launcher_bat, "w", encoding="utf-8") as f:
             f.write("@echo off\n")
             f.write(f'call "{activate_bat}" "{self.env_path}"\n')
-            # 添加环境变量以解决 OpenMP 错误
-            f.write('set KMP_DUPLICATE_LIB_OK=TRUE\n')
-            f.write('set OMP_NUM_THREADS=1\n')
             f.write('pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser(\'~/.pymol/startup\')); import gluetk; gluetk.gluetk_gui()"\n')
         
         # Create VBS script to hide command window

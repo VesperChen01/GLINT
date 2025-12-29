@@ -6,7 +6,7 @@ set -e
 
 # 配置
 ENV_NAME="gluetk"
-PYTHON_VERSION="3.10"
+PYTHON_VERSION="3.9"
 INSTALL_DIR="$HOME/.pymol/startup/gluetk"
 DESKTOP_APP="$HOME/Desktop/GlueTK.app"
 
@@ -112,14 +112,13 @@ CONDA_PACKAGES=(
     "scipy"
     "matplotlib"
     "pillow"
-    "numpy=1.26.4" # 指定兼容 PyMOL 的版本
+    "numpy"
     "pandas"
     "seaborn"
     "pyqt"
     "openbabel"
     "requests"
     "vina"
-    "pdb2pqr" # 通过 conda 安装
 )
 
 conda install -n "$ENV_NAME" -c conda-forge "${CONDA_PACKAGES[@]}" -y
@@ -130,10 +129,15 @@ conda run -n "$ENV_NAME" python -m pip install open3d scikit-image --quiet --dis
     echo -e "${YELLOW}⚠️  Open3D 安装失败，表面分析将使用内置回退方案${NC}"
 }
 
-# EC 分析依赖 (APBS)
-echo "   安装 EC 分析依赖 (APBS)..."
-conda install -n "$ENV_NAME" -c schrodinger -c conda-forge apbs=3.4.1 -y || {
-    echo -e "${YELLOW}⚠️  APBS 安装失败，EC 分析功能将不可用${NC}"
+# EC 分析依赖（PDB2PQR 和 APBS）
+echo "   安装 EC 分析依赖 (PDB2PQR, APBS)..."
+conda run -n "$ENV_NAME" python -m pip install pdb2pqr apbs --quiet --disable-pip-version-check || {
+    echo -e "${YELLOW}⚠️  PDB2PQR/APBS pip 安装失败，尝试 Homebrew (macOS only)...${NC}"
+    if [ "$(uname -s)" = "Darwin" ]; then
+        if command -v brew &> /dev/null; then
+            brew install brewsci/bio/apbs --quiet 2>/dev/null || echo -e "${YELLOW}⚠️  Homebrew APBS 安装失败${NC}"
+        fi
+    fi
 }
 
 echo -e "${GREEN}✅ 依赖包安装完成${NC}"
@@ -303,8 +307,10 @@ else
 CONDA_EXE="$CONDA_EXE"
 if [ -n "\$CONDA_EXE" ] && [ -x "\$CONDA_EXE" ]; then
     echo "Starting GlueTK via conda env: $ENV_NAME"
-    # 确保环境变量在 conda run 之前设置，并传递给 pymol 进程
-    "\$CONDA_EXE" run -n $ENV_NAME bash -c "export KMP_DUPLICATE_LIB_OK=TRUE && export OMP_NUM_THREADS=1 && pymol -d 'import sys, os; sys.path.insert(0, os.path.expanduser('\"'\"'~/.pymol/startup'\"'\"')); import gluetk; gluetk.gluetk_gui()'"
+    # Fix OpenMP error on macOS (especially Apple Silicon)
+    export KMP_DUPLICATE_LIB_OK=TRUE
+    export OMP_NUM_THREADS=1
+    "\$CONDA_EXE" run -n $ENV_NAME pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
 else
     osascript -e 'display alert "Error" message "Conda not found. Please reinstall GlueTK."'
     exit 1
