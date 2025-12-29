@@ -31,6 +31,7 @@ CONDA_PACKAGES = [
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
     "meeko", "vina", "haddock_biobb", "scikit-image", # 添加 haddock_biobb, meeko, vina
     "pdb2pqr", # 添加 pdb2pqr
+    # "apbs", # 暂时移除 apbs，因为它与 PyMOL 的 numpy 依赖存在冲突
 ]
 
 # Pip 包 (open3d 在 conda 上不稳定)
@@ -180,7 +181,12 @@ class InstallerApp:
                             font=self.subtitle_font, foreground="#666666")
         subtitle.pack(pady=(5, 0))
         
-        version = ttk.Label(title_frame, text="Version: v0.1.6-beta",
+        # 从 _version.py 动态获取版本
+        try:
+            from gluetk._version import __version__
+        except ImportError:
+            __version__ = "Unknown"
+        version = ttk.Label(title_frame, text=f"Version: v{__version__}",
                            font=self.small_font, foreground="#888888")
         version.pack(pady=(3, 0))
         

@@ -1,116 +1,8 @@
-#!/bin/bash
-# rebuild_installer.sh
-# 重新创建 GlueTK Installer.app
-
-set -e
-
-APP_NAME="GlueTK Installer.app"
-CONTENTS="${APP_NAME}/Contents"
-MACOS="${CONTENTS}/MacOS"
-RESOURCES="${CONTENTS}/Resources"
-
-echo "🏗️  Rebuilding ${APP_NAME}..."
-
-# 1. 创建目录
-rm -rf "${APP_NAME}"
-mkdir -p "${MACOS}"
-mkdir -p "${RESOURCES}"
-
-# 2. 复制图标 (如果存在)
-if [ -f "gluetk/assets/AppIcon.icns" ]; then
-    cp "gluetk/assets/AppIcon.icns" "${RESOURCES}/AppIcon.icns"
-    # 同时生成一个 png 用于资源
-    cp "gluetk/assets/logo.png" "${RESOURCES}/AppIcon.png" 2>/dev/null || true
-else
-    echo "⚠️  Icon not found in gluetk/assets/"
-fi
-
-# 3. 创建 Info.plist
-cat > "${CONTENTS}/Info.plist" << EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>launcher</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.vesper.gluetk.installer</string>
-    <key>CFBundleName</key>
-    <string>GlueTK Installer</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>$(python3 -c "from gluetk._version import __version__; print(__version__)")</string>
-</dict>
-</plist>
-EOF
-
-# 4. 创建启动脚本 (launcher)
-# 使用 Conda 的 Python 启动 Tk GUI 安装器（与老版本界面一致）
-cat > "${MACOS}/launcher" << 'EOF'
-#!/bin/bash
-# GlueTK Installer Launcher (Tk GUI via conda python)
-
-# 查找 conda
-# 查找 conda
-CONDA_EXE=""
-if command -v conda &> /dev/null; then
-    CONDA_EXE=$(command -v conda)
-else
-    # 尝试常见路径
-    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "$HOME/opt/miniconda3/bin/conda"; do
-        if [ -x "$p" ]; then
-            CONDA_EXE="$p"
-            break
-        fi
-    done
-fi
-
-if [ -z "$CONDA_EXE" ]; then
-  osascript -e 'display alert "Conda Not Found" message "Please install Miniconda (conda) first, then re-run GlueTK Installer."'
-  exit 1
-fi
-
-# 初始化 conda 环境
-eval "$($CONDA_EXE shell.bash hook)"
-
-CONDA_BASE="$(conda info --base 2>/dev/null)"
-if [ ! -d "$CONDA_BASE" ]; then
-  osascript -e 'display alert "Conda Base Not Found" message "Conda is installed but CONDA_BASE is invalid. Please check your conda installation."'
-  exit 1
-fi
-
-PYTHON="${CONDA_BASE}/bin/python"
-if [ ! -x "$PYTHON" ]; then
-  # 退而求其次，使用当前 shell 中的 python
-  if command -v python &> /dev/null; then
-    PYTHON=$(command -v python)
-  else
-    osascript -e 'display alert "Python Not Found" message "Cannot find a suitable python interpreter."'
-    exit 1
-  fi
-fi
-
-# 获取资源目录
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-RESOURCES_DIR="$(dirname "$DIR")/Resources"
-INSTALLER_SCRIPT="${RESOURCES_DIR}/GlueTK_Installer.py"
-
-"$PYTHON" "$INSTALLER_SCRIPT"
-EOF
-
-chmod +x "${MACOS}/launcher"
-
-# 5. （可选）保留旧的 Tk 安装器脚本（目前不再使用，仅作为参考）
-#    主要安装逻辑改为 Run_Install.command + gluetk/install.sh
-cat > "${RESOURCES}/GlueTK_Installer.py" << 'EOF'
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GlueTK macOS Installer - 图形化安装程序
-Professional GUI installer for macOS, similar to Windows version
+GlueTK Linux Installer - 图形化安装程序
+Professional GUI installer for Linux, similar to macOS and Windows versions
 """
 
 import os
@@ -125,46 +17,41 @@ try:
     import tkinter as tk
     from tkinter import ttk, filedialog, messagebox
 except ImportError:
-    print("Error: tkinter not found")
+    print("Error: tkinter not found. Please install it (e.g., sudo apt-get install python3-tk).")
     sys.exit(1)
 
 # 配置
 ENV_NAME = "gluetk"
-PYTHON_VERSION = "3.10" # 更新为 3.10
+PYTHON_VERSION = "3.10"
 DEFAULT_INSTALL_PATH = os.path.join(os.path.expanduser("~"), ".pymol", "startup", "gluetk")
 
-# Conda 依赖包 (与 install_gluetk.sh 保持一致)
+# Conda 依赖包 (与 macOS 版本保持一致)
 CONDA_PACKAGES = [
     "rdkit", "scipy", "matplotlib", "pillow", "numpy=1.26.4", # 指定 numpy 版本
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
-    "meeko", "vina", "haddock_biobb", "scikit-image", # 添加 haddock_biobb, meeko, vina
-    "pdb2pqr", # 添加 pdb2pqr
-    # "apbs", # 暂时移除 apbs，因为它与 PyMOL 的 numpy 依赖存在冲突
+    "meeko", "vina", "haddock_biobb", "scikit-image",
+    "pdb2pqr",
 ]
 
 # Pip 包 (open3d 在 conda 上不稳定)
-PIP_PACKAGES = ["requests", "open3d"] # 添加 requests
+PIP_PACKAGES = ["requests", "open3d"]
 
 
 def get_gluetk_source_dir():
     """获取 GlueTK 源码目录"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # 1. 优先查找 Bundle 内部 (Resources/gluetk) - 用于打包后的 App
+    # 1. 优先查找同级目录的 gluetk
     bundled_dir = os.path.join(script_dir, "gluetk")
     if os.path.isdir(bundled_dir):
         return bundled_dir
-        
-    # 2. 开发模式：从 app bundle 向上查找 repo 目录
-    # Resources -> Contents -> app -> repo
-    try:
-        repo_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(script_dir))))
-        gluetk_dir = os.path.join(repo_dir, "gluetk")
-        if os.path.isdir(gluetk_dir):
-            return gluetk_dir
-    except:
-        pass
-        
+    
+    # 2. PyInstaller 打包后的临时目录
+    if hasattr(sys, '_MEIPASS'):
+        bundled_dir = os.path.join(sys._MEIPASS, "gluetk")
+        if os.path.isdir(bundled_dir):
+            return bundled_dir
+    
     return None
 
 
@@ -176,14 +63,11 @@ class InstallerApp:
         self.root.minsize(700, 750)
         self.root.resizable(True, True)
         
-        # Configure better fonts and styling
         self._configure_styles()
-        
-        # Set window icon
         self._set_icon()
         
         self.install_path = tk.StringVar(value=DEFAULT_INSTALL_PATH)
-        self.create_shortcut = tk.BooleanVar(value=True) # macOS 对应 create_launcher
+        self.create_shortcut = tk.BooleanVar(value=True)
         self.install_deps = tk.BooleanVar(value=True)
         self.conda_ok = False
         self.env_ok = False
@@ -193,47 +77,47 @@ class InstallerApp:
         self._build_ui()
         self._center_window()
         
-        # Fix for macOS Dark Mode / Blank Screen
-        self.root.update()
-        self.root.lift()
-        self.root.attributes('-topmost',True)
-        self.root.after_idle(self.root.attributes,'-topmost',False)
-        
-        # Delayed environment check
         self.root.after(500, lambda: threading.Thread(target=self._check_environment, daemon=True).start())
     
     def _configure_styles(self):
-        """Configure better fonts and styles for macOS"""
+        """Configure better fonts and styles for Linux"""
         style = ttk.Style()
         
         # Try to use a modern theme
         available_themes = style.theme_names()
-        if 'aqua' in available_themes: # macOS default
-            style.theme_use('aqua')
-        elif 'clam' in available_themes:
+        if 'clam' in available_themes:
             style.theme_use('clam')
+        elif 'alt' in available_themes:
+            style.theme_use('alt')
         
-        # Define better fonts - use system default for macOS
-        self.title_font = ("Helvetica Neue", 22, "bold")
-        self.subtitle_font = ("Helvetica Neue", 11)
-        self.normal_font = ("Helvetica Neue", 10)
-        self.small_font = ("Helvetica Neue", 9)
-        self.mono_font = ("Menlo", 9) # macOS monospace font
+        # Define better fonts - use Noto Sans CJK for Chinese support, fallback to system default
+        self.title_font = ("Noto Sans CJK SC", 22, "bold")
+        self.subtitle_font = ("Noto Sans CJK SC", 11)
+        self.normal_font = ("Noto Sans CJK SC", 10)
+        self.small_font = ("Noto Sans CJK SC", 9)
+        self.mono_font = ("Monospace", 9)
         
-        # Fallback fonts if Helvetica Neue is not available
+        # Fallback fonts if Noto Sans CJK is not available
         try:
             import tkinter.font as tkfont
             available_fonts = tkfont.families()
             
-            if "Helvetica Neue" not in available_fonts:
-                if "Arial" in available_fonts:
-                    self.title_font = ("Arial", 22, "bold")
-                    self.subtitle_font = ("Arial", 11)
-                    self.normal_font = ("Arial", 10)
-                    self.small_font = ("Arial", 9)
+            if "Noto Sans CJK SC" not in available_fonts:
+                if "DejaVu Sans" in available_fonts:
+                    self.title_font = ("DejaVu Sans", 22, "bold")
+                    self.subtitle_font = ("DejaVu Sans", 11)
+                    self.normal_font = ("DejaVu Sans", 10)
+                    self.small_font = ("DejaVu Sans", 9)
+                elif "Sans" in available_fonts:
+                    self.title_font = ("Sans", 22, "bold")
+                    self.subtitle_font = ("Sans", 11)
+                    self.normal_font = ("Sans", 10)
+                    self.small_font = ("Sans", 9)
             
-            if "Menlo" not in available_fonts:
-                if "Courier New" in available_fonts:
+            if "Monospace" not in available_fonts:
+                if "DejaVu Sans Mono" in available_fonts:
+                    self.mono_font = ("DejaVu Sans Mono", 9)
+                else:
                     self.mono_font = ("Courier New", 9)
         except:
             pass
@@ -246,14 +130,11 @@ class InstallerApp:
         style.configure("TLabelframe", font=self.normal_font)
         style.configure("TLabelframe.Label", font=self.normal_font)
         
-        # Configure root window background
         self.root.configure(bg='#f0f0f0')
     
     def _set_icon(self):
         """设置窗口图标"""
         try:
-            # For macOS, we use .icns directly for the app bundle, but for the Tkinter window,
-            # we can try to use a PNG if available.
             icon_path = os.path.join(os.path.dirname(__file__), "gluetk", "assets", "logo.png")
             if os.path.exists(icon_path):
                 img = tk.PhotoImage(file=icon_path)
@@ -291,7 +172,12 @@ class InstallerApp:
                             font=self.subtitle_font, foreground="#666666")
         subtitle.pack(pady=(5, 0))
         
-        version = ttk.Label(title_frame, text="Version: v0.1.6-beta",
+        # 从 _version.py 动态获取版本
+        try:
+            from gluetk._version import __version__
+        except ImportError:
+            __version__ = "Unknown"
+        version = ttk.Label(title_frame, text=f"Version: v{__version__}",
                            font=self.small_font, foreground="#888888")
         version.pack(pady=(3, 0))
         
@@ -341,7 +227,7 @@ class InstallerApp:
         
         ttk.Checkbutton(opts_frame, text="Install/Update dependencies (conda packages + PyMOL)",
                        variable=self.install_deps).pack(anchor=tk.W, pady=3)
-        ttk.Checkbutton(opts_frame, text="Create desktop app (GlueTK.app)",
+        ttk.Checkbutton(opts_frame, text="Create desktop shortcut",
                        variable=self.create_shortcut).pack(anchor=tk.W, pady=3)
         
         # Progress section
@@ -398,7 +284,7 @@ class InstallerApp:
         
         if self.conda_exe:
             try:
-                result = subprocess.run([self.conda_exe, "--version"],
+                result = subprocess.run([self.conda_exe, "--version"], 
                                        capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     version = result.stdout.strip()
@@ -450,7 +336,7 @@ class InstallerApp:
         self._log("Ready to install.")
     
     def _find_conda(self):
-        """查找 Conda 安装路径 (macOS)"""
+        """查找 Conda 安装路径 (Linux)"""
         # 检查 PATH
         try:
             result = subprocess.run(["which", "conda"], capture_output=True, text=True, timeout=5)
@@ -469,8 +355,6 @@ class InstallerApp:
             "/opt/miniconda3/bin/conda",
             "/opt/anaconda3/bin/conda",
             "/usr/local/bin/conda",
-            "/opt/homebrew/bin/conda",
-            "/opt/homebrew/Caskroom/miniconda/base/bin/conda"
         ]
         
         for path in candidates:
@@ -482,8 +366,8 @@ class InstallerApp:
     def _install_conda(self):
         """打开 Miniconda 下载页面"""
         webbrowser.open("https://docs.conda.io/en/latest/miniconda.html")
-        messagebox.showinfo("Install Miniconda",
-                           "Please download and install Miniconda for macOS.\n\n"
+        messagebox.showinfo("Install Miniconda", 
+                           "Please download and install Miniconda for Linux.\n\n"
                            "After installation, restart this installer.")
     
     def _start_install(self):
@@ -614,7 +498,7 @@ class InstallerApp:
                     dst = os.path.join(install_path, item)
                     try:
                         if os.path.isdir(src):
-                            shutil.copytree(src, dst,
+                            shutil.copytree(src, dst, 
                                           ignore=shutil.ignore_patterns(*IGNORED))
                         else:
                             shutil.copy2(src, dst)
@@ -627,14 +511,14 @@ class InstallerApp:
             
             self.progress["value"] = 80
             
-            # 4. 创建桌面应用
-            if self.create_shortcut.get(): # macOS 对应 create_launcher
+            # 4. 创建快捷方式
+            if self.create_shortcut.get():
                 self._log("\n" + "=" * 50)
-                self._log("[4/5] Creating desktop App...")
+                self._log("[4/5] Creating desktop shortcut...")
                 self._log("=" * 50)
-                self._create_desktop_app()
+                self._create_shortcut()
             else:
-                self._log("\n[4/5] Skipping app creation")
+                self._log("\n[4/5] Skipping shortcut creation")
             
             self.progress["value"] = 100
             
@@ -643,11 +527,11 @@ class InstallerApp:
             self._log("[5/5] ✅ Installation complete!")
             self._log("=" * 50)
             self._log("\nHow to use GlueTK:")
-            self._log("  1. Double-click 'GlueTK.app' on Desktop")
+            self._log("  1. Double-click 'GlueTK' shortcut on Desktop")
             self._log("  2. Or run in PyMOL: gluetk_gui")
             
             self.root.after(0, lambda: messagebox.showinfo(
-                "Success",
+                "Success", 
                 "GlueTK installed successfully!\n\n"
                 "You can now launch GlueTK from the Desktop shortcut."))
             
@@ -659,82 +543,54 @@ class InstallerApp:
         finally:
             self.root.after(0, lambda: self.install_btn.configure(state=tk.NORMAL))
     
-    def _create_desktop_app(self):
-        """Create macOS .app bundle"""
-        desktop_app = os.path.expanduser("~/Desktop/GlueTK.app")
-        if os.path.exists(desktop_app):
-            shutil.rmtree(desktop_app)
+    def _create_shortcut(self):
+        """Create desktop shortcut for Linux using .desktop file"""
+        home = os.path.expanduser("~")
+        desktop_dir = os.path.join(home, "Desktop")
+        app_dir = os.path.join(home, ".local", "share", "applications")
+        os.makedirs(app_dir, exist_ok=True)
         
-        contents = os.path.join(desktop_app, "Contents")
-        macos = os.path.join(contents, "MacOS")
-        resources = os.path.join(contents, "Resources")
-        os.makedirs(macos, exist_ok=True)
-        os.makedirs(resources, exist_ok=True)
+        # Create launcher script
+        launcher_script_path = os.path.join(home, ".gluetk", "launch_gluetk.sh")
+        os.makedirs(os.path.dirname(launcher_script_path), exist_ok=True)
         
-        # Icon
-        icon_src = None
-        # 优先从当前脚本同级目录查找 AppIcon.icns (PyInstaller 打包后)
-        c1 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "AppIcon.icns")
-        # 其次从 gluetk 源码目录查找
-        source_dir = get_gluetk_source_dir()
-        if source_dir:
-            c2 = os.path.join(source_dir, "assets", "AppIcon.icns")
-            if os.path.exists(c1): icon_src = c1
-            elif os.path.exists(c2): icon_src = c2
+        with open(launcher_script_path, "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write(f'eval "$({self.conda_exe} shell.bash hook)"\n')
+            f.write(f'conda activate {ENV_NAME}\n')
+            f.write('export KMP_DUPLICATE_LIB_OK=TRUE\n')
+            f.write('export OMP_NUM_THREADS=1\n')
+            f.write('pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser(\'~/.pymol/startup\')); import gluetk; gluetk.gluetk_gui()"\n')
+        os.chmod(launcher_script_path, 0o755) # Make executable
         
-        if icon_src and os.path.exists(icon_src):
-            shutil.copy2(icon_src, os.path.join(resources, "AppIcon.icns"))
-            
-        # Info.plist
-        with open(os.path.join(contents, "Info.plist"), "w") as f:
-            f.write('''<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-    <key>CFBundleExecutable</key>
-    <string>launcher</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleIdentifier</key>
-    <string>com.vesper.gluetk</string>
-    <key>CFBundleName</key>
-    <string>GlueTK</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
-</dict>
-</plist>''')
-
-        # Launcher
-        conda_exe_str = self.conda_exe or ""
-        env_path_str = self.env_path or ""
-        launcher_script = os.path.join(macos, "launcher")
+        # Create .desktop file
+        desktop_file_path = os.path.join(app_dir, "gluetk.desktop")
+        icon_path = os.path.join(self.install_path.get(), "assets", "logo.png") # Assuming logo.png is copied to install_path/assets
         
-        with open(launcher_script, "w") as f:
-            f.write(f'''#!/bin/bash
-# GlueTK Launcher (macOS .app)
-
-CONDA_EXE="{conda_exe_str}"
-ENV_PATH="{env_path_str}"
-
-if [ -n "$CONDA_EXE" ] && [ -x "$CONDA_EXE" ] && [ -n "$ENV_PATH" ] && [ -d "$ENV_PATH" ]; then
-  echo "Starting GlueTK via conda env: $ENV_PATH"
-  # 设置 OpenMP 环境变量
-  "$CONDA_EXE" run -p "$ENV_PATH" bash -c "export KMP_DUPLICATE_LIB_OK=TRUE && export OMP_NUM_THREADS=1 && pymol -d 'import sys, os; sys.path.insert(0, os.path.expanduser('\"'\"'~/.pymol/startup'\"'\"')); import gluetk; gluetk.gluetk_gui()'"
-else
-  osascript -e 'display alert "Error" message "Conda env gluetk not found or invalid. Please re-run GlueTK Installer to create it."'
-  exit 1
-fi
-''')
+        with open(desktop_file_path, "w") as f:
+            f.write("[Desktop Entry]\n")
+            f.write("Version=1.0\n")
+            f.write("Type=Application\n")
+            f.write(f"Name=GlueTK\n")
+            f.write(f"Comment=PyMOL Plugin for Molecular Glue Analysis\n")
+            f.write(f"Exec={launcher_script_path}\n")
+            f.write(f"Icon={icon_path}\n")
+            f.write("Terminal=false\n")
+            f.write("Categories=Science;Chemistry;Biology;\n")
         
-        os.chmod(launcher_script, 0o755)
-        self._log(f"  ✅ Created {desktop_app}")
+        # Copy to Desktop for easy access
+        try:
+            shutil.copy(desktop_file_path, desktop_dir)
+            self._log(f"  ✅ Created desktop shortcut: {os.path.join(desktop_dir, 'gluetk.desktop')}")
+        except Exception as e:
+            self._log(f"  ⚠️ Failed to copy shortcut to desktop: {e}")
+        
+        self._log(f"  ✅ Created application shortcut: {desktop_file_path}")
     
     def _create_icon(self, launcher_dir):
-        """Not used for macOS .app bundle, icon is handled by .icns"""
-        return None
-
+        """Linux does not need .ico conversion, just use PNG directly"""
+        return None # Not used for Linux .desktop files
+        
 
 def main():
     root = tk.Tk()
@@ -744,37 +600,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-EOF
-
-# 6. （保留 Terminal 版入口作为高级用户备用，不在 launcher 中默认调用）
-cat > "${RESOURCES}/Run_Install.command" << 'EOF'
-#!/bin/bash
-# Optional: Terminal-based GlueTK installer entry point (fallback)
-
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-GLUETK_DIR="${SCRIPT_DIR}/gluetk"
-
-if [ ! -d "$GLUETK_DIR" ]; then
-  echo "[GlueTK Installer] ERROR: GlueTK sources not found in: $GLUETK_DIR"
-  echo "If you are running from a source checkout, please run: bash gluetk/install.sh"
-  read -n1 -p "Press any key to exit..." _
-  exit 1
-fi
-
-cd "$GLUETK_DIR"
-
-if [ -x "install.sh" ]; then
-  bash install.sh
-else
-  echo "[GlueTK Installer] ERROR: install.sh not found or not executable."
-  read -n1 -p "Press any key to exit..." _
-  exit 1
-fi
-
-read -n1 -p "Press any key to close this window..." _
-EOF
-
-chmod +x "${RESOURCES}/Run_Install.command"
-
-echo "✅ Rebuilt GlueTK Installer.app"
-echo "   Now run: bash package_dmg.sh"

@@ -86,6 +86,7 @@ pyinstaller --noconfirm `
     --windowed `
     --name "GlueTK_Installer" `
     --add-data "gluetk;gluetk" `
+    --add-data "gluetk\assets;gluetk\assets" `
     --hidden-import tkinter `
     --hidden-import tkinter.ttk `
     --hidden-import tkinter.filedialog `

@@ -131,10 +131,12 @@ conda run -n "$ENV_NAME" python -m pip install open3d scikit-image --quiet --dis
 }
 
 # EC 分析依赖 (APBS)
-echo "   安装 EC 分析依赖 (APBS)..."
-conda install -n "$ENV_NAME" -c schrodinger -c conda-forge apbs=3.4.1 -y || {
-    echo -e "${YELLOW}⚠️  APBS 安装失败，EC 分析功能将不可用${NC}"
-}
+# APBS 与 PyMOL 的 numpy 依赖存在冲突，暂时移除 APBS 安装。
+# 如果需要 EC 分析功能，请手动安装兼容版本的 APBS。
+# echo "   安装 EC 分析依赖 (APBS)..."
+# conda install -n "$ENV_NAME" -c schrodinger -c conda-forge apbs=3.4.1 -y || {
+#     echo -e "${YELLOW}⚠️  APBS 安装失败，EC 分析功能将不可用${NC}"
+# }
 
 echo -e "${GREEN}✅ 依赖包安装完成${NC}"
 
@@ -179,20 +181,20 @@ else
     EC_DEPS_OK=false
 fi
 
-# 检查 APBS
-if conda run -n "$ENV_NAME" python -c "import apbs" 2>/dev/null; then
-    echo -e "${GREEN}✅ APBS Python API 可用${NC}"
-else
-    echo -e "${YELLOW}⚠️  APBS Python API 不可用${NC}"
-    EC_DEPS_OK=false
-fi
+# 检查 APBS (已移除，因为与 PyMOL 存在依赖冲突)
+# if conda run -n "$ENV_NAME" python -c "import apbs" 2>/dev/null; then
+#     echo -e "${GREEN}✅ APBS Python API 可用${NC}"
+# else
+#     echo -e "${YELLOW}⚠️  APBS Python API 不可用${NC}"
+#     EC_DEPS_OK=false
+# fi
 
-# 检查命令行工具
-if command -v apbs &> /dev/null; then
-    echo -e "${GREEN}✅ APBS CLI 可用${NC}"
-else
-    echo -e "${YELLOW}⚠️  APBS CLI 不可用${NC}"
-fi
+# 检查命令行工具 (APBS 已移除)
+# if command -v apbs &> /dev/null; then
+#     echo -e "${GREEN}✅ APBS CLI 可用${NC}"
+# else
+#     echo -e "${YELLOW}⚠️  APBS CLI 不可用${NC}"
+# fi
 
 if command -v pdb2pqr &> /dev/null; then
     echo -e "${GREEN}✅ PDB2PQR CLI 可用${NC}"
@@ -291,7 +293,9 @@ export CONDA_EXE="$CONDA_EXE"
 eval "\$(\$CONDA_EXE shell.bash hook)" 2>/dev/null
 conda activate $ENV_NAME 2>/dev/null || true
 
-# 启动 PyMOL
+# 确保环境变量在 conda run 之前设置，并传递给 pymol 进程
+export KMP_DUPLICATE_LIB_OK=TRUE
+export OMP_NUM_THREADS=1
 "$PYMOL_PATH" -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
 LAUNCHER_EOF
 else
