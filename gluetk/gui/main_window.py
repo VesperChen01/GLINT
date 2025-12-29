@@ -25,6 +25,7 @@ from .tabs.target_discovery import TargetDiscoveryTab
 from .tabs.hit_identification import HitIdentificationTab
 from .tabs.lead_optimization import LeadOptimizationTab
 from .tabs.batch_analysis import BatchAnalysisTab
+from .tabs.ternary_evaluation import TernaryEvaluationTab
 
 # Import worker classes if needed for type hinting or global usage
 from .workers import AnalysisWorker, GMotifWorker
@@ -150,10 +151,14 @@ class GlueTKDialog(QDialog):
         self.batch_tab = BatchAnalysisTab(self)
         self.content_stack.addWidget(self.batch_tab)
         
-        # 5. README
+        # 5. Ternary Evaluation
+        self.ternary_tab = TernaryEvaluationTab(self)
+        self.content_stack.addWidget(self.ternary_tab)
+        
+        # 6. README
         self.content_stack.addWidget(self.create_readme_tab())
         
-        # 6. Contact
+        # 7. Contact
         self.content_stack.addWidget(self.create_contact_tab())
         
         content_row.addWidget(self.content_stack, 1)
@@ -215,7 +220,8 @@ class GlueTKDialog(QDialog):
             "Target Discovery",
             "Hit Identification",
             "Lead Optimization",
-            "Batch Analysis"
+            "Batch Analysis",
+            "Ternary Evaluation"
         ]
         self.nav_list.addItems(items)
         self.nav_list.setCurrentRow(0)
@@ -231,12 +237,12 @@ class GlueTKDialog(QDialog):
         
         btn_readme = QPushButton("README")
         btn_readme.setFlat(True)
-        btn_readme.clicked.connect(lambda: self.content_stack.setCurrentIndex(5))
+        btn_readme.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))
         b_layout.addWidget(btn_readme)
         
         btn_contact = QPushButton("Contact Us")
         btn_contact.setFlat(True)
-        btn_contact.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))
+        btn_contact.clicked.connect(lambda: self.content_stack.setCurrentIndex(7))
         b_layout.addWidget(btn_contact)
         
         btn_resources = QPushButton("Resources")
@@ -294,6 +300,7 @@ class GlueTKDialog(QDialog):
             getattr(self, "obj_combo_sim1", None),  # Surface Similarity Object 1
             getattr(self, "obj_combo_sim2", None),  # Surface Similarity Object 2
             getattr(self, "ec_obj_combo", None),  # EC Analysis
+            getattr(self, "ternary_obj_combo", None),  # Ternary Evaluation
         ]
         
         for cb in combos:

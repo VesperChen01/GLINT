@@ -122,13 +122,17 @@ CONDA_PACKAGES=(
     "pdb2pqr" # 通过 conda 安装
 )
 
+# 临时禁用 InsecureRequestWarning
+export PYTHONWARNINGS="ignore::urllib3.exceptions.InsecureRequestWarning"
 conda install -n "$ENV_NAME" -c conda-forge "${CONDA_PACKAGES[@]}" -y
+unset PYTHONWARNINGS # 安装完成后取消设置
 
 # 表面分析依赖（通过 pip 安装，因为 open3d 在 conda 上不稳定）
 echo "   安装表面分析依赖 (Open3D, scikit-image)..."
 conda run -n "$ENV_NAME" python -m pip install open3d scikit-image --quiet --disable-pip-version-check || {
     echo -e "${YELLOW}⚠️  Open3D 安装失败，表面分析将使用内置回退方案${NC}"
 }
+unset PYTHONWARNINGS # 安装完成后取消设置
 
 # EC 分析依赖 (APBS)
 # APBS 与 PyMOL 的 numpy 依赖存在冲突，暂时移除 APBS 安装。
@@ -157,9 +161,12 @@ fi
 # 4c. 使用 conda 安装 HADDOCK3（蛋白-蛋白对接引擎）
 echo -e "\n${BLUE}[4c]${NC} 安装 HADDOCK3..."
 echo "   ${YELLOW}优先使用 conda 安装 (推荐)...${NC}"
+# 临时禁用 InsecureRequestWarning
+export PYTHONWARNINGS="ignore::urllib3.exceptions.InsecureRequestWarning"
 if conda install -n "$ENV_NAME" -c conda-forge -c haddocking haddock3 -y 2>/dev/null; then
     echo -e "${GREEN}✅ HADDOCK3 (conda) 安装成功${NC}"
 else
+    unset PYTHONWARNINGS # 安装完成后取消设置
     echo "   conda 安装失败，尝试 pip..."
     if conda run -n "$ENV_NAME" python -m pip install -U haddock3 --quiet --disable-pip-version-check; then
         echo -e "${GREEN}✅ HADDOCK3 (pip) 安装成功${NC}"
@@ -284,35 +291,68 @@ PLIST_EOF
 # 创建启动脚本（根据 PyMOL 类型）
 if [ "$PYMOL_TYPE" = "app" ]; then
     # 使用系统 PyMOL.app + conda 环境的依赖
-    cat > "$MACOS/launcher" << LAUNCHER_EOF
+    cat > "$MACOS/launcher" << 'LAUNCHER_EOF'
 #!/bin/bash
 # GlueTK Launcher (PyMOL.app + conda dependencies)
 
-# 初始化 conda 环境变量
-export CONDA_EXE="$CONDA_EXE"
-eval "\$(\$CONDA_EXE shell.bash hook)" 2>/dev/null
-conda activate $ENV_NAME 2>/dev/null || true
+# 查找 conda
+CONDA_EXE=""
+if command -v conda &> /dev/null; then
+    CONDA_EXE=$(command -v conda)
+else
+    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "/opt/homebrew/Caskroom/miniconda/base/bin/conda" "$HOME/opt/miniconda3/bin/conda"; do
+        if [ -x "$p" ]; then
+            CONDA_EXE="$p"
+            break
+        fi
+    done
+fi
 
-# 确保环境变量在 conda run 之前设置，并传递给 pymol 进程
+# 初始化 conda 环境变量
+if [ -n "$CONDA_EXE" ]; then
+    eval "$($CONDA_EXE shell.bash hook)" 2>/dev/null
+    conda activate gluetk 2>/dev/null || true
+fi
+
+# 设置环境变量
 export KMP_DUPLICATE_LIB_OK=TRUE
 export OMP_NUM_THREADS=1
-"$PYMOL_PATH" -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
+
+# 启动 PyMOL.app
+/Applications/PyMOL.app/Contents/MacOS/PyMOL -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
 LAUNCHER_EOF
 else
     # 使用 conda 环境中的 PyMOL
-    cat > "$MACOS/launcher" << LAUNCHER_EOF
+    cat > "$MACOS/launcher" << 'LAUNCHER_EOF'
 #!/bin/bash
 # GlueTK Launcher (conda pymol)
 
-CONDA_EXE="$CONDA_EXE"
-if [ -n "\$CONDA_EXE" ] && [ -x "\$CONDA_EXE" ]; then
-    echo "Starting GlueTK via conda env: $ENV_NAME"
-    # 确保环境变量在 conda run 之前设置，并传递给 pymol 进程
-    "\$CONDA_EXE" run -n $ENV_NAME bash -c "export KMP_DUPLICATE_LIB_OK=TRUE && export OMP_NUM_THREADS=1 && pymol -d 'import sys, os; sys.path.insert(0, os.path.expanduser('\"'\"'~/.pymol/startup'\"'\"')); import gluetk; gluetk.gluetk_gui()'"
+# 查找 conda
+CONDA_EXE=""
+if command -v conda &> /dev/null; then
+    CONDA_EXE=$(command -v conda)
 else
+    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "/opt/homebrew/Caskroom/miniconda/base/bin/conda" "$HOME/opt/miniconda3/bin/conda"; do
+        if [ -x "$p" ]; then
+            CONDA_EXE="$p"
+            break
+        fi
+    done
+fi
+
+if [ -z "$CONDA_EXE" ]; then
     osascript -e 'display alert "Error" message "Conda not found. Please reinstall GlueTK."'
     exit 1
 fi
+
+echo "Starting GlueTK via conda env: gluetk"
+
+# 初始化 conda 并激活环境，然后直接运行 pymol
+eval "$($CONDA_EXE shell.bash hook)"
+conda activate gluetk
+export KMP_DUPLICATE_LIB_OK=TRUE
+export OMP_NUM_THREADS=1
+pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
 LAUNCHER_EOF
 fi
 
