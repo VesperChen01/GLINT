@@ -5,9 +5,9 @@
 set -e
 
 # 从 __init__.py 读取版本号
-VERSION=$(grep '__version__' gluetk/__init__.py | sed 's/.*"\(.*\)".*/\1/')
+VERSION=$(python3 -c "from gluetk._version import __version__; print(__version__)")
 if [ -z "$VERSION" ]; then
-    VERSION="v0.1.5-beta"
+    VERSION="Unknown"
 fi
 
 # 配置

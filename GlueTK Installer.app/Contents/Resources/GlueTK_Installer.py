@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GlueTK Installer - 图形化安装程序
+GlueTK macOS Installer - 图形化安装程序
+Professional GUI installer for macOS, similar to Windows version
 """
 
 import os
@@ -21,38 +22,29 @@ except ImportError:
 
 # 配置
 ENV_NAME = "gluetk"
-PYTHON_VERSION = "3.9"
-DEFAULT_INSTALL_PATH = os.path.expanduser("~/.pymol/startup/gluetk")
+PYTHON_VERSION = "3.10"
+DEFAULT_INSTALL_PATH = os.path.join(os.path.expanduser("~"), ".pymol", "startup", "gluetk")
 
-# 包含 Vina / Meeko / PyMOL / HADDOCK3 / 表面分析 的完整依赖列表
-# 说明：
-# - HADDOCK3 官方 PyPI（pip install haddock3）在 macOS 上可能触发本地编译并失败（例如 -march=native）。
-# - 因此这里优先走 conda。
-# - HADDOCK3 的 conda 构建目前在 bioconda 提供（包名：haddock_biobb），可提供 haddock3 CLI/模块。
-# - AutoDock Vina 建议使用 conda-forge 发行版（包名：vina）
-# - 表面分析模块需要 scikit-image（marching cubes）
+# Conda 依赖包
 CONDA_PACKAGES = [
-    "rdkit", "scipy", "matplotlib", "pillow", "numpy",
+    "rdkit", "scipy", "matplotlib", "pillow", "numpy=1.26.4",
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
-    "meeko", "vina",
-    "haddock_biobb",
-    "scikit-image"  # 表面分析：marching cubes 算法
+    "meeko", "vina", "haddock_biobb", "scikit-image",
+    "pdb2pqr",
 ]
 
-# Pip 包：requests + open3d（open3d 在 conda 上不稳定，推荐 pip）
+# Pip 包
 PIP_PACKAGES = ["requests", "open3d"]
+
 
 def get_gluetk_source_dir():
     """获取 GlueTK 源码目录"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    
-    # 1. 优先查找 Bundle 内部 (Resources/gluetk) - 用于打包后的 App
+
     bundled_dir = os.path.join(script_dir, "gluetk")
     if os.path.isdir(bundled_dir):
         return bundled_dir
-        
-    # 2. 开发模式：从 app bundle 向上查找 repo 目录
-    # Resources -> Contents -> app -> repo
+
     try:
         repo_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(script_dir))))
         gluetk_dir = os.path.join(repo_dir, "gluetk")
@@ -60,37 +52,93 @@ def get_gluetk_source_dir():
             return gluetk_dir
     except:
         pass
-        
+
     return None
+
 
 class InstallerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("GlueTK Installer")
-        self.root.geometry("700x650")
+        self.root.geometry("750x780")
+        self.root.minsize(700, 750)
         self.root.resizable(True, True)
-        
+
+        self._configure_styles()
+        self._set_icon()
+
         self.install_path = tk.StringVar(value=DEFAULT_INSTALL_PATH)
-        self.create_launcher = tk.BooleanVar(value=True)
+        self.create_shortcut = tk.BooleanVar(value=True)
         self.install_deps = tk.BooleanVar(value=True)
         self.conda_ok = False
         self.env_ok = False
-        self.conda_exe = None  # Store detected conda path
-        self.env_path = None   # Store full path to conda env (force standard conda base)
-        
+        self.conda_exe = None
+        self.env_path = None
+
         self._build_ui()
-        # Fix for macOS Dark Mode / Blank Screen
+        self._center_window()
+
         self.root.update()
         self.root.lift()
         self.root.attributes('-topmost',True)
         self.root.after_idle(self.root.attributes,'-topmost',False)
-        
-        self._center_window()
-        
-        # 只有在 UI 完全加载后才启动检查
-        self.root.after(1000, lambda: threading.Thread(target=self._check_environment, daemon=True).start())
-    
+
+        self.root.after(500, lambda: threading.Thread(target=self._check_environment, daemon=True).start())
+
+    def _configure_styles(self):
+        """Configure better fonts and styles for macOS"""
+        style = ttk.Style()
+
+        available_themes = style.theme_names()
+        if 'aqua' in available_themes:
+            style.theme_use('aqua')
+        elif 'clam' in available_themes:
+            style.theme_use('clam')
+
+        self.title_font = ("Helvetica Neue", 22, "bold")
+        self.subtitle_font = ("Helvetica Neue", 11)
+        self.normal_font = ("Helvetica Neue", 10)
+        self.small_font = ("Helvetica Neue", 9)
+        self.mono_font = ("Menlo", 9)
+
+        try:
+            import tkinter.font as tkfont
+            available_fonts = tkfont.families()
+
+            if "Helvetica Neue" not in available_fonts:
+                if "Arial" in available_fonts:
+                    self.title_font = ("Arial", 22, "bold")
+                    self.subtitle_font = ("Arial", 11)
+                    self.normal_font = ("Arial", 10)
+                    self.small_font = ("Arial", 9)
+
+            if "Menlo" not in available_fonts:
+                if "Courier New" in available_fonts:
+                    self.mono_font = ("Courier New", 9)
+        except:
+            pass
+
+        style.configure("TLabel", font=self.normal_font)
+        style.configure("TButton", font=self.normal_font, padding=6)
+        style.configure("TCheckbutton", font=self.normal_font)
+        style.configure("TEntry", font=self.normal_font)
+        style.configure("TLabelframe", font=self.normal_font)
+        style.configure("TLabelframe.Label", font=self.normal_font)
+
+        self.root.configure(bg='#f0f0f0')
+
+    def _set_icon(self):
+        """设置窗口图标"""
+        try:
+            icon_path = os.path.join(os.path.dirname(__file__), "gluetk", "assets", "logo.png")
+            if os.path.exists(icon_path):
+                img = tk.PhotoImage(file=icon_path)
+                self.root.iconphoto(True, img)
+        except:
+            pass
+
     def _center_window(self):
+        """居中窗口"""
         self.root.update_idletasks()
         w = self.root.winfo_width()
         h = self.root.winfo_height()
@@ -99,300 +147,396 @@ class InstallerApp:
         x = (sw - w) // 2
         y = (sh - h) // 2
         self.root.geometry(f"{w}x{h}+{x}+{y}")
-    
+
     def _build_ui(self):
+        """Build user interface with improved fonts"""
         main = ttk.Frame(self.root, padding=20)
         main.pack(fill=tk.BOTH, expand=True)
-        
-        title = ttk.Label(main, text="🧬 GlueTK Installer", font=("Helvetica", 24, "bold"))
-        title.pack(pady=(0, 5))
-        subtitle = ttk.Label(main, text="PyMOL Plugin for Molecular Glue Analysis", font=("Helvetica", 12), foreground="gray")
-        subtitle.pack(pady=(0, 20))
-        
-        # Status
-        status_frame = ttk.LabelFrame(main, text="Environment Status", padding=10)
+
+        title_frame = ttk.Frame(main)
+        title_frame.pack(fill=tk.X, pady=(0, 15))
+
+        title = ttk.Label(title_frame, text="🧬 GlueTK Installer",
+                         font=self.title_font)
+        title.pack()
+
+        subtitle = ttk.Label(title_frame,
+                            text="PyMOL Plugin for Molecular Glue Analysis",
+                            font=self.subtitle_font, foreground="#666666")
+        subtitle.pack(pady=(5, 0))
+
+        version = ttk.Label(title_frame, text="Version: v0.1.6-beta",
+                           font=self.small_font, foreground="#888888")
+        version.pack(pady=(3, 0))
+
+        status_frame = ttk.LabelFrame(main, text=" Environment Status ", padding=12)
         status_frame.pack(fill=tk.X, pady=(0, 15))
-        
+
         conda_row = ttk.Frame(status_frame)
-        conda_row.pack(fill=tk.X, pady=2)
-        ttk.Label(conda_row, text="Conda:").pack(side=tk.LEFT)
-        self.conda_status = ttk.Label(conda_row, text="Checking...", foreground="orange")
+        conda_row.pack(fill=tk.X, pady=5)
+        ttk.Label(conda_row, text="Conda:", font=self.normal_font, width=22).pack(side=tk.LEFT)
+        self.conda_status = ttk.Label(conda_row, text="⏳ Checking...",
+                                      font=self.normal_font, foreground="#E67E22")
         self.conda_status.pack(side=tk.LEFT, padx=10)
-        self.conda_install_btn = ttk.Button(conda_row, text="Install Miniconda", command=self._install_conda, state=tk.DISABLED)
+        self.conda_install_btn = ttk.Button(conda_row, text="Download Miniconda",
+                                            command=self._install_conda, state=tk.DISABLED)
         self.conda_install_btn.pack(side=tk.RIGHT)
-        
+
         env_row = ttk.Frame(status_frame)
-        env_row.pack(fill=tk.X, pady=2)
-        ttk.Label(env_row, text=f"Conda Env '{ENV_NAME}':").pack(side=tk.LEFT)
-        self.env_status = ttk.Label(env_row, text="Checking...", foreground="orange")
+        env_row.pack(fill=tk.X, pady=5)
+        ttk.Label(env_row, text=f"Conda Env '{ENV_NAME}':",
+                  font=self.normal_font, width=22).pack(side=tk.LEFT)
+        self.env_status = ttk.Label(env_row, text="⏳ Checking...",
+                                    font=self.normal_font, foreground="#E67E22")
         self.env_status.pack(side=tk.LEFT, padx=10)
-        
-        # Path
-        path_frame = ttk.LabelFrame(main, text="Installation Path", padding=10)
+
+        path_frame = ttk.LabelFrame(main, text=" Installation Path ", padding=12)
         path_frame.pack(fill=tk.X, pady=(0, 15))
+
         path_row = ttk.Frame(path_frame)
         path_row.pack(fill=tk.X)
-        self.path_entry = ttk.Entry(path_row, textvariable=self.install_path, width=50)
+        self.path_entry = ttk.Entry(path_row, textvariable=self.install_path,
+                                    width=60, font=self.normal_font)
         self.path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(path_row, text="Browse...", command=self._browse_path).pack(side=tk.RIGHT, padx=(10, 0))
-        path_note = ttk.Label(path_frame, text="📌 GlueTK will be installed here. PyMOL loads plugins from ~/.pymol/startup/", font=("Helvetica", 10), foreground="gray")
-        path_note.pack(anchor=tk.W, pady=(5, 0))
-        
-        # Options
-        opts_frame = ttk.LabelFrame(main, text="Options", padding=10)
+
+        path_note = ttk.Label(path_frame,
+                             text="📌 GlueTK will be installed here. PyMOL loads plugins from ~/.pymol/startup/",
+                             font=self.small_font, foreground="#888888")
+        path_note.pack(anchor=tk.W, pady=(8, 0))
+
+        opts_frame = ttk.LabelFrame(main, text=" Options ", padding=12)
         opts_frame.pack(fill=tk.X, pady=(0, 15))
-        ttk.Checkbutton(opts_frame, text="Install/Update dependencies (conda packages)", variable=self.install_deps).pack(anchor=tk.W)
-        ttk.Checkbutton(opts_frame, text="Create desktop app (GlueTK.app)", variable=self.create_launcher).pack(anchor=tk.W)
-        
-        # Progress
-        progress_frame = ttk.LabelFrame(main, text="Progress", padding=10)
+
+        ttk.Checkbutton(opts_frame, text="Install/Update dependencies (conda packages + PyMOL)",
+                       variable=self.install_deps).pack(anchor=tk.W, pady=3)
+        ttk.Checkbutton(opts_frame, text="Create desktop app (GlueTK.app)",
+                       variable=self.create_shortcut).pack(anchor=tk.W, pady=3)
+
+        progress_frame = ttk.LabelFrame(main, text=" Progress ", padding=12)
         progress_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
-        self.progress = ttk.Progressbar(progress_frame, mode="determinate", length=400)
+
+        self.progress = ttk.Progressbar(progress_frame, mode="determinate", length=500)
         self.progress.pack(fill=tk.X, pady=(0, 10))
+
         log_frame = ttk.Frame(progress_frame)
         log_frame.pack(fill=tk.BOTH, expand=True)
-        self.log_text = tk.Text(log_frame, height=8, state=tk.DISABLED, font=("Courier", 10), bg="#1e1e1e", fg="#d4d4d4")
+
+        self.log_text = tk.Text(log_frame, height=12, state=tk.DISABLED,
+                               font=self.mono_font, bg="#1a1a2e", fg="#eaeaea",
+                               insertbackground="#ffffff", selectbackground="#3d5a80",
+                               relief=tk.FLAT, padx=10, pady=8)
         scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scrollbar.set)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
-        # Buttons
+
         btn_frame = ttk.Frame(main)
-        btn_frame.pack(fill=tk.X)
-        self.install_btn = ttk.Button(btn_frame, text="🚀 Install GlueTK", command=self._start_install)
+        btn_frame.pack(fill=tk.X, pady=(5, 0))
+
+        self.install_btn = ttk.Button(btn_frame, text="🚀 Install GlueTK",
+                                      command=self._start_install, width=20)
         self.install_btn.pack(side=tk.RIGHT, padx=(10, 0))
-        ttk.Button(btn_frame, text="Cancel", command=self.root.quit).pack(side=tk.RIGHT)
-        
+
+        ttk.Button(btn_frame, text="Cancel", command=self.root.quit, width=12).pack(side=tk.RIGHT)
+
     def _log(self, msg):
+        """写入日志"""
         self.log_text.configure(state=tk.NORMAL)
         self.log_text.insert(tk.END, msg + "\n")
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
         self.root.update()
-    
+
     def _browse_path(self):
-        path = filedialog.askdirectory(title="Select Installation Directory", initialdir=os.path.dirname(self.install_path.get()))
+        """浏览安装路径"""
+        path = filedialog.askdirectory(title="Select Installation Directory",
+                                       initialdir=os.path.dirname(self.install_path.get()))
         if path:
             self.install_path.set(path)
-            
+
     def _check_environment(self):
+        """检查环境"""
         self._log("Checking environment...")
-        
-        # 1. Find Conda Executable
-        self.conda_exe = shutil.which("conda")
-        if not self.conda_exe:
-            # Try standard paths
-            possible_paths = [
-                os.path.expanduser("~/miniconda3/bin/conda"),
-                os.path.expanduser("~/opt/miniconda3/bin/conda"),
-                os.path.expanduser("~/anaconda3/bin/conda"),
-                "/usr/local/bin/conda",
-                "/opt/homebrew/bin/conda",
-                "/opt/homebrew/Caskroom/miniconda/base/bin/conda"
-            ]
-            for p in possible_paths:
-                if os.path.exists(p) and os.access(p, os.X_OK):
-                    self.conda_exe = p
-                    break
-        
+
+        self.conda_exe = self._find_conda()
+
         if self.conda_exe:
             try:
-                result = subprocess.run([self.conda_exe, "--version"], capture_output=True, text=True, timeout=5)
+                result = subprocess.run([self.conda_exe, "--version"],
+                                       capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     version = result.stdout.strip()
-                    self.conda_status.configure(text=f"✅ {version}", foreground="green")
+                    self.root.after(0, lambda: self.conda_status.configure(
+                        text=f"✅ {version}", foreground="green"))
                     self.conda_ok = True
-                    self.conda_install_btn.configure(state=tk.DISABLED)
+                    self.root.after(0, lambda: self.conda_install_btn.configure(state=tk.DISABLED))
                     self._log(f"  Conda found: {self.conda_exe}")
                     self._log(f"  Version: {version}")
                 else:
                     raise Exception("conda command failed")
             except Exception as e:
-                self.conda_status.configure(text="❌ Error", foreground="red")
+                self.root.after(0, lambda: self.conda_status.configure(
+                    text="❌ Error", foreground="red"))
                 self._log(f"  Conda error: {e}")
         else:
-            self.conda_status.configure(text="❌ Not found", foreground="red")
-            self.conda_install_btn.configure(state=tk.NORMAL)
-            self._log("  Conda: Not found in PATH or standard locations")
+            self.root.after(0, lambda: self.conda_status.configure(
+                text="❌ Not found", foreground="red"))
+            self.root.after(0, lambda: self.conda_install_btn.configure(state=tk.NORMAL))
+            self._log("  Conda: Not found")
+            self._log("  Please install Miniconda first!")
             return
-            
-        # 2. Check Environment（强制使用 conda base/envs 下的环境，避免误用 PyMOL.app 内的 gluetk）
+
         try:
-            base_result = subprocess.run([self.conda_exe, "info", "--base"], capture_output=True, text=True, timeout=10)
+            base_result = subprocess.run([self.conda_exe, "info", "--base"],
+                                        capture_output=True, text=True, timeout=10)
             conda_base = base_result.stdout.strip() if base_result.returncode == 0 else ""
+
             if not conda_base:
                 raise Exception("Cannot determine conda base")
 
             self.env_path = os.path.join(conda_base, "envs", ENV_NAME)
 
             if os.path.isdir(self.env_path):
-                self.env_status.configure(text="✅ Exists", foreground="green")
+                self.root.after(0, lambda: self.env_status.configure(
+                    text="✅ Exists", foreground="green"))
                 self.env_ok = True
                 self._log(f"  Environment '{ENV_NAME}': {self.env_path}")
             else:
-                self.env_status.configure(text="⚠️ Will create", foreground="orange")
-                self._log(f"  Environment '{ENV_NAME}': Will be created at {self.env_path}")
+                self.root.after(0, lambda: self.env_status.configure(
+                    text="⚠️ Will create", foreground="orange"))
+                self._log(f"  Environment '{ENV_NAME}': Will be created")
         except Exception as e:
-            self.env_status.configure(text="❓ Unknown", foreground="gray")
+            self.root.after(0, lambda: self.env_status.configure(
+                text="❓ Unknown", foreground="gray"))
             self._log(f"  Environment check failed: {e}")
+
         self._log("Ready to install.")
-        
+
+    def _find_conda(self):
+        """查找 Conda 安装路径 (macOS)"""
+        try:
+            result = subprocess.run(["which", "conda"], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                conda_path = result.stdout.strip().split("\n")
+                if os.path.exists(conda_path):
+                    return conda_path
+        except:
+            pass
+
+        home = os.path.expanduser("~")
+        candidates = [
+            os.path.join(home, "miniconda3", "bin", "conda"),
+            os.path.join(home, "anaconda3", "bin", "conda"),
+            "/opt/miniconda3/bin/conda",
+            "/opt/anaconda3/bin/conda",
+            "/usr/local/bin/conda",
+            "/opt/homebrew/bin/conda",
+            "/opt/homebrew/Caskroom/miniconda/base/bin/conda"
+        ]
+
+        for path in candidates:
+            if os.path.exists(path):
+                return path
+
+        return None
+
     def _install_conda(self):
+        """打开 Miniconda 下载页面"""
         webbrowser.open("https://docs.conda.io/en/latest/miniconda.html")
-        messagebox.showinfo("Install Miniconda", "Please download and install Miniconda, then restart this installer.")
-        
+        messagebox.showinfo("Install Miniconda",
+                           "Please download and install Miniconda for macOS.\n\n"
+                           "After installation, restart this installer.")
+
     def _start_install(self):
+        """开始安装"""
+        if not self.conda_ok:
+            messagebox.showerror("Error", "Please install Miniconda first!")
+            return
+
         self.install_btn.configure(state=tk.DISABLED)
         threading.Thread(target=self._do_install, daemon=True).start()
-        
+
     def _do_install(self):
+        """执行安装"""
         try:
             self.progress["value"] = 0
-            
-            # 1. Conda Env
-            self._log("\n[1/5] Checking conda environment...")
-            self.progress["value"] = 20
-            
-            # 确保 env_path 已设置（防止 None 错误）
+
+            self._log("\n" + "=" * 50)
+            self._log("[1/5] Checking conda environment...")
+            self._log("=" * 50)
+            self.progress["value"] = 10
+
             if not self.env_path:
                 try:
-                    base_result = subprocess.run([self.conda_exe, "info", "--base"], capture_output=True, text=True, timeout=10)
-                    conda_base = base_result.stdout.strip() if base_result.returncode == 0 else ""
+                    base_result = subprocess.run([self.conda_exe, "info", "--base"],
+                                                capture_output=True, text=True, timeout=10)
+                    conda_base = base_result.stdout.strip()
                     if conda_base:
                         self.env_path = os.path.join(conda_base, "envs", ENV_NAME)
                     else:
-                        raise Exception("Cannot determine conda base directory")
+                        raise Exception("Cannot determine conda base")
                 except Exception as e:
                     raise Exception(f"Failed to determine environment path: {e}")
-            
+
             if not self.env_ok:
                 self._log(f"  Creating environment at {self.env_path}...")
-                # 强制使用 -p 指定路径，避免与 PyMOL.app 内同名环境冲突
-                result = subprocess.run([self.conda_exe, "create", "-p", self.env_path, f"python={PYTHON_VERSION}", "-y"], capture_output=True, text=True)
+                result = subprocess.run(
+                    [self.conda_exe, "create", "-p", self.env_path, f"python={PYTHON_VERSION}", "-y"],
+                    capture_output=True, text=True, timeout=600
+                )
                 if result.returncode != 0:
                     self._log(f"  Error: {result.stderr}")
-                    raise Exception(result.stderr.strip() or "conda create failed")
-                else:
-                    self._log("  ✅ Environment created")
+                    raise Exception("Failed to create conda environment")
+                self._log("  ✅ Environment created")
             else:
-                self._log(f"  Environment already exists: {self.env_path}")
-                
-            # 2. Dependencies
+                self._log(f"  Environment exists: {self.env_path}")
+
+            self.progress["value"] = 20
+
             if self.install_deps.get():
-                self._log("\\n[2/5] Installing dependencies (conda)...")
-                self.progress["value"] = 40
+                self._log("\n" + "=" * 50)
+                self._log("[2/5] Installing dependencies...")
+                self._log("=" * 50)
+                self._log("  This may take 10-20 minutes, please wait...")
+
                 pkg_str = " ".join(CONDA_PACKAGES)
-                # 使用 conda-forge + bioconda，并启用 libmamba solver（更稳定）
-                self._log(f"  Running: conda install -p {self.env_path} -c conda-forge -c bioconda {pkg_str}")
+                self._log(f"  Installing: {pkg_str}")
+
                 cmd = [
                     self.conda_exe, "install",
                     "-p", self.env_path,
                     "-c", "conda-forge",
-                    "-c", "bioconda",
-                    "--solver=libmamba",
-                    "-y",
+                    "-c", "schrodinger",
+                    "-c", "haddocking",
+                    "-y"
                 ] + CONDA_PACKAGES
-                
-                # Run without shell=True
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                
+
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+
                 if result.returncode == 0:
                     self._log("  ✅ Conda packages installed")
                 else:
-                    # 输出更可诊断的信息，并中止（否则后续一定检测不到）
-                    if result.stdout:
-                        self._log("  ---- conda stdout ----")
-                        self._log(result.stdout.strip()[-4000:])
+                    self._log(f"  ⚠️ Some packages may have failed")
                     if result.stderr:
-                        self._log("  ---- conda stderr ----")
-                        self._log(result.stderr.strip()[-4000:])
-                    raise Exception("Conda dependency installation failed")
-                
-                # 验证 PyMOL 是否安装成功（我们强制使用 conda PyMOL）
-                pymol_check = subprocess.run([self.conda_exe, "run", "-p", self.env_path, "which", "pymol"],
-                                            capture_output=True, text=True)
-                if pymol_check.returncode != 0:
-                    raise Exception("Conda PyMOL (pymol-open-source) not found in gluetk env")
-                
-                # 2b. Pip dependencies inside the environment
+                        self._log(f"  {result.stderr[:500]}")
+
+                self.progress["value"] = 50
+
                 if PIP_PACKAGES:
-                    self._log("\\n[2b/5] Installing pip packages inside environment...")
-                    env_pip = os.path.join(self.env_path, "bin", "pip") if self.env_path else None
-                    if env_pip and os.path.exists(env_pip):
-                        pip_cmd = [env_pip, "install", "--upgrade", "--disable-pip-version-check"] + PIP_PACKAGES
-                    else:
-                        pip_cmd = [self.conda_exe, "run", "-p", self.env_path, "python", "-m", "pip", "install", "--upgrade", "--disable-pip-version-check"] + PIP_PACKAGES
-                    self._log(f"  Running: {' '.join(pip_cmd)}")
-                    pip_result = subprocess.run(pip_cmd, capture_output=True, text=True)
+                    self._log("\n  Installing pip packages...")
+                    pip_cmd = [
+                        self.conda_exe, "run", "-p", self.env_path,
+                        "python", "-m", "pip", "install", "--quiet"
+                    ] + PIP_PACKAGES
+
+                    pip_result = subprocess.run(pip_cmd, capture_output=True, text=True, timeout=600)
                     if pip_result.returncode == 0:
                         self._log("  ✅ Pip packages installed")
                     else:
-                        self._log(f"  ⚠️ Pip install issues: {pip_result.stderr}")
+                        self._log("  ⚠️ Some pip packages may have failed")
             else:
-                self._log("\\n[2/5] Skipping dependencies (unchecked)")
-                
+                self._log("\n[2/5] Skipping dependencies (unchecked)")
+
             self.progress["value"] = 60
-            
-            # 3. Copy Plugin Files
-            self._log("\n[3/5] Installing plugin files...")
+
+            self._log("\n" + "=" * 50)
+            self._log("[3/5] Installing plugin files...")
+            self._log("=" * 50)
+
             install_path = self.install_path.get()
             source_dir = get_gluetk_source_dir()
-            
+
             if source_dir and os.path.isdir(source_dir):
-                if os.path.exists(install_path) and os.path.samefile(source_dir, install_path):
-                    self._log(f"  ⚠️ Destination same as source. Skipping copy.")
-                else:
-                    os.makedirs(install_path, exist_ok=True)
-                    IGNORED_FILES = {'.DS_Store', '__pycache__', '.git', '.gitignore'}
-                    for item in os.listdir(source_dir):
-                        if item in IGNORED_FILES: continue
-                        src = os.path.join(source_dir, item)
-                        dst = os.path.join(install_path, item)
+                os.makedirs(install_path, exist_ok=True)
+
+                if os.path.exists(install_path):
+                    for item in os.listdir(install_path):
+                        item_path = os.path.join(install_path, item)
                         try:
-                            if os.path.isdir(src):
-                                if os.path.exists(dst):
-                                    if os.path.samefile(src, dst): continue
-                                    shutil.rmtree(dst)
-                                shutil.copytree(src, dst, ignore=shutil.ignore_patterns(*IGNORED_FILES))
+                            if os.path.isdir(item_path):
+                                shutil.rmtree(item_path)
                             else:
-                                if os.path.exists(dst) and os.path.samefile(src, dst): continue
-                                shutil.copy2(src, dst)
-                        except Exception as e:
-                            self._log(f"  ⚠️ Failed to copy {item}: {e}")
-                    self._log(f"  ✅ Copied to {install_path}")
+                                os.remove(item_path)
+                        except:
+                            pass
+
+                IGNORED = {'__pycache__', '.DS_Store', '.git', '.gitignore', '*.pyc'}
+                for item in os.listdir(source_dir):
+                    if item in IGNORED:
+                        continue
+                    src = os.path.join(source_dir, item)
+                    dst = os.path.join(install_path, item)
+                    try:
+                        if os.path.isdir(src):
+                            shutil.copytree(src, dst,
+                                          ignore=shutil.ignore_patterns(*IGNORED))
+                        else:
+                            shutil.copy2(src, dst)
+                    except Exception as e:
+                        self._log(f"  ⚠️ Failed to copy {item}: {e}")
+
+                self._log(f"  ✅ Copied to {install_path}")
             else:
                 self._log(f"  ⚠️ Source directory not found: {source_dir}")
-                
+
             self.progress["value"] = 80
-            
-            # 4. Create Desktop App
-            if self.create_launcher.get():
-                self._log("\n[4/5] Creating desktop App...")
-                desktop_app = os.path.expanduser("~/Desktop/GlueTK.app")
-                if os.path.exists(desktop_app):
-                    shutil.rmtree(desktop_app)
-                
-                contents = os.path.join(desktop_app, "Contents")
-                macos = os.path.join(contents, "MacOS")
-                resources = os.path.join(contents, "Resources")
-                os.makedirs(macos, exist_ok=True)
-                os.makedirs(resources, exist_ok=True)
-                
-                # Icon
-                icon_src = None
-                if source_dir:
-                    c1 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "AppIcon.icns")
-                    c2 = os.path.join(source_dir, "assets", "AppIcon.icns")
-                    if os.path.exists(c1): icon_src = c1
-                    elif os.path.exists(c2): icon_src = c2
-                
-                if icon_src:
-                    shutil.copy2(icon_src, os.path.join(resources, "AppIcon.icns"))
-                    
-                # Info.plist
-                with open(os.path.join(contents, "Info.plist"), "w") as f:
-                    f.write('''<?xml version="1.0" encoding="UTF-8"?>
+
+            if self.create_shortcut.get():
+                self._log("\n" + "=" * 50)
+                self._log("[4/5] Creating desktop App...")
+                self._log("=" * 50)
+                self._create_desktop_app()
+            else:
+                self._log("\n[4/5] Skipping app creation")
+
+            self.progress["value"] = 100
+
+            self._log("\n" + "=" * 50)
+            self._log("[5/5] ✅ Installation complete!")
+            self._log("=" * 50)
+            self._log("\nHow to use GlueTK:")
+            self._log("  1. Double-click 'GlueTK.app' on Desktop")
+            self._log("  2. Or run in PyMOL: gluetk_gui")
+
+            self.root.after(0, lambda: messagebox.showinfo(
+                "Success",
+                "GlueTK installed successfully!\n\n"
+                "You can now launch GlueTK from the Desktop shortcut."))
+
+        except Exception as e:
+            self._log(f"\n❌ Error: {e}")
+            import traceback
+            self._log(traceback.format_exc())
+            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
+        finally:
+            self.root.after(0, lambda: self.install_btn.configure(state=tk.NORMAL))
+
+    def _create_desktop_app(self):
+        """Create macOS .app bundle"""
+        desktop_app = os.path.expanduser("~/Desktop/GlueTK.app")
+        if os.path.exists(desktop_app):
+            shutil.rmtree(desktop_app)
+
+        contents = os.path.join(desktop_app, "Contents")
+        macos = os.path.join(contents, "MacOS")
+        resources = os.path.join(contents, "Resources")
+        os.makedirs(macos, exist_ok=True)
+        os.makedirs(resources, exist_ok=True)
+
+        icon_src = None
+        c1 = os.path.join(os.path.dirname(os.path.abspath(__file__)), "AppIcon.icns")
+        source_dir = get_gluetk_source_dir()
+        if source_dir:
+            c2 = os.path.join(source_dir, "assets", "AppIcon.icns")
+            if os.path.exists(c1): icon_src = c1
+            elif os.path.exists(c2): icon_src = c2
+
+        if icon_src and os.path.exists(icon_src):
+            shutil.copy2(icon_src, os.path.join(resources, "AppIcon.icns"))
+
+        with open(os.path.join(contents, "Info.plist"), "w") as f:
+            f.write('''<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
@@ -406,69 +550,40 @@ class InstallerApp:
     <string>GlueTK</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0.0</string>
 </dict>
 </plist>''')
 
-                # Launcher（智能检测 PyMOL 类型）
-                conda_exe_str = self.conda_exe or ""
-                launcher_script = os.path.join(macos, "launcher")
-                
-                # 强制统一：永远使用 conda 环境里的 PyMOL（pymol-open-source）
-                has_conda_pymol = False
-                try:
-                    check_result = subprocess.run([self.conda_exe, "run", "-p", self.env_path, "which", "pymol"],
-                                                capture_output=True, text=True, timeout=5)
-                    has_conda_pymol = (check_result.returncode == 0)
-                except:
-                    pass
+        conda_exe_str = self.conda_exe or ""
+        env_path_str = self.env_path or ""
+        launcher_script = os.path.join(macos, "launcher")
 
-                with open(launcher_script, "w") as f:
-                    if has_conda_pymol:
-                        self._log("  Using conda PyMOL (forced)")
-                        env_path_str = self.env_path or ""
-                        f.write(f'''#!/bin/bash
-# GlueTK Launcher (FORCED conda pymol-open-source)
+        with open(launcher_script, "w") as f:
+            f.write(f'''#!/bin/bash
+# GlueTK Launcher (macOS .app)
 
 CONDA_EXE="{conda_exe_str}"
 ENV_PATH="{env_path_str}"
+
 if [ -n "$CONDA_EXE" ] && [ -x "$CONDA_EXE" ] && [ -n "$ENV_PATH" ] && [ -d "$ENV_PATH" ]; then
   echo "Starting GlueTK via conda env: $ENV_PATH"
-  "$CONDA_EXE" run -p "$ENV_PATH" pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser('~/.pymol/startup')); import gluetk; gluetk.gluetk_gui()"
+  "$CONDA_EXE" run -p "$ENV_PATH" bash -c "export KMP_DUPLICATE_LIB_OK=TRUE && export OMP_NUM_THREADS=1 && pymol -d 'import sys, os; sys.path.insert(0, os.path.expanduser('\"'\"'~/.pymol/startup'\"'\"')); import gluetk; gluetk.gluetk_gui()'"
 else
-  osascript -e 'display alert "Error" message "Conda env gluetk not found. Please re-run GlueTK Installer to create it."'
+  osascript -e 'display alert "Error" message "Conda env gluetk not found or invalid. Please re-run GlueTK Installer to create it."'
   exit 1
 fi
 ''')
-                    else:
-                        self._log("  ⚠️ Conda PyMOL not found (pymol-open-source install may have failed)")
-                        f.write(f'''#!/bin/bash
-# GlueTK Launcher (conda pymol missing)
 
-osascript -e 'display alert "PyMOL Missing" message "Conda PyMOL (pymol-open-source) was not found in the gluetk environment. Please re-run the installer with dependency installation enabled." buttons {"OK"}'
-exit 1
-''')
-                
-                os.chmod(launcher_script, 0o755)
-                self._log(f"  ✅ Created {desktop_app}")
-            else:
-                self._log("\n[4/5] Skipping app creation")
-                
-            self.progress["value"] = 100
-            self._log("\n[5/5] ✅ Installation complete!")
-            self._log("\nStart GlueTK by double-clicking GlueTK.app on your Desktop.")
-            
-            self.root.after(0, lambda: messagebox.showinfo("Success", "GlueTK installed successfully!"))
-            
-        except Exception as e:
-            self._log(f"\n❌ Error: {e}")
-            self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
-        finally:
-            self.root.after(0, lambda: self.install_btn.configure(state=tk.NORMAL))
+        os.chmod(launcher_script, 0o755)
+        self._log(f"  ✅ Created {desktop_app}")
+
 
 def main():
     root = tk.Tk()
     app = InstallerApp(root)
     root.mainloop()
+
 
 if __name__ == "__main__":
     main()

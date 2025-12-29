@@ -1,13 +1,10 @@
 #!/bin/bash
 # GlueTK Installer Launcher (Tk GUI via conda python)
 
-# 查找 conda
-# 查找 conda
 CONDA_EXE=""
 if command -v conda &> /dev/null; then
     CONDA_EXE=$(command -v conda)
 else
-    # 尝试常见路径
     for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "$HOME/opt/miniconda3/bin/conda"; do
         if [ -x "$p" ]; then
             CONDA_EXE="$p"
@@ -21,7 +18,6 @@ if [ -z "$CONDA_EXE" ]; then
   exit 1
 fi
 
-# 初始化 conda 环境
 eval "$($CONDA_EXE shell.bash hook)"
 
 CONDA_BASE="$(conda info --base 2>/dev/null)"
@@ -32,7 +28,6 @@ fi
 
 PYTHON="${CONDA_BASE}/bin/python"
 if [ ! -x "$PYTHON" ]; then
-  # 退而求其次，使用当前 shell 中的 python
   if command -v python &> /dev/null; then
     PYTHON=$(command -v python)
   else
@@ -41,7 +36,6 @@ if [ ! -x "$PYTHON" ]; then
   fi
 fi
 
-# 获取资源目录
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 RESOURCES_DIR="$(dirname "$DIR")/Resources"
 INSTALLER_SCRIPT="${RESOURCES_DIR}/GlueTK_Installer.py"
