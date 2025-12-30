@@ -91,6 +91,18 @@ except ImportError:
     ADVANCED_PATCHES_AVAILABLE = False
     print("[ligand_ec_calculator] ⚠️ Advanced patches not available (σ-hole, lone pairs)")
 
+# Enhanced EC visualization module
+try:
+    from gluetk.ec_visualization import (
+        visualize_ec_smooth_surface,
+        visualize_ec_cgo_surface,
+        save_ec_visualization,
+        visualize_ternary_ec_surfaces,
+    )
+    EC_VISUALIZATION_AVAILABLE = True
+except ImportError:
+    EC_VISUALIZATION_AVAILABLE = False
+
 # ========== Constants ==========
 # Van der Waals radii (Å) for surface sampling
 VDW_RADII = {
@@ -1472,7 +1484,18 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     # Step 9: Visualize in PyMOL
     if visualize and PYMOL_AVAILABLE:
         print("\n[Step 9] Visualizing in PyMOL...")
-        _visualize_ec_map(obj_name, ec_pdb, ligand_resname)
+        # Use enhanced smooth surface visualization if available
+        if EC_VISUALIZATION_AVAILABLE:
+            visualize_ec_smooth_surface(
+                obj_name, ligand_resname,
+                ec_values=ec_values,
+                surface_points=surface_points,
+                surface_type='gaussian',
+                transparency=0.0
+            )
+        else:
+            # Fallback to basic visualization
+            _visualize_ec_map(obj_name, ec_pdb, ligand_resname)
     
     result = {
         'ec_score': ec_score,
@@ -2028,7 +2051,315 @@ def _visualize_ec_map(obj_name: str, ec_pdb: str, ligand_resname: str = None):
         cmd.zoom(f"{obj_name} and resn {ligand_resname}", buffer=10)
     
     print("[Visualization] EC map loaded as 'ec_map'")
-    print("[Visualization] Blue = complementary (EC > 0), Red = clash (EC < 0)")
+    print("[Visualization] Green = complementary (EC > 0), Red = clash (EC < 0)")
+
+
+def visualize_ec_surface(obj_name: str, ligand_resname: str,
+                         ec_values: np.ndarray = None,
+                         surface_points: np.ndarray = None,
+                         output_dir: str = None,
+                         surface_type: str = 'gaussian',
+                         transparency: float = 0.0,
+                         ec_result: Dict = None) -> bool:
+    """
+    Visualize EC as a smooth colored molecular surface (like the reference image).
+    
+    This creates a smooth surface representation with EC values mapped as colors,
+    similar to electrostatic potential surfaces commonly shown in publications.
+    
+    Args:
+        obj_name: PyMOL object name
+        ligand_resname: Ligand residue name
+        ec_values: EC values at surface points (from calculate_ligand_ec)
+        surface_points: Surface point coordinates (from calculate_ligand_ec)
+        output_dir: Output directory for temporary files
+        surface_type: Surface type ('gaussian', 'solvent', 'molecular')
+        transparency: Surface transparency (0.0 = opaque, 1.0 = fully transparent)
+        ec_result: Full result dict from calculate_ligand_ec (alternative to ec_values/surface_points)
+        
+    Returns:
+        True if successful
+    """
+    if not PYMOL_AVAILABLE:
+        print("[visualize_ec_surface] ❌ PyMOL required")
+        return False
+    
+    if not NUMPY_AVAILABLE:
+        print("[visualize_ec_surface] ❌ NumPy required")
+        return False
+    
+    # Get EC data from result dict if provided
+    if ec_result is not None:
+        ec_values = ec_result.get('ec_values')
+        surface_points = ec_result.get('surface_points')
+        output_dir = ec_result.get('output_dir', output_dir)
+    
+    if ec_values is None or surface_points is None:
+        print("[visualize_ec_surface] ❌ Need ec_values and surface_points")
+        print("[visualize_ec_surface] 💡 Run calculate_ligand_ec first and pass the result")
+        return False
+    
+    if output_dir is None:
+        output_dir = tempfile.mkdtemp(prefix='gluetk_ec_vis_')
+    
+    print(f"[visualize_ec_surface] Creating smooth EC surface visualization...")
+    
+    # Method 1: Create a CGO (Compiled Graphics Object) surface
+    # This creates a smooth interpolated surface colored by EC values
+    
+    ligand_sel = f"{obj_name} and resn {ligand_resname}"
+    surface_obj = f"ec_surface_{ligand_resname}"
+    
+    # First, copy the ligand to a new object for surface generation
+    cmd.create(surface_obj, ligand_sel)
+    
+    # Assign EC values to B-factors of the ligand atoms
+    # We need to map surface point EC values back to atoms
+    if SCIPY_AVAILABLE:
+        # Use KDTree to find nearest surface point for each atom
+        tree = cKDTree(surface_points)
+        
+        # Get ligand atom coordinates
+        atom_coords = []
+        atom_indices = []
+        cmd.iterate_state(1, surface_obj,
+                         "atom_coords.append([x,y,z]); atom_indices.append(index)",
+                         space={'atom_coords': atom_coords, 'atom_indices': atom_indices})
+        
+        if atom_coords:
+            atom_coords = np.array(atom_coords)
+            
+            # For each atom, find nearby surface points and average their EC values
+            for i, (coord, atom_idx) in enumerate(zip(atom_coords, atom_indices)):
+                # Find surface points within 2.5Å of this atom
+                nearby_indices = tree.query_ball_point(coord, r=2.5)
+                
+                if nearby_indices:
+                    # Average EC of nearby surface points
+                    avg_ec = np.mean(ec_values[nearby_indices])
+                else:
+                    # Use nearest point
+                    _, nearest_idx = tree.query(coord)
+                    avg_ec = ec_values[nearest_idx]
+                
+                # Scale EC to B-factor range (-99 to 99)
+                bfactor = np.clip(avg_ec * 100, -99.99, 99.99)
+                
+                # Set B-factor for this atom
+                cmd.alter(f"{surface_obj} and index {atom_idx}", f"b={bfactor}")
+    else:
+        # Fallback: simple nearest neighbor assignment
+        for i, (coord, atom_idx) in enumerate(zip(atom_coords, atom_indices)):
+            distances = np.linalg.norm(surface_points - coord, axis=1)
+            nearest_idx = np.argmin(distances)
+            bfactor = np.clip(ec_values[nearest_idx] * 100, -99.99, 99.99)
+            cmd.alter(f"{surface_obj} and index {atom_idx}", f"b={bfactor}")
+    
+    # Rebuild to apply B-factor changes
+    cmd.rebuild(surface_obj)
+    
+    # Generate surface
+    cmd.show('surface', surface_obj)
+    
+    # Set surface quality
+    cmd.set('surface_quality', 1, surface_obj)  # Higher quality
+    
+    # Color by B-factor (EC values) with red-white-green gradient
+    # Red = negative EC (clash), White = neutral, Green = positive EC (complementary)
+    cmd.spectrum('b', 'red_white_green', surface_obj, minimum=-100, maximum=100)
+    
+    # Set surface properties
+    cmd.set('surface_type', 0 if surface_type == 'molecular' else
+                           1 if surface_type == 'solvent' else 2, surface_obj)  # 2 = gaussian
+    cmd.set('transparency', transparency, surface_obj)
+    cmd.set('surface_color_smoothing', 1)  # Smooth color transitions
+    cmd.set('surface_color_smoothing_threshold', 0.5)
+    
+    # Also show ligand sticks inside the surface
+    cmd.show('sticks', ligand_sel)
+    cmd.color('gray50', f"{ligand_sel} and elem C")
+    cmd.set('stick_transparency', 0.3, ligand_sel)
+    
+    # Show protein as lines/cartoon with transparency
+    cmd.set('cartoon_transparency', 0.7, obj_name)
+    cmd.show('lines', f"{obj_name} and polymer within 5 of {ligand_sel}")
+    
+    # Zoom to ligand
+    cmd.zoom(ligand_sel, buffer=8)
+    
+    # Set nice rendering options
+    cmd.set('ray_shadow', 0)
+    cmd.set('antialias', 2)
+    cmd.set('ambient', 0.4)
+    cmd.set('spec_reflect', 0.5)
+    
+    print(f"[visualize_ec_surface] ✅ Created surface object: {surface_obj}")
+    print("[visualize_ec_surface] Color scheme: Red = clash (EC < 0), White = neutral, Green = complementary (EC > 0)")
+    print("[visualize_ec_surface] 💡 Use 'ray' command for high-quality rendering")
+    
+    return True
+
+
+def visualize_ec_surface_cgo(obj_name: str, ligand_resname: str,
+                             ec_values: np.ndarray,
+                             surface_points: np.ndarray,
+                             surface_normals: np.ndarray = None,
+                             point_size: float = 0.3) -> bool:
+    """
+    Visualize EC as a CGO (Compiled Graphics Object) point cloud surface.
+    
+    This creates a dense point cloud that approximates a smooth surface,
+    with each point colored by its EC value.
+    
+    Args:
+        obj_name: PyMOL object name
+        ligand_resname: Ligand residue name
+        ec_values: EC values at surface points
+        surface_points: Surface point coordinates
+        surface_normals: Surface normals (optional, for lighting)
+        point_size: Size of each point
+        
+    Returns:
+        True if successful
+    """
+    if not PYMOL_AVAILABLE:
+        print("[visualize_ec_surface_cgo] ❌ PyMOL required")
+        return False
+    
+    from pymol.cgo import BEGIN, END, VERTEX, COLOR, NORMAL, SPHERE, TRIANGLES
+    from pymol.cgo import ALPHA
+    
+    print(f"[visualize_ec_surface_cgo] Creating CGO surface with {len(surface_points)} points...")
+    
+    # Create CGO object
+    cgo_obj = []
+    
+    # Color mapping function: EC -> RGB
+    def ec_to_rgb(ec_val):
+        """Map EC value to RGB color (red-white-green gradient)."""
+        # Clip EC to [-1, 1] range
+        ec_clipped = np.clip(ec_val, -1.0, 1.0)
+        
+        if ec_clipped < 0:
+            # Negative EC: red to white
+            t = 1.0 + ec_clipped  # 0 to 1 as EC goes from -1 to 0
+            r = 1.0
+            g = t
+            b = t
+        else:
+            # Positive EC: white to green
+            t = ec_clipped  # 0 to 1 as EC goes from 0 to 1
+            r = 1.0 - t
+            g = 1.0
+            b = 1.0 - t
+        
+        return (r, g, b)
+    
+    # Add spheres for each surface point
+    for i, (point, ec_val) in enumerate(zip(surface_points, ec_values)):
+        r, g, b = ec_to_rgb(ec_val)
+        
+        # Add colored sphere
+        cgo_obj.extend([
+            COLOR, r, g, b,
+            SPHERE, point[0], point[1], point[2], point_size
+        ])
+    
+    # Load CGO object
+    cgo_name = f"ec_cgo_{ligand_resname}"
+    cmd.load_cgo(cgo_obj, cgo_name)
+    
+    # Show ligand sticks
+    ligand_sel = f"{obj_name} and resn {ligand_resname}"
+    cmd.show('sticks', ligand_sel)
+    cmd.color('gray50', f"{ligand_sel} and elem C")
+    
+    # Zoom
+    cmd.zoom(ligand_sel, buffer=8)
+    
+    print(f"[visualize_ec_surface_cgo] ✅ Created CGO object: {cgo_name}")
+    print("[visualize_ec_surface_cgo] Color scheme: Red = clash, White = neutral, Green = complementary")
+    
+    return True
+
+
+def create_ec_surface_mesh(surface_points: np.ndarray, ec_values: np.ndarray,
+                           output_file: str, mesh_resolution: float = 0.5) -> bool:
+    """
+    Create a triangulated mesh surface colored by EC values.
+    
+    This uses Delaunay triangulation to create a proper mesh surface
+    that can be rendered smoothly.
+    
+    Args:
+        surface_points: Surface point coordinates
+        ec_values: EC values at surface points
+        output_file: Output file path (.obj or .ply format)
+        mesh_resolution: Resolution for mesh generation
+        
+    Returns:
+        True if successful
+    """
+    if not NUMPY_AVAILABLE:
+        return False
+    
+    try:
+        from scipy.spatial import Delaunay, ConvexHull
+        
+        print(f"[create_ec_surface_mesh] Creating mesh from {len(surface_points)} points...")
+        
+        # Create Delaunay triangulation
+        tri = Delaunay(surface_points)
+        
+        # Filter triangles to keep only surface triangles
+        # (remove internal triangles based on edge length)
+        max_edge_length = mesh_resolution * 3
+        
+        valid_simplices = []
+        for simplex in tri.simplices:
+            pts = surface_points[simplex]
+            # Calculate edge lengths
+            edges = [
+                np.linalg.norm(pts[0] - pts[1]),
+                np.linalg.norm(pts[1] - pts[2]),
+                np.linalg.norm(pts[2] - pts[0]),
+                np.linalg.norm(pts[0] - pts[3]),
+                np.linalg.norm(pts[1] - pts[3]),
+                np.linalg.norm(pts[2] - pts[3]),
+            ]
+            if max(edges) < max_edge_length:
+                valid_simplices.append(simplex)
+        
+        # Write to OBJ file with vertex colors
+        if output_file.endswith('.obj'):
+            with open(output_file, 'w') as f:
+                f.write("# EC surface mesh generated by GlueTK\n")
+                
+                # Write vertices with colors
+                for i, (point, ec_val) in enumerate(zip(surface_points, ec_values)):
+                    # Map EC to color
+                    ec_clipped = np.clip(ec_val, -1.0, 1.0)
+                    if ec_clipped < 0:
+                        r, g, b = 1.0, 1.0 + ec_clipped, 1.0 + ec_clipped
+                    else:
+                        r, g, b = 1.0 - ec_clipped, 1.0, 1.0 - ec_clipped
+                    
+                    f.write(f"v {point[0]:.4f} {point[1]:.4f} {point[2]:.4f} {r:.4f} {g:.4f} {b:.4f}\n")
+                
+                # Write faces (triangles from valid simplices)
+                for simplex in valid_simplices:
+                    # OBJ uses 1-indexed vertices
+                    f.write(f"f {simplex[0]+1} {simplex[1]+1} {simplex[2]+1}\n")
+                    f.write(f"f {simplex[0]+1} {simplex[2]+1} {simplex[3]+1}\n")
+                    f.write(f"f {simplex[0]+1} {simplex[1]+1} {simplex[3]+1}\n")
+                    f.write(f"f {simplex[1]+1} {simplex[2]+1} {simplex[3]+1}\n")
+        
+        print(f"[create_ec_surface_mesh] ✅ Wrote mesh to {output_file}")
+        return True
+        
+    except Exception as e:
+        print(f"[create_ec_surface_mesh] ❌ Error: {e}")
+        return False
 
 
 def _visualize_ternary_ec(obj_name: str, results: Dict):
@@ -2669,6 +3000,14 @@ if PYMOL_AVAILABLE:
     cmd.extend('analyze_multiconformer_ec', analyze_multiconformer_ec)
     cmd.extend('calculate_ec_hotspots', calculate_ec_hotspots)
     cmd.extend('analyze_substituent_ec_effect', analyze_substituent_ec_effect)
+    cmd.extend('visualize_ec_surface', visualize_ec_surface)
+    cmd.extend('visualize_ec_surface_cgo', visualize_ec_surface_cgo)
+    
+    # Register enhanced visualization commands if available
+    if EC_VISUALIZATION_AVAILABLE:
+        cmd.extend('visualize_ec_smooth_surface', visualize_ec_smooth_surface)
+        cmd.extend('save_ec_visualization', save_ec_visualization)
+        cmd.extend('visualize_ternary_ec_surfaces', visualize_ternary_ec_surfaces)
 
 
 # ========== Module Info ==========

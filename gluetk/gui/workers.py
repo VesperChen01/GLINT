@@ -300,12 +300,14 @@ class SurfaceSimilarityWorker(QThread):
     
     def __init__(self, obj1: str, obj2: str = None,
                  selection1: str = "all", selection2: str = "all",
-                 analysis_type: str = "similarity",  # "similarity" or "complementarity"
+                 analysis_type: str = "similarity",  # "similarity", "complementarity", or "search"
                  patch_radius: float = 12.0,
                  interface_distance: float = 4.0,
                  out_csv: str = None,
                  surface_method: str = "auto",
-                 use_apbs: bool = False):
+                 use_apbs: bool = False,
+                 similarity_threshold: float = 0.5,
+                 top_k: int = 5):
         super().__init__()
         self.obj1 = obj1
         self.obj2 = obj2
@@ -317,6 +319,8 @@ class SurfaceSimilarityWorker(QThread):
         self.out_csv = out_csv
         self.surface_method = surface_method
         self.use_apbs = use_apbs
+        self.similarity_threshold = similarity_threshold
+        self.top_k = top_k
         
     def run(self):
         try:
@@ -358,9 +362,72 @@ class SurfaceSimilarityWorker(QThread):
                         for r1, r2 in result.interface_residues:
                             writer.writerow([r1, r2])
                     self.progress.emit(f"Results saved to {self.out_csv}")
+            
+            elif self.analysis_type == "search" and self.obj2:
+                # Similarity search: use obj1 as template, search in obj2
+                self.progress.emit(f"Searching similar patches: template={self.obj1}, target={self.obj2}...")
+                self.progress.emit(f"  Template selection: {self.selection1}")
+                self.progress.emit(f"  Target selection: {self.selection2}")
+                self.progress.emit(f"  Similarity threshold: {self.similarity_threshold}")
+                
+                result = analyzer.search_similar_surfaces(
+                    template_obj=self.obj1,
+                    target_obj=self.obj2,
+                    template_sel=self.selection1,
+                    target_sel=self.selection2,
+                    similarity_threshold=self.similarity_threshold,
+                    top_k=self.top_k
+                )
+                
+                self.progress.emit(f"Search complete:")
+                self.progress.emit(f"  Template patches: {result.n_template_patches}")
+                self.progress.emit(f"  Target patches: {result.n_target_patches}")
+                self.progress.emit(f"  Matches found: {result.n_matches_found}")
+                self.progress.emit(f"  Best similarity: {result.max_similarity:.3f}")
+                self.progress.emit(f"  Mean best similarity: {result.mean_best_similarity:.3f}")
+                
+                # Export results if CSV requested
+                if self.out_csv:
+                    import csv
+                    with open(self.out_csv, 'w', newline='', encoding='utf-8') as f:
+                        writer = csv.writer(f)
+                        # Summary section
+                        writer.writerow(['=== Similarity Search Results ===', ''])
+                        writer.writerow(['Template', result.template_object])
+                        writer.writerow(['Target', result.target_object])
+                        writer.writerow(['Template_Patches', result.n_template_patches])
+                        writer.writerow(['Target_Patches', result.n_target_patches])
+                        writer.writerow(['Matches_Found', result.n_matches_found])
+                        writer.writerow(['Max_Similarity', f"{result.max_similarity:.4f}"])
+                        writer.writerow(['Mean_Best_Similarity', f"{result.mean_best_similarity:.4f}"])
+                        writer.writerow(['', ''])
+                        
+                        # Per-patch results
+                        writer.writerow(['=== Per-Patch Results ===', ''])
+                        writer.writerow(['Template_Patch_Idx', 'Template_Center_X', 'Template_Center_Y', 'Template_Center_Z',
+                                        'Best_Match_Idx', 'Best_Match_Score', 'Match_Center_X', 'Match_Center_Y', 'Match_Center_Z'])
+                        for pr in result.patch_results:
+                            if pr.best_match_score >= self.similarity_threshold:
+                                tc = pr.template_center
+                                mc = pr.best_match_center if pr.best_match_center is not None else [0, 0, 0]
+                                writer.writerow([
+                                    pr.template_patch_idx,
+                                    f"{tc[0]:.2f}", f"{tc[1]:.2f}", f"{tc[2]:.2f}",
+                                    pr.best_match_idx,
+                                    f"{pr.best_match_score:.4f}",
+                                    f"{mc[0]:.2f}", f"{mc[1]:.2f}", f"{mc[2]:.2f}"
+                                ])
+                        
+                        writer.writerow(['', ''])
+                        writer.writerow(['=== Residue Matches ===', ''])
+                        writer.writerow(['Template_Residue', 'Target_Residue', 'Similarity'])
+                        for t_res, tgt_res, sim in result.residue_matches:
+                            writer.writerow([t_res, tgt_res, f"{sim:.4f}"])
+                    
+                    self.progress.emit(f"Results saved to {self.out_csv}")
                     
             elif self.obj2:
-                # Similarity comparison
+                # Similarity comparison (legacy symmetric comparison)
                 self.progress.emit(f"Comparing surfaces: {self.obj1} vs {self.obj2}...")
                 
                 result = analyzer.compare_surfaces(

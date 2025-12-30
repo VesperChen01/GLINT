@@ -193,6 +193,50 @@ class SimilarityResult:
 
 
 @dataclass
+class PatchSearchResult:
+    """Result of searching similar patches in a target protein using a template patch."""
+    template_patch_idx: int  # Index of the template patch
+    template_center: np.ndarray  # Center of template patch
+    
+    # List of matching patches in target, sorted by similarity (descending)
+    # Each tuple: (target_patch_idx, target_center, similarity_score, geometric_sim, chemical_sim)
+    matches: List[Tuple[int, np.ndarray, float, float, float]] = field(default_factory=list)
+    
+    # Best match info
+    best_match_idx: int = -1
+    best_match_score: float = 0.0
+    best_match_center: Optional[np.ndarray] = None
+
+
+@dataclass
+class SimilaritySearchResult:
+    """Result of similarity search: using one protein as template to search another."""
+    template_object: str  # Name of template protein
+    target_object: str    # Name of target protein
+    
+    # Overall search statistics
+    n_template_patches: int = 0
+    n_target_patches: int = 0
+    n_matches_found: int = 0
+    
+    # Per-template-patch search results
+    patch_results: List[PatchSearchResult] = field(default_factory=list)
+    
+    # Aggregated scores
+    mean_best_similarity: float = 0.0
+    max_similarity: float = 0.0
+    
+    # Best overall match
+    best_template_patch_idx: int = -1
+    best_target_patch_idx: int = -1
+    best_overall_score: float = 0.0
+    
+    # Residue mapping for best matches
+    # List of (template_residue, target_residue, similarity) tuples
+    residue_matches: List[Tuple[str, str, float]] = field(default_factory=list)
+
+
+@dataclass
 class ComplementarityResult:
     """Result of surface complementarity analysis."""
     score: float  # Overall complementarity score [0, 1]
@@ -1223,7 +1267,7 @@ class SurfaceComparator:
         
         return np.mean(complementarity_scores)
     
-    def _histogram_correlation(self, values1: np.ndarray, 
+    def _histogram_correlation(self, values1: np.ndarray,
                                values2: np.ndarray,
                                n_bins: int = 20) -> float:
         """Compute correlation between two distributions using histograms."""
@@ -1250,6 +1294,152 @@ class SurfaceComparator:
         bc = np.sum(np.sqrt(hist1 * hist2))
         
         return bc
+    
+    def search_similar_patches(self,
+                               template_mesh: SurfaceMesh,
+                               target_mesh: SurfaceMesh,
+                               template_points: List[SurfacePoint],
+                               target_points: List[SurfacePoint],
+                               template_name: str = "template",
+                               target_name: str = "target",
+                               similarity_threshold: float = 0.5,
+                               top_k: int = 5) -> SimilaritySearchResult:
+        """
+        Search for similar patches in target protein using template protein patches.
+        
+        This is the correct similarity search logic:
+        1. Generate patches from the template protein
+        2. For each template patch, search ALL patches in the target protein
+        3. Return ranked matches for each template patch
+        
+        Args:
+            template_mesh: Surface mesh of template protein
+            target_mesh: Surface mesh of target protein
+            template_points: Surface points of template protein
+            target_points: Surface points of target protein
+            template_name: Name of template protein
+            target_name: Name of target protein
+            similarity_threshold: Minimum similarity score to consider a match
+            top_k: Number of top matches to return per template patch
+        
+        Returns:
+            SimilaritySearchResult with detailed match information
+        """
+        # Extract patches from template (these are our query patches)
+        template_patches = self._extract_patches(template_mesh, template_points)
+        
+        # Extract ALL patches from target (these are what we search through)
+        # Use more patches for target to ensure good coverage
+        original_n_patches = self.n_patches
+        self.n_patches = max(self.n_patches * 2, 200)  # More patches for thorough search
+        target_patches = self._extract_patches(target_mesh, target_points)
+        self.n_patches = original_n_patches  # Restore
+        
+        # Compute features for all patches
+        for patch in template_patches:
+            patch.compute_mean_features()
+            patch.compute_feature_histogram()
+        
+        for patch in target_patches:
+            patch.compute_mean_features()
+            patch.compute_feature_histogram()
+        
+        # Search: for each template patch, find similar patches in target
+        patch_results = []
+        all_best_scores = []
+        best_overall_score = 0.0
+        best_template_idx = -1
+        best_target_idx = -1
+        
+        for t_idx, template_patch in enumerate(template_patches):
+            # Compare this template patch against ALL target patches
+            matches = []
+            
+            for tgt_idx, target_patch in enumerate(target_patches):
+                # Compute similarity
+                overall_sim = self._patch_similarity(template_patch, target_patch)
+                geo_sim = self._geometric_similarity(template_patch, target_patch)
+                chem_sim = self._chemical_similarity(template_patch, target_patch)
+                
+                if overall_sim >= similarity_threshold:
+                    matches.append((
+                        tgt_idx,
+                        target_patch.center.copy(),
+                        overall_sim,
+                        geo_sim,
+                        chem_sim
+                    ))
+            
+            # Sort matches by similarity (descending)
+            matches.sort(key=lambda x: x[2], reverse=True)
+            
+            # Keep top_k matches
+            top_matches = matches[:top_k]
+            
+            # Create result for this template patch
+            best_match_idx = top_matches[0][0] if top_matches else -1
+            best_match_score = top_matches[0][2] if top_matches else 0.0
+            best_match_center = top_matches[0][1] if top_matches else None
+            
+            patch_result = PatchSearchResult(
+                template_patch_idx=t_idx,
+                template_center=template_patch.center.copy(),
+                matches=top_matches,
+                best_match_idx=best_match_idx,
+                best_match_score=best_match_score,
+                best_match_center=best_match_center
+            )
+            patch_results.append(patch_result)
+            
+            if best_match_score > 0:
+                all_best_scores.append(best_match_score)
+            
+            # Track overall best
+            if best_match_score > best_overall_score:
+                best_overall_score = best_match_score
+                best_template_idx = t_idx
+                best_target_idx = best_match_idx
+        
+        # Compute residue matches for top results
+        residue_matches = []
+        for pr in patch_results:
+            if pr.best_match_idx >= 0 and pr.best_match_score >= similarity_threshold:
+                template_patch = template_patches[pr.template_patch_idx]
+                target_patch = target_patches[pr.best_match_idx]
+                
+                # Get representative residues from each patch
+                template_residues = set()
+                for pt in template_patch.points:
+                    if pt.nearest_residue:
+                        template_residues.add(pt.nearest_residue)
+                
+                target_residues = set()
+                for pt in target_patch.points:
+                    if pt.nearest_residue:
+                        target_residues.add(pt.nearest_residue)
+                
+                # Add residue pairs
+                for t_res in list(template_residues)[:3]:  # Limit to 3 per patch
+                    for tgt_res in list(target_residues)[:3]:
+                        residue_matches.append((t_res, tgt_res, pr.best_match_score))
+        
+        # Create final result
+        result = SimilaritySearchResult(
+            template_object=template_name,
+            target_object=target_name,
+            n_template_patches=len(template_patches),
+            n_target_patches=len(target_patches),
+            n_matches_found=sum(1 for pr in patch_results if pr.best_match_score >= similarity_threshold),
+            patch_results=patch_results,
+            mean_best_similarity=np.mean(all_best_scores) if all_best_scores else 0.0,
+            max_similarity=best_overall_score,
+            best_template_patch_idx=best_template_idx,
+            best_target_patch_idx=best_target_idx,
+            best_overall_score=best_overall_score,
+            residue_matches=residue_matches
+        )
+        
+        return result
 
 
 # =============================================================================
@@ -1395,7 +1585,53 @@ class SurfaceSimilarityAnalyzer:
         else:
             return self.analyze_surface(obj_name=obj, selection=selection)
     
-    def _get_atoms(self, obj_name: Optional[str], 
+    def search_similar_surfaces(self,
+                                template_obj: str,
+                                target_obj: str,
+                                template_sel: str = "all",
+                                target_sel: str = "all",
+                                similarity_threshold: float = 0.5,
+                                top_k: int = 5) -> SimilaritySearchResult:
+        """
+        Search for similar surface patches in target protein using template protein.
+        
+        This is the correct similarity search logic:
+        - Template protein: the protein with known binding site (e.g., CRBN)
+        - Target protein: the protein to search for similar sites
+        
+        The method generates patches from the template and searches for
+        similar patches in the target protein.
+        
+        Args:
+            template_obj: PyMOL object name or PDB file for template protein
+            target_obj: PyMOL object name or PDB file for target protein
+            template_sel: PyMOL selection for template
+            target_sel: PyMOL selection for target
+            similarity_threshold: Minimum similarity score (0-1) to consider a match
+            top_k: Number of top matches to return per template patch
+        
+        Returns:
+            SimilaritySearchResult with detailed match information
+        """
+        # Analyze both surfaces
+        template_mesh, template_points = self._get_or_analyze(template_obj, template_sel)
+        target_mesh, target_points = self._get_or_analyze(target_obj, target_sel)
+        
+        # Perform search
+        result = self.comparator.search_similar_patches(
+            template_mesh=template_mesh,
+            target_mesh=target_mesh,
+            template_points=template_points,
+            target_points=target_points,
+            template_name=template_obj,
+            target_name=target_obj,
+            similarity_threshold=similarity_threshold,
+            top_k=top_k
+        )
+        
+        return result
+    
+    def _get_atoms(self, obj_name: Optional[str],
                    pdb_file: Optional[str],
                    selection: str) -> List[Dict]:
         """Get atom information from PyMOL or PDB file."""

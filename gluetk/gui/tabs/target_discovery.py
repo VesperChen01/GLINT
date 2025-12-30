@@ -231,8 +231,8 @@ class TargetDiscoveryTab(CommonTab):
         # Row 2: Analysis Type / Surface Method
         sim_grid.addWidget(QLabel("Analysis Type:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_analysis_type = QComboBox(); self.parent_window.sim_analysis_type.setMinimumHeight(32)
-        self.parent_window.sim_analysis_type.addItems(["Similarity", "Complementarity (PPI)"])
-        self.parent_window.sim_analysis_type.setToolTip("Similarity: find similar binding sites\nComplementarity: analyze PPI interface fit")
+        self.parent_window.sim_analysis_type.addItems(["Similarity Search", "Complementarity (PPI)"])
+        self.parent_window.sim_analysis_type.setToolTip("Similarity Search: use Object 1 as template to search similar patches in Object 2\nComplementarity: analyze PPI interface fit")
         sim_grid.addWidget(self.parent_window.sim_analysis_type, 2, 1)
         
         sim_grid.addWidget(QLabel("Surface Method:"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -796,7 +796,13 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_thread.start()
 
     def start_surface_comparison(self):
-        """Start surface comparison or complementarity analysis"""
+        """Start surface comparison or complementarity analysis
+        
+        For Similarity Search:
+        - Object 1 is the TEMPLATE (e.g., known binding site like CRBN)
+        - Object 2 is the TARGET (protein to search for similar sites)
+        - The method generates patches from template and searches in target
+        """
         obj1 = self.parent_window.obj_combo_sim1.currentText().strip()
         obj2_text = self.parent_window.obj_combo_sim2.currentText().strip()
         
@@ -817,7 +823,9 @@ class TargetDiscoveryTab(CommonTab):
         
         # Determine analysis type
         analysis_idx = self.parent_window.sim_analysis_type.currentIndex()
-        analysis_type = "complementarity" if analysis_idx == 1 else "similarity"
+        # 0 = Similarity Search (use obj1 as template, search in obj2)
+        # 1 = Complementarity (PPI)
+        analysis_type = "complementarity" if analysis_idx == 1 else "search"
         
         try:
             patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
@@ -832,6 +840,13 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_compare_btn.setEnabled(False)
         self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
         
+        # Log the search direction for clarity
+        if analysis_type == "search":
+            self.log(f"🔍 Starting similarity search:")
+            self.log(f"   Template (Object 1): {obj1} [{sel1}]")
+            self.log(f"   Target (Object 2): {obj2} [{sel2}]")
+            self.log(f"   → Searching for patches in {obj2} similar to {obj1}")
+        
         self.parent_window.sim_thread = SurfaceSimilarityWorker(
             obj1=obj1, obj2=obj2,
             selection1=sel1, selection2=sel2,
@@ -839,7 +854,9 @@ class TargetDiscoveryTab(CommonTab):
             patch_radius=patch_radius,
             interface_distance=interface_dist,
             out_csv=outcsv,
-            surface_method=surface_method
+            surface_method=surface_method,
+            similarity_threshold=0.5,  # Default threshold
+            top_k=5  # Return top 5 matches per template patch
         )
         self.parent_window.sim_thread.progress.connect(self.log)
         self.parent_window.sim_thread.error.connect(self.on_error)
@@ -865,7 +882,7 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_analyze_btn.setEnabled(True)
 
     def on_finished_comparison(self, result, out_csv_path: str):
-        """Handle comparison/complementarity analysis completion"""
+        """Handle comparison/complementarity/search analysis completion"""
         analysis_type = self.parent_window.sim_analysis_type.currentText()
         
         if "Complementarity" in analysis_type:
@@ -877,7 +894,29 @@ class TargetDiscoveryTab(CommonTab):
             self.log(f"   Hydrophobic: {result.hydrophobic_complementarity:.3f}")
             self.log(f"   Interface Area: {result.interface_area:.1f} Å²")
             self.log(f"   Contacts: {result.n_contacts}")
+        elif hasattr(result, 'n_template_patches'):
+            # SimilaritySearchResult - new search logic
+            self._last_search_result = result
+            self.log(f"✅ Similarity search complete:")
+            self.log(f"   Template: {result.template_object}")
+            self.log(f"   Target: {result.target_object}")
+            self.log(f"   Template patches: {result.n_template_patches}")
+            self.log(f"   Target patches: {result.n_target_patches}")
+            self.log(f"   Matches found: {result.n_matches_found}")
+            self.log(f"   Best similarity: {result.max_similarity:.3f}")
+            self.log(f"   Mean best similarity: {result.mean_best_similarity:.3f}")
+            
+            # Show top matches
+            if result.patch_results:
+                self.log(f"   Top matching patches:")
+                sorted_results = sorted(result.patch_results,
+                                        key=lambda x: x.best_match_score, reverse=True)
+                for i, pr in enumerate(sorted_results[:5]):
+                    if pr.best_match_score > 0:
+                        self.log(f"     {i+1}. Template patch {pr.template_patch_idx} → "
+                                f"Target patch {pr.best_match_idx} (score: {pr.best_match_score:.3f})")
         else:
+            # Legacy SimilarityResult
             self._last_similarity_result = result
             self.log(f"✅ Similarity analysis complete:")
             self.log(f"   Overall Score: {result.score:.3f}")
