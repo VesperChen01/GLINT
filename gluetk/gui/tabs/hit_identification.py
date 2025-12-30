@@ -30,35 +30,27 @@ class HitIdentificationTab(CommonTab):
         self.init_ui()
         
     def init_ui(self):
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        
-        content_widget = QWidget()
-        content_widget.setObjectName("scroll_content")
-        self.parent_window._hit_scroll_content = content_widget
+        self.setObjectName("scroll_content")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.parent_window._hit_scroll_content = self
+
         bg_color = "#0d1117" if getattr(self.parent_window, "_dark_mode", True) else "#f8fafc"
-        content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
-        
-        layout = QVBoxLayout(content_widget)
-        layout.setSpacing(14)
-        layout.setContentsMargins(12, 12, 12, 12)
-        
-        # 1. Binding Site Detection
-        layout.addWidget(self._create_pocket_detection_card())
-        
-        # 2. Vina Docking
-        layout.addWidget(self._create_vina_docking_card())
-        
-        # 3. HADDOCK3 (Protein-Protein Docking)
-        layout.addWidget(self._create_hdock_card())
-        
-        layout.addStretch(1)
-        scroll_area.setWidget(content_widget)
-        
+        self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
+
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll_area)
+        main_layout.setSpacing(14)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+
+        # 1. Binding Site Detection
+        main_layout.addWidget(self._create_pocket_detection_card())
+
+        # 2. Vina Docking
+        main_layout.addWidget(self._create_vina_docking_card())
+
+        # 3. HADDOCK3 (Protein-Protein Docking)
+        main_layout.addWidget(self._create_hdock_card())
+
+        main_layout.addStretch(1)
 
     def _create_hdock_card(self) -> QWidget:
         """Create HADDOCK3 protein-protein docking card"""
@@ -356,8 +348,7 @@ class HitIdentificationTab(CommonTab):
                     self,
                     "Error",
                     "HADDOCK3 not detected. Please install in the same Python/environment as PyMOL and restart:\n\n"
-                    "1) pip:    python -m pip install -U haddock3\n"
-                    "2) conda:  conda install -c conda-forge -c haddocking haddock3"
+                    "pip install -U haddock3"
                 )
                 return
                 

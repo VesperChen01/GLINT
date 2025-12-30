@@ -54,18 +54,18 @@ class CommonTab(QWidget):
         """Create pocket detection and visualization card"""
         card = QGroupBox("Pocket Detection")
         layout = QVBoxLayout(card)
-        layout.setSpacing(10)
-        layout.setContentsMargins(16, 20, 16, 16)
+        layout.setSpacing(14)
+        layout.setContentsMargins(12, 16, 12, 8)
         
         # Target object
         obj_row = QHBoxLayout()
         obj_row.setSpacing(8)
         # We bind to parent's attributes to keep state
         self.parent_window.pocket_obj_combo = QComboBox()
-        self.parent_window.pocket_obj_combo.setMinimumHeight(36)
+        self.parent_window.pocket_obj_combo.setMinimumHeight(32)
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setObjectName("refresh_btn")
-        refresh_btn.setMinimumHeight(36)
+        refresh_btn.setMinimumHeight(32)
         refresh_btn.setToolTip("Refresh objects")
         refresh_btn.clicked.connect(self.refresh_objects)
         obj_row.addWidget(QLabel("Target:"))
@@ -75,26 +75,28 @@ class CommonTab(QWidget):
         
         # Parameters row
         param_row = QGridLayout()
-        param_row.setSpacing(10)
+        param_row.setSpacing(12)
+        param_row.setVerticalSpacing(4)
         
-        param_row.addWidget(QLabel("Grid Spacing:"), 0, 0)
+        
+        param_row.addWidget(QLabel("Grid Spacing:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.pocket_grid_spacing = QLineEdit("0.5")
-        self.parent_window.pocket_grid_spacing.setMinimumHeight(36)
+        self.parent_window.pocket_grid_spacing.setMinimumHeight(32)
         self.parent_window.pocket_grid_spacing.setMaximumWidth(80)
         param_row.addWidget(self.parent_window.pocket_grid_spacing, 0, 1)
         param_row.addWidget(QLabel("Å"), 0, 2)
         
-        param_row.addWidget(QLabel("Min Volume:"), 0, 3)
+        param_row.addWidget(QLabel("Min Volume:"), 0, 3, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.pocket_min_volume = QLineEdit("30")
-        self.parent_window.pocket_min_volume.setMinimumHeight(36)
+        self.parent_window.pocket_min_volume.setMinimumHeight(32)
         self.parent_window.pocket_min_volume.setMaximumWidth(80)
         param_row.addWidget(self.parent_window.pocket_min_volume, 0, 4)
         param_row.addWidget(QLabel("Ų"), 0, 5)
         
-        param_row.addWidget(QLabel("Color by:"), 1, 0)
+        param_row.addWidget(QLabel("Color by:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.pocket_color_by = QComboBox()
         self.parent_window.pocket_color_by.addItems(["Volume", "Druggability", "Hydrophobicity", "Depth"])
-        self.parent_window.pocket_color_by.setMinimumHeight(36)
+        self.parent_window.pocket_color_by.setMinimumHeight(32)
         param_row.addWidget(self.parent_window.pocket_color_by, 1, 1, 1, 5)
         
         layout.addLayout(param_row)
@@ -105,12 +107,12 @@ class CommonTab(QWidget):
         
         detect_btn = QPushButton("Detect Pockets")
         detect_btn.setObjectName("primary_btn")
-        detect_btn.setMinimumHeight(36)
+        detect_btn.setMinimumHeight(32)
         detect_btn.clicked.connect(self.run_pocket_detection)
         
         viz_btn = QPushButton("Visualize")
         viz_btn.setObjectName("secondary_btn")
-        viz_btn.setMinimumHeight(36)
+        viz_btn.setMinimumHeight(32)
         viz_btn.clicked.connect(self.run_pocket_visualization)
         
         btn_row.addWidget(detect_btn)
@@ -123,8 +125,8 @@ class CommonTab(QWidget):
         """Create Vina docking card (supports custom box)"""
         card = QGroupBox("AutoDock Vina")
         layout = QVBoxLayout(card)
-        layout.setSpacing(10)
-        layout.setContentsMargins(16, 20, 16, 16)
+        layout.setSpacing(14)
+        layout.setContentsMargins(12, 16, 12, 8)
         
         # Ligand file
         ligand_layout = QHBoxLayout()
@@ -132,11 +134,11 @@ class CommonTab(QWidget):
         
         self.parent_window.vina_ligand = QLineEdit()
         self.parent_window.vina_ligand.setPlaceholderText("Select ligand file (MOL2/SDF/PDBQT)")
-        self.parent_window.vina_ligand.setMinimumHeight(36)
+        self.parent_window.vina_ligand.setMinimumHeight(32)
         
         ligand_browse = QPushButton("Browse")
         ligand_browse.setObjectName("browse_btn")
-        ligand_browse.setMinimumHeight(36)
+        ligand_browse.setMinimumHeight(32)
         ligand_browse.setToolTip("Browse ligand file")
         ligand_browse.clicked.connect(self.browse_vina_ligand)
         
@@ -144,24 +146,26 @@ class CommonTab(QWidget):
         ligand_layout.addWidget(self.parent_window.vina_ligand, 1)
         ligand_layout.addWidget(ligand_browse)
         layout.addLayout(ligand_layout)
-        
+
         # Parameter settings
         param_layout = QGridLayout()
-        param_layout.setSpacing(10)
+        param_layout.setSpacing(12)
+        param_layout.setVerticalSpacing(4)
         
-        param_layout.addWidget(QLabel("Max Pockets:"), 0, 0)
+        
+        param_layout.addWidget(QLabel("Max Pockets:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.vina_max_pockets = QSpinBox()
         self.parent_window.vina_max_pockets.setRange(1, 10)
         self.parent_window.vina_max_pockets.setValue(3)
-        self.parent_window.vina_max_pockets.setMinimumHeight(36)
+        self.parent_window.vina_max_pockets.setMinimumHeight(32)
         self.parent_window.vina_max_pockets.setMaximumWidth(80)
         param_layout.addWidget(self.parent_window.vina_max_pockets, 0, 1)
         
-        param_layout.addWidget(QLabel("Exhaustiveness:"), 0, 2)
+        param_layout.addWidget(QLabel("Exhaustiveness:"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.vina_exhaustiveness = QSpinBox()
         self.parent_window.vina_exhaustiveness.setRange(1, 32)
         self.parent_window.vina_exhaustiveness.setValue(8)
-        self.parent_window.vina_exhaustiveness.setMinimumHeight(36)
+        self.parent_window.vina_exhaustiveness.setMinimumHeight(32)
         self.parent_window.vina_exhaustiveness.setMaximumWidth(80)
         param_layout.addWidget(self.parent_window.vina_exhaustiveness, 0, 3)
         
@@ -173,27 +177,51 @@ class CommonTab(QWidget):
         
         box_grid = QGridLayout()
         box_grid.setSpacing(8)
+        box_grid.setVerticalSpacing(4)
+        
         
         # Center
-        box_grid.addWidget(QLabel("center_x"), 0, 0)
-        self.parent_window.vina_cx = QLineEdit(); self.parent_window.vina_cx.setPlaceholderText("e.g. 10.0"); self.parent_window.vina_cx.setEnabled(False)
+        box_grid.addWidget(QLabel("center_x"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.vina_cx = QLineEdit()
+        self.parent_window.vina_cx.setPlaceholderText("e.g. 10.0")
+        self.parent_window.vina_cx.setMinimumHeight(32)
+        self.parent_window.vina_cx.setEnabled(False)
         box_grid.addWidget(self.parent_window.vina_cx, 0, 1)
-        box_grid.addWidget(QLabel("center_y"), 0, 2)
-        self.parent_window.vina_cy = QLineEdit(); self.parent_window.vina_cy.setPlaceholderText("e.g. 20.0"); self.parent_window.vina_cy.setEnabled(False)
+        
+        box_grid.addWidget(QLabel("center_y"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.vina_cy = QLineEdit()
+        self.parent_window.vina_cy.setPlaceholderText("e.g. 20.0")
+        self.parent_window.vina_cy.setMinimumHeight(32)
+        self.parent_window.vina_cy.setEnabled(False)
         box_grid.addWidget(self.parent_window.vina_cy, 0, 3)
-        box_grid.addWidget(QLabel("center_z"), 0, 4)
-        self.parent_window.vina_cz = QLineEdit(); self.parent_window.vina_cz.setPlaceholderText("e.g. 30.0"); self.parent_window.vina_cz.setEnabled(False)
+        
+        box_grid.addWidget(QLabel("center_z"), 0, 4, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.vina_cz = QLineEdit()
+        self.parent_window.vina_cz.setPlaceholderText("e.g. 30.0")
+        self.parent_window.vina_cz.setMinimumHeight(32)
+        self.parent_window.vina_cz.setEnabled(False)
         box_grid.addWidget(self.parent_window.vina_cz, 0, 5)
         
         # Size
-        box_grid.addWidget(QLabel("size_x"), 1, 0)
-        self.parent_window.vina_sx = QLineEdit(); self.parent_window.vina_sx.setPlaceholderText("e.g. 20.0"); self.parent_window.vina_sx.setEnabled(False)
+        box_grid.addWidget(QLabel("size_x"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.vina_sx = QLineEdit()
+        self.parent_window.vina_sx.setPlaceholderText("e.g. 20.0")
+        self.parent_window.vina_sx.setMinimumHeight(32)
+        self.parent_window.vina_sx.setEnabled(False)
         box_grid.addWidget(self.parent_window.vina_sx, 1, 1)
-        box_grid.addWidget(QLabel("size_y"), 1, 2)
-        self.parent_window.vina_sy = QLineEdit(); self.parent_window.vina_sy.setPlaceholderText("e.g. 20.0"); self.parent_window.vina_sy.setEnabled(False)
+        
+        box_grid.addWidget(QLabel("size_y"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.vina_sy = QLineEdit()
+        self.parent_window.vina_sy.setPlaceholderText("e.g. 20.0")
+        self.parent_window.vina_sy.setMinimumHeight(32)
+        self.parent_window.vina_sy.setEnabled(False)
         box_grid.addWidget(self.parent_window.vina_sy, 1, 3)
-        box_grid.addWidget(QLabel("size_z"), 1, 4)
-        self.parent_window.vina_sz = QLineEdit(); self.parent_window.vina_sz.setPlaceholderText("e.g. 20.0"); self.parent_window.vina_sz.setEnabled(False)
+        
+        box_grid.addWidget(QLabel("size_z"), 1, 4, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.vina_sz = QLineEdit()
+        self.parent_window.vina_sz.setPlaceholderText("e.g. 20.0")
+        self.parent_window.vina_sz.setMinimumHeight(32)
+        self.parent_window.vina_sz.setEnabled(False)
         box_grid.addWidget(self.parent_window.vina_sz, 1, 5)
         
         layout.addLayout(box_grid)
@@ -210,12 +238,12 @@ class CommonTab(QWidget):
         
         self.parent_window.vina_dock_btn = QPushButton("Run Docking")
         self.parent_window.vina_dock_btn.setObjectName("primary_btn")
-        self.parent_window.vina_dock_btn.setMinimumHeight(36)
+        self.parent_window.vina_dock_btn.setMinimumHeight(32)
         self.parent_window.vina_dock_btn.clicked.connect(self.run_vina_docking)
         
         self.parent_window.vina_load_result_btn = QPushButton("Load Result")
         self.parent_window.vina_load_result_btn.setObjectName("secondary_btn")
-        self.parent_window.vina_load_result_btn.setMinimumHeight(36)
+        self.parent_window.vina_load_result_btn.setMinimumHeight(32)
         self.parent_window.vina_load_result_btn.clicked.connect(self.load_vina_result)
         
         btn_row.addWidget(self.parent_window.vina_dock_btn)

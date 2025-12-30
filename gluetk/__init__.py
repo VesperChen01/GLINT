@@ -9,7 +9,33 @@ Version:
 
 from __future__ import print_function
 import locale
-from ._version import __version__ # 从 _version.py 导入版本
+import os
+import sys
+
+# 修复相对导入问题：当通过 `run` 命令执行时，需要确保包路径正确
+_this_dir = os.path.dirname(os.path.abspath(__file__))
+_parent_dir = os.path.dirname(_this_dir)
+if _parent_dir not in sys.path:
+    sys.path.insert(0, _parent_dir)
+
+# 从 _version.py 导入版本（支持两种加载方式）
+try:
+    from ._version import __version__
+except ImportError:
+    try:
+        from gluetk._version import __version__
+    except ImportError:
+        # 最后尝试直接读取版本文件
+        _version_file = os.path.join(_this_dir, "_version.py")
+        if os.path.exists(_version_file):
+            __version__ = "unknown"
+            with open(_version_file, "r") as f:
+                for line in f:
+                    if line.startswith("__version__"):
+                        __version__ = line.split("=")[1].strip().strip('"\'')
+                        break
+        else:
+            __version__ = "unknown"
 
 __author__ = "Vesper"
 

@@ -94,32 +94,31 @@ class BatchAnalysisTab(CommonTab):
         self.init_ui()
         
     def init_ui(self):
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        
-        content_widget = QWidget()
-        content_widget.setObjectName("scroll_content")
+        self.setObjectName("scroll_content")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
         bg_color = "#0d1117" if getattr(self.parent_window, "_dark_mode", True) else "#f8fafc"
-        content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
-        
-        layout = QVBoxLayout(content_widget)
-        layout.setSpacing(14)
+        self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
         layout.setContentsMargins(12, 12, 12, 12)
         
         # 1. Input file selection
         grp_input = QGroupBox("Input Structures")
         input_layout = QVBoxLayout(grp_input)
+        input_layout.setSpacing(12)
         
         # PDB ID input
         pdb_id_row = QHBoxLayout()
         pdb_id_row.addWidget(QLabel("PDB IDs:"))
         self.pdb_id_input = QLineEdit()
         self.pdb_id_input.setPlaceholderText("Enter PDB IDs separated by comma (e.g., 6H0G,6H0F,5FQD)")
-        self.pdb_id_input.setMinimumHeight(36)
+        self.pdb_id_input.setMinimumHeight(32)
         pdb_id_row.addWidget(self.pdb_id_input, 1)
         
         self.add_pdb_ids_btn = QPushButton("Add")
+        self.add_pdb_ids_btn.setMinimumHeight(32)
         self.add_pdb_ids_btn.clicked.connect(self._add_pdb_ids)
         pdb_id_row.addWidget(self.add_pdb_ids_btn)
         input_layout.addLayout(pdb_id_row)
@@ -128,10 +127,12 @@ class BatchAnalysisTab(CommonTab):
         file_row = QHBoxLayout()
         file_row.addWidget(QLabel("PDB Files:"))
         self.browse_files_btn = QPushButton("Browse Files...")
+        self.browse_files_btn.setMinimumHeight(32)
         self.browse_files_btn.clicked.connect(self._browse_files)
         file_row.addWidget(self.browse_files_btn)
         
         self.browse_folder_btn = QPushButton("Browse Folder...")
+        self.browse_folder_btn.setMinimumHeight(32)
         self.browse_folder_btn.clicked.connect(self._browse_folder)
         file_row.addWidget(self.browse_folder_btn)
         file_row.addStretch()
@@ -176,7 +177,7 @@ class BatchAnalysisTab(CommonTab):
             "Protein-Ligand Interactions",
             "Comprehensive (All)"
         ])
-        self.analysis_type_combo.setMinimumHeight(36)
+        self.analysis_type_combo.setMinimumHeight(32)
         self.analysis_type_combo.currentIndexChanged.connect(self._on_analysis_type_changed)
         type_row.addWidget(self.analysis_type_combo, 1)
         analysis_layout.addLayout(type_row)
@@ -197,10 +198,11 @@ class BatchAnalysisTab(CommonTab):
         output_row.addWidget(QLabel("Output Directory:"))
         self.output_dir_input = QLineEdit()
         self.output_dir_input.setPlaceholderText("Default: ./batch_results")
-        self.output_dir_input.setMinimumHeight(36)
+        self.output_dir_input.setMinimumHeight(32)
         output_row.addWidget(self.output_dir_input, 1)
         
         self.browse_output_btn = QPushButton("Browse...")
+        self.browse_output_btn.setMinimumHeight(32)
         self.browse_output_btn.clicked.connect(self._browse_output_dir)
         output_row.addWidget(self.browse_output_btn)
         output_layout.addLayout(output_row)
@@ -239,11 +241,6 @@ class BatchAnalysisTab(CommonTab):
         layout.addWidget(grp_progress)
         
         layout.addStretch(1)
-        scroll_area.setWidget(content_widget)
-        
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll_area)
     
     def _create_gmotif_params(self):
         """Create G-motif parameter controls"""
@@ -253,11 +250,13 @@ class BatchAnalysisTab(CommonTab):
         row1.addWidget(QLabel("RMSD Cutoff (Å):"))
         self.gmotif_rmsd = QLineEdit("3.5")
         self.gmotif_rmsd.setMaximumWidth(100)
+        self.gmotif_rmsd.setMinimumHeight(32)
         row1.addWidget(self.gmotif_rmsd)
         
         row1.addWidget(QLabel("Template:"))
         self.gmotif_template = QComboBox()
         self.gmotif_template.addItems(["GSPT1", "CK1α", "VAV1"])
+        self.gmotif_template.setMinimumHeight(32)
         row1.addWidget(self.gmotif_template)
         
         self.gmotif_require_gly = QCheckBox("Require Central Gly")
@@ -276,17 +275,20 @@ class BatchAnalysisTab(CommonTab):
         self.ppi_chains1 = QLineEdit("A")
         self.ppi_chains1.setPlaceholderText("e.g., A or A,C")
         self.ppi_chains1.setMaximumWidth(150)
+        self.ppi_chains1.setMinimumHeight(32)
         row1.addWidget(self.ppi_chains1)
         
         row1.addWidget(QLabel("Protein 2 Chains:"))
         self.ppi_chains2 = QLineEdit("B")
         self.ppi_chains2.setPlaceholderText("e.g., B or B,D")
         self.ppi_chains2.setMaximumWidth(150)
+        self.ppi_chains2.setMinimumHeight(32)
         row1.addWidget(self.ppi_chains2)
         
         row1.addWidget(QLabel("Interface Distance (Å):"))
         self.ppi_distance = QLineEdit("4.5")
         self.ppi_distance.setMaximumWidth(80)
+        self.ppi_distance.setMinimumHeight(32)
         row1.addWidget(self.ppi_distance)
         row1.addStretch()
         
@@ -300,11 +302,13 @@ class BatchAnalysisTab(CommonTab):
         row1.addWidget(QLabel("Min Volume (ų):"))
         self.pocket_min_volume = QLineEdit("30.0")
         self.pocket_min_volume.setMaximumWidth(100)
+        self.pocket_min_volume.setMinimumHeight(32)
         row1.addWidget(self.pocket_min_volume)
         
         row1.addWidget(QLabel("Min Depth (Å):"))
         self.pocket_min_depth = QLineEdit("2.5")
         self.pocket_min_depth.setMaximumWidth(100)
+        self.pocket_min_depth.setMinimumHeight(32)
         row1.addWidget(self.pocket_min_depth)
         row1.addStretch()
         
@@ -318,11 +322,13 @@ class BatchAnalysisTab(CommonTab):
         row1.addWidget(QLabel("Ligand Names:"))
         self.interaction_ligands = QLineEdit()
         self.interaction_ligands.setPlaceholderText("Optional: e.g., CC9,LEN (auto-detect if empty)")
+        self.interaction_ligands.setMinimumHeight(32)
         row1.addWidget(self.interaction_ligands, 1)
         
         row1.addWidget(QLabel("Distance (Å):"))
         self.interaction_distance = QLineEdit("4.5")
         self.interaction_distance.setMaximumWidth(80)
+        self.interaction_distance.setMinimumHeight(32)
         row1.addWidget(self.interaction_distance)
         
         self.params_layout.addLayout(row1)
@@ -336,17 +342,20 @@ class BatchAnalysisTab(CommonTab):
         row1.addWidget(QLabel("PPI Chains 1:"))
         self.comp_chains1 = QLineEdit("A")
         self.comp_chains1.setMaximumWidth(100)
+        self.comp_chains1.setMinimumHeight(32)
         row1.addWidget(self.comp_chains1)
         
         row1.addWidget(QLabel("PPI Chains 2:"))
         self.comp_chains2 = QLineEdit("B")
         self.comp_chains2.setMaximumWidth(100)
+        self.comp_chains2.setMinimumHeight(32)
         row1.addWidget(self.comp_chains2)
         
         row1.addWidget(QLabel("Ligands:"))
         self.comp_ligands = QLineEdit()
         self.comp_ligands.setPlaceholderText("Optional")
         self.comp_ligands.setMaximumWidth(150)
+        self.comp_ligands.setMinimumHeight(32)
         row1.addWidget(self.comp_ligands)
         row1.addStretch()
         

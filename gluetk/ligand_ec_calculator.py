@@ -16,12 +16,20 @@ Core Concepts:
 - EC (Electrostatic Complementarity): Compare protein potential with ligand potential
   at ligand surface points. Opposite signs = complementary; same signs = clash.
 
+Advanced Features (v2.0):
+- σ-hole virtual points for halogen bonds (Cl/Br/I)
+- Lone pair virtual points for carbonyl O
+- Bridging water filter for structural waters
+
 Usage:
     # Basic EC analysis
     result = calculate_ligand_ec('complex', 'LIG', output_dir='./ec_output')
     
     # Ternary complex (molecular glue) analysis
     result = analyze_ternary_ec('complex', 'GLUE', ['A'], ['B'], output_dir='./ec_output')
+    
+    # Enhanced EC with σ-hole (for halogen-containing ligands)
+    result = calculate_ligand_ec('complex', 'LIG', use_sigma_holes=True)
 
 Author: GlueTK Team
 """
@@ -69,6 +77,19 @@ try:
     PYMOL_AVAILABLE = True
 except ImportError:
     PYMOL_AVAILABLE = False
+
+# Advanced patches (σ-hole, lone pairs, bridging waters)
+try:
+    from gluetk.ec_advanced_patches import (
+        SigmaHoleGenerator,
+        LonePairGenerator,
+        BridgingWaterFilter,
+        EnhancedChargeCalculator,
+    )
+    ADVANCED_PATCHES_AVAILABLE = True
+except ImportError:
+    ADVANCED_PATCHES_AVAILABLE = False
+    print("[ligand_ec_calculator] ⚠️ Advanced patches not available (σ-hole, lone pairs)")
 
 # ========== Constants ==========
 # Van der Waals radii (Å) for surface sampling
@@ -423,14 +444,36 @@ class GasteigerChargeCalculator:
     
     Uses RDKit's Gasteiger charge implementation and computes Coulomb potential
     at surface points.
+    
+    Enhanced Features (v2.0):
+    - Optional σ-hole virtual points for halogens (Cl/Br/I)
+    - Optional lone pair virtual points for carbonyl O
     """
     
-    def __init__(self, dielectric: float = 4.0):
+    def __init__(self, dielectric: float = 4.0,
+                 use_sigma_holes: bool = False,
+                 use_lone_pairs: bool = False):
         """
         Args:
             dielectric: Effective dielectric constant for Coulomb calculation
+            use_sigma_holes: Add σ-hole virtual points for Cl/Br/I
+            use_lone_pairs: Add lone pair virtual points for carbonyl O
         """
         self.dielectric = dielectric
+        self.use_sigma_holes = use_sigma_holes
+        self.use_lone_pairs = use_lone_pairs
+        
+        # Initialize enhanced calculator if patches available
+        if (use_sigma_holes or use_lone_pairs) and ADVANCED_PATCHES_AVAILABLE:
+            self.enhanced_calc = EnhancedChargeCalculator(
+                use_sigma_holes=use_sigma_holes,
+                use_lone_pairs=use_lone_pairs,
+                dielectric=dielectric
+            )
+        else:
+            self.enhanced_calc = None
+            if use_sigma_holes or use_lone_pairs:
+                print("[GasteigerChargeCalculator] ⚠️ Advanced patches not available, using standard charges")
     
     def calculate_charges(self, mol: 'Chem.Mol') -> np.ndarray:
         """
@@ -458,12 +501,15 @@ class GasteigerChargeCalculator:
         
         return np.array(charges)
     
-    def calculate_potential(self, mol: 'Chem.Mol', points: np.ndarray, 
+    def calculate_potential(self, mol: 'Chem.Mol', points: np.ndarray,
                            conformer_id: int = 0) -> np.ndarray:
         """
         Calculate electrostatic potential at given points using Coulomb's law.
         
         φ(r) = Σ q_i / (ε * |r - r_i|)
+        
+        If σ-hole or lone pair patches are enabled, virtual points are included
+        in the potential calculation.
         
         Args:
             mol: RDKit molecule with Gasteiger charges
@@ -476,6 +522,11 @@ class GasteigerChargeCalculator:
         if not RDKIT_AVAILABLE:
             raise RuntimeError("RDKit required for potential calculation")
         
+        # Use enhanced calculator if available
+        if self.enhanced_calc is not None:
+            return self.enhanced_calc.calculate_potential(mol, points, conformer_id)
+        
+        # Standard calculation (no virtual points)
         # Get charges
         charges = self.calculate_charges(mol)
         
@@ -1040,8 +1091,8 @@ class ECCalculator:
     
     EC_i = -2 * φ_protein * φ_ligand / (φ_protein² + φ_ligand² + ε)
     
-    - Opposite signs (complementary): EC > 0
-    - Same signs (clash): EC < 0
+    - Opposite signs (complementary): EC > 0 (protein provides what ligand surface needs)
+    - Same signs (clash): EC < 0 (electrostatic repulsion)
     - Perfect match: EC → +1
     """
     
@@ -1070,7 +1121,11 @@ class ECCalculator:
         phi_l = np.clip(phi_ligand, self.clip_min, self.clip_max)
         
         # Calculate EC
-        numerator = -2.0 * phi_p * phi_l
+        
+        # EC formula: EC = -2 * φ_protein * φ_ligand / (φ_protein² + φ_ligand² + ε)
+        # When protein and ligand potentials have OPPOSITE signs, EC > 0 (complementary)
+        # Opposite signs mean protein provides what ligand surface needs
+        numerator = -2.0 * phi_p * phi_l  # Positive when opposite signs (complementary)
         denominator = phi_p ** 2 + phi_l ** 2 + self.epsilon
         
         ec = numerator / denominator
@@ -1088,10 +1143,19 @@ class ECCalculator:
         Returns:
             Scalar EC score
         """
+        # Exclude points where EC == 0 (masked by distance cutoff)
+        nonzero_mask = ec_local != 0
+        if np.sum(nonzero_mask) == 0:
+            return 0.0  # All points masked
+        
+        ec_nonzero = ec_local[nonzero_mask]
+        print(f"[EC Score] Using {len(ec_nonzero)}/{len(ec_local)} non-zero points")
+        
         if weights is None:
-            return float(np.mean(ec_local))
+            return float(np.mean(ec_nonzero))
         else:
-            return float(np.average(ec_local, weights=weights))
+            weights_nonzero = weights[nonzero_mask] if weights is not None else None
+            return float(np.average(ec_nonzero, weights=weights_nonzero))
     
     def calculate_ec_statistics(self, ec_local: np.ndarray) -> Dict[str, float]:
         """
@@ -1197,7 +1261,10 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
                        ph: float = 7.4,
                        surface_density: float = 10.0,
                        visualize: bool = True,
-                       pdb_file: str = None) -> Optional[Dict[str, Any]]:
+                       pdb_file: str = None,
+                       use_sigma_holes: bool = False,
+                       use_lone_pairs: bool = False,
+                       keep_bridging_waters: bool = False) -> Optional[Dict[str, Any]]:
     """
     Calculate Electrostatic Complementarity for a protein-ligand complex.
     
@@ -1219,6 +1286,9 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         surface_density: Surface sampling density (points/Å²)
         visualize: Whether to visualize results in PyMOL
         pdb_file: Alternative: use PDB file instead of PyMOL object
+        use_sigma_holes: Add σ-hole virtual points for Cl/Br/I (improves halogen bond EC)
+        use_lone_pairs: Add lone pair virtual points for carbonyl O (improves H-bond EC)
+        keep_bridging_waters: Keep structurally important bridging waters
         
     Returns:
         Dictionary containing:
@@ -1227,6 +1297,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         - surface_points: Surface point coordinates
         - ec_values: EC value at each point
         - output_files: Paths to generated files
+        - advanced_features: Info about σ-hole/lone pair usage
     """
     # Check dependencies
     if not NUMPY_AVAILABLE:
@@ -1348,8 +1419,25 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         phi_protein = charge_calc_protein.calculate_potential_from_pqr(protein_pqr, surface_points)
 
     # Ligand potential (Gasteiger charges + Coulomb)
-    charge_calc = GasteigerChargeCalculator()
+    # Use enhanced calculator if σ-hole or lone pairs requested
+    charge_calc = GasteigerChargeCalculator(
+        use_sigma_holes=use_sigma_holes,
+        use_lone_pairs=use_lone_pairs
+    )
     phi_ligand = charge_calc.calculate_potential(ligand_mol, surface_points)
+    
+    # Log advanced features usage
+    advanced_features = {
+        'sigma_holes_enabled': use_sigma_holes,
+        'lone_pairs_enabled': use_lone_pairs,
+        'bridging_waters_enabled': keep_bridging_waters,
+        'advanced_patches_available': ADVANCED_PATCHES_AVAILABLE,
+    }
+    
+    if use_sigma_holes and ADVANCED_PATCHES_AVAILABLE:
+        print("[calculate_ligand_ec] ✨ Using σ-hole virtual points for halogens")
+    if use_lone_pairs and ADVANCED_PATCHES_AVAILABLE:
+        print("[calculate_ligand_ec] ✨ Using lone pair virtual points")
     
     print(f"[calculate_ligand_ec] φ_protein range: [{phi_protein.min():.3f}, {phi_protein.max():.3f}]")
     print(f"[calculate_ligand_ec] φ_ligand range: [{phi_ligand.min():.3f}, {phi_ligand.max():.3f}]")
@@ -1399,7 +1487,8 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
             'protein_pqr': protein_pqr,
             'apbs_dx': dx_file
         },
-        'output_dir': output_dir
+        'output_dir': output_dir,
+        'advanced_features': advanced_features,
     }
     
     return result
@@ -1625,10 +1714,45 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     print("="*60)
     
     if 'A_glue' in results['interfaces'] and 'B_glue' in results['interfaces']:
-        ec_a = results['interfaces']['A_glue']['ec_score']
-        ec_b = results['interfaces']['B_glue']['ec_score']
+        ec_a_values = results['interfaces']['A_glue']['ec_values']
+        ec_b_values = results['interfaces']['B_glue']['ec_values']
         
-        # Combined score (average)
+        # Identify interface regions
+        interface_a = ec_a_values != 0  # Points near Protein A
+        interface_b = ec_b_values != 0  # Points near Protein B
+        overlap = interface_a & interface_b  # Points near both proteins
+        only_a = interface_a & ~interface_b
+        only_b = ~interface_a & interface_b
+        
+        # Calculate EC for different regions
+        ec_calc = ECCalculator()
+        
+        # Overall scores (using non-zero points)
+        ec_a = ec_calc.calculate_ec_score(ec_a_values)
+        ec_b = ec_calc.calculate_ec_score(ec_b_values)
+        
+        # Overlap region scores (most important for molecular glue!)
+        if np.sum(overlap) > 0:
+            ec_a_overlap = float(np.mean(ec_a_values[overlap]))
+            ec_b_overlap = float(np.mean(ec_b_values[overlap]))
+            ec_overlap_combined = (ec_a_overlap + ec_b_overlap) / 2
+            # Positive EC fraction (more intuitive metric)
+            pos_frac_a = float(np.mean(ec_a_values[overlap] > 0))
+            pos_frac_b = float(np.mean(ec_b_values[overlap] > 0))
+            pos_frac_combined = (pos_frac_a + pos_frac_b) / 2
+        else:
+            ec_a_overlap = 0.0
+            ec_b_overlap = 0.0
+            ec_overlap_combined = 0.0
+            pos_frac_a = 0.0
+            pos_frac_b = 0.0
+            pos_frac_combined = 0.0
+        
+        # Non-overlap region scores
+        ec_a_only = float(np.mean(ec_a_values[only_a])) if np.sum(only_a) > 0 else 0.0
+        ec_b_only = float(np.mean(ec_b_values[only_b])) if np.sum(only_b) > 0 else 0.0
+        
+        # Combined score (average of overall)
         ec_combined = (ec_a + ec_b) / 2
         
         # Asymmetry (difference between interfaces)
@@ -1638,23 +1762,51 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
             'ec_combined_score': ec_combined,
             'ec_asymmetry': ec_asymmetry,
             'ec_a_glue': ec_a,
-            'ec_b_glue': ec_b
+            'ec_b_glue': ec_b,
+            'ec_overlap': {
+                'ec_a_overlap': ec_a_overlap,
+                'ec_b_overlap': ec_b_overlap,
+                'ec_combined': ec_overlap_combined,
+                'pos_frac_a': pos_frac_a,
+                'pos_frac_b': pos_frac_b,
+                'pos_frac_combined': pos_frac_combined,
+                'n_points': int(np.sum(overlap))
+            },
+            'ec_non_overlap': {
+                'ec_a_only': ec_a_only,
+                'ec_b_only': ec_b_only,
+                'n_points_a': int(np.sum(only_a)),
+                'n_points_b': int(np.sum(only_b))
+            }
         }
         
-        print(f"EC(A-Glue): {ec_a:.4f}")
-        print(f"EC(B-Glue): {ec_b:.4f}")
-        print(f"Combined EC: {ec_combined:.4f}")
-        print(f"Asymmetry: {ec_asymmetry:.4f}")
+        print(f"\nOverall EC (all interface points):")
+        print(f"  EC(A-Glue): {ec_a:.4f}")
+        print(f"  EC(B-Glue): {ec_b:.4f}")
+        print(f"  Combined EC: {ec_combined:.4f}")
         
-        # Interpretation
-        if ec_combined > 0.3:
-            print("\n✨ Strong electrostatic complementarity - favorable glue binding")
-        elif ec_combined > 0:
-            print("\n✓ Moderate electrostatic complementarity")
+        print(f"\n⭐ Overlap Region (glue bridging zone - {np.sum(overlap)} points):")
+        print(f"  Positive EC fraction (A-Glue): {pos_frac_a*100:.1f}%")
+        print(f"  Positive EC fraction (B-Glue): {pos_frac_b*100:.1f}%")
+        print(f"  Combined positive fraction: {pos_frac_combined*100:.1f}%")
+        print(f"  (Mean EC values: A={ec_a_overlap:.4f}, B={ec_b_overlap:.4f})")
+        
+        print(f"\nNon-overlap Region EC:")
+        print(f"  EC(A-Glue) A-only region ({np.sum(only_a)} points): {ec_a_only:.4f}")
+        print(f"  EC(B-Glue) B-only region ({np.sum(only_b)} points): {ec_b_only:.4f}")
+        
+        print(f"\nAsymmetry: {ec_asymmetry:.4f}")
+        
+        # Interpretation based on positive EC fraction (more intuitive!)
+        if pos_frac_combined > 0.6:
+            print("\n✨ Good electrostatic complementarity in bridging zone (>60% positive)")
+        elif pos_frac_combined > 0.5:
+            print("\n✓ Moderate electrostatic complementarity in bridging zone (50-60% positive)")
         else:
-            print("\n⚠️ Poor electrostatic complementarity - potential clash")
+            print("\n⚠️ Poor electrostatic complementarity in bridging zone (<50% positive)")
+
     
-    # Interface 3: Protein A - Protein B (PPI interface with glue)
+        # Interface 3: Protein A - Protein B (PPI interface with glue)
     print("\n" + "="*60)
     print("Interface 3: Protein A - Protein B (PPI with Glue)")
     print("="*60)

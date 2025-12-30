@@ -39,46 +39,46 @@ class TargetDiscoveryTab(CommonTab):
         self.init_ui()
         
     def init_ui(self):
-        # Use scroll area for better layout handling
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        
-        content_widget = QWidget()
-        content_widget.setObjectName("scroll_content")
+        self.setObjectName("scroll_content")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.parent_window._target_scroll_content = self
+
         bg_color = "#0d1117" if getattr(self.parent_window, "_dark_mode", True) else "#f8fafc"
-        content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
-        
-        layout = QVBoxLayout(content_widget)
-        layout.setSpacing(14)
+        self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
         layout.setContentsMargins(12, 12, 12, 12)
         
         # 2. G-Motif Detection
         grp_gm = QGroupBox("G-Motif (CRBN G-loop) Detection")
         gm_grid = QGridLayout(grp_gm)
+        gm_grid.setContentsMargins(12, 16, 12, 8)
         gm_grid.setColumnStretch(1, 1); gm_grid.setColumnStretch(3, 1)
-        gm_grid.setHorizontalSpacing(8); gm_grid.setVerticalSpacing(10)
+        gm_grid.setHorizontalSpacing(12); gm_grid.setVerticalSpacing(4)
+        
         
         # Row 0
-        gm_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        gm_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.obj_combo_gm = QComboBox(); self.parent_window.obj_combo_gm.setMinimumHeight(32)
-        self.parent_window.refresh_obj_gm = QPushButton(t("refresh")); self.parent_window.refresh_obj_gm.clicked.connect(self.refresh_objects)
+        self.parent_window.refresh_obj_gm = QPushButton(t("refresh")); self.parent_window.refresh_obj_gm.setMinimumHeight(32); self.parent_window.refresh_obj_gm.clicked.connect(self.refresh_objects)
         r0 = QHBoxLayout(); r0.addWidget(self.parent_window.obj_combo_gm, 1); r0.addWidget(self.parent_window.refresh_obj_gm)
         gm_grid.addLayout(r0, 0, 1)
         
-        gm_grid.addWidget(QLabel("PDB File (opt):"), 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.gm_pdb = QLineEdit(); self.parent_window.gm_pdb_browse = QPushButton(t("browse"))
+        gm_grid.addWidget(QLabel("PDB File (opt):"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.gm_pdb = QLineEdit(); self.parent_window.gm_pdb.setMinimumHeight(32)
+        self.parent_window.gm_pdb_browse = QPushButton(t("browse")); self.parent_window.gm_pdb_browse.setMinimumHeight(32)
         self.parent_window.gm_pdb_browse.clicked.connect(self.browse_gm_pdb)
         r0b = QHBoxLayout(); r0b.addWidget(self.parent_window.gm_pdb, 1); r0b.addWidget(self.parent_window.gm_pdb_browse)
         gm_grid.addLayout(r0b, 0, 3)
         
         # Row 1
-        gm_grid.addWidget(QLabel("RMSD cutoff (Å):"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.gm_rmsd = QLineEdit("3.5")
+        gm_grid.addWidget(QLabel("RMSD cutoff (Å):"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.gm_rmsd = QLineEdit("3.5"); self.parent_window.gm_rmsd.setMinimumHeight(32)
         gm_grid.addWidget(self.parent_window.gm_rmsd, 1, 1)
         
         # Glycine position requirement dropdown
-        gm_grid.addWidget(QLabel("Require Gly:"), 1, 2, Qt.AlignmentFlag.AlignRight)
+        gm_grid.addWidget(QLabel("Require Gly:"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.gm_require_gly_pos = QComboBox()
         self.parent_window.gm_require_gly_pos.addItems([
             "Pos 6 or 3 (default)",  # "6,3"
@@ -87,18 +87,19 @@ class TargetDiscoveryTab(CommonTab):
             "No requirement"          # None
         ])
         self.parent_window.gm_require_gly_pos.setToolTip("Require glycine at specific position(s) in the 8-residue window")
+        self.parent_window.gm_require_gly_pos.setMinimumHeight(32)
         gm_grid.addWidget(self.parent_window.gm_require_gly_pos, 1, 3)
         
         # Row 2: Template selection (only real templates, removed idealized templates)
-        gm_grid.addWidget(QLabel("Template:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.gm_template_mode = QComboBox()
+        gm_grid.addWidget(QLabel("Template:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.gm_template_mode = QComboBox(); self.parent_window.gm_template_mode.setMinimumHeight(32)
         # Template options: GSPT1 (default), CK1α, VAV1, custom selection
         self.parent_window.gm_template_mode.addItems(["GSPT1 (5HXB)", "CK1α (5FQD)", "From Selection"])
         gm_grid.addWidget(self.parent_window.gm_template_mode, 2, 1)
         
-        gm_grid.addWidget(QLabel("Selection:"), 2, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.gm_template_sel = QLineEdit()
-        self.parent_window.gm_template_pick = QPushButton("Pick (sele)"); self.parent_window.gm_template_pick.clicked.connect(lambda: self.parent_window.gm_template_sel.setText("sele"))
+        gm_grid.addWidget(QLabel("Selection:"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.gm_template_sel = QLineEdit(); self.parent_window.gm_template_sel.setMinimumHeight(32)
+        self.parent_window.gm_template_pick = QPushButton("Pick (sele)"); self.parent_window.gm_template_pick.setMinimumHeight(32); self.parent_window.gm_template_pick.clicked.connect(lambda: self.parent_window.gm_template_sel.setText("sele"))
         r2b = QHBoxLayout(); r2b.addWidget(self.parent_window.gm_template_sel, 1); r2b.addWidget(self.parent_window.gm_template_pick)
         gm_grid.addLayout(r2b, 2, 3)
         
@@ -110,9 +111,9 @@ class TargetDiscoveryTab(CommonTab):
         _toggle_template_inputs(0)  # Default: select GSPT1
         
         # Row 3
-        gm_grid.addWidget(QLabel("Output CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.gm_out_csv = QLineEdit()
-        self.parent_window.gm_out_browse = QPushButton(t("browse")); self.parent_window.gm_out_browse.clicked.connect(self.browse_gm_out_csv)
+        gm_grid.addWidget(QLabel("Output CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.gm_out_csv = QLineEdit(); self.parent_window.gm_out_csv.setMinimumHeight(32)
+        self.parent_window.gm_out_browse = QPushButton(t("browse")); self.parent_window.gm_out_browse.setMinimumHeight(32); self.parent_window.gm_out_browse.clicked.connect(self.browse_gm_out_csv)
         r3 = QHBoxLayout(); r3.addWidget(self.parent_window.gm_out_csv, 1); r3.addWidget(self.parent_window.gm_out_browse)
         gm_grid.addLayout(r3, 3, 1, 1, 3)
         
@@ -128,20 +129,21 @@ class TargetDiscoveryTab(CommonTab):
         gm_grid.addWidget(self.parent_window.gm_export_coords, 4, 3)
         
         # Row 5: Surface analysis options
-        gm_grid.addWidget(QLabel("Max Patches:"), 5, 0, Qt.AlignmentFlag.AlignRight)
+        gm_grid.addWidget(QLabel("Max Patches:"), 5, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.gm_max_patches = QComboBox()
         self.parent_window.gm_max_patches.addItems(["5", "10", "15", "20", "All"])
         self.parent_window.gm_max_patches.setCurrentIndex(1)  # Default: 10
+        self.parent_window.gm_max_patches.setMinimumHeight(32)
         self.parent_window.gm_max_patches.setToolTip("Maximum number of surface patches to display in analysis")
         gm_grid.addWidget(self.parent_window.gm_max_patches, 5, 1)
         
         # Buttons
         gm_btn_row = QHBoxLayout()
-        self.parent_window.gm_btn = QPushButton("Detect POI"); self.parent_window.gm_btn.setObjectName("highlight_btn")
+        self.parent_window.gm_btn = QPushButton("Detect POI"); self.parent_window.gm_btn.setObjectName("highlight_btn"); self.parent_window.gm_btn.setMinimumHeight(32)
         self.parent_window.gm_btn.clicked.connect(self.start_gmotif)
         gm_btn_row.addWidget(self.parent_window.gm_btn)
         
-        self.parent_window.gm_btn_coords = QPushButton("Export Coords"); self.parent_window.gm_btn_coords.setObjectName("highlight_btn")
+        self.parent_window.gm_btn_coords = QPushButton("Export Coords"); self.parent_window.gm_btn_coords.setObjectName("highlight_btn"); self.parent_window.gm_btn_coords.setMinimumHeight(32)
         self.parent_window.gm_btn_coords.clicked.connect(self.export_gloop_coords)
         # gm_btn_surface and gm_btn_surf_analysis removed
         gm_btn_row.addWidget(self.parent_window.gm_btn_coords)
@@ -156,37 +158,36 @@ class TargetDiscoveryTab(CommonTab):
         # 4. Surface Analysis
         grp_surf = QGroupBox("Protein Surface Analysis")
         surf_grid = QGridLayout(grp_surf)
+        surf_grid.setContentsMargins(12, 16, 12, 8)
         surf_grid.setColumnStretch(1, 1); surf_grid.setColumnStretch(3, 1)
-        surf_grid.setHorizontalSpacing(8); surf_grid.setVerticalSpacing(10)
+        surf_grid.setHorizontalSpacing(12); surf_grid.setVerticalSpacing(4)
+        
         
         # Row 0: Target Object
-        surf_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        surf_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.obj_combo_surf = QComboBox(); self.parent_window.obj_combo_surf.setMinimumHeight(32)
-        self.parent_window.refresh_obj_surf = QPushButton(t("refresh")); self.parent_window.refresh_obj_surf.clicked.connect(self.refresh_objects)
+        self.parent_window.refresh_obj_surf = QPushButton(t("refresh")); self.parent_window.refresh_obj_surf.setMinimumHeight(32); self.parent_window.refresh_obj_surf.clicked.connect(self.refresh_objects)
         r0_surf = QHBoxLayout(); r0_surf.addWidget(self.parent_window.obj_combo_surf, 1); r0_surf.addWidget(self.parent_window.refresh_obj_surf)
         surf_grid.addLayout(r0_surf, 0, 1)
 
         # Row 0: Output CSV
-        surf_grid.addWidget(QLabel("Output CSV:"), 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.surf_out_csv = QLineEdit()
-        self.parent_window.surf_out_browse = QPushButton(t("browse"))
+        surf_grid.addWidget(QLabel("Output CSV:"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.surf_out_csv = QLineEdit(); self.parent_window.surf_out_csv.setMinimumHeight(32)
+        self.parent_window.surf_out_browse = QPushButton(t("browse")); self.parent_window.surf_out_browse.setMinimumHeight(32)
         self.parent_window.surf_out_browse.clicked.connect(self.browse_surf_out_csv)
         r0b_surf = QHBoxLayout(); r0b_surf.addWidget(self.parent_window.surf_out_csv, 1); r0b_surf.addWidget(self.parent_window.surf_out_browse)
         surf_grid.addLayout(r0b_surf, 0, 3)
-        
-        # Row 1: Description
-        desc_label = QLabel("Detects electrostatic and hydrophobic patches on the surface.")
-        desc_label.setStyleSheet("color: gray; font-style: italic;")
-        surf_grid.addWidget(desc_label, 1, 1, 1, 3)
         
         # Buttons
         surf_btn_row = QHBoxLayout()
         self.parent_window.surf_btn = QPushButton("Analyze Surface")
         self.parent_window.surf_btn.setObjectName("highlight_btn")
+        self.parent_window.surf_btn.setMinimumHeight(32)
         self.parent_window.surf_btn.clicked.connect(self.start_surface_analysis)
         
         self.parent_window.surf_vis_btn = QPushButton("Visualize Patches")
         self.parent_window.surf_vis_btn.setObjectName("highlight_btn")
+        self.parent_window.surf_vis_btn.setMinimumHeight(32)
         self.parent_window.surf_vis_btn.clicked.connect(self.render_surface_patches)
         
         surf_btn_row.addWidget(self.parent_window.surf_btn)
@@ -196,63 +197,65 @@ class TargetDiscoveryTab(CommonTab):
         layout.addWidget(grp_surf)
         layout.addLayout(surf_btn_row)
         
-        # 5. Surface Similarity & Complementarity Analysis (MaSIF-style)
-        grp_sim = QGroupBox("Surface Similarity & Complementarity (MaSIF-style)")
+        # 5. Surface Similarity & Complementarity Analysis
+        grp_sim = QGroupBox("Surface Similarity & Complementarity")
         sim_grid = QGridLayout(grp_sim)
+        sim_grid.setContentsMargins(12, 16, 12, 8)
         sim_grid.setColumnStretch(1, 1); sim_grid.setColumnStretch(3, 1)
-        sim_grid.setHorizontalSpacing(8); sim_grid.setVerticalSpacing(10)
+        sim_grid.setHorizontalSpacing(12); sim_grid.setVerticalSpacing(4)
+        
         
         # Row 0: Object 1 / Object 2
-        sim_grid.addWidget(QLabel("Object 1:"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        sim_grid.addWidget(QLabel("Object 1:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.obj_combo_sim1 = QComboBox(); self.parent_window.obj_combo_sim1.setMinimumHeight(32)
-        self.parent_window.refresh_obj_sim1 = QPushButton(t("refresh")); self.parent_window.refresh_obj_sim1.clicked.connect(self.refresh_objects)
+        self.parent_window.refresh_obj_sim1 = QPushButton(t("refresh")); self.parent_window.refresh_obj_sim1.setMinimumHeight(32); self.parent_window.refresh_obj_sim1.clicked.connect(self.refresh_objects)
         r0_sim = QHBoxLayout(); r0_sim.addWidget(self.parent_window.obj_combo_sim1, 1); r0_sim.addWidget(self.parent_window.refresh_obj_sim1)
         sim_grid.addLayout(r0_sim, 0, 1)
         
-        sim_grid.addWidget(QLabel("Object 2:"), 0, 2, Qt.AlignmentFlag.AlignRight)
+        sim_grid.addWidget(QLabel("Object 2:"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.obj_combo_sim2 = QComboBox(); self.parent_window.obj_combo_sim2.setMinimumHeight(32)
         self.parent_window.obj_combo_sim2.addItem("(None - Single Surface)")
         sim_grid.addWidget(self.parent_window.obj_combo_sim2, 0, 3)
         
         # Row 1: Selection 1 / Selection 2
-        sim_grid.addWidget(QLabel("Selection 1:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.sim_sel1 = QLineEdit("all")
+        sim_grid.addWidget(QLabel("Selection 1:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_sel1 = QLineEdit("all"); self.parent_window.sim_sel1.setMinimumHeight(32)
         self.parent_window.sim_sel1.setToolTip("PyMOL selection for Object 1 (e.g., 'chain A')")
         sim_grid.addWidget(self.parent_window.sim_sel1, 1, 1)
         
-        sim_grid.addWidget(QLabel("Selection 2:"), 1, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.sim_sel2 = QLineEdit("all")
+        sim_grid.addWidget(QLabel("Selection 2:"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_sel2 = QLineEdit("all"); self.parent_window.sim_sel2.setMinimumHeight(32)
         self.parent_window.sim_sel2.setToolTip("PyMOL selection for Object 2 (e.g., 'chain B')")
         sim_grid.addWidget(self.parent_window.sim_sel2, 1, 3)
         
         # Row 2: Analysis Type / Surface Method
-        sim_grid.addWidget(QLabel("Analysis Type:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.sim_analysis_type = QComboBox()
+        sim_grid.addWidget(QLabel("Analysis Type:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_analysis_type = QComboBox(); self.parent_window.sim_analysis_type.setMinimumHeight(32)
         self.parent_window.sim_analysis_type.addItems(["Similarity", "Complementarity (PPI)"])
         self.parent_window.sim_analysis_type.setToolTip("Similarity: find similar binding sites\nComplementarity: analyze PPI interface fit")
         sim_grid.addWidget(self.parent_window.sim_analysis_type, 2, 1)
         
-        sim_grid.addWidget(QLabel("Surface Method:"), 2, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.sim_surface_method = QComboBox()
+        sim_grid.addWidget(QLabel("Surface Method:"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_surface_method = QComboBox(); self.parent_window.sim_surface_method.setMinimumHeight(32)
         self.parent_window.sim_surface_method.addItems(["auto", "msms", "open3d", "edtsurf"])
         self.parent_window.sim_surface_method.setToolTip("auto: use best available\nmsms: most accurate (requires MSMS)\nopen3d: good quality (requires open3d)\nedtsurf: built-in fallback")
         sim_grid.addWidget(self.parent_window.sim_surface_method, 2, 3)
         
         # Row 3: Patch Radius / Interface Distance
-        sim_grid.addWidget(QLabel("Patch Radius (Å):"), 3, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.sim_patch_radius = QLineEdit("12.0")
+        sim_grid.addWidget(QLabel("Patch Radius (Å):"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_patch_radius = QLineEdit("12.0"); self.parent_window.sim_patch_radius.setMinimumHeight(32)
         self.parent_window.sim_patch_radius.setToolTip("Radius of surface patches for comparison (default: 12 Å)")
         sim_grid.addWidget(self.parent_window.sim_patch_radius, 3, 1)
         
-        sim_grid.addWidget(QLabel("Interface Dist (Å):"), 3, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.sim_interface_dist = QLineEdit("4.0")
+        sim_grid.addWidget(QLabel("Interface Dist (Å):"), 3, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_interface_dist = QLineEdit("4.0"); self.parent_window.sim_interface_dist.setMinimumHeight(32)
         self.parent_window.sim_interface_dist.setToolTip("Distance threshold for interface contacts (default: 4 Å)")
         sim_grid.addWidget(self.parent_window.sim_interface_dist, 3, 3)
         
         # Row 4: Output CSV / Use APBS
-        sim_grid.addWidget(QLabel("Output CSV:"), 4, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.sim_out_csv = QLineEdit()
-        self.parent_window.sim_out_browse = QPushButton(t("browse")); self.parent_window.sim_out_browse.clicked.connect(self.browse_sim_out_csv)
+        sim_grid.addWidget(QLabel("Output CSV:"), 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_out_csv = QLineEdit(); self.parent_window.sim_out_csv.setMinimumHeight(32)
+        self.parent_window.sim_out_browse = QPushButton(t("browse")); self.parent_window.sim_out_browse.setMinimumHeight(32); self.parent_window.sim_out_browse.clicked.connect(self.browse_sim_out_csv)
         r4_sim = QHBoxLayout(); r4_sim.addWidget(self.parent_window.sim_out_csv, 1); r4_sim.addWidget(self.parent_window.sim_out_browse)
         sim_grid.addLayout(r4_sim, 4, 1)
         
@@ -267,23 +270,22 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_include_ligands.setToolTip("Include small molecules (HETATM) in surface analysis using atom-type based features")
         sim_grid.addWidget(self.parent_window.sim_include_ligands, 5, 1)
         
-        # Row 6: Description
-        desc_sim = QLabel("MaSIF-style analysis: geometric (curvature, shape index) + chemical (ESP, hydrophobicity) features")
-        desc_sim.setStyleSheet("color: gray; font-style: italic;")
-        sim_grid.addWidget(desc_sim, 6, 1, 1, 3)
         
         # Buttons
         sim_btn_row = QHBoxLayout()
         self.parent_window.sim_analyze_btn = QPushButton("Analyze Surface")
         self.parent_window.sim_analyze_btn.setObjectName("highlight_btn")
+        self.parent_window.sim_analyze_btn.setMinimumHeight(32)
         self.parent_window.sim_analyze_btn.clicked.connect(self.start_surface_similarity)
         
         self.parent_window.sim_compare_btn = QPushButton("Compare / Complementarity")
         self.parent_window.sim_compare_btn.setObjectName("primary_btn")
+        self.parent_window.sim_compare_btn.setMinimumHeight(32)
         self.parent_window.sim_compare_btn.clicked.connect(self.start_surface_comparison)
         
         self.parent_window.sim_visualize_btn = QPushButton("Visualize Features")
         self.parent_window.sim_visualize_btn.setObjectName("highlight_btn")
+        self.parent_window.sim_visualize_btn.setMinimumHeight(32)
         self.parent_window.sim_visualize_btn.clicked.connect(self.visualize_surface_features)
         
         sim_btn_row.addWidget(self.parent_window.sim_analyze_btn)
@@ -296,14 +298,6 @@ class TargetDiscoveryTab(CommonTab):
         
         # Add stretch at the end to prevent compression
         layout.addStretch(1)
-        
-        # Set scroll area content
-        scroll_area.setWidget(content_widget)
-        
-        # Main layout for this tab
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll_area)
 
     # --- G-Motif Logic ---
     def browse_gm_pdb(self):

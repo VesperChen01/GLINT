@@ -28,7 +28,7 @@ _COMMON_CLASSES = [
     'QWidget', 'QPushButton', 'QLabel', 'QFrame', 'QTextEdit', 'QProgressBar', 'QMessageBox',
     'QIcon', 'QPixmap', 'QColor', 'QBrush', 'QRadialGradient', 'QLinearGradient',
     'QTimer', 'QSize', 'QSettings', 'QPainter', 'QGraphicsDropShadowEffect', 'QGridLayout',
-    'QScrollArea', 'QTextBrowser', 'QLineEdit', 'QComboBox', 'QSpinBox', 'QGroupBox',
+    'QScrollArea', 'QTextBrowser', 'QLineEdit', 'QComboBox', 'QSpinBox', 'QDoubleSpinBox', 'QGroupBox',
     'QTabWidget', 'QTabBar', 'QAction', 'QMainWindow', 'QFileDialog', 'QCheckBox',
     'QFormLayout', 'QAbstractItemView', 'QListWidgetItem', 'QThread'
 ]

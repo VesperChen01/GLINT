@@ -26,16 +26,17 @@ PYTHON_VERSION = "3.10" # 更新为 3.10
 DEFAULT_INSTALL_PATH = os.path.join(os.path.expanduser("~"), ".pymol", "startup", "gluetk")
 
 # Conda 依赖包 (与 macOS 版本保持一致)
+# 注意: haddock_biobb 已移除，因为 haddocking channel 不可用 (HTTP 404)
 CONDA_PACKAGES = [
     "rdkit", "scipy", "matplotlib", "pillow", "numpy=1.26.4", # 指定 numpy 版本
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
-    "meeko", "vina", "haddock_biobb", "scikit-image", # 添加 haddock_biobb, meeko, vina
-    "pdb2pqr", # 添加 pdb2pqr
+    "meeko", "vina", "scikit-image",
+    "pdb2pqr",
     # "apbs", # 暂时移除 apbs，因为它与 PyMOL 的 numpy 依赖存在冲突
 ]
 
-# Pip 包 (open3d 在 conda 上不稳定)
-PIP_PACKAGES = ["requests", "open3d"] # 添加 requests
+# Pip 包 (open3d 在 conda 上不稳定, haddock3 因 haddocking channel 不可用改用 pip)
+PIP_PACKAGES = ["requests", "open3d", "haddock3"]
 
 
 def get_gluetk_source_dir():

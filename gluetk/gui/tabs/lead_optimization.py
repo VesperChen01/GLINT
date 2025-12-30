@@ -27,54 +27,54 @@ class LeadOptimizationTab(CommonTab):
         self.init_ui()
         
     def init_ui(self):
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        
-        content_widget = QWidget()
-        content_widget.setObjectName("scroll_content")
-        self.parent_window._lead_scroll_content = content_widget
+        self.setObjectName("scroll_content")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+        self.parent_window._lead_scroll_content = self
+
         bg_color = "#0d1117" if getattr(self.parent_window, "_dark_mode", True) else "#f8fafc"
-        content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
-        
-        layout = QVBoxLayout(content_widget)
-        layout.setSpacing(14)
+        self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
+
+        layout = QVBoxLayout(self)
+        layout.setSpacing(16)
         layout.setContentsMargins(12, 12, 12, 12)
         
         # 1. Protein-Protein Interface (PPI) Analysis
         grp_ppi = QGroupBox("Protein-Protein Interface (PPI) Analysis")
         ppi_grid = QGridLayout(grp_ppi)
+        ppi_grid.setContentsMargins(12, 16, 12, 8)
         ppi_grid.setColumnStretch(1, 1); ppi_grid.setColumnStretch(3, 1)
-        ppi_grid.setHorizontalSpacing(8); ppi_grid.setVerticalSpacing(10)
+        ppi_grid.setHorizontalSpacing(12); ppi_grid.setVerticalSpacing(4)
         
-        ppi_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ppi_obj_combo = QComboBox(); self.parent_window.ppi_obj_combo.setMinimumHeight(36)
-        self.parent_window.ppi_refresh_btn = QPushButton(t("refresh")); self.parent_window.ppi_refresh_btn.clicked.connect(self.refresh_objects)
+        
+        ppi_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ppi_obj_combo = QComboBox(); self.parent_window.ppi_obj_combo.setMinimumHeight(32)
+        self.parent_window.ppi_refresh_btn = QPushButton(t("refresh")); self.parent_window.ppi_refresh_btn.setMinimumHeight(32); self.parent_window.ppi_refresh_btn.clicked.connect(self.refresh_objects)
         r0 = QHBoxLayout(); r0.addWidget(self.parent_window.ppi_obj_combo, 1); r0.addWidget(self.parent_window.ppi_refresh_btn)
         ppi_grid.addLayout(r0, 0, 1)
         
-        ppi_grid.addWidget(QLabel("Protein1 Chains:"), 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ppi_protein1_chains = QLineEdit(); self.parent_window.ppi_protein1_chains.setPlaceholderText("e.g. A")
+        ppi_grid.addWidget(QLabel("Protein1 Chains:"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ppi_protein1_chains = QLineEdit(); self.parent_window.ppi_protein1_chains.setPlaceholderText("e.g. A"); self.parent_window.ppi_protein1_chains.setMinimumHeight(32)
         ppi_grid.addWidget(self.parent_window.ppi_protein1_chains, 0, 3)
         
-        ppi_grid.addWidget(QLabel("Protein2 Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ppi_protein2_chains = QLineEdit(); self.parent_window.ppi_protein2_chains.setPlaceholderText("e.g. B")
+        ppi_grid.addWidget(QLabel("Protein2 Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ppi_protein2_chains = QLineEdit(); self.parent_window.ppi_protein2_chains.setPlaceholderText("e.g. B"); self.parent_window.ppi_protein2_chains.setMinimumHeight(32)
         ppi_grid.addWidget(self.parent_window.ppi_protein2_chains, 1, 1)
         
-        ppi_grid.addWidget(QLabel("Interface Dist (Å):"), 1, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ppi_interface_dist = QLineEdit("4.5")
+        ppi_grid.addWidget(QLabel("Interface Dist (Å):"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ppi_interface_dist = QLineEdit("4.5"); self.parent_window.ppi_interface_dist.setMinimumHeight(32)
         ppi_grid.addWidget(self.parent_window.ppi_interface_dist, 1, 3)
         
-        ppi_grid.addWidget(QLabel("Output CSV:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ppi_csv = QLineEdit(); self.parent_window.ppi_csv.setPlaceholderText("Optional")
-        self.parent_window.ppi_csv_btn = QPushButton(t("browse"))
+        ppi_grid.addWidget(QLabel("Output CSV:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ppi_csv = QLineEdit(); self.parent_window.ppi_csv.setPlaceholderText("Optional"); self.parent_window.ppi_csv.setMinimumHeight(32)
+        self.parent_window.ppi_csv_btn = QPushButton(t("browse")); self.parent_window.ppi_csv_btn.setMinimumHeight(32)
         self.parent_window.ppi_csv_btn.clicked.connect(lambda: self._browse_save_file(self.parent_window.ppi_csv, "CSV (*.csv)"))
         r2 = QHBoxLayout(); r2.addWidget(self.parent_window.ppi_csv, 1); r2.addWidget(self.parent_window.ppi_csv_btn)
         ppi_grid.addLayout(r2, 2, 1, 1, 3)
 
         # Row 3: Visualization Options
-        ppi_grid.addWidget(QLabel("Display Mode:"), 3, 0, Qt.AlignmentFlag.AlignRight)
+        ppi_grid.addWidget(QLabel("Display Mode:"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.ppi_display_mode = QComboBox()
+        self.parent_window.ppi_display_mode.setMinimumHeight(32)
         self.parent_window.ppi_display_mode.addItems(["Cartoon + Surface + Interactions", "Surface + Interactions"])
         ppi_grid.addWidget(self.parent_window.ppi_display_mode, 3, 1)
         
@@ -83,7 +83,7 @@ class LeadOptimizationTab(CommonTab):
         ppi_grid.addWidget(self.parent_window.ppi_show_labels, 3, 3)
         
         ppi_btn_row = QHBoxLayout()
-        self.parent_window.ppi_analyze_btn = QPushButton("Analyze PPI Interface"); self.parent_window.ppi_analyze_btn.setObjectName("highlight_btn")
+        self.parent_window.ppi_analyze_btn = QPushButton("Analyze PPI Interface"); self.parent_window.ppi_analyze_btn.setObjectName("highlight_btn"); self.parent_window.ppi_analyze_btn.setMinimumHeight(32)
         self.parent_window.ppi_analyze_btn.clicked.connect(self.run_ppi_analysis)
         ppi_btn_row.addWidget(self.parent_window.ppi_analyze_btn)
         ppi_btn_row.addStretch(1)
@@ -94,35 +94,37 @@ class LeadOptimizationTab(CommonTab):
         # 2. Protein-Ligand Interactions
         grp_pl = QGroupBox("Protein-Ligand Interactions")
         pl_grid = QGridLayout(grp_pl)
+        pl_grid.setContentsMargins(12, 16, 12, 8)
         pl_grid.setColumnStretch(1, 1); pl_grid.setColumnStretch(3, 1)
-        pl_grid.setHorizontalSpacing(8); pl_grid.setVerticalSpacing(10)
+        pl_grid.setHorizontalSpacing(12); pl_grid.setVerticalSpacing(4)
         
-        pl_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.pl_obj_combo = QComboBox(); self.parent_window.pl_obj_combo.setMinimumWidth(150); self.parent_window.pl_obj_combo.setMinimumHeight(36)
-        self.parent_window.pl_refresh_btn = QPushButton(t("refresh")); self.parent_window.pl_refresh_btn.clicked.connect(self.refresh_objects)
+        
+        pl_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.pl_obj_combo = QComboBox(); self.parent_window.pl_obj_combo.setMinimumWidth(150); self.parent_window.pl_obj_combo.setMinimumHeight(32)
+        self.parent_window.pl_refresh_btn = QPushButton(t("refresh")); self.parent_window.pl_refresh_btn.setMinimumHeight(32); self.parent_window.pl_refresh_btn.clicked.connect(self.refresh_objects)
         r0_pl = QHBoxLayout(); r0_pl.addWidget(self.parent_window.pl_obj_combo, 1); r0_pl.addWidget(self.parent_window.pl_refresh_btn)
         pl_grid.addLayout(r0_pl, 0, 1)
         
-        pl_grid.addWidget(QLabel("Ligand Name:"), 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.pl_ligand_name = QLineEdit(); self.parent_window.pl_ligand_name.setPlaceholderText("e.g. CC885, Auto-detect if blank")
+        pl_grid.addWidget(QLabel("Ligand Name:"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.pl_ligand_name = QLineEdit(); self.parent_window.pl_ligand_name.setPlaceholderText("e.g. CC885, Auto-detect if blank"); self.parent_window.pl_ligand_name.setMinimumHeight(32)
         pl_grid.addWidget(self.parent_window.pl_ligand_name, 0, 3)
         
-        pl_grid.addWidget(QLabel("Protein Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.pl_protein_chains = QLineEdit(); self.parent_window.pl_protein_chains.setPlaceholderText("e.g. A,B (optional)")
+        pl_grid.addWidget(QLabel("Protein Chains:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.pl_protein_chains = QLineEdit(); self.parent_window.pl_protein_chains.setPlaceholderText("e.g. A,B (optional)"); self.parent_window.pl_protein_chains.setMinimumHeight(32)
         pl_grid.addWidget(self.parent_window.pl_protein_chains, 1, 1)
         
-        pl_grid.addWidget(QLabel("Distance (Å):"), 1, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.pl_distance = QLineEdit("4.5")
+        pl_grid.addWidget(QLabel("Distance (Å):"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.pl_distance = QLineEdit("4.5"); self.parent_window.pl_distance.setMinimumHeight(32)
         pl_grid.addWidget(self.parent_window.pl_distance, 1, 3)
         
         # Output CSV moved to row 3 to make space for 3D options
         # See below for new layout positioning
         
         pl_btn_row = QHBoxLayout()
-        self.parent_window.pl_analyze_btn = QPushButton("Analyze Protein-Ligand"); self.parent_window.pl_analyze_btn.setObjectName("highlight_btn")
+        self.parent_window.pl_analyze_btn = QPushButton("Analyze Protein-Ligand"); self.parent_window.pl_analyze_btn.setObjectName("highlight_btn"); self.parent_window.pl_analyze_btn.setMinimumHeight(32)
         self.parent_window.pl_analyze_btn.clicked.connect(self.run_pl_analysis)
         
-        self.parent_window.pl_2d_btn = QPushButton("Generate 2D Diagram")
+        self.parent_window.pl_2d_btn = QPushButton("Generate 2D Diagram"); self.parent_window.pl_2d_btn.setMinimumHeight(32)
         self.parent_window.pl_2d_btn.clicked.connect(self.run_pl_2d_diagram)
         
         pl_btn_row.addWidget(self.parent_window.pl_analyze_btn)
@@ -133,8 +135,8 @@ class LeadOptimizationTab(CommonTab):
         layout.addLayout(pl_btn_row)
         
         # 3D Visualization Options
-        pl_grid.addWidget(QLabel("Min Confidence:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.pl_min_confidence = QComboBox()
+        pl_grid.addWidget(QLabel("Min Confidence:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.pl_min_confidence = QComboBox(); self.parent_window.pl_min_confidence.setMinimumHeight(32)
         self.parent_window.pl_min_confidence.addItems(["0.0 (Show All)", "0.5", "0.6", "0.7", "0.8 (High)", "0.9"])
         self.parent_window.pl_min_confidence.setCurrentText("0.8 (High)")
         pl_grid.addWidget(self.parent_window.pl_min_confidence, 2, 1)
@@ -143,12 +145,11 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.pl_show_hydrophobic.setChecked(False)
         pl_grid.addWidget(self.parent_window.pl_show_hydrophobic, 2, 3)
         
-        # Adjust Output CSV row
-        # Adjust Output CSV row
-        pl_grid.addWidget(QLabel("Output CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight)
+        # Output CSV row
+        pl_grid.addWidget(QLabel("Output CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
-        self.parent_window.pl_csv = QLineEdit(); self.parent_window.pl_csv.setPlaceholderText("Optional")
-        self.parent_window.pl_csv_btn = QPushButton(t("browse"))
+        self.parent_window.pl_csv = QLineEdit(); self.parent_window.pl_csv.setPlaceholderText("Optional"); self.parent_window.pl_csv.setMinimumHeight(32)
+        self.parent_window.pl_csv_btn = QPushButton(t("browse")); self.parent_window.pl_csv_btn.setMinimumHeight(32)
         self.parent_window.pl_csv_btn.clicked.connect(lambda: self._browse_save_file(self.parent_window.pl_csv, "CSV (*.csv)"))
         
         r2_pl = QHBoxLayout(); r2_pl.addWidget(self.parent_window.pl_csv, 1); r2_pl.addWidget(self.parent_window.pl_csv_btn)
@@ -157,36 +158,38 @@ class LeadOptimizationTab(CommonTab):
         # 3. Ligand-Ligand Interactions
         grp_ll = QGroupBox("Ligand-Ligand Interactions (Small Molecule - Small Molecule)")
         ll_grid = QGridLayout(grp_ll)
+        ll_grid.setContentsMargins(12, 16, 12, 8)
         ll_grid.setColumnStretch(1, 1); ll_grid.setColumnStretch(3, 1)
-        ll_grid.setHorizontalSpacing(8); ll_grid.setVerticalSpacing(10)
+        ll_grid.setHorizontalSpacing(12); ll_grid.setVerticalSpacing(4)
         
-        ll_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ll_obj_combo = QComboBox(); self.parent_window.ll_obj_combo.setMinimumWidth(150); self.parent_window.ll_obj_combo.setMinimumHeight(36)
-        self.parent_window.ll_refresh_btn = QPushButton(t("refresh")); self.parent_window.ll_refresh_btn.clicked.connect(self.refresh_objects)
+        
+        ll_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ll_obj_combo = QComboBox(); self.parent_window.ll_obj_combo.setMinimumWidth(150); self.parent_window.ll_obj_combo.setMinimumHeight(32)
+        self.parent_window.ll_refresh_btn = QPushButton(t("refresh")); self.parent_window.ll_refresh_btn.setMinimumHeight(32); self.parent_window.ll_refresh_btn.clicked.connect(self.refresh_objects)
         r0_ll = QHBoxLayout(); r0_ll.addWidget(self.parent_window.ll_obj_combo, 1); r0_ll.addWidget(self.parent_window.ll_refresh_btn)
         ll_grid.addLayout(r0_ll, 0, 1, 1, 3)
         
-        ll_grid.addWidget(QLabel("Selection 1:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ll_sel1 = QLineEdit(); self.parent_window.ll_sel1.setPlaceholderText("e.g. resn LIG1 or resi 100")
+        ll_grid.addWidget(QLabel("Selection 1:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ll_sel1 = QLineEdit(); self.parent_window.ll_sel1.setPlaceholderText("e.g. resn LIG1 or resi 100"); self.parent_window.ll_sel1.setMinimumHeight(32)
         ll_grid.addWidget(self.parent_window.ll_sel1, 1, 1)
         
-        ll_grid.addWidget(QLabel("Selection 2:"), 1, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ll_sel2 = QLineEdit(); self.parent_window.ll_sel2.setPlaceholderText("e.g. resn LIG2 or resi 200")
+        ll_grid.addWidget(QLabel("Selection 2:"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ll_sel2 = QLineEdit(); self.parent_window.ll_sel2.setPlaceholderText("e.g. resn LIG2 or resi 200"); self.parent_window.ll_sel2.setMinimumHeight(32)
         ll_grid.addWidget(self.parent_window.ll_sel2, 1, 3)
         
-        ll_grid.addWidget(QLabel("Distance (Å):"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ll_dist = QLineEdit("4.5")
+        ll_grid.addWidget(QLabel("Distance (Å):"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ll_dist = QLineEdit("4.5"); self.parent_window.ll_dist.setMinimumHeight(32)
         ll_grid.addWidget(self.parent_window.ll_dist, 2, 1)
         
-        ll_grid.addWidget(QLabel("Output CSV:"), 2, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ll_csv = QLineEdit(); self.parent_window.ll_csv.setPlaceholderText("Optional")
-        self.parent_window.ll_csv_btn = QPushButton(t("browse"))
+        ll_grid.addWidget(QLabel("Output CSV:"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ll_csv = QLineEdit(); self.parent_window.ll_csv.setPlaceholderText("Optional"); self.parent_window.ll_csv.setMinimumHeight(32)
+        self.parent_window.ll_csv_btn = QPushButton(t("browse")); self.parent_window.ll_csv_btn.setMinimumHeight(32)
         self.parent_window.ll_csv_btn.clicked.connect(lambda: self._browse_save_file(self.parent_window.ll_csv, "CSV (*.csv)"))
         r2_ll = QHBoxLayout(); r2_ll.addWidget(self.parent_window.ll_csv, 1); r2_ll.addWidget(self.parent_window.ll_csv_btn)
         ll_grid.addLayout(r2_ll, 2, 3)
         
         ll_btn_row = QHBoxLayout()
-        self.parent_window.ll_analyze_btn = QPushButton("Analyze Ligand-Ligand"); self.parent_window.ll_analyze_btn.setObjectName("highlight_btn")
+        self.parent_window.ll_analyze_btn = QPushButton("Analyze Ligand-Ligand"); self.parent_window.ll_analyze_btn.setObjectName("highlight_btn"); self.parent_window.ll_analyze_btn.setMinimumHeight(32)
         self.parent_window.ll_analyze_btn.clicked.connect(self.run_ll_analysis)
         ll_btn_row.addWidget(self.parent_window.ll_analyze_btn)
         ll_btn_row.addStretch(1)
@@ -197,57 +200,94 @@ class LeadOptimizationTab(CommonTab):
         # 4. Electrostatic Complementarity (EC) Analysis
         grp_ec = QGroupBox("Electrostatic Complementarity (EC) Analysis")
         ec_grid = QGridLayout(grp_ec)
+        ec_grid.setContentsMargins(12, 16, 12, 8)
         ec_grid.setColumnStretch(1, 1); ec_grid.setColumnStretch(3, 1)
-        ec_grid.setHorizontalSpacing(8); ec_grid.setVerticalSpacing(10)
+        ec_grid.setHorizontalSpacing(12); ec_grid.setVerticalSpacing(4)
         
-        ec_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ec_obj_combo = QComboBox(); self.parent_window.ec_obj_combo.setMinimumWidth(150); self.parent_window.ec_obj_combo.setMinimumHeight(36)
-        self.parent_window.ec_refresh_btn = QPushButton(t("refresh")); self.parent_window.ec_refresh_btn.clicked.connect(self.refresh_objects)
+        
+        ec_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_obj_combo = QComboBox(); self.parent_window.ec_obj_combo.setMinimumWidth(150); self.parent_window.ec_obj_combo.setMinimumHeight(32)
+        self.parent_window.ec_refresh_btn = QPushButton(t("refresh")); self.parent_window.ec_refresh_btn.setMinimumHeight(32); self.parent_window.ec_refresh_btn.clicked.connect(self.refresh_objects)
         r0_ec = QHBoxLayout(); r0_ec.addWidget(self.parent_window.ec_obj_combo, 1); r0_ec.addWidget(self.parent_window.ec_refresh_btn)
         ec_grid.addLayout(r0_ec, 0, 1)
         
-        ec_grid.addWidget(QLabel("Ligand/Glue Name:"), 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ec_ligand_name = QLineEdit(); self.parent_window.ec_ligand_name.setPlaceholderText("e.g. LIG, CC885")
+        ec_grid.addWidget(QLabel("Ligand/Glue Name:"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_ligand_name = QLineEdit(); self.parent_window.ec_ligand_name.setPlaceholderText("e.g. LIG, CC885"); self.parent_window.ec_ligand_name.setMinimumHeight(32)
         ec_grid.addWidget(self.parent_window.ec_ligand_name, 0, 3)
         
-        ec_grid.addWidget(QLabel("Analysis Mode:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ec_mode_combo = QComboBox()
+        ec_grid.addWidget(QLabel("Analysis Mode:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_mode_combo = QComboBox(); self.parent_window.ec_mode_combo.setMinimumHeight(32)
         self.parent_window.ec_mode_combo.addItems(["Protein-Ligand EC", "Ternary Complex EC (Molecular Glue)"])
         self.parent_window.ec_mode_combo.currentIndexChanged.connect(self._on_ec_mode_changed)
         ec_grid.addWidget(self.parent_window.ec_mode_combo, 1, 1)
         
-        ec_grid.addWidget(QLabel("pH:"), 1, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ec_ph = QLineEdit("7.4")
+        ec_grid.addWidget(QLabel("pH:"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_ph = QLineEdit("7.4"); self.parent_window.ec_ph.setMinimumHeight(32)
         ec_grid.addWidget(self.parent_window.ec_ph, 1, 3)
         
         # Ternary-specific options (initially hidden)
-        ec_grid.addWidget(QLabel("Protein A Chains:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ec_protein_a_chains = QLineEdit(); self.parent_window.ec_protein_a_chains.setPlaceholderText("e.g. A (E3 ligase)")
+        ec_grid.addWidget(QLabel("Protein A Chains:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_protein_a_chains = QLineEdit(); self.parent_window.ec_protein_a_chains.setPlaceholderText("e.g. A (E3 ligase)"); self.parent_window.ec_protein_a_chains.setMinimumHeight(32)
         ec_grid.addWidget(self.parent_window.ec_protein_a_chains, 2, 1)
         
-        ec_grid.addWidget(QLabel("Protein B Chains:"), 2, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ec_protein_b_chains = QLineEdit(); self.parent_window.ec_protein_b_chains.setPlaceholderText("e.g. B (Substrate)")
+        ec_grid.addWidget(QLabel("Protein B Chains:"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_protein_b_chains = QLineEdit(); self.parent_window.ec_protein_b_chains.setPlaceholderText("e.g. B (Substrate)"); self.parent_window.ec_protein_b_chains.setMinimumHeight(32)
         ec_grid.addWidget(self.parent_window.ec_protein_b_chains, 2, 3)
         
-        ec_grid.addWidget(QLabel("Surface Density:"), 3, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ec_surface_density = QLineEdit("10.0"); self.parent_window.ec_surface_density.setPlaceholderText("Points/Ų")
+        ec_grid.addWidget(QLabel("Surface Density:"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_surface_density = QLineEdit("10.0"); self.parent_window.ec_surface_density.setPlaceholderText("Points/Ų"); self.parent_window.ec_surface_density.setMinimumHeight(32)
         ec_grid.addWidget(self.parent_window.ec_surface_density, 3, 1)
         
-        ec_grid.addWidget(QLabel("Output Directory:"), 3, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ec_output_dir = QLineEdit(); self.parent_window.ec_output_dir.setPlaceholderText("Optional (temp dir if blank)")
-        self.parent_window.ec_output_btn = QPushButton(t("browse"))
+        ec_grid.addWidget(QLabel("Output Directory:"), 3, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_output_dir = QLineEdit(); self.parent_window.ec_output_dir.setPlaceholderText("Optional (temp dir if blank)"); self.parent_window.ec_output_dir.setMinimumHeight(32)
+        self.parent_window.ec_output_btn = QPushButton(t("browse")); self.parent_window.ec_output_btn.setMinimumHeight(32)
         self.parent_window.ec_output_btn.clicked.connect(self._browse_ec_output_dir)
         r3_ec = QHBoxLayout(); r3_ec.addWidget(self.parent_window.ec_output_dir, 1); r3_ec.addWidget(self.parent_window.ec_output_btn)
         ec_grid.addLayout(r3_ec, 3, 3)
         
+        # Advanced EC Options (σ-hole, Lone Pairs, Bridging Waters)
+        ec_grid.addWidget(QLabel("Advanced Options:"), 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        
+        self.parent_window.ec_use_sigma_holes = QCheckBox("σ-hole (Cl/Br/I)")
+        self.parent_window.ec_use_sigma_holes.setChecked(True)
+        self.parent_window.ec_use_sigma_holes.setToolTip(
+            "Add σ-hole virtual points for halogen atoms (Cl, Br, I).\n"
+            "Improves EC accuracy for halogen bond interactions.\n"
+            "Recommended for ligands containing halogens."
+        )
+        ec_grid.addWidget(self.parent_window.ec_use_sigma_holes, 4, 1)
+        
+        self.parent_window.ec_use_lone_pairs = QCheckBox("Lone Pairs (C=O)")
+        self.parent_window.ec_use_lone_pairs.setChecked(True)
+        self.parent_window.ec_use_lone_pairs.setToolTip(
+            "Add lone pair virtual points for carbonyl oxygen.\n"
+            "Improves H-bond directionality prediction.\n"
+            "May increase computation time."
+        )
+        ec_grid.addWidget(self.parent_window.ec_use_lone_pairs, 4, 3)
+        
         self.parent_window.ec_visualize = QCheckBox("Visualize EC Map in PyMOL")
         self.parent_window.ec_visualize.setChecked(True)
-        ec_grid.addWidget(self.parent_window.ec_visualize, 4, 1)
+        ec_grid.addWidget(self.parent_window.ec_visualize, 5, 1)
+        
+        self.parent_window.ec_keep_waters = QCheckBox("Keep Bridging Waters")
+        self.parent_window.ec_keep_waters.setToolTip(
+            "Retain structurally important bridging water molecules.\n"
+            "Waters that form ≥2 H-bonds with protein or bridge protein-ligand.\n"
+            "Useful for high-resolution crystal structures."
+        )
+        ec_grid.addWidget(self.parent_window.ec_keep_waters, 5, 3)
         
         ec_btn_row = QHBoxLayout()
-        self.parent_window.ec_analyze_btn = QPushButton("Calculate EC"); self.parent_window.ec_analyze_btn.setObjectName("highlight_btn")
+        self.parent_window.ec_analyze_btn = QPushButton("Calculate EC"); self.parent_window.ec_analyze_btn.setObjectName("highlight_btn"); self.parent_window.ec_analyze_btn.setMinimumHeight(32)
         self.parent_window.ec_analyze_btn.clicked.connect(self.run_ec_analysis)
+        
+        self.parent_window.ec_hotspots_btn = QPushButton("Find EC Hotspots"); self.parent_window.ec_hotspots_btn.setMinimumHeight(32)
+        self.parent_window.ec_hotspots_btn.setToolTip("Identify regions of strong electrostatic complementarity")
+        self.parent_window.ec_hotspots_btn.clicked.connect(self.run_ec_hotspots)
+        
         ec_btn_row.addWidget(self.parent_window.ec_analyze_btn)
+        ec_btn_row.addWidget(self.parent_window.ec_hotspots_btn)
         ec_btn_row.addStretch(1)
         
         layout.addWidget(grp_ec)
@@ -260,11 +300,6 @@ class LeadOptimizationTab(CommonTab):
         layout.addWidget(self._create_mutation_analysis_card())
         
         layout.addStretch(1)
-        scroll_area.setWidget(content_widget)
-        
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll_area)
 
     # --- PPI Analysis Logic ---
     def run_ppi_analysis(self):
@@ -657,10 +692,23 @@ class LeadOptimizationTab(CommonTab):
             output_dir = self.parent_window.ec_output_dir.text().strip() or None
             visualize = self.parent_window.ec_visualize.isChecked()
             
+            # Get advanced options
+            use_sigma_holes = self.parent_window.ec_use_sigma_holes.isChecked()
+            use_lone_pairs = self.parent_window.ec_use_lone_pairs.isChecked()
+            keep_bridging_waters = self.parent_window.ec_keep_waters.isChecked()
+            
             self.log(f"Starting EC analysis for {obj_name}...")
             self.log(f"  Ligand/Glue: {ligand_name}")
             self.log(f"  Mode: {'Ternary Complex' if mode == 1 else 'Protein-Ligand'}")
             self.log(f"  pH: {ph}")
+            
+            # Log advanced options
+            if use_sigma_holes:
+                self.log(f"  ✨ σ-hole virtual points: ENABLED")
+            if use_lone_pairs:
+                self.log(f"  ✨ Lone pair virtual points: ENABLED")
+            if keep_bridging_waters:
+                self.log(f"  ✨ Bridging waters: ENABLED")
             
             # Import EC calculator
             try:
@@ -682,7 +730,10 @@ class LeadOptimizationTab(CommonTab):
                     output_dir=output_dir,
                     ph=ph,
                     surface_density=surface_density,
-                    visualize=visualize
+                    visualize=visualize,
+                    use_sigma_holes=use_sigma_holes,
+                    use_lone_pairs=use_lone_pairs,
+                    keep_bridging_waters=keep_bridging_waters
                 )
                 
                 if result:
@@ -747,31 +798,113 @@ class LeadOptimizationTab(CommonTab):
                     ec_b = combined.get('ec_b_glue', 0)
                     ec_combined = combined.get('ec_combined_score', 0)
                     
-                    self.log(f"Ternary EC Analysis Complete:")
-                    self.log(f"  EC(A-Glue): {ec_a:.4f}")
-                    self.log(f"  EC(B-Glue): {ec_b:.4f}")
-                    self.log(f"  Combined EC: {ec_combined:.4f}")
+                    # Get overlap region data (most important for molecular glue!)
+                    overlap_data = combined.get('ec_overlap', {})
+                    pos_frac_a = overlap_data.get('pos_frac_a', 0)
+                    pos_frac_b = overlap_data.get('pos_frac_b', 0)
+                    pos_frac_combined = overlap_data.get('pos_frac_combined', 0)
+                    n_overlap = overlap_data.get('n_points', 0)
                     
-                    # Interpretation
-                    if ec_combined > 0.3:
-                        interpretation = "Strong complementarity - favorable glue binding"
-                    elif ec_combined > 0:
-                        interpretation = "Moderate complementarity"
+                    self.log(f"Ternary EC Analysis Complete:")
+                    self.log(f"  Bridging Zone ({n_overlap} points):")
+                    self.log(f"    Positive EC (A-Glue): {pos_frac_a*100:.1f}%")
+                    self.log(f"    Positive EC (B-Glue): {pos_frac_b*100:.1f}%")
+                    self.log(f"    Combined: {pos_frac_combined*100:.1f}%")
+                    
+                    # Interpretation based on positive EC fraction
+                    if pos_frac_combined > 0.6:
+                        interpretation = "Good complementarity (>60% positive)"
+                    elif pos_frac_combined > 0.5:
+                        interpretation = "Moderate complementarity (50-60% positive)"
                     else:
-                        interpretation = "Poor complementarity - potential clash"
+                        interpretation = "Poor complementarity (<50% positive)"
                     
                     self.log(f"  Interpretation: {interpretation}")
                     
                     QMessageBox.information(self, "Ternary EC Analysis Complete",
-                        f"EC(Protein A - Glue): {ec_a:.4f}\n"
-                        f"EC(Protein B - Glue): {ec_b:.4f}\n"
-                        f"Combined EC Score: {ec_combined:.4f}\n\n"
+                        f"Bridging Zone Analysis ({n_overlap} points):\n\n"
+                        f"Positive EC (A-Glue): {pos_frac_a*100:.1f}%\n"
+                        f"Positive EC (B-Glue): {pos_frac_b*100:.1f}%\n"
+                        f"Combined: {pos_frac_combined*100:.1f}%\n\n"
                         f"{interpretation}\n\n"
                         f"Output: {result.get('output_dir', 'N/A')}")
                 else:
                     self.log("Ternary EC analysis failed or incomplete")
                     QMessageBox.warning(self, "Error", "Ternary EC analysis failed. Check the log for details.")
                     
+        except Exception as e:
+            self.on_error(str(e))
+            import traceback; traceback.print_exc()
+    
+    def run_ec_hotspots(self):
+        """Run EC hotspot analysis to identify regions of strong complementarity"""
+        try:
+            obj_name = self.parent_window.ec_obj_combo.currentText()
+            if obj_name == t("no_object") or not obj_name:
+                QMessageBox.warning(self, "Warning", "Please select a structure object")
+                return
+            
+            ligand_name = self.parent_window.ec_ligand_name.text().strip()
+            if not ligand_name:
+                QMessageBox.warning(self, "Warning", "Please specify the ligand residue name")
+                return
+            
+            ph = float(self.parent_window.ec_ph.text().strip() or "7.4")
+            output_dir = self.parent_window.ec_output_dir.text().strip() or None
+            
+            # Get advanced options
+            use_sigma_holes = self.parent_window.ec_use_sigma_holes.isChecked()
+            use_lone_pairs = self.parent_window.ec_use_lone_pairs.isChecked()
+            
+            self.log(f"Starting EC hotspot analysis for {obj_name}...")
+            self.log(f"  Ligand: {ligand_name}")
+            
+            # Import EC calculator
+            try:
+                from ...ligand_ec_calculator import calculate_ec_hotspots
+            except ImportError:
+                try:
+                    from ligand_ec_calculator import calculate_ec_hotspots
+                except ImportError:
+                    QMessageBox.critical(self, "Error",
+                        "EC Calculator module not found.\n\n"
+                        "Please ensure ligand_ec_calculator.py is installed.")
+                    return
+            
+            result = calculate_ec_hotspots(
+                obj_name=obj_name,
+                ligand_resname=ligand_name,
+                output_dir=output_dir,
+                ph=ph,
+                surface_density=15.0,  # Higher density for hotspot detection
+                hotspot_threshold=0.5
+            )
+            
+            if result and 'hotspots' in result:
+                pos_hotspots = result['hotspots']['positive']
+                neg_hotspots = result['hotspots']['negative']
+                
+                self.log(f"EC Hotspot Analysis Complete:")
+                self.log(f"  Positive hotspots (complementary): {pos_hotspots['count']} points ({pos_hotspots['fraction']*100:.1f}%)")
+                self.log(f"  Negative hotspots (clash): {neg_hotspots['count']} points ({neg_hotspots['fraction']*100:.1f}%)")
+                
+                if 'n_clusters' in pos_hotspots:
+                    self.log(f"  Distinct complementary regions: {pos_hotspots['n_clusters']}")
+                
+                QMessageBox.information(self, "EC Hotspot Analysis Complete",
+                    f"Positive Hotspots (Complementary):\n"
+                    f"  Count: {pos_hotspots['count']} points\n"
+                    f"  Fraction: {pos_hotspots['fraction']*100:.1f}%\n"
+                    f"  Mean EC: {pos_hotspots['mean_ec']:.4f}\n\n"
+                    f"Negative Hotspots (Clash):\n"
+                    f"  Count: {neg_hotspots['count']} points\n"
+                    f"  Fraction: {neg_hotspots['fraction']*100:.1f}%\n"
+                    f"  Mean EC: {neg_hotspots['mean_ec']:.4f}\n\n"
+                    f"Output: {result.get('output_dir', 'N/A')}")
+            else:
+                self.log("EC hotspot analysis failed")
+                QMessageBox.warning(self, "Error", "EC hotspot analysis failed. Check the log for details.")
+                
         except Exception as e:
             self.on_error(str(e))
             import traceback; traceback.print_exc()

@@ -25,16 +25,13 @@ class TernaryEvaluationTab(CommonTab):
         self.init_ui()
         
     def init_ui(self):
-        scroll_area = QScrollArea()
-        scroll_area.setWidgetResizable(True)
-        scroll_area.setFrameShape(QFrame.Shape.NoFrame)
-        
-        content_widget = QWidget()
-        content_widget.setObjectName("scroll_content")
+        self.setObjectName("scroll_content")
+        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
+
         bg_color = "#161b22" if getattr(self.parent_window, "_dark_mode", False) else "#ffffff"
-        content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
-        
-        layout = QVBoxLayout(content_widget)
+        self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
+
+        layout = QVBoxLayout(self)
         layout.setSpacing(16)
         layout.setContentsMargins(16, 16, 16, 16)
         
@@ -50,13 +47,16 @@ class TernaryEvaluationTab(CommonTab):
         # === 输入区域 ===
         grp_input = QGroupBox("Structure Input")
         input_layout = QGridLayout(grp_input)
+        input_layout.setContentsMargins(12, 16, 12, 8)
         input_layout.setColumnStretch(1, 1)
         input_layout.setColumnStretch(3, 1)
+        input_layout.setVerticalSpacing(20)
+        input_layout.setHorizontalSpacing(12)
         
         # Row 0: PyMOL Object / PDB File
-        input_layout.addWidget(QLabel("PyMOL Object:"), 0, 0, Qt.AlignmentFlag.AlignRight)
+        input_layout.addWidget(QLabel("PyMOL Object:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.ternary_obj_combo = QComboBox()
-        self.ternary_obj_combo.setMinimumHeight(28)
+        self.ternary_obj_combo.setMinimumHeight(32)
         # 同时保存到parent_window以便refresh_objects能找到
         self.parent_window.ternary_obj_combo = self.ternary_obj_combo
         
@@ -67,9 +67,9 @@ class TernaryEvaluationTab(CommonTab):
         r0.addWidget(refresh_btn)
         input_layout.addLayout(r0, 0, 1)
         
-        input_layout.addWidget(QLabel("PDB File:"), 0, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ternary_pdb_path = QLineEdit()
-        browse_btn = QPushButton(t("browse"))
+        input_layout.addWidget(QLabel("PDB File:"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ternary_pdb_path = QLineEdit(); self.parent_window.ternary_pdb_path.setMinimumHeight(32)
+        browse_btn = QPushButton(t("browse")); browse_btn.setMinimumHeight(32)
         browse_btn.clicked.connect(self.browse_pdb)
         r0b = QHBoxLayout()
         r0b.addWidget(self.parent_window.ternary_pdb_path, 1)
@@ -77,24 +77,24 @@ class TernaryEvaluationTab(CommonTab):
         input_layout.addLayout(r0b, 0, 3)
         
         # Row 1: Chain IDs
-        input_layout.addWidget(QLabel("E3 Chain:"), 1, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ternary_e3_chain = QLineEdit("A")
+        input_layout.addWidget(QLabel("E3 Chain:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ternary_e3_chain = QLineEdit("A"); self.parent_window.ternary_e3_chain.setMinimumHeight(32)
         self.parent_window.ternary_e3_chain.setToolTip("E3 ligase chain ID (e.g., CRBN)")
         input_layout.addWidget(self.parent_window.ternary_e3_chain, 1, 1)
         
-        input_layout.addWidget(QLabel("POI Chain:"), 1, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ternary_poi_chain = QLineEdit("B")
+        input_layout.addWidget(QLabel("POI Chain:"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ternary_poi_chain = QLineEdit("B"); self.parent_window.ternary_poi_chain.setMinimumHeight(32)
         self.parent_window.ternary_poi_chain.setToolTip("Protein of Interest chain ID")
         input_layout.addWidget(self.parent_window.ternary_poi_chain, 1, 3)
         
         # Row 2: Ligand
-        input_layout.addWidget(QLabel("Ligand Chain:"), 2, 0, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ternary_lig_chain = QLineEdit("C")
+        input_layout.addWidget(QLabel("Ligand Chain:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ternary_lig_chain = QLineEdit("C"); self.parent_window.ternary_lig_chain.setMinimumHeight(32)
         self.parent_window.ternary_lig_chain.setToolTip("Molecular glue chain/residue ID")
         input_layout.addWidget(self.parent_window.ternary_lig_chain, 2, 1)
         
-        input_layout.addWidget(QLabel("SMILES (optional):"), 2, 2, Qt.AlignmentFlag.AlignRight)
-        self.parent_window.ternary_smiles = QLineEdit()
+        input_layout.addWidget(QLabel("SMILES (optional):"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ternary_smiles = QLineEdit(); self.parent_window.ternary_smiles.setMinimumHeight(32)
         self.parent_window.ternary_smiles.setToolTip("SMILES for ligand property calculation")
         input_layout.addWidget(self.parent_window.ternary_smiles, 2, 3)
         
@@ -154,11 +154,6 @@ class TernaryEvaluationTab(CommonTab):
         layout.addWidget(grp_result)
         
         layout.addStretch(1)
-        scroll_area.setWidget(content_widget)
-        
-        main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(scroll_area)
 
     def _do_refresh(self):
         """刷新PyMOL对象列表"""
@@ -194,23 +189,27 @@ class TernaryEvaluationTab(CommonTab):
         layout.addWidget(desc)
         
         grid = QGridLayout()
-        grid.addWidget(QLabel("Probe Radius (Å):"), 0, 0)
+        grid.setVerticalSpacing(12)
+        grid.addWidget(QLabel("Probe Radius (Å):"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.ternary_probe_radius = QDoubleSpinBox()
         self.parent_window.ternary_probe_radius.setRange(0.5, 3.0)
         self.parent_window.ternary_probe_radius.setValue(1.4)
         self.parent_window.ternary_probe_radius.setSingleStep(0.1)
+        self.parent_window.ternary_probe_radius.setMinimumHeight(32)
         grid.addWidget(self.parent_window.ternary_probe_radius, 0, 1)
         
-        grid.addWidget(QLabel("Contact Distance (Å):"), 1, 0)
+        grid.addWidget(QLabel("Contact Distance (Å):"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.ternary_contact_dist = QDoubleSpinBox()
         self.parent_window.ternary_contact_dist.setRange(3.0, 8.0)
         self.parent_window.ternary_contact_dist.setValue(4.5)
         self.parent_window.ternary_contact_dist.setSingleStep(0.5)
+        self.parent_window.ternary_contact_dist.setMinimumHeight(32)
         grid.addWidget(self.parent_window.ternary_contact_dist, 1, 1)
         
         layout.addLayout(grid)
         
         run_btn = QPushButton("Calculate Interface")
+        run_btn.setMinimumHeight(32)
         run_btn.clicked.connect(self.run_interface_only)
         layout.addWidget(run_btn)
         
@@ -229,12 +228,15 @@ class TernaryEvaluationTab(CommonTab):
         layout.addWidget(desc)
         
         grid = QGridLayout()
-        grid.addWidget(QLabel("SMILES:"), 0, 0)
+        grid.setVerticalSpacing(12)
+        grid.addWidget(QLabel("SMILES:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.ternary_lig_smiles = QLineEdit()
         self.parent_window.ternary_lig_smiles.setPlaceholderText("Enter SMILES or extract from structure")
+        self.parent_window.ternary_lig_smiles.setMinimumHeight(32)
         grid.addWidget(self.parent_window.ternary_lig_smiles, 0, 1)
         
         extract_btn = QPushButton("Extract from PDB")
+        extract_btn.setMinimumHeight(32)
         extract_btn.clicked.connect(self.extract_smiles)
         grid.addWidget(extract_btn, 0, 2)
         
@@ -254,6 +256,7 @@ class TernaryEvaluationTab(CommonTab):
         layout.addWidget(props_grp)
         
         run_btn = QPushButton("Calculate Ligand Properties")
+        run_btn.setMinimumHeight(32)
         run_btn.clicked.connect(self.run_ligand_only)
         layout.addWidget(run_btn)
         
@@ -274,22 +277,25 @@ class TernaryEvaluationTab(CommonTab):
         # 几何参数显示
         geom_grp = QGroupBox("Geometry Features")
         geom_layout = QGridLayout(geom_grp)
+        geom_layout.setVerticalSpacing(12)
         self.geom_labels = {}
         features = [
-            ("COG Shift", "Å"), ("Angle", "°"), 
+            ("COG Shift", "Å"), ("Angle", "°"),
             ("E3-POI Dist", "Å"), ("E3-MG Dist", "Å"), ("POI-MG Dist", "Å"),
             ("Cooperativity", "kcal/mol"), ("Hook Risk", ""), ("Duality", "")
         ]
         for i, (name, unit) in enumerate(features):
-            geom_layout.addWidget(QLabel(f"{name}:"), i // 2, (i % 2) * 3)
+            geom_layout.addWidget(QLabel(f"{name}:"), i // 2, (i % 2) * 3, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
             lbl = QLabel("-")
             lbl.setStyleSheet("font-weight: bold;")
+            lbl.setMinimumHeight(24)
             self.geom_labels[name] = lbl
             geom_layout.addWidget(lbl, i // 2, (i % 2) * 3 + 1)
             geom_layout.addWidget(QLabel(unit), i // 2, (i % 2) * 3 + 2)
         layout.addWidget(geom_grp)
         
         run_btn = QPushButton("Calculate Geometry")
+        run_btn.setMinimumHeight(32)
         run_btn.clicked.connect(self.run_geometry_only)
         layout.addWidget(run_btn)
         

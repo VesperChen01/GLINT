@@ -5,6 +5,7 @@ Modularized version of the Unified GUI.
 """
 import os
 import sys
+import platform
 from typing import Optional, List, Dict, Tuple, Any
 
 from .qt_adapter import QtCore, QtWidgets, QtGui, Qt, Signal, Slot, Property
@@ -17,7 +18,7 @@ from .qt_adapter import (
     QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QStackedWidget,
     QWidget, QPushButton, QLabel, QFrame, QTextEdit, QProgressBar, QMessageBox,
     QIcon, QPixmap, QColor, QBrush, QRadialGradient, QLinearGradient,
-    QTimer, QSize, QSettings
+    QTimer, QSize, QSettings, QScrollArea
 )
 
 from .utils import t, get_lang
@@ -43,6 +44,26 @@ def _get_welcome_bg_path() -> Optional[str]:
     if os.path.exists(bg_path):
         return bg_path
     return None
+
+def _get_platform_font() -> str:
+    """Get platform-specific font family for best rendering."""
+    system = platform.system()
+    if system == "Darwin":  # macOS
+        return "SF Pro Text, -apple-system, Helvetica Neue, sans-serif"
+    elif system == "Windows":
+        return "Segoe UI, Microsoft YaHei UI, sans-serif"
+    else:  # Linux
+        return "Ubuntu, Noto Sans, DejaVu Sans, sans-serif"
+
+def _get_platform_adjustments() -> Dict[str, int]:
+    """Get platform-specific size adjustments."""
+    system = platform.system()
+    if system == "Darwin":  # macOS - Retina displays
+        return {"min_height": 24, "padding": 4, "font_size": 13}
+    elif system == "Windows":  # Windows - needs slightly larger
+        return {"min_height": 26, "padding": 5, "font_size": 12}
+    else:  # Linux
+        return {"min_height": 26, "padding": 5, "font_size": 12}
 
 class HeroHeader(QWidget):
     """Custom widget for the hero section with adaptive background and overlay."""
@@ -134,26 +155,34 @@ class GlueTKDialog(QDialog):
         
         # 0. Welcome
         self.content_stack.addWidget(self.create_welcome_tab())
-        
+
+        # Helper to wrap tab in scroll area
+        def wrap_in_scroll(tab_widget):
+            scroll = QScrollArea()
+            scroll.setWidgetResizable(True)
+            scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setWidget(tab_widget)
+            return scroll
+
         # 1. Target Discovery
         self.target_tab = TargetDiscoveryTab(self)
-        self.content_stack.addWidget(self.target_tab)
-        
+        self.content_stack.addWidget(wrap_in_scroll(self.target_tab))
+
         # 2. Hit Identification
         self.hit_tab = HitIdentificationTab(self)
-        self.content_stack.addWidget(self.hit_tab)
-        
-        # 3. Lead Optimization
-        self.lead_tab = LeadOptimizationTab(self)
-        self.content_stack.addWidget(self.lead_tab)
-        
-        # 4. Batch Analysis
-        self.batch_tab = BatchAnalysisTab(self)
-        self.content_stack.addWidget(self.batch_tab)
-        
-        # 5. Ternary Evaluation
+        self.content_stack.addWidget(wrap_in_scroll(self.hit_tab))
+
+        # 3. Ternary Evaluation (moved before Lead Optimization)
         self.ternary_tab = TernaryEvaluationTab(self)
-        self.content_stack.addWidget(self.ternary_tab)
+        self.content_stack.addWidget(wrap_in_scroll(self.ternary_tab))
+
+        # 4. Lead Optimization
+        self.lead_tab = LeadOptimizationTab(self)
+        self.content_stack.addWidget(wrap_in_scroll(self.lead_tab))
+
+        # 5. Batch Analysis
+        self.batch_tab = BatchAnalysisTab(self)
+        self.content_stack.addWidget(wrap_in_scroll(self.batch_tab))
         
         # 6. README
         self.content_stack.addWidget(self.create_readme_tab())
@@ -213,22 +242,26 @@ class GlueTKDialog(QDialog):
         # Nav List
         self.nav_list = QListWidget()
         self.nav_list.setFrameShape(QFrame.Shape.NoFrame)
-        self.nav_list.setStyleSheet("QListWidget { background: transparent; font-size: 14px; } QListWidget::item { padding: 12px; } QListWidget::item:selected { background: #3b82f6; color: white; border-radius: 4px; }")
+        # 减少 padding，使菜单更紧凑
+        self.nav_list.setStyleSheet("""
+            QListWidget { background: transparent; font-size: 14px; }
+            QListWidget::item { padding: 10px 16px; margin: 2px 8px; border-radius: 6px; }
+            QListWidget::item:selected { background: #3b82f6; color: white; }
+            QListWidget::item:hover:!selected { background: rgba(59, 130, 246, 0.1); }
+        """)
         
         items = [
             "Welcome",
             "Target Discovery",
             "Hit Identification",
+            "Ternary Evaluation",
             "Lead Optimization",
             "Batch Analysis",
-            "Ternary Evaluation"
         ]
         self.nav_list.addItems(items)
         self.nav_list.setCurrentRow(0)
         self.nav_list.currentRowChanged.connect(self.on_nav_changed)
-        layout.addWidget(self.nav_list)
-        
-        layout.addStretch()
+        layout.addWidget(self.nav_list, 1)  # stretch factor 1，让列表填充可用空间
         
         # Bottom links
         bottom_bar = QWidget()
@@ -237,12 +270,12 @@ class GlueTKDialog(QDialog):
         
         btn_readme = QPushButton("README")
         btn_readme.setFlat(True)
-        btn_readme.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))
+        btn_readme.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))  # README is index 6
         b_layout.addWidget(btn_readme)
         
         btn_contact = QPushButton("Contact Us")
         btn_contact.setFlat(True)
-        btn_contact.clicked.connect(lambda: self.content_stack.setCurrentIndex(7))
+        btn_contact.clicked.connect(lambda: self.content_stack.setCurrentIndex(7))  # Contact is index 7
         b_layout.addWidget(btn_contact)
         
         btn_resources = QPushButton("Resources")
@@ -323,56 +356,71 @@ class GlueTKDialog(QDialog):
         self.log(f"Switched to {'Dark' if self._dark_mode else 'Light'} mode")
 
     def setup_style(self):
+        font = _get_platform_font()
+        adj = _get_platform_adjustments()
+        h = adj["min_height"]
+        p = adj["padding"]
+        fs = adj["font_size"]
+
+        base_style = f"""
+            * {{ font-family: {font}; font-size: {fs}px; }}
+        """
+
         if self._dark_mode:
-            self.setStyleSheet("""
-                QDialog, QWidget { background-color: #0d1117; color: #c9d1d9; }
-                QGroupBox { border: 1px solid #30363d; border-radius: 6px; margin-top: 12px; padding-top: 10px; }
-                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px; color: #58a6ff; font-weight: bold; }
-                QLineEdit, QComboBox, QSpinBox { background-color: #010409; border: 1px solid #30363d; border-radius: 4px; padding: 4px; color: #c9d1d9; selection-background-color: #1f6feb; }
-                QPushButton { background-color: #21262d; border: 1px solid #30363d; border-radius: 4px; padding: 6px 12px; color: #c9d1d9; }
-                QPushButton:hover { background-color: #30363d; border-color: #8b949e; }
-                QPushButton:pressed { background-color: #282e33; }
-                QPushButton#highlight_btn { background-color: #238636; color: #ffffff; border: 1px solid #2ea043; }
-                QPushButton#highlight_btn:hover { background-color: #2ea043; }
-                QScrollArea { border: none; background-color: transparent; }
-                QScrollBar:vertical { border: none; background: #0d1117; width: 10px; margin: 0px 0 0px 0; }
-                QScrollBar::handle:vertical { background: #30363d; min-height: 20px; border-radius: 5px; }
-                QListWidget { background: transparent; font-size: 14px; color: #c9d1d9; }
-                QListWidget::item { padding: 12px; }
-                QListWidget::item:selected { background: #3b82f6; color: white; border-radius: 4px; }
-                #nav_widget { background-color: #0d1117; border-right: 1px solid #30363d; }
-                #tab_content { background-color: #161b22; }
+            self.setStyleSheet(base_style + f"""
+                QDialog, QWidget {{ background-color: #0d1117; color: #c9d1d9; }}
+                QGroupBox {{ border: 1px solid #30363d; border-radius: 6px; margin-top: 12px; padding: 16px 12px 12px 12px; }}
+                QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; color: #58a6ff; font-weight: bold; }}
+                QLabel {{ min-height: {h-2}px; padding: {p-2}px 0px; }}
+                QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{ background-color: #010409; border: 1px solid #30363d; border-radius: 4px; padding: {p}px 6px; color: #c9d1d9; selection-background-color: #1f6feb; min-height: {h}px; }}
+                QCheckBox {{ min-height: {h-2}px; padding: {p-2}px 0px; }}
+                QPushButton {{ background-color: #21262d; border: 1px solid #30363d; border-radius: 4px; padding: {p}px 10px; color: #c9d1d9; min-height: {h}px; }}
+                QPushButton:hover {{ background-color: #30363d; border-color: #8b949e; }}
+                QPushButton:pressed {{ background-color: #282e33; }}
+                QPushButton#highlight_btn {{ background-color: #238636; color: #ffffff; border: 1px solid #2ea043; }}
+                QPushButton#highlight_btn:hover {{ background-color: #2ea043; }}
+                QPushButton#primary_btn {{ background-color: #1f6feb; color: #ffffff; border: 1px solid #388bfd; }}
+                QPushButton#primary_btn:hover {{ background-color: #388bfd; }}
+                QScrollArea {{ border: none; background-color: transparent; }}
+                QScrollBar:vertical {{ border: none; background: #0d1117; width: 10px; margin: 0px 0 0px 0; }}
+                QScrollBar::handle:vertical {{ background: #30363d; min-height: 20px; border-radius: 5px; }}
+                QListWidget {{ background: transparent; font-size: 14px; color: #c9d1d9; }}
+                QListWidget::item {{ padding: 10px 16px; margin: 2px 8px; border-radius: 6px; }}
+                QListWidget::item:selected {{ background: #3b82f6; color: white; }}
+                QListWidget::item:hover:!selected {{ background: rgba(59, 130, 246, 0.1); }}
+                #nav_widget {{ background-color: #0d1117; border-right: 1px solid #30363d; }}
+                #tab_content {{ background-color: #161b22; }}
             """)
-            # Update navigation bar style
             if hasattr(self, 'nav_widget'):
                 self.nav_widget.setStyleSheet("background-color: #0d1117; border-right: 1px solid #30363d;")
         else:
-            # Light theme style
-            self.setStyleSheet("""
-                QDialog, QWidget { background-color: #ffffff; color: #1f2937; }
-                QGroupBox { border: 1px solid #e5e7eb; border-radius: 6px; margin-top: 12px; padding-top: 10px; background-color: #f9fafb; }
-                QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top left; padding: 0 5px; color: #3b82f6; font-weight: bold; }
-                QLineEdit, QComboBox, QSpinBox { background-color: #ffffff; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px; color: #1f2937; selection-background-color: #3b82f6; }
-                QPushButton { background-color: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; padding: 6px 12px; color: #374151; }
-                QPushButton:hover { background-color: #e5e7eb; border-color: #9ca3af; }
-                QPushButton:pressed { background-color: #d1d5db; }
-                QPushButton#highlight_btn { background-color: #22c55e; color: #ffffff; border: 1px solid #16a34a; }
-                QPushButton#highlight_btn:hover { background-color: #16a34a; }
-                QPushButton#primary_btn { background-color: #3b82f6; color: #ffffff; border: 1px solid #2563eb; }
-                QPushButton#primary_btn:hover { background-color: #2563eb; }
-                QScrollArea { border: none; background-color: transparent; }
-                QScrollBar:vertical { border: none; background: #f3f4f6; width: 10px; margin: 0px 0 0px 0; }
-                QScrollBar::handle:vertical { background: #d1d5db; min-height: 20px; border-radius: 5px; }
-                QListWidget { background: transparent; font-size: 14px; color: #1f2937; }
-                QListWidget::item { padding: 12px; }
-                QListWidget::item:selected { background: #3b82f6; color: white; border-radius: 4px; }
-                #nav_widget { background-color: #f1f5f9; border-right: 1px solid #e2e8f0; }
-                #tab_content { background-color: #ffffff; }
-                QTabWidget::pane { border: 1px solid #e5e7eb; background-color: #ffffff; }
-                QTabBar::tab { background-color: #f3f4f6; border: 1px solid #e5e7eb; padding: 6px 12px; }
-                QTabBar::tab:selected { background-color: #ffffff; border-bottom-color: #ffffff; }
+            self.setStyleSheet(base_style + f"""
+                QDialog, QWidget {{ background-color: #ffffff; color: #1f2937; }}
+                QGroupBox {{ border: 1px solid #e5e7eb; border-radius: 6px; margin-top: 12px; padding: 16px 12px 12px 12px; background-color: #f9fafb; }}
+                QGroupBox::title {{ subcontrol-origin: margin; subcontrol-position: top left; padding: 0 8px; color: #3b82f6; font-weight: bold; }}
+                QLabel {{ min-height: {h-2}px; padding: {p-2}px 0px; }}
+                QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {{ background-color: #ffffff; border: 1px solid #d1d5db; border-radius: 4px; padding: {p}px 6px; color: #1f2937; selection-background-color: #3b82f6; min-height: {h}px; }}
+                QCheckBox {{ min-height: {h-2}px; padding: {p-2}px 0px; }}
+                QPushButton {{ background-color: #f3f4f6; border: 1px solid #d1d5db; border-radius: 4px; padding: {p}px 10px; color: #374151; min-height: {h}px; }}
+                QPushButton:hover {{ background-color: #e5e7eb; border-color: #9ca3af; }}
+                QPushButton:pressed {{ background-color: #d1d5db; }}
+                QPushButton#highlight_btn {{ background-color: #22c55e; color: #ffffff; border: 1px solid #16a34a; }}
+                QPushButton#highlight_btn:hover {{ background-color: #16a34a; }}
+                QPushButton#primary_btn {{ background-color: #3b82f6; color: #ffffff; border: 1px solid #2563eb; }}
+                QPushButton#primary_btn:hover {{ background-color: #2563eb; }}
+                QScrollArea {{ border: none; background-color: transparent; }}
+                QScrollBar:vertical {{ border: none; background: #f3f4f6; width: 10px; margin: 0px 0 0px 0; }}
+                QScrollBar::handle:vertical {{ background: #d1d5db; min-height: 20px; border-radius: 5px; }}
+                QListWidget {{ background: transparent; font-size: 14px; color: #1f2937; }}
+                QListWidget::item {{ padding: 10px 16px; margin: 2px 8px; border-radius: 6px; }}
+                QListWidget::item:selected {{ background: #3b82f6; color: white; }}
+                QListWidget::item:hover:!selected {{ background: rgba(59, 130, 246, 0.1); }}
+                #nav_widget {{ background-color: #f1f5f9; border-right: 1px solid #e2e8f0; }}
+                #tab_content {{ background-color: #ffffff; }}
+                QTabWidget::pane {{ border: 1px solid #e5e7eb; background-color: #ffffff; }}
+                QTabBar::tab {{ background-color: #f3f4f6; border: 1px solid #e5e7eb; padding: 6px 12px; }}
+                QTabBar::tab:selected {{ background-color: #ffffff; border-bottom-color: #ffffff; }}
             """)
-            # Update navigation bar style
             if hasattr(self, 'nav_widget'):
                 self.nav_widget.setStyleSheet("background-color: #f1f5f9; border-right: 1px solid #e2e8f0;")
 
@@ -614,7 +662,7 @@ class GlueTKDialog(QDialog):
         </div>
         
         <div class="feature-box">
-            <div class="feature-title">Surface Similarity & Complementarity (MaSIF-style)</div>
+            <div class="feature-title">Surface Similarity & Complementarity</div>
             <p>Compare binding site features using geometric and chemical descriptors.</p>
             <table>
                 <tr><th>Parameter</th><th>Description</th><th>Default</th></tr>

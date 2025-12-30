@@ -34,8 +34,10 @@ class VisualizationTab(CommonTab):
         # Target Object
         r0 = QHBoxLayout()
         self.parent_window.obj_combo_apbs = QComboBox()
+        self.parent_window.obj_combo_apbs.setMinimumHeight(32)
         self.parent_window.refresh_obj_apbs = QPushButton(t("refresh"))
         self.parent_window.refresh_obj_apbs.setObjectName("refresh_btn")
+        self.parent_window.refresh_obj_apbs.setMinimumHeight(32)
         self.parent_window.refresh_obj_apbs.clicked.connect(self.refresh_objects)
         r0.addWidget(self.parent_window.obj_combo_apbs, 1)
         r0.addWidget(self.parent_window.refresh_obj_apbs)
@@ -43,19 +45,23 @@ class VisualizationTab(CommonTab):
         
         # Parameters
         self.parent_window.apbs_grid = QLineEdit("1.0")
+        self.parent_window.apbs_grid.setMinimumHeight(32)
         form.addRow(QLabel(t("apbs_grid")), self.parent_window.apbs_grid)
         
         self.parent_window.apbs_range = QLineEdit("-5,0,5")
+        self.parent_window.apbs_range.setMinimumHeight(32)
         form.addRow(QLabel(t("apbs_range")), self.parent_window.apbs_range)
         
         # Run Buttons
         btn_row = QHBoxLayout()
         self.parent_window.btn_apbs_quick = QPushButton(t("btn_quick"))
         self.parent_window.btn_apbs_quick.setObjectName("highlight_btn")
+        self.parent_window.btn_apbs_quick.setMinimumHeight(32)
         self.parent_window.btn_apbs_quick.clicked.connect(self.apbs_run_quick)
         
         self.parent_window.btn_apbs_true = QPushButton(t("btn_apbs"))
         self.parent_window.btn_apbs_true.setObjectName("highlight_btn")
+        self.parent_window.btn_apbs_true.setMinimumHeight(32)
         self.parent_window.btn_apbs_true.clicked.connect(self.apbs_run_true)
         
         btn_row.addWidget(self.parent_window.btn_apbs_quick)
@@ -69,8 +75,11 @@ class VisualizationTab(CommonTab):
         # Image Settings
         exp_row1 = QHBoxLayout()
         self.parent_window.png_w = QLineEdit("3000")
+        self.parent_window.png_w.setMinimumHeight(32)
         self.parent_window.png_h = QLineEdit("2000")
+        self.parent_window.png_h.setMinimumHeight(32)
         self.parent_window.png_dpi = QLineEdit("300")
+        self.parent_window.png_dpi.setMinimumHeight(32)
         
         exp_row1.addWidget(QLabel(t("img_w")))
         exp_row1.addWidget(self.parent_window.png_w)
@@ -95,6 +104,7 @@ class VisualizationTab(CommonTab):
         
         self.parent_window.btn_viewport = QPushButton(t("btn_viewport"))
         self.parent_window.btn_viewport.setObjectName("refresh_btn")
+        self.parent_window.btn_viewport.setMinimumHeight(32)
         self.parent_window.btn_viewport.clicked.connect(self.fill_viewport_size)
         
         exp_row2.addWidget(self.parent_window.bg_white)
@@ -108,10 +118,12 @@ class VisualizationTab(CommonTab):
         exp_row3 = QHBoxLayout()
         self.parent_window.btn_export_png = QPushButton(t("btn_export_png"))
         self.parent_window.btn_export_png.setObjectName("save_btn")
+        self.parent_window.btn_export_png.setMinimumHeight(32)
         self.parent_window.btn_export_png.clicked.connect(self.export_png)
         
         self.parent_window.btn_export_dx = QPushButton(t("btn_export_dx"))
         self.parent_window.btn_export_dx.setObjectName("save_btn")
+        self.parent_window.btn_export_dx.setMinimumHeight(32)
         self.parent_window.btn_export_dx.clicked.connect(self.export_dx)
         
         exp_row3.addWidget(self.parent_window.btn_export_png)

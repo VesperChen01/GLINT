@@ -158,22 +158,15 @@ else
     echo -e "${GREEN}✅ GCC 已安装${NC}"
 fi
 
-# 4c. 使用 conda 安装 HADDOCK3（蛋白-蛋白对接引擎）
+# 4c. 使用 pip 安装 HADDOCK3（蛋白-蛋白对接引擎）
 echo -e "\n${BLUE}[4c]${NC} 安装 HADDOCK3..."
-echo "   ${YELLOW}优先使用 conda 安装 (推荐)...${NC}"
-# 临时禁用 InsecureRequestWarning
-export PYTHONWARNINGS="ignore::urllib3.exceptions.InsecureRequestWarning"
-if conda install -n "$ENV_NAME" -c conda-forge -c haddocking haddock3 -y 2>/dev/null; then
-    echo -e "${GREEN}✅ HADDOCK3 (conda) 安装成功${NC}"
+echo "   ${YELLOW}使用 pip 安装 HADDOCK3...${NC}"
+# 注意: haddocking conda channel 已不可用 (HTTP 404)，改用 pip 安装
+if conda run -n "$ENV_NAME" python -m pip install -U haddock3 --quiet --disable-pip-version-check; then
+    echo -e "${GREEN}✅ HADDOCK3 (pip) 安装成功${NC}"
 else
-    unset PYTHONWARNINGS # 安装完成后取消设置
-    echo "   conda 安装失败，尝试 pip..."
-    if conda run -n "$ENV_NAME" python -m pip install -U haddock3 --quiet --disable-pip-version-check; then
-        echo -e "${GREEN}✅ HADDOCK3 (pip) 安装成功${NC}"
-    else
-        echo -e "${YELLOW}⚠️  HADDOCK3 安装失败，蛋白-蛋白对接功能将不可用${NC}"
-        echo "   可稍后手动执行: conda run -n $ENV_NAME python -m pip install -U haddock3"
-    fi
+    echo -e "${YELLOW}⚠️  HADDOCK3 安装失败，蛋白-蛋白对接功能将不可用${NC}"
+    echo "   可稍后手动执行: conda run -n $ENV_NAME python -m pip install -U haddock3"
 fi
 
 # 4d. 验证 EC 分析依赖
