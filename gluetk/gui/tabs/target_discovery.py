@@ -612,9 +612,9 @@ class TargetDiscoveryTab(CommonTab):
                 
                 # Color based on type
                 if p.type == "electrostatic_pos":
-                    cmd.color("red", patch_name)
-                elif p.type == "electrostatic_neg":
                     cmd.color("blue", patch_name)
+                elif p.type == "electrostatic_neg":
+                    cmd.color("red", patch_name)
                 elif p.type == "hydrophobic":
                     cmd.color("green", patch_name)
                 
@@ -741,10 +741,10 @@ class TargetDiscoveryTab(CommonTab):
                 cmd.set("transparency", 0.3, patch_name)
                 
                 # Color based on type
-                color = "blue" # neg
-                if p.type == "electrostatic_pos": color = "red"
+                color = "red" # neg
+                if p.type == "electrostatic_pos": color = "blue"
                 elif p.type == "hydrophobic": color = "green"
-                elif p.type == "electrostatic_neg": color = "blue"
+                elif p.type == "electrostatic_neg": color = "red"
                 
                 cmd.color(color, patch_name)
                 

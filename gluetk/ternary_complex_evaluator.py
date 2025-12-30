@@ -8,7 +8,7 @@
 2. Ligand Module - 小分子理化参数（MW/LogP/TPSA等）
 3. Ternary Geometry Module - 三元复合物重心、几何特征
 
-依赖：BioPython, RDKit, numpy
+依赖：BioPython, RDKit, numpy, PyMOL
 """
 
 import numpy as np
@@ -94,65 +94,91 @@ class TernaryComplexFeatures:
     hook_risk_score: Optional[float] = None
     duality_index: Optional[float] = None
 
-# ==================== SASA计算器 ====================
+# ==================== BSA计算器（使用PyMOL） ====================
 
-class SASACalculator:
-    """SASA计算器 - Shrake-Rupley算法"""
+class BSACalculator:
+    """BSA计算器 - 使用PyMOL的cmd.get_area()"""
     
-    VDW_RADII = {
-        'H': 1.20, 'C': 1.70, 'N': 1.55, 'O': 1.52,
-        'F': 1.47, 'P': 1.80, 'S': 1.80, 'CL': 1.75
-    }
-    DEFAULT_RADIUS = 1.70
-    PROBE_RADIUS = 1.40
-
-    def __init__(self, n_points: int = 100):
-        self.n_points = n_points
-        self.sphere_points = self._generate_sphere_points(n_points)
-
-    def _generate_sphere_points(self, n: int) -> np.ndarray:
-        """Golden Spiral均匀分布点"""
-        indices = np.arange(0, n, dtype=float) + 0.5
-        phi = np.arccos(1 - 2*indices/n)
-        theta = np.pi * (1 + 5**0.5) * indices
-        return np.column_stack((
-            np.cos(theta) * np.sin(phi),
-            np.sin(theta) * np.sin(phi),
-            np.cos(phi)
-        ))
-
-    def calculate_sasa(self, atoms: List[AtomInfo]) -> float:
-        """计算原子列表的总SASA"""
-        if not atoms:
+    def __init__(self, obj_name: str = None):
+        self.obj_name = obj_name
+        self._pymol_available = False
+        try:
+            from pymol import cmd
+            self.cmd = cmd
+            self._pymol_available = True
+        except ImportError:
+            logger.warning("PyMOL不可用，BSA计算功能受限")
+    
+    def calculate_bsa(self, chain1: str, chain2: str) -> float:
+        """
+        计算两个链之间的埋藏表面积 (Buried Surface Area)
+        
+        改进版：创建临时对象以确保计算的是孤立状态下的表面积，
+        避免PyMOL在同一对象中计算Area时考虑其他非选定原子的遮挡。
+        BSA = (SA_chain1 + SA_chain2 - SA_complex) / 2
+        
+        参数:
+            chain1: 第一条链ID
+            chain2: 第二条链ID
+        
+        返回:
+            float: 埋藏表面积 (Å²)
+        """
+        if not self._pymol_available or not self.obj_name:
+            logger.warning("PyMOL不可用或未指定对象名，返回0")
             return 0.0
         
-        coords = np.array([a.coords for a in atoms])
-        radii = np.array([self.VDW_RADII.get(a.element, self.DEFAULT_RADIUS) for a in atoms])
-        effective_radii = radii + self.PROBE_RADIUS
+        import uuid
+        # 生成唯一后缀以避免冲突
+        suffix = str(uuid.uuid4())[:8]
         
-        total_area = 0.0
-        for i in range(len(atoms)):
-            current_radius = effective_radii[i]
-            test_points = coords[i] + self.sphere_points * current_radius
-            
-            # 检查邻居遮挡
-            accessible = 0
-            for point in test_points:
-                dists = np.linalg.norm(coords - point, axis=1)
-                dists[i] = np.inf  # 排除自身
-                if np.all(dists > effective_radii):
-                    accessible += 1
-            
-            total_area += 4 * np.pi * current_radius**2 * (accessible / self.n_points)
+        # 临时对象名
+        obj_c1 = f"temp_c1_{suffix}"
+        obj_c2 = f"temp_c2_{suffix}"
+        obj_complex = f"temp_complex_{suffix}"
         
-        return total_area
-
-    def calculate_bsa(self, atoms1: List[AtomInfo], atoms2: List[AtomInfo]) -> float:
-        """计算埋藏表面积"""
-        sasa1 = self.calculate_sasa(atoms1)
-        sasa2 = self.calculate_sasa(atoms2)
-        sasa_complex = self.calculate_sasa(atoms1 + atoms2)
-        return (sasa1 + sasa2 - sasa_complex) / 2.0
+        try:
+            # 定义排除溶剂的选择基础
+            # 排除常见溶剂和离子
+            solvent_sel = "resn HOH+WAT+NA+CL+MG+CA+ZN"
+            sel_base = f"{self.obj_name} and not ({solvent_sel})"
+            
+            # 1. 创建孤立的Chain 1对象并计算面积
+            # 使用create命令将选择的原子复制到新对象，从而使其在计算SAS时完全孤立
+            self.cmd.create(obj_c1, f"{sel_base} and chain {chain1}")
+            # 设置dot_solvent以确保准确性 (0=surface only, 1=include voids) - default is usually fine but let's be safe
+            # self.cmd.set("dot_solvent", 1, obj_c1)
+            area_chain1 = self.cmd.get_area(obj_c1)
+            
+            # 2. 创建孤立的Chain 2对象并计算面积
+            self.cmd.create(obj_c2, f"{sel_base} and chain {chain2}")
+            area_chain2 = self.cmd.get_area(obj_c2)
+            
+            # 3. 创建复合物对象（Chain 1 + Chain 2）并计算面积
+            self.cmd.create(obj_complex, f"{sel_base} and (chain {chain1} or chain {chain2})")
+            area_complex = self.cmd.get_area(obj_complex)
+            
+            # 4. 计算BSA
+            # BSA = (SA1 + SA2 - SA_complex) / 2
+            bsa = (area_chain1 + area_chain2 - area_complex) / 2.0
+            
+            # 清理临时对象
+            self.cmd.delete(obj_c1)
+            self.cmd.delete(obj_c2)
+            self.cmd.delete(obj_complex)
+            
+            return max(0.0, bsa)
+        
+        except Exception as e:
+            logger.error(f"BSA计算失败: {e}")
+            # 出错时尝试清理
+            try:
+                if self.cmd.get_type(obj_c1) != 'object:': self.cmd.delete(obj_c1)
+                if self.cmd.get_type(obj_c2) != 'object:': self.cmd.delete(obj_c2)
+                if self.cmd.get_type(obj_complex) != 'object:': self.cmd.delete(obj_complex)
+            except:
+                pass
+            return 0.0
 
 # ==================== 结构解析器 ====================
 
@@ -298,8 +324,8 @@ class TernaryComplexEvaluator:
     
     def __init__(self):
         self.parser = StructureParser()
-        self.sasa_calc = SASACalculator(n_points=100)
         self.ligand_calc = LigandCalculator()
+        self._obj_name = None  # PyMOL对象名
 
     def evaluate(
         self,
@@ -307,7 +333,8 @@ class TernaryComplexEvaluator:
         e3_chain: str,
         poi_chain: str,
         ligand_chain: str,
-        ligand_smiles: Optional[str] = None
+        ligand_smiles: Optional[str] = None,
+        obj_name: Optional[str] = None
     ) -> TernaryComplexFeatures:
         """
         评估三元复合物
@@ -318,6 +345,7 @@ class TernaryComplexEvaluator:
             poi_chain: POI链ID
             ligand_chain: 配体链ID
             ligand_smiles: 配体SMILES（可选，用于计算小分子性质）
+            obj_name: PyMOL对象名（可选，用于BSA计算）
         
         Returns:
             TernaryComplexFeatures: 综合特征
@@ -336,8 +364,20 @@ class TernaryComplexEvaluator:
             logger.error(f"缺少链: {missing}")
             return features
         
-        # 2. 计算界面特征
-        features.interface = self._calculate_interface(e3, poi, mg)
+        # 2. 计算界面特征（使用PyMOL）
+        self._obj_name = obj_name
+        if not obj_name:
+            # 尝试加载PDB到PyMOL
+            try:
+                from pymol import cmd
+                import os
+                obj_name = os.path.splitext(os.path.basename(pdb_path))[0]
+                cmd.load(pdb_path, obj_name)
+                self._obj_name = obj_name
+            except Exception as e:
+                logger.warning(f"无法加载PDB到PyMOL: {e}")
+        
+        features.interface = self._calculate_interface(e3, poi, mg, e3_chain, poi_chain, ligand_chain)
         
         # 3. 计算配体特征
         if ligand_smiles:
@@ -353,17 +393,20 @@ class TernaryComplexEvaluator:
         
         return features
 
-    def _calculate_interface(self, e3: ChainInfo, poi: ChainInfo, mg: ChainInfo) -> InterfaceFeatures:
-        """计算界面特征"""
+    def _calculate_interface(self, e3: ChainInfo, poi: ChainInfo, mg: ChainInfo,
+                            e3_chain: str, poi_chain: str, mg_chain: str) -> InterfaceFeatures:
+        """计算界面特征 - 使用PyMOL的cmd.get_area()"""
         interface = InterfaceFeatures()
         
-        # BSA计算
-        interface.bsa_mg_e3 = self.sasa_calc.calculate_bsa(mg.atoms, e3.atoms)
-        interface.bsa_mg_poi = self.sasa_calc.calculate_bsa(mg.atoms, poi.atoms)
-        interface.bsa_e3_poi = self.sasa_calc.calculate_bsa(e3.atoms, poi.atoms)
+        # 使用PyMOL计算BSA
+        bsa_calc = BSACalculator(self._obj_name)
+        
+        interface.bsa_mg_e3 = bsa_calc.calculate_bsa(mg_chain, e3_chain)
+        interface.bsa_mg_poi = bsa_calc.calculate_bsa(mg_chain, poi_chain)
+        interface.bsa_e3_poi = bsa_calc.calculate_bsa(e3_chain, poi_chain)
         interface.bsa_total = interface.bsa_mg_e3 + interface.bsa_mg_poi + interface.bsa_e3_poi
         
-        # 接触数统计
+        # 接触数统计（仍使用原子坐标）
         interface.contact_count_45 = self._count_contacts(mg.atoms, e3.atoms + poi.atoms, 4.5)
         interface.contact_count_50 = self._count_contacts(mg.atoms, e3.atoms + poi.atoms, 5.0)
         
@@ -503,7 +546,8 @@ def evaluate_ternary_complex(
     e3_chain: str,
     poi_chain: str,
     ligand_chain: str,
-    ligand_smiles: Optional[str] = None
+    ligand_smiles: Optional[str] = None,
+    obj_name: Optional[str] = None
 ) -> Dict[str, Any]:
     """
     评估三元复合物的便捷函数
@@ -514,6 +558,7 @@ def evaluate_ternary_complex(
         poi_chain: POI链ID
         ligand_chain: 配体链ID
         ligand_smiles: 配体SMILES（可选）
+        obj_name: PyMOL对象名（可选）
     
     Returns:
         Dict: 特征字典
@@ -530,7 +575,7 @@ def evaluate_ternary_complex(
         >>> print(f"COG Shift: {features['geom_cog_shift']:.2f} Å")
     """
     evaluator = TernaryComplexEvaluator()
-    features = evaluator.evaluate(pdb_path, e3_chain, poi_chain, ligand_chain, ligand_smiles)
+    features = evaluator.evaluate(pdb_path, e3_chain, poi_chain, ligand_chain, ligand_smiles, obj_name)
     return evaluator.to_dict(features)
 
 
