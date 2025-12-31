@@ -15,16 +15,17 @@ class TernaryEvaluationWorker(QThread):
     finished = pyqtSignal(dict, str)  # (result_dict, out_csv)
     error = pyqtSignal(str)
     
-    def __init__(self, pdb_path: str, e3_chain: str, poi_chain: str, 
-                 lig_chain: str, smiles: Optional[str] = None,
-                 out_csv: Optional[str] = None):
+    def __init__(self, pdb_path: str, e3_chain: str, poi_chain: str,
+                 lig_resn: str, smiles: Optional[str] = None,
+                 out_csv: Optional[str] = None, obj_name: Optional[str] = None):
         super().__init__()
         self.pdb_path = pdb_path
         self.e3_chain = e3_chain
         self.poi_chain = poi_chain
-        self.lig_chain = lig_chain
+        self.lig_resn = lig_resn
         self.smiles = smiles
         self.out_csv = out_csv
+        self.obj_name = obj_name
         
     def run(self):
         try:
@@ -42,8 +43,9 @@ class TernaryEvaluationWorker(QThread):
                 pdb_path=self.pdb_path,
                 e3_chain=self.e3_chain,
                 poi_chain=self.poi_chain,
-                ligand_chain=self.lig_chain,
-                ligand_smiles=self.smiles
+                ligand_resn=self.lig_resn,
+                ligand_smiles=self.smiles,
+                obj_name=self.obj_name
             )
             
             # 转换为字典

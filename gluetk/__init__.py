@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 GlueTK - PyMOL Plugin for Molecular Glue Analysis
-Molecular Glue vs PROTAC Classification Toolkit
+Molecular Glue Toolkit
 
-Author: Vesper
+Author: Roufen Chen
 Version:
 """
 
@@ -37,7 +37,7 @@ except ImportError:
         else:
             __version__ = "unknown"
 
-__author__ = "Vesper"
+__author__ = "Roufen Chen"
 
 # ---- 环境依赖检查 ----
 # 延迟依赖检查，避免在导入时触发 PyQt 崩溃
@@ -45,7 +45,11 @@ _DEPS_OK = False
 _DEPS_CHECKED = False
 
 def _check_deps_safe():
-    """安全地检查依赖（延迟到实际需要时）"""
+    """
+    安全地检查依赖（延迟到实际需要时）
+    
+    带有详细的错误日志，便于调试导入问题。
+    """
     global _DEPS_OK, _DEPS_CHECKED
     if _DEPS_CHECKED:
         return _DEPS_OK
@@ -54,7 +58,20 @@ def _check_deps_safe():
         from .env_checker import ensure_dependencies
         _DEPS_OK = ensure_dependencies(silent=True)  # 静默检查
         _DEPS_CHECKED = True
+    except ImportError as e:
+        # 详细记录导入错误
+        import traceback
+        print(f"[GlueTK] ⚠️ 依赖检查模块导入失败: {e}")
+        print(f"[GlueTK] 详细错误信息:")
+        traceback.print_exc()
+        _DEPS_OK = False
+        _DEPS_CHECKED = True
     except Exception as e:
+        # 其他错误
+        import traceback
+        print(f"[GlueTK] ⚠️ 依赖检查时发生错误: {e}")
+        print(f"[GlueTK] 详细错误信息:")
+        traceback.print_exc()
         _DEPS_OK = False
         _DEPS_CHECKED = True
     
@@ -77,7 +94,37 @@ _vina_available = False
 
 # ---- 命令注册（与 GUI 解耦）----
 def _register_commands():
+    """
+    注册所有 PyMOL 命令。
+    
+    带有详细的导入错误日志，便于调试模块加载问题。
+    """
     global _vina_available
+    import traceback
+    
+    # 用于记录导入失败的模块
+    _import_errors = []
+    
+    def _safe_import(module_name, items=None):
+        """安全导入模块，记录错误但不中断"""
+        try:
+            if items:
+                module = __import__(module_name, globals(), locals(), items, 1)
+                return tuple(getattr(module, item) for item in items)
+            else:
+                return __import__(module_name, globals(), locals(), [], 1)
+        except ImportError as e:
+            _import_errors.append((module_name, str(e)))
+            print(f"[GlueTK] ⚠️ 模块导入失败: {module_name}")
+            print(f"[GlueTK]   错误: {e}")
+            return None if not items else tuple([None] * len(items))
+        except Exception as e:
+            _import_errors.append((module_name, str(e)))
+            print(f"[GlueTK] ❌ 模块导入异常: {module_name}")
+            print(f"[GlueTK]   错误: {e}")
+            traceback.print_exc()
+            return None if not items else tuple([None] * len(items))
+    
     try:
         from .highlight_residues import highlight_csv_residues
         from .interaction_analyzer import (
@@ -96,7 +143,8 @@ def _register_commands():
         # Ligand-Ligand Interaction
         try:
             from .ligand_ligand_analyzer import analyze_ligand_ligand_interactions
-        except ImportError:
+        except ImportError as e:
+            print(f"[GlueTK] ℹ️ ligand_ligand_analyzer 不可用: {e}")
             analyze_ligand_ligand_interactions = None
         
         # 新增: 分子胶特异功能 (PPI 分析 & Neo-表位)

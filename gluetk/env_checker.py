@@ -685,24 +685,48 @@ class EnvironmentChecker:
     
     def get_hmm_data_dir(self) -> str:
         """
-        获取 HMM 数据目录路径
+        获取 HMM 数据目录路径（延迟创建，带权限错误处理）
         
         Returns:
-            str: 数据目录路径
+            str: 数据目录路径，如果无法创建则返回临时目录
         """
         # 优先使用插件目录下的 data 文件夹
         plugin_dir = os.path.dirname(os.path.abspath(__file__))
         data_dir = os.path.join(plugin_dir, "data")
         
+        # 尝试创建插件目录下的 data 文件夹
         if not os.path.exists(data_dir):
             try:
                 os.makedirs(data_dir, exist_ok=True)
-            except Exception:
-                # 回退到用户目录
-                data_dir = os.path.join(os.path.expanduser("~"), ".gluetk", "data")
-                os.makedirs(data_dir, exist_ok=True)
+                return data_dir
+            except PermissionError as e:
+                self.log(f"  ⚠️ 无法创建插件数据目录 {data_dir}: 权限不足")
+            except OSError as e:
+                self.log(f"  ⚠️ 无法创建插件数据目录 {data_dir}: {e}")
+        else:
+            return data_dir
         
-        return data_dir
+        # 回退到用户目录 ~/.gluetk/data
+        user_data_dir = os.path.join(os.path.expanduser("~"), ".gluetk", "data")
+        try:
+            os.makedirs(user_data_dir, exist_ok=True)
+            return user_data_dir
+        except PermissionError as e:
+            self.log(f"  ⚠️ 无法创建用户数据目录 {user_data_dir}: 权限不足")
+        except OSError as e:
+            self.log(f"  ⚠️ 无法创建用户数据目录 {user_data_dir}: {e}")
+        
+        # 最后回退到临时目录
+        import tempfile
+        temp_data_dir = os.path.join(tempfile.gettempdir(), "gluetk_data")
+        try:
+            os.makedirs(temp_data_dir, exist_ok=True)
+            self.log(f"  ℹ️ 使用临时数据目录: {temp_data_dir}")
+            return temp_data_dir
+        except Exception as e:
+            self.log(f"  ❌ 无法创建任何数据目录: {e}")
+            # 返回临时目录路径，即使创建失败也让调用者处理
+            return temp_data_dir
     
     def check_hmm_files(self) -> Dict[str, bool]:
         """
@@ -1463,11 +1487,32 @@ def is_first_run() -> bool:
 
 
 def mark_initialized():
-    """标记已初始化"""
+    """
+    标记已初始化（带权限错误处理）
+    
+    尝试在用户主目录创建初始化标记文件。
+    如果失败（权限问题等），静默忽略，不影响插件正常使用。
+    """
     try:
+        # 确保父目录存在
+        marker_dir = os.path.dirname(_FIRST_RUN_MARKER)
+        if marker_dir and not os.path.exists(marker_dir):
+            try:
+                os.makedirs(marker_dir, exist_ok=True)
+            except (PermissionError, OSError):
+                # 无法创建目录，静默忽略
+                return
+        
         with open(_FIRST_RUN_MARKER, 'w') as f:
             f.write('initialized')
-    except:
+    except PermissionError:
+        # 权限不足，静默忽略
+        pass
+    except OSError as e:
+        # 其他 OS 错误，静默忽略
+        pass
+    except Exception:
+        # 任何其他错误，静默忽略
         pass
 
 

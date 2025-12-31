@@ -99,8 +99,9 @@ class TernaryComplexFeatures:
 class BSACalculator:
     """BSA计算器 - 使用PyMOL的cmd.get_area()"""
     
-    def __init__(self, obj_name: str = None):
+    def __init__(self, obj_name: str = None, ligand_resn: str = None):
         self.obj_name = obj_name
+        self.ligand_resn = ligand_resn
         self._pymol_available = False
         try:
             from pymol import cmd
@@ -109,12 +110,10 @@ class BSACalculator:
         except ImportError:
             logger.warning("PyMOL不可用，BSA计算功能受限")
     
-    def calculate_bsa(self, chain1: str, chain2: str) -> float:
+    def calculate_bsa_chain_chain(self, chain1: str, chain2: str) -> float:
         """
-        计算两个链之间的埋藏表面积 (Buried Surface Area)
+        计算两条蛋白链之间的埋藏表面积 (Buried Surface Area)
         
-        改进版：创建临时对象以确保计算的是孤立状态下的表面积，
-        避免PyMOL在同一对象中计算Area时考虑其他非选定原子的遮挡。
         BSA = (SA_chain1 + SA_chain2 - SA_complex) / 2
         
         参数:
@@ -125,44 +124,32 @@ class BSACalculator:
             float: 埋藏表面积 (Å²)
         """
         if not self._pymol_available or not self.obj_name:
-            logger.warning("PyMOL不可用或未指定对象名，返回0")
             return 0.0
         
         import uuid
-        # 生成唯一后缀以避免冲突
         suffix = str(uuid.uuid4())[:8]
         
-        # 临时对象名
         obj_c1 = f"temp_c1_{suffix}"
         obj_c2 = f"temp_c2_{suffix}"
         obj_complex = f"temp_complex_{suffix}"
         
         try:
-            # 定义排除溶剂的选择基础
-            # 排除常见溶剂和离子
             solvent_sel = "resn HOH+WAT+NA+CL+MG+CA+ZN"
-            sel_base = f"{self.obj_name} and not ({solvent_sel})"
+            # 排除配体残基，只计算蛋白质部分
+            ligand_exclude = f" and not resn {self.ligand_resn}" if self.ligand_resn else ""
+            sel_base = f"{self.obj_name} and not ({solvent_sel}){ligand_exclude}"
             
-            # 1. 创建孤立的Chain 1对象并计算面积
-            # 使用create命令将选择的原子复制到新对象，从而使其在计算SAS时完全孤立
             self.cmd.create(obj_c1, f"{sel_base} and chain {chain1}")
-            # 设置dot_solvent以确保准确性 (0=surface only, 1=include voids) - default is usually fine but let's be safe
-            # self.cmd.set("dot_solvent", 1, obj_c1)
             area_chain1 = self.cmd.get_area(obj_c1)
             
-            # 2. 创建孤立的Chain 2对象并计算面积
             self.cmd.create(obj_c2, f"{sel_base} and chain {chain2}")
             area_chain2 = self.cmd.get_area(obj_c2)
             
-            # 3. 创建复合物对象（Chain 1 + Chain 2）并计算面积
             self.cmd.create(obj_complex, f"{sel_base} and (chain {chain1} or chain {chain2})")
             area_complex = self.cmd.get_area(obj_complex)
             
-            # 4. 计算BSA
-            # BSA = (SA1 + SA2 - SA_complex) / 2
             bsa = (area_chain1 + area_chain2 - area_complex) / 2.0
             
-            # 清理临时对象
             self.cmd.delete(obj_c1)
             self.cmd.delete(obj_c2)
             self.cmd.delete(obj_complex)
@@ -171,14 +158,339 @@ class BSACalculator:
         
         except Exception as e:
             logger.error(f"BSA计算失败: {e}")
-            # 出错时尝试清理
             try:
-                if self.cmd.get_type(obj_c1) != 'object:': self.cmd.delete(obj_c1)
-                if self.cmd.get_type(obj_c2) != 'object:': self.cmd.delete(obj_c2)
-                if self.cmd.get_type(obj_complex) != 'object:': self.cmd.delete(obj_complex)
+                self.cmd.delete(obj_c1)
+                self.cmd.delete(obj_c2)
+                self.cmd.delete(obj_complex)
             except:
                 pass
             return 0.0
+    
+    def calculate_bsa_ligand_chain(self, chain: str) -> float:
+        """
+        计算配体与蛋白链之间的埋藏表面积 (Buried Surface Area)
+        
+        使用标准 BSA 公式：BSA = (SA_ligand + SA_chain - SA_complex) / 2
+        
+        由于 PyMOL 的 get_area() 对 HETATM 原子可能返回 0，
+        我们尝试使用 FreeSASA 库作为备选方案。
+        
+        参数:
+            chain: 蛋白链ID
+        
+        返回:
+            float: 埋藏表面积 (Å²)
+        """
+        if not self._pymol_available or not self.obj_name or not self.ligand_resn:
+            print(f"[BSA Debug] Skipping: pymol={self._pymol_available}, obj={self.obj_name}, resn={self.ligand_resn}")
+            return 0.0
+        
+        import uuid
+        suffix = str(uuid.uuid4())[:8]
+        
+        obj_lig = f"temp_lig_{suffix}"
+        obj_chain = f"temp_chain_{suffix}"
+        obj_complex = f"temp_complex_{suffix}"
+        
+        try:
+            solvent_sel = "resn HOH+WAT+NA+CL+MG+CA+ZN"
+            sel_base = f"{self.obj_name} and not ({solvent_sel})"
+            
+            # 选择配体（按 residue name）
+            lig_sel = f"{sel_base} and resn {self.ligand_resn}"
+            # 选择蛋白链（排除配体）
+            chain_sel = f"{sel_base} and chain {chain} and not resn {self.ligand_resn}"
+            
+            print(f"[BSA Debug] === Calculating BSA for chain {chain} ===")
+            
+            # 检查选择是否有原子
+            lig_count = self.cmd.count_atoms(lig_sel)
+            chain_count = self.cmd.count_atoms(chain_sel)
+            print(f"[BSA Debug] Ligand atoms: {lig_count}, Chain {chain} atoms: {chain_count}")
+            
+            if lig_count == 0 or chain_count == 0:
+                return 0.0
+            
+            # 保存当前设置
+            old_dot_solvent = self.cmd.get("dot_solvent")
+            old_dot_density = self.cmd.get("dot_density")
+            
+            # 设置表面积计算参数
+            self.cmd.set("dot_solvent", 1)
+            self.cmd.set("dot_density", 3)
+            
+            # 尝试使用 FreeSASA 计算配体面积
+            area_lig = 0.0
+            try:
+                import freesasa
+                # 导出配体到临时 PDB 文件
+                import tempfile
+                import os
+                fd, temp_pdb = tempfile.mkstemp(suffix=".pdb")
+                os.close(fd)
+                self.cmd.save(temp_pdb, lig_sel)
+                
+                # 使用 FreeSASA 计算
+                structure = freesasa.Structure(temp_pdb)
+                result = freesasa.calc(structure)
+                area_lig = result.totalArea()
+                print(f"[BSA Debug] Ligand area (FreeSASA): {area_lig:.1f}")
+                
+                os.remove(temp_pdb)
+            except ImportError:
+                print(f"[BSA Debug] FreeSASA not available, using PyMOL")
+                # 使用 PyMOL 计算
+                self.cmd.create(obj_lig, lig_sel)
+                area_lig = self.cmd.get_area(obj_lig, state=1)
+                print(f"[BSA Debug] Ligand area (PyMOL): {area_lig:.1f}")
+                self.cmd.delete(obj_lig)
+            except Exception as e:
+                print(f"[BSA Debug] FreeSASA error: {e}, using PyMOL")
+                self.cmd.create(obj_lig, lig_sel)
+                area_lig = self.cmd.get_area(obj_lig, state=1)
+                print(f"[BSA Debug] Ligand area (PyMOL): {area_lig:.1f}")
+                self.cmd.delete(obj_lig)
+            
+            # 如果配体面积仍为 0，使用基于接触原子的估算
+            if area_lig == 0:
+                print(f"[BSA Debug] Ligand area is 0, using contact-based estimation")
+                # 估算配体面积：每个重原子约 15-20 Å²
+                area_lig = lig_count * 17.0  # 平均每个原子 17 Å²
+                print(f"[BSA Debug] Estimated ligand area: {lig_count} atoms × 17 Å² = {area_lig:.1f} Å²")
+            
+            # 计算蛋白链面积
+            self.cmd.create(obj_chain, chain_sel)
+            area_chain = self.cmd.get_area(obj_chain, state=1)
+            print(f"[BSA Debug] Chain {chain} area: {area_chain:.1f}")
+            self.cmd.delete(obj_chain)
+            
+            # 计算复合物面积
+            complex_sel = f"({lig_sel}) or ({chain_sel})"
+            self.cmd.create(obj_complex, complex_sel)
+            area_complex = self.cmd.get_area(obj_complex, state=1)
+            
+            # 如果复合物面积等于蛋白链面积（说明配体没有被计入），需要调整
+            if abs(area_complex - area_chain) < 1.0:
+                print(f"[BSA Debug] Complex area equals chain area, adjusting...")
+                # 复合物面积 = 蛋白链面积 + 配体面积 - 2×BSA
+                # 我们需要估算 BSA，使用接触原子方法
+                contact_dist = 4.5
+                lig_contact_sel = f"({lig_sel}) within {contact_dist} of ({chain_sel})"
+                chain_contact_sel = f"({chain_sel}) within {contact_dist} of ({lig_sel})"
+                lig_contact_count = self.cmd.count_atoms(lig_contact_sel)
+                chain_contact_count = self.cmd.count_atoms(chain_contact_sel)
+                
+                # 估算 BSA：每对接触原子贡献约 15 Å²
+                contact_pairs = min(lig_contact_count, chain_contact_count)
+                bsa = contact_pairs * 15.0
+                print(f"[BSA Debug] Contact-based BSA: {contact_pairs} pairs × 15 Å² = {bsa:.1f} Å²")
+                
+                self.cmd.delete(obj_complex)
+                self.cmd.set("dot_solvent", old_dot_solvent)
+                self.cmd.set("dot_density", old_dot_density)
+                return bsa
+            
+            print(f"[BSA Debug] Complex area: {area_complex:.1f}")
+            self.cmd.delete(obj_complex)
+            
+            # 恢复设置
+            self.cmd.set("dot_solvent", old_dot_solvent)
+            self.cmd.set("dot_density", old_dot_density)
+            
+            # 计算 BSA
+            bsa = (area_lig + area_chain - area_complex) / 2.0
+            print(f"[BSA Debug] BSA = ({area_lig:.1f} + {area_chain:.1f} - {area_complex:.1f}) / 2 = {bsa:.1f} Å²")
+            
+            return max(0.0, bsa)
+        
+        except Exception as e:
+            logger.error(f"配体-蛋白BSA计算失败: {e}")
+            print(f"[BSA Debug] Error: {e}")
+            import traceback
+            traceback.print_exc()
+            try:
+                self.cmd.delete(obj_lig)
+                self.cmd.delete(obj_chain)
+                self.cmd.delete(obj_complex)
+            except:
+                pass
+            return 0.0
+
+    def calculate_bsa_ternary(self, e3_chain: str, poi_chain: str) -> Dict[str, float]:
+        """
+        使用三元复合物公式计算 BSA
+        
+        公式：BSA_MG = (SA_E3-MG + SA_POI-MG) - SA_E3-POI-MG
+        
+        其中：
+        - SA_E3-MG = E3 和 MG 组成的二元复合物的表面积
+        - SA_POI-MG = POI 和 MG 组成的二元复合物的表面积
+        - SA_E3-POI-MG = 三元复合物的总表面积
+        
+        参数:
+            e3_chain: E3 链 ID
+            poi_chain: POI 链 ID
+        
+        返回:
+            Dict: 包含 bsa_mg_e3, bsa_mg_poi, bsa_e3_poi, bsa_total 的字典
+        """
+        result = {
+            'bsa_mg_e3': 0.0,
+            'bsa_mg_poi': 0.0,
+            'bsa_e3_poi': 0.0,
+            'bsa_total': 0.0,
+            # 中间计算值
+            'sa_e3_mg': 0.0,      # E3-MG 二元复合物表面积
+            'sa_poi_mg': 0.0,     # POI-MG 二元复合物表面积
+            'sa_ternary': 0.0,    # 三元复合物表面积
+            'sa_e3': 0.0,         # E3 单独表面积
+            'sa_poi': 0.0,        # POI 单独表面积
+            'sa_e3_poi': 0.0,     # E3-POI 二元复合物表面积
+            'contact_mg_e3': 0,   # MG-E3 接触原子数
+            'contact_mg_poi': 0,  # MG-POI 接触原子数
+        }
+        
+        if not self._pymol_available or not self.obj_name or not self.ligand_resn:
+            print(f"[BSA Debug] Skipping ternary BSA: pymol={self._pymol_available}, obj={self.obj_name}, resn={self.ligand_resn}")
+            return result
+        
+        import uuid
+        suffix = str(uuid.uuid4())[:8]
+        
+        try:
+            solvent_sel = "resn HOH+WAT+NA+CL+MG+CA+ZN"
+            sel_base = f"{self.obj_name} and not ({solvent_sel})"
+            
+            # 选择各组分
+            lig_sel = f"{sel_base} and resn {self.ligand_resn}"
+            e3_sel = f"{sel_base} and chain {e3_chain} and not resn {self.ligand_resn}"
+            poi_sel = f"{sel_base} and chain {poi_chain} and not resn {self.ligand_resn}"
+            
+            print(f"[BSA Debug] === Calculating Ternary BSA ===")
+            
+            # 检查选择是否有原子
+            lig_count = self.cmd.count_atoms(lig_sel)
+            e3_count = self.cmd.count_atoms(e3_sel)
+            poi_count = self.cmd.count_atoms(poi_sel)
+            print(f"[BSA Debug] Atoms: Ligand={lig_count}, E3={e3_count}, POI={poi_count}")
+            
+            if lig_count == 0 or e3_count == 0 or poi_count == 0:
+                return result
+            
+            # 保存当前设置
+            old_dot_solvent = self.cmd.get("dot_solvent")
+            old_dot_density = self.cmd.get("dot_density")
+            
+            # 设置表面积计算参数
+            self.cmd.set("dot_solvent", 1)
+            self.cmd.set("dot_density", 3)
+            
+            # 创建临时对象
+            obj_e3_mg = f"temp_e3_mg_{suffix}"
+            obj_poi_mg = f"temp_poi_mg_{suffix}"
+            obj_ternary = f"temp_ternary_{suffix}"
+            obj_e3_poi = f"temp_e3_poi_{suffix}"
+            
+            # 计算 E3-MG 二元复合物面积
+            self.cmd.create(obj_e3_mg, f"({e3_sel}) or ({lig_sel})")
+            area_e3_mg = self.cmd.get_area(obj_e3_mg, state=1)
+            print(f"[BSA Debug] SA(E3-MG): {area_e3_mg:.1f}")
+            
+            # 计算 POI-MG 二元复合物面积
+            self.cmd.create(obj_poi_mg, f"({poi_sel}) or ({lig_sel})")
+            area_poi_mg = self.cmd.get_area(obj_poi_mg, state=1)
+            print(f"[BSA Debug] SA(POI-MG): {area_poi_mg:.1f}")
+            
+            # 计算三元复合物面积
+            self.cmd.create(obj_ternary, f"({e3_sel}) or ({poi_sel}) or ({lig_sel})")
+            area_ternary = self.cmd.get_area(obj_ternary, state=1)
+            print(f"[BSA Debug] SA(E3-POI-MG): {area_ternary:.1f}")
+            
+            # 计算 E3-POI 二元复合物面积（不含配体）
+            self.cmd.create(obj_e3_poi, f"({e3_sel}) or ({poi_sel})")
+            area_e3_poi = self.cmd.get_area(obj_e3_poi, state=1)
+            print(f"[BSA Debug] SA(E3-POI): {area_e3_poi:.1f}")
+            
+            # 计算各组分单独的面积
+            obj_e3 = f"temp_e3_{suffix}"
+            obj_poi = f"temp_poi_{suffix}"
+            
+            self.cmd.create(obj_e3, e3_sel)
+            area_e3 = self.cmd.get_area(obj_e3, state=1)
+            print(f"[BSA Debug] SA(E3): {area_e3:.1f}")
+            
+            self.cmd.create(obj_poi, poi_sel)
+            area_poi = self.cmd.get_area(obj_poi, state=1)
+            print(f"[BSA Debug] SA(POI): {area_poi:.1f}")
+            
+            # 清理临时对象
+            self.cmd.delete(obj_e3_mg)
+            self.cmd.delete(obj_poi_mg)
+            self.cmd.delete(obj_ternary)
+            self.cmd.delete(obj_e3_poi)
+            self.cmd.delete(obj_e3)
+            self.cmd.delete(obj_poi)
+            
+            # 恢复设置
+            self.cmd.set("dot_solvent", old_dot_solvent)
+            self.cmd.set("dot_density", old_dot_density)
+            
+            # 使用三元复合物公式计算 BSA
+            # BSA_MG_total = (SA_E3-MG + SA_POI-MG) - SA_E3-POI-MG
+            bsa_mg_total = (area_e3_mg + area_poi_mg) - area_ternary
+            print(f"[BSA Debug] BSA_MG_total = ({area_e3_mg:.1f} + {area_poi_mg:.1f}) - {area_ternary:.1f} = {bsa_mg_total:.1f}")
+            
+            # 计算 E3-POI BSA（标准公式）
+            bsa_e3_poi = (area_e3 + area_poi - area_e3_poi) / 2.0
+            print(f"[BSA Debug] BSA_E3-POI = ({area_e3:.1f} + {area_poi:.1f} - {area_e3_poi:.1f}) / 2 = {bsa_e3_poi:.1f}")
+            
+            # 分配 MG 的 BSA 到 E3 和 POI
+            # 使用接触原子数来估算比例
+            contact_dist = 4.5
+            lig_e3_contact = self.cmd.count_atoms(f"({lig_sel}) within {contact_dist} of ({e3_sel})")
+            lig_poi_contact = self.cmd.count_atoms(f"({lig_sel}) within {contact_dist} of ({poi_sel})")
+            total_contact = lig_e3_contact + lig_poi_contact
+            
+            print(f"[BSA Debug] Contact atoms: MG-E3={lig_e3_contact}, MG-POI={lig_poi_contact}")
+            
+            if total_contact > 0:
+                ratio_e3 = lig_e3_contact / total_contact
+                ratio_poi = lig_poi_contact / total_contact
+            else:
+                ratio_e3 = 0.5
+                ratio_poi = 0.5
+            
+            bsa_mg_e3 = bsa_mg_total * ratio_e3
+            bsa_mg_poi = bsa_mg_total * ratio_poi
+            
+            print(f"[BSA Debug] BSA_MG-E3 = {bsa_mg_total:.1f} × {ratio_e3:.2f} = {bsa_mg_e3:.1f}")
+            print(f"[BSA Debug] BSA_MG-POI = {bsa_mg_total:.1f} × {ratio_poi:.2f} = {bsa_mg_poi:.1f}")
+            
+            result['bsa_mg_e3'] = max(0.0, bsa_mg_e3)
+            result['bsa_mg_poi'] = max(0.0, bsa_mg_poi)
+            result['bsa_e3_poi'] = max(0.0, bsa_e3_poi)
+            result['bsa_total'] = result['bsa_mg_e3'] + result['bsa_mg_poi'] + result['bsa_e3_poi']
+            
+            # 保存中间计算值
+            result['sa_e3_mg'] = area_e3_mg
+            result['sa_poi_mg'] = area_poi_mg
+            result['sa_ternary'] = area_ternary
+            result['sa_e3'] = area_e3
+            result['sa_poi'] = area_poi
+            result['sa_e3_poi'] = area_e3_poi
+            result['contact_mg_e3'] = lig_e3_contact
+            result['contact_mg_poi'] = lig_poi_contact
+            
+            print(f"[BSA Debug] Total BSA = {result['bsa_total']:.1f}")
+            
+            return result
+        
+        except Exception as e:
+            logger.error(f"三元复合物BSA计算失败: {e}")
+            print(f"[BSA Debug] Error: {e}")
+            import traceback
+            traceback.print_exc()
+            return result
 
 # ==================== 结构解析器 ====================
 
@@ -332,7 +644,7 @@ class TernaryComplexEvaluator:
         pdb_path: str,
         e3_chain: str,
         poi_chain: str,
-        ligand_chain: str,
+        ligand_resn: str,
         ligand_smiles: Optional[str] = None,
         obj_name: Optional[str] = None
     ) -> TernaryComplexFeatures:
@@ -343,7 +655,7 @@ class TernaryComplexEvaluator:
             pdb_path: PDB文件路径
             e3_chain: E3链ID
             poi_chain: POI链ID
-            ligand_chain: 配体链ID
+            ligand_resn: 配体残基名称（如 UNL, LIG, MOL）
             ligand_smiles: 配体SMILES（可选，用于计算小分子性质）
             obj_name: PyMOL对象名（可选，用于BSA计算）
         
@@ -357,15 +669,25 @@ class TernaryComplexEvaluator:
         
         e3 = chains.get(e3_chain)
         poi = chains.get(poi_chain)
-        mg = chains.get(ligand_chain)
+        
+        # 按 residue name 查找配体（而不是 chain ID）
+        mg = self._find_ligand_by_resn(chains, ligand_resn)
         
         if not all([e3, poi, mg]):
-            missing = [c for c, v in [('E3', e3), ('POI', poi), ('MG', mg)] if not v]
-            logger.error(f"缺少链: {missing}")
+            missing = []
+            if not e3:
+                missing.append(f'E3 (chain {e3_chain})')
+            if not poi:
+                missing.append(f'POI (chain {poi_chain})')
+            if not mg:
+                missing.append(f'Ligand (resn {ligand_resn})')
+            logger.error(f"缺少组分: {missing}")
+            print(f"缺少组分: {missing}")
             return features
         
         # 2. 计算界面特征（使用PyMOL）
         self._obj_name = obj_name
+        self._ligand_resn = ligand_resn
         if not obj_name:
             # 尝试加载PDB到PyMOL
             try:
@@ -377,7 +699,9 @@ class TernaryComplexEvaluator:
             except Exception as e:
                 logger.warning(f"无法加载PDB到PyMOL: {e}")
         
-        features.interface = self._calculate_interface(e3, poi, mg, e3_chain, poi_chain, ligand_chain)
+        # 获取配体所在的链ID（用于BSA计算）
+        mg_chain = mg.chain_id if mg else ""
+        features.interface, self._intermediate_values = self._calculate_interface(e3, poi, mg, e3_chain, poi_chain, mg_chain)
         
         # 3. 计算配体特征
         if ligand_smiles:
@@ -393,18 +717,59 @@ class TernaryComplexEvaluator:
         
         return features
 
+    def _find_ligand_by_resn(self, chains: Dict[str, ChainInfo], ligand_resn: str) -> Optional[ChainInfo]:
+        """
+        按残基名称查找配体
+        
+        Args:
+            chains: 所有链的字典
+            ligand_resn: 配体残基名称（如 UNL, LIG, MOL）
+        
+        Returns:
+            ChainInfo: 包含配体原子的虚拟链信息，如果未找到则返回 None
+        """
+        ligand_atoms = []
+        ligand_chain_id = None
+        
+        for chain_id, chain in chains.items():
+            for atom in chain.atoms:
+                if atom.residue_name.upper() == ligand_resn.upper():
+                    ligand_atoms.append(atom)
+                    if ligand_chain_id is None:
+                        ligand_chain_id = chain_id
+        
+        if ligand_atoms:
+            # 创建一个虚拟的 ChainInfo 来存储配体原子
+            return ChainInfo(
+                chain_id=ligand_chain_id or "LIG",
+                chain_type="ligand",
+                atoms=ligand_atoms
+            )
+        
+        return None
+
     def _calculate_interface(self, e3: ChainInfo, poi: ChainInfo, mg: ChainInfo,
-                            e3_chain: str, poi_chain: str, mg_chain: str) -> InterfaceFeatures:
-        """计算界面特征 - 使用PyMOL的cmd.get_area()"""
+                            e3_chain: str, poi_chain: str, mg_chain: str) -> Tuple[InterfaceFeatures, Dict[str, float]]:
+        """
+        计算界面特征 - 使用三元复合物 BSA 公式
+        
+        BSA_MG = (SA_E3-MG + SA_POI-MG) - SA_E3-POI-MG
+        
+        返回:
+            Tuple[InterfaceFeatures, Dict]: 界面特征和中间计算值
+        """
         interface = InterfaceFeatures()
         
-        # 使用PyMOL计算BSA
-        bsa_calc = BSACalculator(self._obj_name)
+        # 使用PyMOL计算BSA，传入配体残基名称
+        bsa_calc = BSACalculator(self._obj_name, self._ligand_resn)
         
-        interface.bsa_mg_e3 = bsa_calc.calculate_bsa(mg_chain, e3_chain)
-        interface.bsa_mg_poi = bsa_calc.calculate_bsa(mg_chain, poi_chain)
-        interface.bsa_e3_poi = bsa_calc.calculate_bsa(e3_chain, poi_chain)
-        interface.bsa_total = interface.bsa_mg_e3 + interface.bsa_mg_poi + interface.bsa_e3_poi
+        # 使用三元复合物公式计算 BSA
+        bsa_results = bsa_calc.calculate_bsa_ternary(e3_chain, poi_chain)
+        
+        interface.bsa_mg_e3 = bsa_results.get('bsa_mg_e3', 0.0)
+        interface.bsa_mg_poi = bsa_results.get('bsa_mg_poi', 0.0)
+        interface.bsa_e3_poi = bsa_results.get('bsa_e3_poi', 0.0)
+        interface.bsa_total = bsa_results.get('bsa_total', 0.0)
         
         # 接触数统计（仍使用原子坐标）
         interface.contact_count_45 = self._count_contacts(mg.atoms, e3.atoms + poi.atoms, 4.5)
@@ -413,7 +778,19 @@ class TernaryComplexEvaluator:
         # 最小链间距离
         interface.min_inter_chain_dist = self._min_distance(e3.atoms, poi.atoms)
         
-        return interface
+        # 返回中间计算值
+        intermediate = {
+            'sa_e3_mg': bsa_results.get('sa_e3_mg', 0.0),
+            'sa_poi_mg': bsa_results.get('sa_poi_mg', 0.0),
+            'sa_ternary': bsa_results.get('sa_ternary', 0.0),
+            'sa_e3': bsa_results.get('sa_e3', 0.0),
+            'sa_poi': bsa_results.get('sa_poi', 0.0),
+            'sa_e3_poi': bsa_results.get('sa_e3_poi', 0.0),
+            'contact_mg_e3': bsa_results.get('contact_mg_e3', 0),
+            'contact_mg_poi': bsa_results.get('contact_mg_poi', 0),
+        }
+        
+        return interface, intermediate
 
     def _calculate_geometry(self, e3: ChainInfo, poi: ChainInfo, mg: ChainInfo) -> GeometryFeatures:
         """计算几何特征"""
@@ -496,6 +873,9 @@ class TernaryComplexEvaluator:
 
     def to_dict(self, features: TernaryComplexFeatures) -> Dict[str, Any]:
         """转换为字典格式"""
+        # 获取中间计算值
+        intermediate = getattr(self, '_intermediate_values', {})
+        
         return {
             # Interface
             'bsa_total': features.interface.bsa_total,
@@ -505,6 +885,16 @@ class TernaryComplexEvaluator:
             'contact_count_45': features.interface.contact_count_45,
             'contact_count_50': features.interface.contact_count_50,
             'min_inter_chain_dist': features.interface.min_inter_chain_dist,
+            
+            # 中间计算值（用于显示计算过程）
+            'sa_e3_mg': intermediate.get('sa_e3_mg', 0.0),
+            'sa_poi_mg': intermediate.get('sa_poi_mg', 0.0),
+            'sa_ternary': intermediate.get('sa_ternary', 0.0),
+            'sa_e3': intermediate.get('sa_e3', 0.0),
+            'sa_poi': intermediate.get('sa_poi', 0.0),
+            'sa_e3_poi_complex': intermediate.get('sa_e3_poi', 0.0),
+            'contact_mg_e3': intermediate.get('contact_mg_e3', 0),
+            'contact_mg_poi': intermediate.get('contact_mg_poi', 0),
             
             # Ligand
             'ligand_mw': features.ligand.molecular_weight,

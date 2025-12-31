@@ -14,7 +14,7 @@
 - 静电分析（APBS 或 Quick 模式）
 - PPI 界面分析（ppi_analyzer）
 
-Author: Vesper
+Author: GlueTK Team
 Date: 2025-11-11
 """
 

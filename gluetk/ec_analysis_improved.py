@@ -9,6 +9,7 @@
 3. 更好的错误消息和建议
 4. 性能监控和进度显示
 5. 自动降级策略
+Author: GlueTK Team
 """
 
 from __future__ import print_function

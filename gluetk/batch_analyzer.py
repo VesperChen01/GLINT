@@ -11,8 +11,8 @@ GlueTK Batch Analyzer
 4. 批量相互作用分析
 5. 结果汇总与导出
 
-Author: Vesper
-Date: 2024-12
+Author: Roufen Chen
+Date: 2025-12
 """
 
 from __future__ import print_function
