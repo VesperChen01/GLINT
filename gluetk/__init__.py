@@ -181,20 +181,6 @@ def _register_commands():
             print(f"⚠️ Batch analyzer not available: {e}")
             _batch_available = False
         
-        # 分子胶数据库模块
-        try:
-            from .glue_database import (
-                GlueDatabase,
-                glue_db_search,
-                glue_db_info,
-                glue_db_fetch,
-                glue_db_export
-            )
-            _glue_db_available = True
-        except ImportError as e:
-            print(f"⚠️ Glue database not available: {e}")
-            _glue_db_available = False
-        
         # 分子胶设计分析（Ternary complex 建模）
         from .glue_design_analyzer import (
             align_gloop_for_modeling,
@@ -261,17 +247,6 @@ def _register_commands():
         except ImportError as e:
             print(f"⚠️ Surface similarity analysis not available: {e}")
             _surface_similarity_available = False
-        
-        # Open Targets 疾病靶点分析
-        try:
-            from .disease_target_commands import (
-                ot_disease_targets,
-                ot_glue_insight
-            )
-            _disease_analysis_available = True
-        except ImportError as e:
-            print(f"⚠️ Disease analysis not available: {e}")
-            _disease_analysis_available = False
         
         # Vina集成(可选,需要安装Vina)
         try:
@@ -352,12 +327,7 @@ def _register_commands():
         cmd.extend("calculate_mutation_ddg", calculate_mutation_ddg)
         cmd.extend("analyze_mutation_effects", analyze_mutation_effects)
         cmd.extend("ddg_heatmap", ddg_heatmap)
-        
-        # Open Targets 疾病靶点分析命令
-        if _disease_analysis_available:
-            cmd.extend("ot_disease_targets", ot_disease_targets)
-            cmd.extend("ot_glue_insight", ot_glue_insight)
-        
+
         # Vina集成命令(可选)
         if _vina_available:
             cmd.extend("vina_score_complex", vina_score_complex)
@@ -375,14 +345,7 @@ def _register_commands():
         if _surface_similarity_available:
             cmd.extend("analyze_surface_similarity", analyze_surface_similarity)
             cmd.extend("analyze_surface_complementarity", analyze_surface_complementarity)
-        
-        # 分子胶数据库命令
-        if _glue_db_available:
-            cmd.extend("glue_db_search", glue_db_search)
-            cmd.extend("glue_db_info", glue_db_info)
-            cmd.extend("glue_db_fetch", glue_db_fetch)
-            cmd.extend("glue_db_export", glue_db_export)
-        
+
         # 配体电性互补性分析命令
         if _ec_available:
             cmd.extend("calculate_ligand_ec", calculate_ligand_ec)

@@ -2100,13 +2100,14 @@ class GlueTKDialog(QDialog):
         self.mut_input.setFixedHeight(28)
         input_grid.addWidget(self.mut_input, 1, 1)
         
-        # 方法选择
+        # 方法选择 (FoldX only)
         input_grid.addWidget(QLabel("Method:"), 2, 0)
         method_row = QHBoxLayout()
         self.mut_method_combo = QComboBox()
-        self.mut_method_combo.addItems(["Auto", "FoldX", "PyRosetta"])
+        self.mut_method_combo.addItems(["FoldX"])
         self.mut_method_combo.setFixedHeight(28)
         self.mut_method_combo.setFixedWidth(120)
+        self.mut_method_combo.setToolTip("ΔΔG calculation requires FoldX\nDownload: https://foldxsuite.crg.eu/")
         method_row.addWidget(self.mut_method_combo)
         method_row.addStretch()
         input_grid.addLayout(method_row, 2, 1)
@@ -2795,13 +2796,14 @@ class GlueTKDialog(QDialog):
         self.mut_input.setFixedHeight(28)
         input_grid.addWidget(self.mut_input, 1, 1)
         
-        # 方法选择
+        # 方法选择 (FoldX only)
         input_grid.addWidget(QLabel("Method:"), 2, 0)
         method_row = QHBoxLayout()
         self.mut_method_combo = QComboBox()
-        self.mut_method_combo.addItems(["Auto", "FoldX", "PyRosetta"])
+        self.mut_method_combo.addItems(["FoldX"])
         self.mut_method_combo.setFixedHeight(28)
         self.mut_method_combo.setFixedWidth(120)
+        self.mut_method_combo.setToolTip("ΔΔG calculation requires FoldX\nDownload: https://foldxsuite.crg.eu/")
         method_row.addWidget(self.mut_method_combo)
         method_row.addStretch()
         input_grid.addLayout(method_row, 2, 1)

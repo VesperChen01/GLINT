@@ -296,8 +296,6 @@ class LeadOptimizationTab(CommonTab):
         # Initially hide ternary-specific fields
         self._on_ec_mode_changed(0)
         
-        # 5. Mutation Analysis
-        layout.addWidget(self._create_mutation_analysis_card())
         
         layout.addStretch(1)
 
@@ -964,5 +962,41 @@ class LeadOptimizationTab(CommonTab):
             self.on_error(str(e))
 
     def run_mutation_analysis(self):
-        # Placeholder for full analysis
-        self.log("Full mutation analysis requires external tools (FoldX/PyRosetta).")
+        """Run full mutation ΔΔG analysis using FoldX"""
+        obj_name = self.parent_window.mut_obj_combo.currentText()
+        if not obj_name or obj_name == t("no_object"):
+            QMessageBox.warning(self, "Warning", "Please select a structure object")
+            return
+        
+        # Check if FoldX is available
+        try:
+            from ...mutation_analyzer import _detect_foldx
+        except ImportError:
+            try:
+                from mutation_analyzer import _detect_foldx
+            except ImportError:
+                self.log("❌ mutation_analyzer module not found")
+                return
+        
+        foldx_path = _detect_foldx()
+        if not foldx_path:
+            QMessageBox.warning(self, "FoldX Not Found",
+                "FoldX is required for ΔΔG analysis.\n\n"
+                "Installation:\n"
+                "1. Download FoldX: https://foldxsuite.crg.eu/\n"
+                "2. Set environment variable: export FOLDX=/path/to/foldx\n"
+                "   Or add FoldX to your PATH")
+            self.log("❌ FoldX not found. Please install FoldX for ΔΔG analysis.")
+            return
+        
+        self.log(f"✅ FoldX detected: {foldx_path}")
+        self.log("💡 For ΔΔG heatmap analysis, use the PyMOL command:")
+        self.log("   ddg_heatmap('CRBN_selection', 'POI_selection')")
+        self.log("")
+        self.log("FoldX Input:")
+        self.log("  - PDB file: CRBN + POI complex structure")
+        self.log("  - Mutation file: <chain><resi><icode><WT><Mut> format")
+        self.log("")
+        self.log("FoldX Output:")
+        self.log("  - DifferencesBetweenMutantAndWildType_fxout.csv")
+        self.log("  - Contains ΔΔG values (kcal/mol)")

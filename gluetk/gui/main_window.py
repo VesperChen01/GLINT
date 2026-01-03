@@ -322,6 +322,7 @@ class GlueTKDialog(QDialog):
         # List of combos to update
         combos = [
             getattr(self, "obj_combo_gm", None),
+            getattr(self, "vina_receptor_combo", None),
 
             getattr(self, "obj_combo_apbs", None),
             getattr(self, "pocket_obj_combo", None),

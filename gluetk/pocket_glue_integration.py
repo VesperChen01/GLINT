@@ -282,7 +282,171 @@ def correlate_pockets_with_interactions(pockets, interaction_csv, output_csv=Non
     return correlations
 
 
-def comprehensive_gmotif_pocket_analysis(obj_name, e3_chain, substrate_chain, 
+def integrate_pockets_with_electrostatics(obj_name, pockets=None,
+                                          output_csv=None, visualize=True,
+                                          **pocket_kwargs):
+    """
+    整合口袋检测与静电势分析
+
+    参数：
+        obj_name: PyMOL 对象名
+        pockets: 预先检测的口袋列表（可选，None 则自动检测）
+        output_csv: 输出 CSV 文件路径
+        visualize: 是否可视化
+        **pocket_kwargs: 传递给 detect_pockets 的参数
+
+    返回：
+        带有静电势信息的口袋列表
+    """
+    if not cmd:
+        return None
+
+    # 检测口袋
+    if pockets is None:
+        pockets = detect_pockets(obj_name, **pocket_kwargs)
+
+    if not pockets:
+        _info("⚠️  未检测到口袋", "⚠️  No pockets detected")
+        return []
+
+    _info(f"\n🔬 整合 {len(pockets)} 个口袋的静电势信息...",
+          f"\n🔬 Integrating electrostatics for {len(pockets)} pockets...")
+
+    # 为每个口袋计算静电势特征
+    for pocket in pockets:
+        center = pocket.get('center', [0, 0, 0])
+
+        # 计算口袋内残基的净电荷
+        pocket_residues = pocket.get('residues', [])
+        positive_count = 0
+        negative_count = 0
+
+        for res in pocket_residues:
+            resn = res.get('resn', '')
+            if resn in ['ARG', 'LYS', 'HIS']:
+                positive_count += 1
+            elif resn in ['ASP', 'GLU']:
+                negative_count += 1
+
+        pocket['positive_residues'] = positive_count
+        pocket['negative_residues'] = negative_count
+        pocket['net_charge'] = positive_count - negative_count
+        pocket['charge_ratio'] = positive_count / max(negative_count, 1)
+
+        # 静电势极性评估
+        if pocket['net_charge'] > 2:
+            pocket['electrostatic_character'] = 'positive'
+        elif pocket['net_charge'] < -2:
+            pocket['electrostatic_character'] = 'negative'
+        else:
+            pocket['electrostatic_character'] = 'neutral'
+
+    # 输出 CSV
+    if output_csv:
+        import csv
+        fieldnames = [
+            'Pocket_ID', 'Volume_A3', 'Druggability_Score',
+            'Positive_Residues', 'Negative_Residues', 'Net_Charge',
+            'Electrostatic_Character', 'Center_X', 'Center_Y', 'Center_Z'
+        ]
+        with open(output_csv, 'w', newline='') as f:
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for i, p in enumerate(pockets, 1):
+                writer.writerow({
+                    'Pocket_ID': i,
+                    'Volume_A3': f"{p.get('volume', 0):.1f}",
+                    'Druggability_Score': f"{p.get('druggability_score', 0):.2f}",
+                    'Positive_Residues': p.get('positive_residues', 0),
+                    'Negative_Residues': p.get('negative_residues', 0),
+                    'Net_Charge': p.get('net_charge', 0),
+                    'Electrostatic_Character': p.get('electrostatic_character', 'unknown'),
+                    'Center_X': f"{p['center'][0]:.2f}",
+                    'Center_Y': f"{p['center'][1]:.2f}",
+                    'Center_Z': f"{p['center'][2]:.2f}"
+                })
+        _info(f"✅ 结果已保存：{output_csv}", f"✅ Results saved: {output_csv}")
+
+    # 可视化
+    if visualize:
+        from .pocket_visualizer import visualize_pockets
+        visualize_pockets(pockets, obj_name='electrostatic_pockets', color_by='druggability')
+
+    return pockets
+
+
+def comprehensive_glue_pocket_analysis(obj_name, chain_a, chain_b,
+                                       glue_selection=None,
+                                       output_dir='glue_pocket_analysis'):
+    """
+    分子胶口袋综合分析（一键式）
+
+    参数：
+        obj_name: PyMOL 对象名
+        chain_a: 蛋白 A 链（如 E3）
+        chain_b: 蛋白 B 链（如底物）
+        glue_selection: 分子胶选择表达式（可选）
+        output_dir: 输出目录
+
+    返回：综合分析结果字典
+    """
+    if not cmd:
+        return None
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    _info("\n" + "="*60, "\n" + "="*60)
+    _info("  分子胶口袋综合分析", "  Comprehensive Glue Pocket Analysis")
+    _info("="*60, "="*60)
+
+    results = {}
+
+    # 1. 全局口袋检测
+    _info("\n📍 步骤 1: 全局口袋检测...", "\n📍 Step 1: Global pocket detection...")
+    all_pockets = detect_pockets(
+        obj_name=obj_name,
+        output_csv=os.path.join(output_dir, 'all_pockets.csv')
+    )
+    results['all_pockets'] = all_pockets
+    _info(f"   检测到 {len(all_pockets)} 个口袋", f"   Detected {len(all_pockets)} pockets")
+
+    # 2. 界面口袋分析
+    _info("\n📍 步骤 2: 界面口袋分析...", "\n📍 Step 2: Interface pocket analysis...")
+    interface_pockets = analyze_pockets_in_ppi_interface(
+        obj_name, chain_a, chain_b,
+        output_csv=os.path.join(output_dir, 'interface_pockets.csv'),
+        visualize=False
+    )
+    results['interface_pockets'] = interface_pockets
+    _info(f"   界面口袋: {len(interface_pockets)} 个", f"   Interface pockets: {len(interface_pockets)}")
+
+    # 3. 静电势整合
+    _info("\n📍 步骤 3: 静电势整合...", "\n📍 Step 3: Electrostatics integration...")
+    electrostatic_pockets = integrate_pockets_with_electrostatics(
+        obj_name, pockets=all_pockets,
+        output_csv=os.path.join(output_dir, 'electrostatic_pockets.csv'),
+        visualize=False
+    )
+    results['electrostatic_pockets'] = electrostatic_pockets
+
+    # 4. 分子胶影响分析（如果提供）
+    if glue_selection:
+        _info("\n📍 步骤 4: 分子胶影响分析...", "\n📍 Step 4: Glue impact analysis...")
+        # 这里可以扩展更多分析
+        results['glue_selection'] = glue_selection
+
+    # 5. 可视化
+    from .pocket_visualizer import visualize_pockets
+    if interface_pockets:
+        visualize_pockets(interface_pockets, obj_name='interface_pockets', color_by='druggability')
+
+    _info(f"\n✅ 分析完成！结果保存在：{output_dir}", f"\n✅ Analysis complete! Results saved to: {output_dir}")
+
+    return results
+
+
+def comprehensive_gmotif_pocket_analysis(obj_name, e3_chain, substrate_chain,
                                          glue_chain=None, 
                                          output_dir='gmotif_pocket_analysis'):
     """

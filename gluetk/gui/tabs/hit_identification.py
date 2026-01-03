@@ -1,6 +1,7 @@
+
 # -*- coding: utf-8 -*-
 """
-Hit Identification Tab: Binding Site Detection, Vina Docking, HADDOCK3
+Hit Identification Tab: Vina Docking, HADDOCK3, Mutation Analysis
 """
 import os
 from typing import Optional
@@ -8,7 +9,7 @@ from typing import Optional
 from ..qt_adapter import (
     Qt, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QGroupBox, QScrollArea, QFrame, QFileDialog, QMessageBox,
-    QComboBox, QCheckBox
+    QComboBox, QCheckBox, QSpinBox, QGridLayout
 )
 
 from ..utils import t
@@ -17,16 +18,6 @@ from .common import CommonTab
 class HitIdentificationTab(CommonTab):
     def __init__(self, parent):
         super().__init__(parent)
-        
-        self._detected_pockets = []
-        
-        # Remove proxies
-        for attr in ['browse_vina_ligand', 'run_vina_docking', 'load_vina_result',
-                     'run_pocket_detection', 'run_pocket_visualization',
-                     'browse_hdock_receptor', 'browse_hdock_ligand', 'run_hdock']:
-            if attr in self.__dict__:
-                del self.__dict__[attr]
-
         self.init_ui()
         
     def init_ui(self):
@@ -38,286 +29,416 @@ class HitIdentificationTab(CommonTab):
         self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
 
         main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(14)
+        main_layout.setSpacing(12)
         main_layout.setContentsMargins(12, 12, 12, 12)
 
-        # 1. Binding Site Detection
-        main_layout.addWidget(self._create_pocket_detection_card())
+        # 1. Vina Docking (Small Molecule)
+        main_layout.addWidget(self._create_vina_card())
+        
+        # Vina buttons row
+        vina_btn_row = QHBoxLayout()
+        self.parent_window.vina_dock_btn = QPushButton("Run Docking")
+        self.parent_window.vina_dock_btn.setObjectName("primary_btn")
+        self.parent_window.vina_dock_btn.setMinimumHeight(32)
+        self.parent_window.vina_dock_btn.clicked.connect(self.run_vina_docking)
+        
+        self.parent_window.vina_load_result_btn = QPushButton("Load Result")
+        self.parent_window.vina_load_result_btn.setObjectName("highlight_btn")
+        self.parent_window.vina_load_result_btn.setMinimumHeight(32)
+        self.parent_window.vina_load_result_btn.clicked.connect(self.load_vina_result)
+        
+        vina_btn_row.addWidget(self.parent_window.vina_dock_btn)
+        vina_btn_row.addWidget(self.parent_window.vina_load_result_btn)
+        vina_btn_row.addStretch(1)
+        main_layout.addLayout(vina_btn_row)
 
-        # 2. Vina Docking
-        main_layout.addWidget(self._create_vina_docking_card())
-
-        # 3. HADDOCK3 (Protein-Protein Docking)
+        # 2. HADDOCK3 (Protein-Protein Docking)
         main_layout.addWidget(self._create_hdock_card())
+
+        # HADDOCK3 buttons row
+        hdock_btn_row = QHBoxLayout()
+        self.parent_window.hdock_run_btn = QPushButton("Run HADDOCK3")
+        self.parent_window.hdock_run_btn.setObjectName("primary_btn")
+        self.parent_window.hdock_run_btn.setMinimumHeight(32)
+        self.parent_window.hdock_run_btn.clicked.connect(self.run_hdock)
+
+        hdock_btn_row.addWidget(self.parent_window.hdock_run_btn)
+        hdock_btn_row.addStretch(1)
+        main_layout.addLayout(hdock_btn_row)
+
+        # 3. Protein Mutation & ΔΔG Analysis (independent card under HADDOCK3)
+        main_layout.addWidget(self._create_mutation_analysis_card())
 
         main_layout.addStretch(1)
 
-    def _create_hdock_card(self) -> QWidget:
-        """Create HADDOCK3 protein-protein docking card"""
-        card = QGroupBox("HADDOCK3 - Protein-Protein Docking")
+    def _create_vina_card(self) -> QWidget:
+        """Create compact Vina docking card"""
+        card = QGroupBox("AutoDock Vina - Small Molecule Docking")
         layout = QVBoxLayout(card)
-        layout.setSpacing(10)
-        layout.setContentsMargins(16, 20, 16, 16)
+        layout.setSpacing(8)
+        layout.setContentsMargins(12, 14, 12, 10)
         
-        # Receptor (E3+Glue)
-        rec_layout = QHBoxLayout()
-        rec_layout.setSpacing(8)
+        # Row 1: Receptor + Ligand
+        row1 = QHBoxLayout()
+        row1.setSpacing(6)
         
-        self.parent_window.hdock_receptor = QLineEdit()
-        self.parent_window.hdock_receptor.setPlaceholderText("Receptor PDB (e.g., E3+Glue)")
-        self.parent_window.hdock_receptor.setMinimumHeight(36)
+        self.parent_window.vina_receptor_combo = QComboBox()
+        self.parent_window.vina_receptor_combo.setMinimumHeight(28)
+        self.parent_window.vina_receptor_combo.setMinimumWidth(120)
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setMinimumHeight(28)
+        refresh_btn.clicked.connect(self.refresh_objects)
         
-        self.parent_window.hdock_rec_browse = QPushButton("Browse")
-        self.parent_window.hdock_rec_browse.setObjectName("browse_btn")
-        self.parent_window.hdock_rec_browse.setMinimumHeight(36)
-        self.parent_window.hdock_rec_browse.clicked.connect(self.browse_hdock_receptor)
+        self.parent_window.vina_ligand = QLineEdit()
+        self.parent_window.vina_ligand.setPlaceholderText("Ligand file or folder")
+        self.parent_window.vina_ligand.setMinimumHeight(28)
+        self.parent_window.vina_ligand.setMinimumWidth(150)
         
-        rec_layout.addWidget(QLabel("Receptor:"))
-        rec_layout.addWidget(self.parent_window.hdock_receptor, 1)
-        rec_layout.addWidget(self.parent_window.hdock_rec_browse)
-        layout.addLayout(rec_layout)
+        lig_browse_btn = QPushButton("Browse")
+        lig_browse_btn.setMinimumHeight(28)
+        lig_browse_btn.setToolTip("Select ligand file or folder for batch docking")
+        lig_browse_btn.clicked.connect(self.browse_vina_ligand)
         
-        # Ligand (POI)
-        lig_layout = QHBoxLayout()
-        lig_layout.setSpacing(8)
+        row1.addWidget(QLabel("Receptor:"))
+        row1.addWidget(self.parent_window.vina_receptor_combo)
+        row1.addWidget(refresh_btn)
+        row1.addSpacing(10)
+        row1.addWidget(QLabel("Ligand:"))
+        row1.addWidget(self.parent_window.vina_ligand)
+        row1.addWidget(lig_browse_btn)
+        row1.addStretch()
+        layout.addLayout(row1)
         
-        self.parent_window.hdock_ligand = QLineEdit()
-        self.parent_window.hdock_ligand.setPlaceholderText("Ligand PDB (e.g., POI/Substrate)")
-        self.parent_window.hdock_ligand.setMinimumHeight(36)
+        # Row 2: Selection + Get Center + Center/Size/Exhaust/Modes
+        row2 = QHBoxLayout()
+        row2.setSpacing(6)
         
-        self.parent_window.hdock_lig_browse = QPushButton("Browse")
-        self.parent_window.hdock_lig_browse.setObjectName("browse_btn")
-        self.parent_window.hdock_lig_browse.setMinimumHeight(36)
-        self.parent_window.hdock_lig_browse.clicked.connect(self.browse_hdock_ligand)
+        self.parent_window.vina_selection = QLineEdit()
+        self.parent_window.vina_selection.setPlaceholderText("resn LIG")
+        self.parent_window.vina_selection.setMinimumHeight(28)
+        self.parent_window.vina_selection.setMaximumWidth(80)
+        get_center_btn = QPushButton("Get Center")
+        get_center_btn.setMinimumHeight(28)
+        get_center_btn.clicked.connect(self.get_center_from_selection)
         
-        lig_layout.addWidget(QLabel("Ligand:"))
-        lig_layout.addWidget(self.parent_window.hdock_ligand, 1)
-        lig_layout.addWidget(self.parent_window.hdock_lig_browse)
-        layout.addLayout(lig_layout)
+        self.parent_window.vina_cx = QLineEdit()
+        self.parent_window.vina_cx.setPlaceholderText("X")
+        self.parent_window.vina_cx.setFixedWidth(60)
+        self.parent_window.vina_cx.setMinimumHeight(28)
+        self.parent_window.vina_cy = QLineEdit()
+        self.parent_window.vina_cy.setPlaceholderText("Y")
+        self.parent_window.vina_cy.setFixedWidth(60)
+        self.parent_window.vina_cy.setMinimumHeight(28)
+        self.parent_window.vina_cz = QLineEdit()
+        self.parent_window.vina_cz.setPlaceholderText("Z")
+        self.parent_window.vina_cz.setFixedWidth(60)
+        self.parent_window.vina_cz.setMinimumHeight(28)
         
-        # Docking mode
-        mode_layout = QHBoxLayout()
-        mode_layout.setSpacing(8)
-        self.parent_window.haddock_mode = QComboBox()
-        self.parent_window.haddock_mode.addItems([
-            "Blind docking (Random AIR)",
-            "Blind docking (Centroid)",
-            "Blind docking (Surface)",
-            "Pocket-constrained (Residue AIR)"
-        ])
-        self.parent_window.haddock_mode.setMinimumHeight(32)
-        mode_layout.addWidget(QLabel("Mode:"))
-        mode_layout.addWidget(self.parent_window.haddock_mode, 1)
-        layout.addLayout(mode_layout)
+        self.parent_window.vina_sx = QLineEdit("20")
+        self.parent_window.vina_sx.setFixedWidth(35)
+        self.parent_window.vina_sx.setMinimumHeight(28)
+        self.parent_window.vina_sy = QLineEdit("20")
+        self.parent_window.vina_sy.setFixedWidth(35)
+        self.parent_window.vina_sy.setMinimumHeight(28)
+        self.parent_window.vina_sz = QLineEdit("20")
+        self.parent_window.vina_sz.setFixedWidth(35)
+        self.parent_window.vina_sz.setMinimumHeight(28)
         
-        # Auto passive expansion (only for pocket-constrained)
-        self.parent_window.haddock_auto_passive = QCheckBox("Auto expand passive residues (6.5 Å)")
-        self.parent_window.haddock_auto_passive.setChecked(True)
-        layout.addWidget(self.parent_window.haddock_auto_passive)
+        self.parent_window.vina_exhaustiveness = QSpinBox()
+        self.parent_window.vina_exhaustiveness.setRange(1, 32)
+        self.parent_window.vina_exhaustiveness.setValue(8)
+        self.parent_window.vina_exhaustiveness.setFixedWidth(50)
+        self.parent_window.vina_exhaustiveness.setMinimumHeight(28)
         
-        # Receptor/Ligand site residues
-        rsite_layout = QHBoxLayout()
-        rsite_layout.setSpacing(8)
-        self.parent_window.hdock_rsite = QLineEdit()
-        self.parent_window.hdock_rsite.setPlaceholderText("Rec site residues, e.g., 195:A,203-206:A")
-        self.parent_window.hdock_rsite.setMinimumHeight(32)
-        rsite_layout.addWidget(QLabel("Rec site:"))
-        rsite_layout.addWidget(self.parent_window.hdock_rsite, 1)
-        layout.addLayout(rsite_layout)
-
-        lsite_layout = QHBoxLayout()
-        lsite_layout.setSpacing(8)
-        self.parent_window.hdock_lsite = QLineEdit()
-        self.parent_window.hdock_lsite.setPlaceholderText("Lig site residues, e.g., 108:B,120-123:B")
-        self.parent_window.hdock_lsite.setMinimumHeight(32)
-        lsite_layout.addWidget(QLabel("Lig site:"))
-        lsite_layout.addWidget(self.parent_window.hdock_lsite, 1)
-        layout.addLayout(lsite_layout)
+        self.parent_window.vina_num_modes = QSpinBox()
+        self.parent_window.vina_num_modes.setRange(1, 20)
+        self.parent_window.vina_num_modes.setValue(9)
+        self.parent_window.vina_num_modes.setFixedWidth(50)
+        self.parent_window.vina_num_modes.setMinimumHeight(28)
         
-        # Output directory (optional)
-        out_layout = QHBoxLayout()
-        out_layout.setSpacing(8)
-        self.parent_window.hdock_output = QLineEdit()
-        self.parent_window.hdock_output.setPlaceholderText("Output dir (default: same as receptor)")
-        self.parent_window.hdock_output.setMinimumHeight(32)
-        self.parent_window.hdock_out_browse = QPushButton("Browse")
-        self.parent_window.hdock_out_browse.setObjectName("browse_btn")
-        self.parent_window.hdock_out_browse.setMinimumHeight(32)
-        self.parent_window.hdock_out_browse.clicked.connect(self.browse_hdock_output)
-        out_layout.addWidget(QLabel("Output:"))
-        out_layout.addWidget(self.parent_window.hdock_output, 1)
-        out_layout.addWidget(self.parent_window.hdock_out_browse)
-        layout.addLayout(out_layout)
+        row2.addWidget(self.parent_window.vina_selection)
+        row2.addWidget(get_center_btn)
+        row2.addWidget(QLabel("Center:"))
+        row2.addWidget(self.parent_window.vina_cx)
+        row2.addWidget(self.parent_window.vina_cy)
+        row2.addWidget(self.parent_window.vina_cz)
+        row2.addWidget(QLabel("Size:"))
+        row2.addWidget(self.parent_window.vina_sx)
+        row2.addWidget(self.parent_window.vina_sy)
+        row2.addWidget(self.parent_window.vina_sz)
+        row2.addWidget(QLabel("Exhaust:"))
+        row2.addWidget(self.parent_window.vina_exhaustiveness)
+        row2.addWidget(QLabel("Modes:"))
+        row2.addWidget(self.parent_window.vina_num_modes)
+        row2.addStretch()
+        layout.addLayout(row2)
         
-        # Toggle visibility by mode
-        def _toggle_mode(idx: int):
-            text = self.parent_window.haddock_mode.currentText()
-            pocket_mode = text.startswith("Pocket-constrained")
-            for w in (self.parent_window.hdock_rsite, self.parent_window.hdock_lsite, self.parent_window.haddock_auto_passive):
-                w.setEnabled(pocket_mode)
-        self.parent_window.haddock_mode.currentIndexChanged.connect(_toggle_mode)
-        _toggle_mode(self.parent_window.haddock_mode.currentIndex())
+        # Row 3: Output directory
+        row3 = QHBoxLayout()
+        row3.setSpacing(6)
         
-        # Run button
-        self.parent_window.hdock_run_btn = QPushButton("Run HADDOCK3")
-        self.parent_window.hdock_run_btn.setObjectName("primary_btn")
-        self.parent_window.hdock_run_btn.setMinimumHeight(36)
-        self.parent_window.hdock_run_btn.clicked.connect(self.run_hdock)
-        layout.addWidget(self.parent_window.hdock_run_btn)
+        self.parent_window.vina_output_dir = QLineEdit()
+        self.parent_window.vina_output_dir.setPlaceholderText("Output directory (optional)")
+        self.parent_window.vina_output_dir.setMinimumHeight(28)
+        self.parent_window.vina_output_dir.setMinimumWidth(200)
+        out_browse = QPushButton("Browse")
+        out_browse.setMinimumHeight(28)
+        out_browse.clicked.connect(lambda: self._browse_directory(self.parent_window.vina_output_dir, "Select Output Directory"))
+        
+        row3.addWidget(QLabel("Output:"))
+        row3.addWidget(self.parent_window.vina_output_dir)
+        row3.addWidget(out_browse)
+        row3.addStretch()
+        layout.addLayout(row3)
         
         return card
 
-    # --- Pocket Detection Logic ---
-    def run_pocket_detection(self):
-        try:
-            obj = self.parent_window.pocket_obj_combo.currentText().strip()
-            if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select an object")
-                return
-            try:
-                grid_spacing = float(self.parent_window.pocket_grid_spacing.text().strip() or "0.6")
-                min_volume = float(self.parent_window.pocket_min_volume.text().strip() or "20")
-            except ValueError:
-                QMessageBox.warning(self, "Warning", "Invalid parameter values")
-                return
-            
-            self.log(f"\n🔍 Detecting pockets in {obj}...")
-            try: from ...pocket_detector import detect_pockets
-            except ImportError: from pocket_detector import detect_pockets
-            
-            pockets = detect_pockets(obj, grid_spacing, min_volume)
-            if not pockets:
-                self.log("⚠️  No pockets detected")
-                QMessageBox.information(self, "Result", "No pockets detected.")
-                return
-            
-            self._detected_pockets = pockets
-            self.log(f"\n✅ Detected {len(pockets)} pockets")
-            self.run_pocket_visualization()
-            
-        except Exception as e:
-            self.on_error(str(e))
+    def _create_hdock_card(self) -> QWidget:
+        """Create compact HADDOCK3 card"""
+        card = QGroupBox("HADDOCK3 - Protein-Protein Docking")
+        layout = QVBoxLayout(card)
+        layout.setSpacing(8)
+        layout.setContentsMargins(12, 14, 12, 10)
 
-    def run_pocket_visualization(self):
-        try:
-            if not self._detected_pockets:
-                QMessageBox.warning(self, "Warning", "Please run pocket detection first")
-                return
-            
-            color_by_map = {"Volume": "volume", "Druggability": "druggability", "Hydrophobicity": "hydrophobicity", "Depth": "depth"}
-            color_by = color_by_map.get(self.parent_window.pocket_color_by.currentText(), "volume")
-            
-            try: from ...pocket_visualizer import visualize_pockets
-            except ImportError: from pocket_visualizer import visualize_pockets
-            
-            visualize_pockets(self._detected_pockets, 'gluetk_pockets', color_by=color_by, show_spheres=True, sphere_radius=1.5)
-            self.log("Pockets visualized")
-        except Exception as e:
-            self.on_error(str(e))
+        # Row 1: Receptor + Ligand files
+        row1 = QHBoxLayout()
+        row1.setSpacing(6)
+
+        self.parent_window.hdock_receptor = QLineEdit()
+        self.parent_window.hdock_receptor.setPlaceholderText("Receptor PDB")
+        self.parent_window.hdock_receptor.setMinimumHeight(28)
+        self.parent_window.hdock_receptor.setMinimumWidth(150)
+        rec_browse = QPushButton("Browse")
+        rec_browse.setMinimumHeight(28)
+        rec_browse.clicked.connect(self.browse_hdock_receptor)
+
+        self.parent_window.hdock_ligand = QLineEdit()
+        self.parent_window.hdock_ligand.setPlaceholderText("Ligand PDB")
+        self.parent_window.hdock_ligand.setMinimumHeight(28)
+        self.parent_window.hdock_ligand.setMinimumWidth(150)
+        lig_browse = QPushButton("Browse")
+        lig_browse.setMinimumHeight(28)
+        lig_browse.clicked.connect(self.browse_hdock_ligand)
+
+        row1.addWidget(QLabel("Receptor:"))
+        row1.addWidget(self.parent_window.hdock_receptor)
+        row1.addWidget(rec_browse)
+        row1.addSpacing(10)
+        row1.addWidget(QLabel("Ligand:"))
+        row1.addWidget(self.parent_window.hdock_ligand)
+        row1.addWidget(lig_browse)
+        row1.addStretch()
+        layout.addLayout(row1)
+
+        # Row 2: Mode + site residues
+        row2 = QHBoxLayout()
+        row2.setSpacing(6)
+
+        self.parent_window.haddock_mode = QComboBox()
+        self.parent_window.haddock_mode.addItems([
+            "Blind (Random AIR)", "Blind (Centroid)", "Blind (Surface)", "Pocket-constrained"
+        ])
+        self.parent_window.haddock_mode.setMinimumHeight(28)
+        self.parent_window.haddock_mode.setMinimumWidth(130)
+
+        self.parent_window.hdock_rsite = QLineEdit()
+        self.parent_window.hdock_rsite.setPlaceholderText("Rec site: 195:A,203-206:A")
+        self.parent_window.hdock_rsite.setMinimumHeight(28)
+        self.parent_window.hdock_rsite.setMinimumWidth(140)
+        self.parent_window.hdock_rsite.setEnabled(False)
+
+        self.parent_window.hdock_lsite = QLineEdit()
+        self.parent_window.hdock_lsite.setPlaceholderText("Lig site: 108:B,120-123:B")
+        self.parent_window.hdock_lsite.setMinimumHeight(28)
+        self.parent_window.hdock_lsite.setMinimumWidth(140)
+        self.parent_window.hdock_lsite.setEnabled(False)
+
+        row2.addWidget(QLabel("Mode:"))
+        row2.addWidget(self.parent_window.haddock_mode)
+        row2.addWidget(self.parent_window.hdock_rsite)
+        row2.addWidget(self.parent_window.hdock_lsite)
+        row2.addStretch()
+        layout.addLayout(row2)
+
+        # Row 3: Options + output
+        row3 = QHBoxLayout()
+        row3.setSpacing(6)
+
+        self.parent_window.haddock_auto_passive = QCheckBox("Auto passive (6.5Å)")
+        self.parent_window.haddock_auto_passive.setChecked(True)
+        self.parent_window.haddock_auto_passive.setEnabled(False)
+
+        self.parent_window.hdock_output = QLineEdit()
+        self.parent_window.hdock_output.setPlaceholderText("Output dir (optional)")
+        self.parent_window.hdock_output.setMinimumHeight(28)
+        self.parent_window.hdock_output.setMinimumWidth(150)
+        out_browse = QPushButton("Browse")
+        out_browse.setMinimumHeight(28)
+        out_browse.clicked.connect(self.browse_hdock_output)
+
+        row3.addWidget(self.parent_window.haddock_auto_passive)
+        row3.addWidget(QLabel("Output:"))
+        row3.addWidget(self.parent_window.hdock_output)
+        row3.addWidget(out_browse)
+        row3.addStretch()
+        layout.addLayout(row3)
+
+        # Toggle site fields by mode
+        def _toggle_mode(idx: int):
+            pocket_mode = self.parent_window.haddock_mode.currentText().startswith("Pocket")
+            self.parent_window.hdock_rsite.setEnabled(pocket_mode)
+            self.parent_window.hdock_lsite.setEnabled(pocket_mode)
+            self.parent_window.haddock_auto_passive.setEnabled(pocket_mode)
+        self.parent_window.haddock_mode.currentIndexChanged.connect(_toggle_mode)
+
+        return card
 
     # --- Vina Logic ---
     def browse_vina_ligand(self):
-        fn, _ = QFileDialog.getOpenFileName(self, "Select Ligand", "", "MOL2/SDF/PDBQT (*.mol2 *.sdf *.pdbqt);;All Files (*)")
+        fn, _ = QFileDialog.getOpenFileName(self, "Select Ligand (Cancel for Folder)", "", 
+            "Ligand Files (*.mol2 *.sdf *.pdbqt *.mol *.pdb);;All (*)")
         if fn:
             self.parent_window.vina_ligand.setText(fn)
+        else:
+            folder = QFileDialog.getExistingDirectory(self, "Select Ligand Folder (Batch)")
+            if folder:
+                self.parent_window.vina_ligand.setText(folder)
+
+    def get_center_from_selection(self):
+        try:
+            from pymol import cmd
+            selection = self.parent_window.vina_selection.text().strip()
+            if not selection:
+                QMessageBox.warning(self, "Warning", "Enter a PyMOL selection (e.g. resn LIG)")
+                return
+            try:
+                com = cmd.centerofmass(selection)
+                if com:
+                    self.parent_window.vina_cx.setText(f"{com[0]:.2f}")
+                    self.parent_window.vina_cy.setText(f"{com[1]:.2f}")
+                    self.parent_window.vina_cz.setText(f"{com[2]:.2f}")
+                    self.log(f"Center: ({com[0]:.2f}, {com[1]:.2f}, {com[2]:.2f})")
+                else:
+                    QMessageBox.warning(self, "Warning", f"Could not get center for '{selection}'")
+            except Exception as e:
+                QMessageBox.warning(self, "Warning", f"Error: {e}")
+        except Exception as e:
+            self.on_error(str(e))
 
     def run_vina_docking(self):
         try:
             from pymol import cmd
             
-            if not hasattr(self.parent_window, 'pocket_obj_combo'):
-                 QMessageBox.warning(self, "Warning", "Receptor selector not found (init Target Tab first)")
-                 return
-
-            receptor_obj = self.parent_window.pocket_obj_combo.currentText().strip()
+            receptor_obj = self.parent_window.vina_receptor_combo.currentText().strip()
             if not receptor_obj or receptor_obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select a receptor object from Pocket Detection")
+                QMessageBox.warning(self, "Warning", "Select a receptor object")
+                return
+            
+            ligand_path = self.parent_window.vina_ligand.text().strip()
+            if not ligand_path or not os.path.exists(ligand_path):
+                QMessageBox.warning(self, "Warning", "Select a valid ligand file or folder")
                 return
             
             try:
-                names = cmd.get_names("objects")
-            except:
-                try:
-                    names = cmd.get_object_list()
-                except:
-                    names = []
-                
-            if receptor_obj not in names:
-                QMessageBox.warning(self, "Warning", f"Object '{receptor_obj}' not found in PyMOL")
+                box = {
+                    'center_x': float(self.parent_window.vina_cx.text().strip()),
+                    'center_y': float(self.parent_window.vina_cy.text().strip()),
+                    'center_z': float(self.parent_window.vina_cz.text().strip()),
+                    'size_x': float(self.parent_window.vina_sx.text().strip()),
+                    'size_y': float(self.parent_window.vina_sy.text().strip()),
+                    'size_z': float(self.parent_window.vina_sz.text().strip())
+                }
+            except ValueError:
+                QMessageBox.warning(self, "Warning", "Invalid box parameters. Use 'Get Center' first.")
                 return
             
-            ligand = self.parent_window.vina_ligand.text().strip()
-            if not ligand or not os.path.exists(ligand):
-                QMessageBox.warning(self, "Warning", "Please select a valid ligand file")
-                return
-            
-            max_pockets = self.parent_window.vina_max_pockets.value()
             exhaustiveness = self.parent_window.vina_exhaustiveness.value()
+            num_modes = self.parent_window.vina_num_modes.value()
+            output_dir = self.parent_window.vina_output_dir.text().strip() or None
+            remove_selection = self.parent_window.vina_selection.text().strip() or None
             
-            self.log(f"\nStarting Vina docking...")
-            self.log(f"   Receptor: {receptor_obj}")
-            self.log(f"   Ligand: {os.path.basename(ligand)}")
-            
-            try: from ...vina_integration import pocket_based_docking, manual_box_docking, check_vina_available
-            except ImportError: from vina_integration import pocket_based_docking, manual_box_docking, check_vina_available
+            try:
+                from ...vina_integration import batch_docking, get_ligand_files, check_vina_available
+            except ImportError:
+                from vina_integration import batch_docking, get_ligand_files, check_vina_available
             
             if not check_vina_available():
-                QMessageBox.warning(self, "Vina Not Found", "AutoDock Vina is not installed.")
+                QMessageBox.warning(self, "Error", "AutoDock Vina not found")
                 return
             
-            if self.parent_window.vina_use_custom_box.isChecked():
-                try:
-                    box = {
-                        'center_x': float(self.parent_window.vina_cx.text().strip()),
-                        'center_y': float(self.parent_window.vina_cy.text().strip()),
-                        'center_z': float(self.parent_window.vina_cz.text().strip()),
-                        'size_x': float(self.parent_window.vina_sx.text().strip()),
-                        'size_y': float(self.parent_window.vina_sy.text().strip()),
-                        'size_z': float(self.parent_window.vina_sz.text().strip())
-                    }
-                except ValueError:
-                    QMessageBox.warning(self, "Warning", "Invalid custom box parameters")
-                    return
-                
-                self.log("   Using custom docking box")
-                result = manual_box_docking(receptor_obj, ligand, box, exhaustiveness)
+            ligand_files = get_ligand_files(ligand_path)
+            if not ligand_files:
+                QMessageBox.warning(self, "Warning", "No valid ligand files found")
+                return
+            
+            is_batch = len(ligand_files) > 1
+            
+            if is_batch:
+                self.log(f"Batch docking: {len(ligand_files)} ligands")
+                if remove_selection:
+                    self.log(f"Removing co-crystal: {remove_selection}")
             else:
-                self.log(f"   Auto-detecting max {max_pockets} pockets...")
-                result = pocket_based_docking(receptor_obj, ligand, max_pockets, exhaustiveness)
+                self.log(f"Vina: {receptor_obj} + {os.path.basename(ligand_files[0])}")
+            
+            self.parent_window.vina_dock_btn.setEnabled(False)
+            self.parent_window.vina_dock_btn.setText("Running...")
+            self.parent_window.repaint()
+            
+            def progress_callback(current, total, name):
+                self.log(f"  [{current}/{total}] {name}")
+                self.parent_window.repaint()
+            
+            result = batch_docking(
+                receptor_obj, ligand_path, box,
+                output_dir=output_dir,
+                exhaustiveness=exhaustiveness,
+                num_modes=num_modes,
+                remove_selection=remove_selection,
+                progress_callback=progress_callback if is_batch else None
+            )
+            
+            self.parent_window.vina_dock_btn.setEnabled(True)
+            self.parent_window.vina_dock_btn.setText("Run Docking")
             
             if result.get('success'):
-                self.log("Docking complete!")
-                if 'results' in result:
-                    sorted_results = sorted([r for r in result['results'] if r.get('success')], key=lambda r: r.get('affinity', 0))
-                    for i, r in enumerate(sorted_results[:3], 1):
-                        self.log(f"   {i}. Pocket {r.get('pocket_id','Custom')}: {r.get('affinity'):.2f} kcal/mol")
-                QMessageBox.information(self, "Success", f"Docking completed.\nSaved to: {result.get('output_dir')}")
+                if is_batch:
+                    self.log(f"✅ Batch complete: {result['successful']}/{result['total']} successful")
+                    self.log(f"   Results: {result['csv_path']}")
+                    QMessageBox.information(self, "Success", 
+                        f"Batch docking complete.\n"
+                        f"Successful: {result['successful']}/{result['total']}\n"
+                        f"Results saved to: {result['csv_path']}")
+                else:
+                    affinity = result['results'][0].get('affinity', 0) if result.get('results') else 0
+                    self.log(f"✅ Done! Best: {affinity:.2f} kcal/mol")
+                    QMessageBox.information(self, "Success", f"Docking complete.\nBest: {affinity:.2f} kcal/mol")
             else:
-                self.log(f"Docking failed: {result.get('error')}")
+                self.log(f"❌ Failed: {result.get('error')}")
                 QMessageBox.warning(self, "Error", f"Docking failed: {result.get('error')}")
-                
         except Exception as e:
             self.on_error(str(e))
+            self.parent_window.vina_dock_btn.setEnabled(True)
+            self.parent_window.vina_dock_btn.setText("Run Docking")
 
     def load_vina_result(self):
-        fn, _ = QFileDialog.getOpenFileName(self, "Select Docking Result", "", "PDBQT (*.pdbqt);;All Files (*)")
+        fn, _ = QFileDialog.getOpenFileName(self, "Select Result", "", "PDBQT (*.pdbqt);;All (*)")
         if fn:
             try:
                 from pymol import cmd
                 obj_name = os.path.splitext(os.path.basename(fn))[0]
                 cmd.load(fn, obj_name)
-                self.log(f"Loaded docking result: {obj_name}")
+                self.log(f"Loaded: {obj_name}")
                 self.refresh_objects()
             except Exception as e:
                 self.on_error(str(e))
 
-    # --- HDOCK Logic ---
+    # --- HADDOCK3 Logic ---
     def browse_hdock_receptor(self):
-        fn, _ = QFileDialog.getOpenFileName(self, "Select Receptor PDB (E3)", "", "PDB (*.pdb)")
+        fn, _ = QFileDialog.getOpenFileName(self, "Select Receptor PDB", "", "PDB (*.pdb)")
         if fn: self.parent_window.hdock_receptor.setText(fn)
 
     def browse_hdock_ligand(self):
-        fn, _ = QFileDialog.getOpenFileName(self, "Select Ligand PDB (POI)", "", "PDB (*.pdb)")
+        fn, _ = QFileDialog.getOpenFileName(self, "Select Ligand PDB", "", "PDB (*.pdb)")
         if fn: self.parent_window.hdock_ligand.setText(fn)
 
     def browse_hdock_output(self):
@@ -329,85 +450,134 @@ class HitIdentificationTab(CommonTab):
         lig = self.parent_window.hdock_ligand.text().strip()
         
         if not rec or not lig:
-            QMessageBox.warning(self, "Warning", "Please select both Receptor and Ligand PDB files.")
+            QMessageBox.warning(self, "Warning", "Select both Receptor and Ligand PDB files")
             return
-            
         if not os.path.exists(rec) or not os.path.exists(lig):
-            QMessageBox.warning(self, "Warning", "Selected files do not exist.")
+            QMessageBox.warning(self, "Warning", "Selected files do not exist")
             return
             
-        self.log(f"Starting HADDOCK3...")
-        self.log(f"   Receptor: {os.path.basename(rec)}")
-        self.log(f"   Ligand: {os.path.basename(lig)}")
+        self.log(f"HADDOCK3: {os.path.basename(rec)} + {os.path.basename(lig)}")
         
         try:
             from ...haddock3_integration import check_haddock3_available, Haddock3Runner
             info = check_haddock3_available()
             if not info.get('available'):
-                QMessageBox.warning(
-                    self,
-                    "Error",
-                    "HADDOCK3 not detected. Please install in the same Python/environment as PyMOL and restart:\n\n"
-                    "pip install -U haddock3"
-                )
+                QMessageBox.warning(self, "Error", "HADDOCK3 not found. Install: pip install -U haddock3")
                 return
                 
             runner = Haddock3Runner()
-            
             self.parent_window.hdock_run_btn.setEnabled(False)
-            self.parent_window.hdock_run_btn.setText("Running HADDOCK3...")
+            self.parent_window.hdock_run_btn.setText("Running...")
             self.parent_window.repaint()
             
-            rsite = getattr(self.parent_window, 'hdock_rsite', None)
-            rsite_txt = rsite.text().strip() if rsite else ""
-            lsite = getattr(self.parent_window, 'hdock_lsite', None)
-            lsite_txt = lsite.text().strip() if lsite else ""
-
-            # Map UI mode to runner mode
             mode_map = {
-                "Blind docking (Random AIR)": "blind_ranair",
-                "Blind docking (Centroid)": "blind_cm",
-                "Blind docking (Surface)": "blind_surf",
-                "Pocket-constrained (Residue AIR)": "air_from_residues",
+                "Blind (Random AIR)": "blind_ranair",
+                "Blind (Centroid)": "blind_cm",
+                "Blind (Surface)": "blind_surf",
+                "Pocket-constrained": "air_from_residues",
             }
-            mode_txt = self.parent_window.haddock_mode.currentText()
-            mode = mode_map.get(mode_txt, 'blind_ranair')
-            expand_passive = self.parent_window.haddock_auto_passive.isChecked()
-            
-            # Get output directory (optional)
-            output_dir = self.parent_window.hdock_output.text().strip() or None
+            mode = mode_map.get(self.parent_window.haddock_mode.currentText(), 'blind_ranair')
             
             result = runner.run_docking(
                 rec, lig,
-                output_dir=output_dir,
-                rsite=(rsite_txt or None), lsite=(lsite_txt or None),
-                mode=mode, expand_passive=expand_passive
+                output_dir=self.parent_window.hdock_output.text().strip() or None,
+                rsite=self.parent_window.hdock_rsite.text().strip() or None,
+                lsite=self.parent_window.hdock_lsite.text().strip() or None,
+                mode=mode,
+                expand_passive=self.parent_window.haddock_auto_passive.isChecked()
             )
             
             self.parent_window.hdock_run_btn.setEnabled(True)
             self.parent_window.hdock_run_btn.setText("Run HADDOCK3")
             
             if result.get('success'):
-                self.log("HADDOCK3 complete!")
-                # Show path fallback warning (if any)
-                if result.get('warning'):
-                    self.log(f"   ⚠️  {result['warning']}")
-                self.log(f"   Models: {result['models_pdb']}")
-                
+                self.log("✅ HADDOCK3 complete!")
                 from pymol import cmd
                 cmd.load(result['models_pdb'], "haddock3_models")
-                self.log("   Loaded 'haddock3_models' into PyMOL")
-                
-                msg = "Docking complete. Top models loaded."
-                if result.get('warning'):
-                    msg += f"\n\n⚠️  {result['warning']}"
-                QMessageBox.information(self, "Success", msg)
+                QMessageBox.information(self, "Success", "Docking complete. Models loaded.")
             else:
-                self.log(f"HADDOCK3 failed: {result.get('error')}")
+                self.log(f"❌ Failed: {result.get('error')}")
                 QMessageBox.critical(self, "Error", f"HADDOCK3 failed: {result.get('error')}")
                 
         except Exception as e:
-            self.log(f"Error: {e}")
             self.on_error(str(e))
             self.parent_window.hdock_run_btn.setEnabled(True)
             self.parent_window.hdock_run_btn.setText("Run HADDOCK3")
+
+    # --- Mutation Logic ---
+    def run_mutation(self):
+        obj_name = self.parent_window.mut_obj_combo.currentText()
+        mutations_str = self.parent_window.mut_input.text().strip()
+        if not obj_name or not mutations_str: return
+        
+        try:
+            mutations = []
+            for mut in mutations_str.split(','):
+                parts = mut.strip().split(':')
+                if len(parts) == 3: mutations.append((parts[0], parts[1], parts[2]))
+            
+            if not mutations:
+                self.log("Invalid mutation format (e.g. A:23:ALA)")
+                return
+                
+            from pymol import cmd
+            if hasattr(cmd, 'perform_mutation'):
+                cmd.perform_mutation(obj_name, mutations, method='pymol')
+                self.log("Mutation performed")
+            else:
+                for chain, resi, resn in mutations:
+                    sel = f"/{obj_name}//{chain}/{resi}"
+                    cmd.wizard("mutagenesis")
+                    cmd.get_wizard().do_select(sel)
+                    cmd.get_wizard().set_mode(resn)
+                    cmd.get_wizard().apply()
+                    cmd.set_wizard()
+                self.log("Mutation applied via PyMOL Wizard")
+        except Exception as e:
+            self.on_error(str(e))
+
+    def run_minimize(self):
+        obj = self.parent_window.mut_obj_combo.currentText()
+        if not obj: return
+        try:
+            from pymol import cmd
+            if hasattr(cmd, 'minimize_energy'):
+                cmd.minimize_energy(obj)
+            else:
+                cmd.protect(f"not {obj}")
+                cmd.sculpt_activate(obj)
+                cmd.sculpt_iterate(obj, cycles=100)
+                self.log("minimization done (sculpt)")
+        except Exception as e:
+            self.on_error(str(e))
+
+    def run_mutation_analysis(self):
+        """Run full mutation ΔΔG analysis using FoldX"""
+        obj_name = self.parent_window.mut_obj_combo.currentText()
+        if not obj_name or obj_name == t("no_object"):
+            QMessageBox.warning(self, "Warning", "Please select a structure object")
+            return
+        
+        try:
+            from ...mutation_analyzer import _detect_foldx
+        except ImportError:
+            try:
+                from mutation_analyzer import _detect_foldx
+            except ImportError:
+                self.log("❌ mutation_analyzer module not found")
+                return
+        
+        foldx_path = _detect_foldx()
+        if not foldx_path:
+            QMessageBox.warning(self, "FoldX Not Found",
+                "FoldX is required for ΔΔG analysis.\n\n"
+                "Installation:\n"
+                "1. Download FoldX: https://foldxsuite.crg.eu/\n"
+                "2. Set environment variable: export FOLDX=/path/to/foldx\n"
+                "   Or add FoldX to your PATH")
+            self.log("❌ FoldX not found. Please install FoldX for ΔΔG analysis.")
+            return
+        
+        self.log(f"✅ FoldX detected: {foldx_path}")
+        self.log("💡 For ΔΔG heatmap analysis, use the PyMOL command:")
+        self.log("   ddg_heatmap('CRBN_selection', 'POI_selection')")

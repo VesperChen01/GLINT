@@ -520,17 +520,17 @@ class SurfaceGenerator:
         """Simple surface point extraction (fallback)."""
         # Find surface voxels (sign change)
         surface_mask = np.zeros(volume.shape, dtype=bool)
-        
+
         # Check neighbors for sign change
         for axis in range(3):
             shifted_pos = np.roll(volume, 1, axis=axis)
             shifted_neg = np.roll(volume, -1, axis=axis)
             surface_mask |= ((volume * shifted_pos) < 0) | ((volume * shifted_neg) < 0)
-        
+
         # Extract surface points
         indices = np.argwhere(surface_mask & (np.abs(volume) < spacing))
         vertices = origin + indices * spacing
-        
+
         # Estimate normals from gradient
         grad = np.gradient(volume)
         normals = np.zeros((len(vertices), 3))
@@ -538,11 +538,88 @@ class SurfaceGenerator:
             n = np.array([grad[0][tuple(idx)], grad[1][tuple(idx)], grad[2][tuple(idx)]])
             norm = np.linalg.norm(n)
             normals[i] = n / norm if norm > 0 else [0, 0, 1]
-        
-        # Create simple triangulation (placeholder)
-        faces = np.array([]).reshape(0, 3).astype(int)
-        
+
+        # Create triangulation using nearest neighbors
+        faces = self._triangulate_surface_points(vertices, normals, spacing)
+
         return vertices, faces, normals
+
+    def _triangulate_surface_points(self, vertices: np.ndarray, normals: np.ndarray,
+                                    spacing: float) -> np.ndarray:
+        """
+        Create triangular faces from surface points using local Delaunay-like triangulation.
+        This is a simplified approach that works for molecular surfaces.
+        """
+        if len(vertices) < 3:
+            return np.array([]).reshape(0, 3).astype(int)
+
+        # Use KDTree for efficient neighbor finding
+        tree = cKDTree(vertices)
+
+        faces = []
+        used_triangles = set()
+
+        # For each vertex, try to form triangles with nearby vertices
+        # Use a distance threshold based on grid spacing
+        max_edge_length = spacing * 2.5
+
+        for i in range(len(vertices)):
+            # Find nearby vertices
+            nearby_indices = tree.query_ball_point(vertices[i], max_edge_length)
+            nearby_indices = [j for j in nearby_indices if j != i]
+
+            if len(nearby_indices) < 2:
+                continue
+
+            # Sort by distance
+            distances = [np.linalg.norm(vertices[j] - vertices[i]) for j in nearby_indices]
+            sorted_neighbors = [x for _, x in sorted(zip(distances, nearby_indices))]
+
+            # Try to form triangles with pairs of nearby vertices
+            for j_idx, j in enumerate(sorted_neighbors[:8]):  # Limit to 8 nearest
+                for k in sorted_neighbors[j_idx+1:8]:
+                    # Check if j and k are also close to each other
+                    jk_dist = np.linalg.norm(vertices[j] - vertices[k])
+                    if jk_dist > max_edge_length:
+                        continue
+
+                    # Create canonical triangle representation (sorted indices)
+                    tri = tuple(sorted([i, j, k]))
+                    if tri in used_triangles:
+                        continue
+
+                    # Check normal consistency - triangle normal should roughly align with vertex normals
+                    v0, v1, v2 = vertices[i], vertices[j], vertices[k]
+                    edge1 = v1 - v0
+                    edge2 = v2 - v0
+                    tri_normal = np.cross(edge1, edge2)
+                    tri_norm_len = np.linalg.norm(tri_normal)
+
+                    if tri_norm_len < 1e-10:
+                        continue  # Degenerate triangle
+
+                    tri_normal = tri_normal / tri_norm_len
+
+                    # Check if triangle normal aligns with average vertex normal
+                    avg_normal = (normals[i] + normals[j] + normals[k]) / 3
+                    avg_norm_len = np.linalg.norm(avg_normal)
+                    if avg_norm_len > 0:
+                        avg_normal = avg_normal / avg_norm_len
+                        dot = np.dot(tri_normal, avg_normal)
+
+                        # Accept if normals are roughly aligned (allow some tolerance)
+                        if abs(dot) > 0.3:
+                            # Ensure consistent winding order
+                            if dot < 0:
+                                faces.append([i, k, j])  # Flip winding
+                            else:
+                                faces.append([i, j, k])
+                            used_triangles.add(tri)
+
+        if len(faces) == 0:
+            return np.array([]).reshape(0, 3).astype(int)
+
+        return np.array(faces, dtype=int)
 
 
 # =============================================================================
@@ -1046,33 +1123,55 @@ class SurfaceComparator:
                                 interface_distance: float = 4.0) -> ComplementarityResult:
         """
         Compute complementarity between two surfaces (for PPI analysis).
-        
+
         Args:
             mesh1, mesh2: Surface meshes
             points1, points2: Surface points with features
             interface_distance: Distance threshold for interface contacts (Å)
-        
+
         Returns:
             ComplementarityResult
+
+        Note:
+            This analysis is designed for surfaces that are in contact (e.g.,
+            receptor-ligand interface within the same complex). If the two
+            surfaces are from different structures that are not spatially
+            aligned, no interface will be found.
         """
         # Find interface points
         coords1 = np.array([p.coord for p in points1])
         coords2 = np.array([p.coord for p in points2])
-        
+
         tree2 = cKDTree(coords2)
-        
+
         interface_pairs = []
         interface_points1 = []
         interface_points2 = []
-        
+
+        # Also track minimum distance for diagnostic purposes
+        min_distance = float('inf')
+
         for i, coord in enumerate(coords1):
             distances, indices = tree2.query(coord, k=1)
+            if distances < min_distance:
+                min_distance = distances
             if distances < interface_distance:
                 interface_pairs.append((i, indices))
                 interface_points1.append(points1[i])
                 interface_points2.append(points2[indices])
-        
+
         if not interface_pairs:
+            # Provide diagnostic information
+            print(f"\n⚠️  No interface found between the two surfaces!")
+            print(f"   Minimum distance between surfaces: {min_distance:.1f} Å")
+            print(f"   Interface distance threshold: {interface_distance:.1f} Å")
+            if min_distance > 50:
+                print(f"\n💡 The surfaces appear to be from different structures that are not spatially aligned.")
+                print(f"   For complementarity analysis, use chains from the SAME complex (e.g., 'chain A' vs 'chain B').")
+                print(f"   For comparing different structures, use 'Similarity Search' instead.")
+            elif min_distance > interface_distance:
+                print(f"\n💡 Try increasing the 'Interface Distance' parameter to {min_distance + 2:.1f} Å or more.")
+
             return ComplementarityResult(
                 score=0.0,
                 geometric_complementarity=0.0,
@@ -1628,15 +1727,76 @@ class SurfaceSimilarityAnalyzer:
             similarity_threshold=similarity_threshold,
             top_k=top_k
         )
-        
+
         return result
-    
+
+    def _normalize_selection(self, obj_name: str, selection: str) -> str:
+        """
+        Normalize selection string - convert short chain names to full PyMOL selection.
+
+        Examples:
+            'A' -> 'chain A'
+            'A B' -> 'chain A or chain B'
+            'A+B' -> 'chain A or chain B'
+            'all' -> 'all'
+            'chain A' -> 'chain A' (unchanged)
+            'resi 1-100' -> 'resi 1-100' (unchanged)
+        """
+        if not selection:
+            return "all"
+
+        selection = selection.strip()
+
+        # If it's already a valid PyMOL selection keyword, return as-is
+        pymol_keywords = ['all', 'chain', 'resi', 'resn', 'name', 'elem', 'hetatm',
+                         'polymer', 'solvent', 'organic', 'inorganic', 'and', 'or', 'not']
+        first_word = selection.split()[0].lower()
+        if first_word in pymol_keywords:
+            return selection
+
+        # Check if it looks like chain identifiers (single letters/numbers, possibly separated)
+        # Pattern: single chars separated by space, comma, or plus
+        import re
+        chain_pattern = re.compile(r'^[A-Za-z0-9](\s*[,+\s]\s*[A-Za-z0-9])*$')
+
+        if chain_pattern.match(selection):
+            # Split by common separators
+            chains = re.split(r'[\s,+]+', selection)
+            chains = [c.strip().upper() for c in chains if c.strip()]
+
+            if len(chains) == 1:
+                # Single chain - verify it exists
+                chain = chains[0]
+                if HAS_PYMOL:
+                    try:
+                        count = cmd.count_atoms(f"{obj_name} and chain {chain}")
+                        if count > 0:
+                            print(f"💡 Selection '{selection}' interpreted as 'chain {chain}' ({count} atoms)")
+                            return f"chain {chain}"
+                    except:
+                        pass
+            else:
+                # Multiple chains
+                chain_sels = [f"chain {c}" for c in chains]
+                combined = " or ".join(chain_sels)
+                if HAS_PYMOL:
+                    try:
+                        count = cmd.count_atoms(f"{obj_name} and ({combined})")
+                        if count > 0:
+                            print(f"💡 Selection '{selection}' interpreted as '({combined})' ({count} atoms)")
+                            return f"({combined})"
+                    except:
+                        pass
+
+        # Return original selection if no conversion needed
+        return selection
+
     def _get_atoms(self, obj_name: Optional[str],
                    pdb_file: Optional[str],
                    selection: str) -> List[Dict]:
         """Get atom information from PyMOL or PDB file."""
         atoms = []
-        
+
         # VDW radii
         vdw_radii = {
             'C': 1.70, 'N': 1.55, 'O': 1.52, 'S': 1.80,
@@ -1644,9 +1804,32 @@ class SurfaceSimilarityAnalyzer:
             'BR': 1.85, 'I': 1.98, 'MG': 1.73, 'CA': 2.31,
             'FE': 2.00, 'ZN': 1.39, 'CU': 1.40, 'MN': 1.61
         }
-        
+
         if obj_name and HAS_PYMOL:
-            model = cmd.get_model(f"{obj_name} and {selection}")
+            # Normalize selection - convert short chain names to full selection
+            selection = self._normalize_selection(obj_name, selection)
+
+            # Validate selection first
+            full_selection = f"{obj_name} and {selection}"
+            try:
+                atom_count = cmd.count_atoms(full_selection)
+                if atom_count == 0:
+                    raise ValueError(
+                        f"Selection '{selection}' in object '{obj_name}' contains no atoms.\n"
+                        f"Please check:\n"
+                        f"  - Is the selection syntax correct? (e.g., 'all', 'chain A', 'A', 'resi 1-100')\n"
+                        f"  - Does the object '{obj_name}' exist in PyMOL?"
+                    )
+            except Exception as e:
+                if "Invalid selection" in str(e) or "Selector-Error" in str(e):
+                    raise ValueError(
+                        f"Invalid selection: '{selection}'\n"
+                        f"Common selections: 'all', 'A' (chain A), 'chain A', 'resi 1-100'\n"
+                        f"Did you mean 'all' instead of '{selection}'?"
+                    )
+                raise
+
+            model = cmd.get_model(full_selection)
             for atom in model.atom:
                 elem = atom.symbol.upper()
                 atoms.append({

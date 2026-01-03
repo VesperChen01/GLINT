@@ -220,19 +220,38 @@ class TargetDiscoveryTab(CommonTab):
         # Row 1: Selection 1 / Selection 2
         sim_grid.addWidget(QLabel("Selection 1:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_sel1 = QLineEdit("all"); self.parent_window.sim_sel1.setMinimumHeight(32)
-        self.parent_window.sim_sel1.setToolTip("PyMOL selection for Object 1 (e.g., 'chain A')")
+        self.parent_window.sim_sel1.setToolTip(
+            "Selection for Object 1. Examples:\n"
+            "  • 'all' - entire structure\n"
+            "  • 'A' or 'chain A' - chain A\n"
+            "  • 'A B' or 'A+B' - chains A and B\n"
+            "  • 'resi 1-100' - residues 1-100"
+        )
         sim_grid.addWidget(self.parent_window.sim_sel1, 1, 1)
-        
+
         sim_grid.addWidget(QLabel("Selection 2:"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_sel2 = QLineEdit("all"); self.parent_window.sim_sel2.setMinimumHeight(32)
-        self.parent_window.sim_sel2.setToolTip("PyMOL selection for Object 2 (e.g., 'chain B')")
+        self.parent_window.sim_sel2.setToolTip(
+            "Selection for Object 2. Examples:\n"
+            "  • 'all' - entire structure\n"
+            "  • 'B' or 'chain B' - chain B\n"
+            "  • 'C D' or 'C+D' - chains C and D\n"
+            "  • 'resi 1-100' - residues 1-100"
+        )
         sim_grid.addWidget(self.parent_window.sim_sel2, 1, 3)
         
         # Row 2: Analysis Type / Surface Method
         sim_grid.addWidget(QLabel("Analysis Type:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_analysis_type = QComboBox(); self.parent_window.sim_analysis_type.setMinimumHeight(32)
         self.parent_window.sim_analysis_type.addItems(["Similarity Search", "Complementarity (PPI)"])
-        self.parent_window.sim_analysis_type.setToolTip("Similarity Search: use Object 1 as template to search similar patches in Object 2\nComplementarity: analyze PPI interface fit")
+        self.parent_window.sim_analysis_type.setToolTip(
+            "Similarity Search: Compare surface features between two different structures.\n"
+            "  - Use for finding similar binding sites across proteins\n"
+            "  - Objects can be from different PDB files\n\n"
+            "Complementarity (PPI): Analyze interface fit between receptor and ligand.\n"
+            "  - Use for chains within the SAME complex (e.g., 'chain A' vs 'chain B')\n"
+            "  - Objects must be spatially close (in contact)"
+        )
         sim_grid.addWidget(self.parent_window.sim_analysis_type, 2, 1)
         
         sim_grid.addWidget(QLabel("Surface Method:"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)

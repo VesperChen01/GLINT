@@ -34,7 +34,8 @@ AA_3TO1 = {
 AA_1TO3 = {v: k for k, v in AA_3TO1.items()}
 
 
-# ==================== 工具检测 ====================\n
+# ==================== 工具检测 ====================
+
 def _which(exe: str) -> Optional[str]:
     path = os.environ.get("FOLDX") if exe.lower() == "foldx" else None
     if path and os.path.isfile(path) and os.access(path, os.X_OK):
@@ -50,19 +51,10 @@ def _which(exe: str) -> Optional[str]:
                 return app_bin
     return None
 
+
 def _detect_foldx() -> Optional[str]:
     """检测 FoldX 可执行文件"""
     return _which("foldx")
-        return None
-
-
-def _detect_pyrosetta() -> bool:
-    """检测 PyRosetta 是否可用"""
-    try:
-        import pyrosetta
-        return True
-    except ImportError:
-        return False
 
 
 # ==================== 突变字符串解析 ====================
@@ -223,7 +215,7 @@ def minimize_energy(obj_name: str, selection: str = "all", cycles: int = 100,
 
 # ==================== 主要接口函数 ====================
 
-def perform_mutation(obj_name: str, mutations: List[Tuple[str, str, str]], 
+def perform_mutation(obj_name: str, mutations: List[Tuple[str, str, str]],
                     method: str = "pymol") -> Optional[str]:
     """
     执行突变
@@ -231,7 +223,7 @@ def perform_mutation(obj_name: str, mutations: List[Tuple[str, str, str]],
     参数：
         obj_name: PyMOL 对象名
         mutations: 突变列表 [(chain, resi, target_aa), ...]
-        method: 'pymol', 'foldx', 或 'pyrosetta'
+        method: 'pymol' 或 'foldx'
     
     返回：
         突变后的对象名，失败返回 None
@@ -239,7 +231,6 @@ def perform_mutation(obj_name: str, mutations: List[Tuple[str, str, str]],
     方法说明：
         - pymol: 使用 PyMOL 内置 mutagenesis wizard（快速，无需外部工具）
         - foldx: 使用 FoldX BuildModel（更准确，需要安装 FoldX）
-        - pyrosetta: 使用 PyRosetta（最准确，跨平台，需要许可证）
     """
     if not cmd:
         print("❌ PyMOL 不可用")
@@ -264,37 +255,28 @@ def perform_mutation(obj_name: str, mutations: List[Tuple[str, str, str]],
         return mut_obj
     
     elif method == "foldx":
-        print("⚠️ FoldX 突变尚未实现")
-        print("💡 提示：FoldX 集成将在后续版本中添加")
-        cmd.delete(mut_obj)
-        return None
-    
-    elif method == "pyrosetta":
-        if not _detect_pyrosetta():
-            print("❌ PyRosetta 未安装")
+        if not _detect_foldx():
+            print("❌ FoldX 未检测到")
             print("💡 安装方法：")
-            print("   1. 申请许可证（学术免费）: https://www.pyrosetta.org/")
-            print("   2. 使用 Conda 安装（推荐）:")
-            print("      conda install -c https://USERNAME:PASSWORD@conda.graylab.jhu.edu pyrosetta")
-            print("   3. 或使用 pip 安装:")
-            print("      pip install pyrosetta-*.whl")
+            print("   1. 下载 FoldX: https://foldxsuite.crg.eu/")
+            print("   2. 设置环境变量: export FOLDX=/path/to/foldx")
             cmd.delete(mut_obj)
             return None
         
-        print("⚠️ PyRosetta 突变尚未实现")
-        print("💡 这将在后续版本中添加")
+        print("⚠️ FoldX 突变功能请使用 ddg_heatmap 命令")
+        print("💡 示例: ddg_heatmap('CRBN_sel', 'POI_sel')")
         cmd.delete(mut_obj)
         return None
     
     else:
         print(f"❌ 未知的突变方法: {method}")
-        print("💡 可用方法: pymol, foldx, pyrosetta")
+        print("💡 可用方法: pymol, foldx")
         cmd.delete(mut_obj)
         return None
 
 
 def calculate_mutation_ddg(wt_obj: str, mut_obj: str, partner_sel: Optional[str] = None,
-                          method: str = "auto") -> Optional[Dict[str, Any]]:
+                          method: str = "foldx") -> Optional[Dict[str, Any]]:
     """
     计算突变的 ΔΔG
     
@@ -302,68 +284,42 @@ def calculate_mutation_ddg(wt_obj: str, mut_obj: str, partner_sel: Optional[str]
         wt_obj: 野生型对象名
         mut_obj: 突变型对象名
         partner_sel: 结合伴侣选择（可选）
-        method: 'auto', 'foldx', 'pyrosetta'
+        method: 'foldx'（目前仅支持 FoldX）
     
     返回：
         结果字典 {'ddg': float, 'method': str, 'details': dict}
     
     方法说明：
-        - auto: 自动选择最佳可用方法（FoldX > PyRosetta）
-        - foldx: FoldX BuildModel（推荐，中等准确性，跨平台）
-        - pyrosetta: PyRosetta 计算（高准确性，需要许可证）
+        - foldx: FoldX BuildModel（推荐，需要安装 FoldX）
+    
+    FoldX 输入：
+        - PDB 文件：野生型和突变型结构
+        - 突变文件：格式为 <chain><resi><icode><WT><Mut>
+    
+    FoldX 输出：
+        - DifferencesBetweenMutantAndWildType_fxout.csv
+        - 包含 Total Energy (ΔΔG) 值，单位 kcal/mol
     """
     if not cmd:
         print("❌ PyMOL 不可用")
         return None
     
-    # 自动选择方法
-    if method == "auto":
-        if _detect_foldx():
-            method = "foldx"
-        elif _detect_pyrosetta():
-            method = "pyrosetta"
-        else:
-            print("❌ 未检测到 FoldX 或 PyRosetta")
-            print("� 请安装其中一个：")
-            print("   - FoldX: https://foldxsuite.crg.eu/")
-            print("   - PyRosetta: https://www.pyrosetta.org/")
-            return None
-        
-        print(f"🔍 自动选择方法: {method}")
-    
-    if method == "foldx":
-        if not _detect_foldx():
-            print("❌ FoldX 未检测到")
-            print("💡 安装方法：")
-            print("   1. 下载 FoldX: https://foldxsuite.crg.eu/")
-            print("   2. 设置环境变量: export FOLDX=/path/to/foldx")
-            return None
-        
-        print("⚠️ FoldX ΔΔG 计算尚未实现")
-        print("💡 提示：可以使用现有的 ddg_heatmap 命令")
-        print("   示例: ddg_heatmap('CRBN_sel', 'POI_sel', method='foldx')")
-        return None
-    
-    elif method == "pyrosetta":
-        if not _detect_pyrosetta():
-            print("❌ PyRosetta 未安装")
-            print("💡 安装方法：")
-            print("   1. 申请许可证（学术免费）: https://www.pyrosetta.org/")
-            print("   2. 使用 Conda 安装（推荐）:")
-            print("      conda install -c https://USERNAME:PASSWORD@conda.graylab.jhu.edu pyrosetta")
-            print("   3. 或使用 pip 安装:")
-            print("      pip install pyrosetta-*.whl")
-            print("   注意：Windows 用户现已支持原生安装（无需 WSL）")
-            return None
-        
-        print("⚠️ PyRosetta ΔΔG 计算尚未实现")
-        print("💡 这将在后续版本中添加")
-        return None
-    
-    else:
+    if method != "foldx":
         print(f"❌ 未知的方法: {method}")
-        print("💡 可用方法: auto, foldx, pyrosetta")
+        print("💡 目前仅支持 FoldX 方法")
         return None
+    
+    if not _detect_foldx():
+        print("❌ FoldX 未检测到")
+        print("💡 安装方法：")
+        print("   1. 下载 FoldX: https://foldxsuite.crg.eu/")
+        print("   2. 设置环境变量: export FOLDX=/path/to/foldx")
+        print("   或将 FoldX 可执行文件添加到 PATH")
+        return None
+    
+    print("💡 提示：请使用 ddg_heatmap 命令进行完整的 ΔΔG 分析")
+    print("   示例: ddg_heatmap('CRBN_sel', 'POI_sel')")
+    return None
 
 
 def analyze_mutation_effects(obj_name: str, mutations: List[Tuple[str, str, str]],
@@ -511,82 +467,66 @@ def _foldx_alanine_scan(foldx_bin: str, pdb_path: str, poi_sel: str) -> Dict[Tup
                         pass
     return ddg
 
-def _asa_ddg_proxy(poi_sel: str, complex_sel: str, scale: float = 0.025) -> Dict[Tuple[str,str,str], float]:
-    # Use PyMOL get_area per residue in monomer vs complex; ΔASA scaled to ddG
-    poi = f"({poi_sel})"
-    # Build list of residues
-    model = cmd.get_model(poi)
-    residues = []
-    seen = set()
-    for a in model.atom:
-        key = (a.chain, a.resi, getattr(a, 'q', a.icode))
-        if key not in seen:
-            seen.add(key)
-            residues.append(key)
-
-    ddg = {}
-    # Ensure surface areas are computed with dot settings
-    prev_dot_solvent = cmd.get("dot_solvent")
-    prev_dot_density = cmd.get("dot_density")
-    cmd.set("dot_solvent", 1)
-    cmd.set("dot_density", 3)
-
-    for (ch, resi, icode) in residues:
-        sel_res = f"{poi} and chain {ch} and resi {resi}"
-        asa_complex = cmd.get_area(sel_res, load_b=0, state=1)
-        # To get monomer ASA, duplicate POI only into temp object and measure
-        tmp_obj = "__poi_tmp__"
-        cmd.delete(tmp_obj)
-        cmd.create(tmp_obj, sel_res)
-        asa_monomer = cmd.get_area(tmp_obj, load_b=0, state=1)
-        cmd.delete(tmp_obj)
-        dASA = max(0.0, asa_monomer - asa_complex)
-        ddg[(ch, resi, icode)] = -scale * dASA  # burial stabilizes binding (negative)
-
-    # Restore settings
-    cmd.set("dot_solvent", prev_dot_solvent)
-    cmd.set("dot_density", prev_dot_density)
-    return ddg
-
-def ddg_heatmap(CRBN_sel: str, POI_sel: str, method: str = "auto", name: str = "ddg", scale: float = 0.025):
+def ddg_heatmap(CRBN_sel: str, POI_sel: str, name: str = "ddg"):
     """
-    Color POI by ΔΔG. method: auto|foldx|asa. Stores value to b-factor and colors by spectrum.
+    使用 FoldX 计算 ΔΔG 并在 POI 上显示热图
+    
+    参数：
+        CRBN_sel: CRBN（E3连接酶）选择表达式
+        POI_sel: POI（目标蛋白）选择表达式
+        name: 颜色渐变名称（默认 'ddg'）
+    
+    FoldX 输入：
+        - PDB 文件：CRBN + POI 复合物结构
+        - 突变文件：界面残基的丙氨酸扫描突变列表
+          格式：<chain><resi><icode><WT>A（每行一个突变）
+    
+    FoldX 输出：
+        - DifferencesBetweenMutantAndWildType_fxout.csv
+        - 字段：Mutation, Total Energy (ΔΔG, kcal/mol)
+    
+    可视化输出：
+        - POI 表面按 ΔΔG 值着色（蓝-白-红渐变）
+        - 蓝色：稳定化突变（负 ΔΔG）
+        - 红色：去稳定化突变（正 ΔΔG）
+    
+    示例：
+        ddg_heatmap('chain A', 'chain B')
     """
     poi = f"({POI_sel})"
     crbn = f"({CRBN_sel})"
-    # Try FoldX if auto
-    ddg = {}
-    use_foldx = False
-    if method in ("auto", "foldx"):
-        fx = _detect_foldx()
-        if fx:
-            use_foldx = True
-            print(f"[ddg_heatmap] ✅ Using FoldX at: {fx}")
-            pdb_path, _ = _prep_complex_tmp(crbn, poi)
-            ddg = _foldx_alanine_scan(fx, pdb_path, poi)
-        elif method == "foldx":
-            # User explicitly requested FoldX but it's not available
-            print("[ddg_heatmap] ❌ FoldX not found in PATH or $FOLDX")
-            print("[ddg_heatmap] 💡 Download FoldX from: https://foldxsuite.crg.eu/")
-            if method == "foldx":  # Don't fallback if explicitly requested
-                return
     
-    if (not ddg) and method in ("auto", "asa"):
-        # ASA proxy fallback
-        print("[ddg_heatmap] ⚠️ Using ASA-based proxy (ΔΔG approximation, not publication quality)")
-        print("[ddg_heatmap] 💡 For accurate ΔΔG values, install FoldX: https://foldxsuite.crg.eu/")
-        ddg = _asa_ddg_proxy(poi, f"{crbn} or {poi}", scale=scale)
-
+    # 检测 FoldX
+    fx = _detect_foldx()
+    if not fx:
+        print("[ddg_heatmap] ❌ FoldX not found in PATH or $FOLDX")
+        print("[ddg_heatmap] 💡 安装方法：")
+        print("   1. 下载 FoldX: https://foldxsuite.crg.eu/")
+        print("   2. 设置环境变量: export FOLDX=/path/to/foldx")
+        print("   或将 FoldX 可执行文件添加到 PATH")
+        return
+    
+    print(f"[ddg_heatmap] ✅ Using FoldX at: {fx}")
+    
+    # 准备 PDB 文件并运行 FoldX
+    pdb_path, _ = _prep_complex_tmp(crbn, poi)
+    ddg = _foldx_alanine_scan(fx, pdb_path, poi)
+    
     if not ddg:
         cmd.feedback("pop", "all", "actions")
         print("[ddg_heatmap] ❌ No ΔΔG values computed. Check selections.")
+        print("[ddg_heatmap] 💡 确保选择的残基在界面区域（5Å 内）")
         return
-
+    
+    # 设置 B 因子并着色
     set_b_factors(poi, ddg)
     color_by_b(poi, palette="blue_white_red", ramp_name=f"{name}_ramp")
     cmd.show("surface", poi)
+    
+    print(f"[ddg_heatmap] ✅ 完成！共计算 {len(ddg)} 个残基的 ΔΔG 值")
 
-# ==================== PyMOL 命令注册 ====================\n
+# ==================== PyMOL 命令注册 ====================
+
 if cmd:
     cmd.extend("perform_mutation", perform_mutation)
     cmd.extend("minimize_energy", minimize_energy)
