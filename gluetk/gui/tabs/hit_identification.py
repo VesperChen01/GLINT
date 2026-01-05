@@ -19,32 +19,47 @@ class HitIdentificationTab(CommonTab):
     def __init__(self, parent):
         super().__init__(parent)
         self.init_ui()
-        
+
     def init_ui(self):
+        """初始化UI - 现代卡片式布局"""
         self.setObjectName("scroll_content")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.parent_window._hit_scroll_content = self
 
-        bg_color = "#0d1117" if getattr(self.parent_window, "_dark_mode", True) else "#f8fafc"
+        is_dark = getattr(self.parent_window, "_dark_mode", False)
+        bg_color = "#161b22" if is_dark else "#f8fafc"
         self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
 
         main_layout = QVBoxLayout(self)
-        main_layout.setSpacing(12)
-        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(16)
+        main_layout.setContentsMargins(20, 20, 20, 20)
+
+        # === 页面标题 ===
+        header = QHBoxLayout()
+        title = QLabel("Hit Identification")
+        title.setStyleSheet("""
+            font-size: 20px; font-weight: 600;
+            color: #3b82f6; padding: 4px 0;
+        """)
+        header.addWidget(title)
+        header.addStretch(1)
+        main_layout.addLayout(header)
 
         # 1. Vina Docking (Small Molecule)
-        main_layout.addWidget(self._create_vina_card())
+        main_layout.addWidget(self._create_vina_card(is_dark))
         
         # Vina buttons row
         vina_btn_row = QHBoxLayout()
+        vina_btn_row.setSpacing(10)
+
         self.parent_window.vina_dock_btn = QPushButton("Run Docking")
-        self.parent_window.vina_dock_btn.setObjectName("primary_btn")
-        self.parent_window.vina_dock_btn.setMinimumHeight(32)
+        self.parent_window.vina_dock_btn.setMinimumHeight(36)
+        self.parent_window.vina_dock_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.vina_dock_btn.clicked.connect(self.run_vina_docking)
-        
+
         self.parent_window.vina_load_result_btn = QPushButton("Load Result")
-        self.parent_window.vina_load_result_btn.setObjectName("highlight_btn")
-        self.parent_window.vina_load_result_btn.setMinimumHeight(32)
+        self.parent_window.vina_load_result_btn.setMinimumHeight(36)
+        self.parent_window.vina_load_result_btn.setStyleSheet(self._get_secondary_btn_style())
         self.parent_window.vina_load_result_btn.clicked.connect(self.load_vina_result)
         
         vina_btn_row.addWidget(self.parent_window.vina_dock_btn)
@@ -53,13 +68,15 @@ class HitIdentificationTab(CommonTab):
         main_layout.addLayout(vina_btn_row)
 
         # 2. HADDOCK3 (Protein-Protein Docking)
-        main_layout.addWidget(self._create_hdock_card())
+        main_layout.addWidget(self._create_hdock_card(is_dark))
 
         # HADDOCK3 buttons row
         hdock_btn_row = QHBoxLayout()
+        hdock_btn_row.setSpacing(10)
+
         self.parent_window.hdock_run_btn = QPushButton("Run HADDOCK3")
-        self.parent_window.hdock_run_btn.setObjectName("primary_btn")
-        self.parent_window.hdock_run_btn.setMinimumHeight(32)
+        self.parent_window.hdock_run_btn.setMinimumHeight(36)
+        self.parent_window.hdock_run_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.hdock_run_btn.clicked.connect(self.run_hdock)
 
         hdock_btn_row.addWidget(self.parent_window.hdock_run_btn)
@@ -67,16 +84,49 @@ class HitIdentificationTab(CommonTab):
         main_layout.addLayout(hdock_btn_row)
 
         # 3. Protein Mutation & ΔΔG Analysis (independent card under HADDOCK3)
-        main_layout.addWidget(self._create_mutation_analysis_card())
+        main_layout.addWidget(self._create_mutation_analysis_card(is_dark))
 
         main_layout.addStretch(1)
 
-    def _create_vina_card(self) -> QWidget:
+    def _get_card_style(self, is_dark: bool) -> str:
+        """获取卡片样式"""
+        if is_dark:
+            return """
+                QFrame {
+                    background: #1e2530;
+                    border: 1px solid #30363d;
+                    border-radius: 10px;
+                    padding: 12px;
+                }
+                QLabel {
+                    border: none;
+                    background: transparent;
+                }
+            """
+        return """
+            QFrame {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 12px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """
+
+    def _create_vina_card(self, is_dark: bool = False) -> QWidget:
         """Create compact Vina docking card"""
-        card = QGroupBox("AutoDock Vina - Small Molecule Docking")
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)
-        layout.setSpacing(8)
-        layout.setContentsMargins(12, 14, 12, 10)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 14, 16, 14)
+
+        title = QLabel("AutoDock Vina - Small Molecule Docking")
+        title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        layout.addWidget(title)
         
         # Row 1: Receptor + Ligand
         row1 = QHBoxLayout()
@@ -193,12 +243,17 @@ class HitIdentificationTab(CommonTab):
         
         return card
 
-    def _create_hdock_card(self) -> QWidget:
+    def _create_hdock_card(self, is_dark: bool = False) -> QWidget:
         """Create compact HADDOCK3 card"""
-        card = QGroupBox("HADDOCK3 - Protein-Protein Docking")
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)
-        layout.setSpacing(8)
-        layout.setContentsMargins(12, 14, 12, 10)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 14, 16, 14)
+
+        title = QLabel("HADDOCK3 - Protein-Protein Docking")
+        title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        layout.addWidget(title)
 
         # Row 1: Receptor + Ligand files
         row1 = QHBoxLayout()
@@ -581,3 +636,26 @@ class HitIdentificationTab(CommonTab):
         self.log(f"✅ FoldX detected: {foldx_path}")
         self.log("💡 For ΔΔG heatmap analysis, use the PyMOL command:")
         self.log("   ddg_heatmap('CRBN_selection', 'POI_selection')")
+
+    def _get_primary_btn_style(self) -> str:
+        """主按钮样式 - 蓝色渐变"""
+        return """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #2563eb);
+                color: white; border: none; border-radius: 8px;
+                font-weight: 600; font-size: 13px; padding: 8px 20px;
+            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #1d4ed8); }
+            QPushButton:pressed { background: #1d4ed8; }
+            QPushButton:disabled { background: #94a3b8; }
+        """
+
+    def _get_secondary_btn_style(self) -> str:
+        """次要按钮样式 - 浅灰色"""
+        return """
+            QPushButton {
+                background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+                border-radius: 8px; padding: 8px 16px; font-weight: 500;
+            }
+            QPushButton:hover { background: #e2e8f0; }
+        """

@@ -39,20 +39,42 @@ class TargetDiscoveryTab(CommonTab):
         self.init_ui()
         
     def init_ui(self):
+        """初始化UI - 现代卡片式布局"""
         self.setObjectName("scroll_content")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.parent_window._target_scroll_content = self
 
-        bg_color = "#0d1117" if getattr(self.parent_window, "_dark_mode", True) else "#f8fafc"
+        is_dark = getattr(self.parent_window, "_dark_mode", False)
+        bg_color = "#161b22" if is_dark else "#f8fafc"
         self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
 
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
-        layout.setContentsMargins(12, 12, 12, 12)
-        
-        # 2. G-Motif Detection
-        grp_gm = QGroupBox("G-Motif (CRBN G-loop) Detection")
-        gm_grid = QGridLayout(grp_gm)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # === 页面标题 ===
+        header = QHBoxLayout()
+        title = QLabel("Target Discovery")
+        title.setStyleSheet("""
+            font-size: 20px; font-weight: 600;
+            color: #3b82f6; padding: 4px 0;
+        """)
+        header.addWidget(title)
+        header.addStretch(1)
+        layout.addLayout(header)
+
+        # === G-Motif Detection 卡片 ===
+        grp_gm = QFrame()
+        grp_gm.setStyleSheet(self._get_card_style(is_dark))
+        gm_layout = QVBoxLayout(grp_gm)
+        gm_layout.setSpacing(12)
+        gm_layout.setContentsMargins(16, 14, 16, 14)
+
+        gm_title = QLabel("G-Motif (CRBN G-loop) Detection")
+        gm_title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        gm_layout.addWidget(gm_title)
+
+        gm_grid = QGridLayout()
         gm_grid.setContentsMargins(12, 16, 12, 8)
         gm_grid.setColumnStretch(1, 1); gm_grid.setColumnStretch(3, 1)
         gm_grid.setHorizontalSpacing(12); gm_grid.setVerticalSpacing(4)
@@ -136,28 +158,41 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.gm_max_patches.setMinimumHeight(32)
         self.parent_window.gm_max_patches.setToolTip("Maximum number of surface patches to display in analysis")
         gm_grid.addWidget(self.parent_window.gm_max_patches, 5, 1)
-        
-        # Buttons
+
+        gm_layout.addLayout(gm_grid)
+
+        # Buttons - 使用 Ternary Evaluation 风格
         gm_btn_row = QHBoxLayout()
-        self.parent_window.gm_btn = QPushButton("Detect POI"); self.parent_window.gm_btn.setObjectName("highlight_btn"); self.parent_window.gm_btn.setMinimumHeight(32)
+        gm_btn_row.setSpacing(10)
+
+        self.parent_window.gm_btn = QPushButton("Detect POI")
+        self.parent_window.gm_btn.setMinimumHeight(36)
+        self.parent_window.gm_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.gm_btn.clicked.connect(self.start_gmotif)
         gm_btn_row.addWidget(self.parent_window.gm_btn)
-        
-        self.parent_window.gm_btn_coords = QPushButton("Export Coords"); self.parent_window.gm_btn_coords.setObjectName("highlight_btn"); self.parent_window.gm_btn_coords.setMinimumHeight(32)
+
+        self.parent_window.gm_btn_coords = QPushButton("Export Coords")
+        self.parent_window.gm_btn_coords.setMinimumHeight(36)
+        self.parent_window.gm_btn_coords.setStyleSheet(self._get_secondary_btn_style())
         self.parent_window.gm_btn_coords.clicked.connect(self.export_gloop_coords)
-        # gm_btn_surface and gm_btn_surf_analysis removed
         gm_btn_row.addWidget(self.parent_window.gm_btn_coords)
-        gm_btn_row.addStretch(1)
         gm_btn_row.addStretch(1)
         
         layout.addWidget(grp_gm)
         layout.addLayout(gm_btn_row)
-        
 
-        
         # 4. Surface Analysis
-        grp_surf = QGroupBox("Protein Surface Analysis")
-        surf_grid = QGridLayout(grp_surf)
+        grp_surf = QFrame()
+        grp_surf.setStyleSheet(self._get_card_style(is_dark))
+        surf_layout = QVBoxLayout(grp_surf)
+        surf_layout.setSpacing(12)
+        surf_layout.setContentsMargins(16, 14, 16, 14)
+
+        surf_title = QLabel("Protein Surface Analysis")
+        surf_title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        surf_layout.addWidget(surf_title)
+
+        surf_grid = QGridLayout()
         surf_grid.setContentsMargins(12, 16, 12, 8)
         surf_grid.setColumnStretch(1, 1); surf_grid.setColumnStretch(3, 1)
         surf_grid.setHorizontalSpacing(12); surf_grid.setVerticalSpacing(4)
@@ -177,29 +212,42 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.surf_out_browse.clicked.connect(self.browse_surf_out_csv)
         r0b_surf = QHBoxLayout(); r0b_surf.addWidget(self.parent_window.surf_out_csv, 1); r0b_surf.addWidget(self.parent_window.surf_out_browse)
         surf_grid.addLayout(r0b_surf, 0, 3)
-        
-        # Buttons
+
+        surf_layout.addLayout(surf_grid)
+
+        # Buttons - 使用 Ternary Evaluation 风格
         surf_btn_row = QHBoxLayout()
+        surf_btn_row.setSpacing(10)
+
         self.parent_window.surf_btn = QPushButton("Analyze Surface")
-        self.parent_window.surf_btn.setObjectName("highlight_btn")
-        self.parent_window.surf_btn.setMinimumHeight(32)
+        self.parent_window.surf_btn.setMinimumHeight(36)
+        self.parent_window.surf_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.surf_btn.clicked.connect(self.start_surface_analysis)
-        
+
         self.parent_window.surf_vis_btn = QPushButton("Visualize Patches")
-        self.parent_window.surf_vis_btn.setObjectName("highlight_btn")
-        self.parent_window.surf_vis_btn.setMinimumHeight(32)
+        self.parent_window.surf_vis_btn.setMinimumHeight(36)
+        self.parent_window.surf_vis_btn.setStyleSheet(self._get_green_btn_style())
         self.parent_window.surf_vis_btn.clicked.connect(self.render_surface_patches)
-        
+
         surf_btn_row.addWidget(self.parent_window.surf_btn)
         surf_btn_row.addWidget(self.parent_window.surf_vis_btn)
         surf_btn_row.addStretch(1)
-        
+
         layout.addWidget(grp_surf)
         layout.addLayout(surf_btn_row)
-        
+
         # 5. Surface Similarity & Complementarity Analysis
-        grp_sim = QGroupBox("Surface Similarity & Complementarity")
-        sim_grid = QGridLayout(grp_sim)
+        grp_sim = QFrame()
+        grp_sim.setStyleSheet(self._get_card_style(is_dark))
+        sim_layout = QVBoxLayout(grp_sim)
+        sim_layout.setSpacing(12)
+        sim_layout.setContentsMargins(16, 14, 16, 14)
+
+        sim_title = QLabel("Surface Similarity & Complementarity")
+        sim_title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        sim_layout.addWidget(sim_title)
+
+        sim_grid = QGridLayout()
         sim_grid.setContentsMargins(12, 16, 12, 8)
         sim_grid.setColumnStretch(1, 1); sim_grid.setColumnStretch(3, 1)
         sim_grid.setHorizontalSpacing(12); sim_grid.setVerticalSpacing(4)
@@ -288,23 +336,26 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_include_ligands.setChecked(True)
         self.parent_window.sim_include_ligands.setToolTip("Include small molecules (HETATM) in surface analysis using atom-type based features")
         sim_grid.addWidget(self.parent_window.sim_include_ligands, 5, 1)
-        
-        
-        # Buttons
+
+        sim_layout.addLayout(sim_grid)
+
+        # Buttons - 使用 Ternary Evaluation 风格
         sim_btn_row = QHBoxLayout()
+        sim_btn_row.setSpacing(10)
+
         self.parent_window.sim_analyze_btn = QPushButton("Analyze Surface")
-        self.parent_window.sim_analyze_btn.setObjectName("highlight_btn")
-        self.parent_window.sim_analyze_btn.setMinimumHeight(32)
+        self.parent_window.sim_analyze_btn.setMinimumHeight(36)
+        self.parent_window.sim_analyze_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.sim_analyze_btn.clicked.connect(self.start_surface_similarity)
-        
+
         self.parent_window.sim_compare_btn = QPushButton("Compare / Complementarity")
-        self.parent_window.sim_compare_btn.setObjectName("primary_btn")
-        self.parent_window.sim_compare_btn.setMinimumHeight(32)
+        self.parent_window.sim_compare_btn.setMinimumHeight(36)
+        self.parent_window.sim_compare_btn.setStyleSheet(self._get_purple_btn_style())
         self.parent_window.sim_compare_btn.clicked.connect(self.start_surface_comparison)
-        
+
         self.parent_window.sim_visualize_btn = QPushButton("Visualize Features")
-        self.parent_window.sim_visualize_btn.setObjectName("highlight_btn")
-        self.parent_window.sim_visualize_btn.setMinimumHeight(32)
+        self.parent_window.sim_visualize_btn.setMinimumHeight(36)
+        self.parent_window.sim_visualize_btn.setStyleSheet(self._get_green_btn_style())
         self.parent_window.sim_visualize_btn.clicked.connect(self.visualize_surface_features)
         
         sim_btn_row.addWidget(self.parent_window.sim_analyze_btn)
@@ -990,16 +1041,16 @@ class TargetDiscoveryTab(CommonTab):
         try:
             from pymol import cmd
             from pymol import cgo
-            
+
             # Create a color ramp based on shape index
             # SI: -1 (concave/blue) to +1 (convex/red)
-            
+
             cgo_obj = []
             sphere_radius = 0.3
-            
+
             for p in points:
                 si = p.shape_index
-                
+
                 # Color mapping: -1 -> blue, 0 -> white, +1 -> red
                 if si < 0:
                     r = 1.0 + si  # 0 to 1
@@ -1009,19 +1060,110 @@ class TargetDiscoveryTab(CommonTab):
                     r = 1.0
                     g = 1.0 - si
                     b = 1.0 - si
-                
+
                 cgo_obj.extend([
                     cgo.COLOR, r, g, b,
                     cgo.SPHERE, p.coord[0], p.coord[1], p.coord[2], sphere_radius
                 ])
-            
+
             cgo_name = f"{obj_name}_shape_index"
             cmd.load_cgo(cgo_obj, cgo_name)
-            
+
             # Also show the original structure
             cmd.show("cartoon", obj_name)
             cmd.set("cartoon_transparency", 0.7, obj_name)
-            
+
         except Exception as e:
             self.log(f"Shape index visualization failed: {e}")
 
+    def _get_card_style(self, is_dark: bool) -> str:
+        """获取卡片样式"""
+        if is_dark:
+            return """
+                QFrame {
+                    background: #1e2530;
+                    border: 1px solid #30363d;
+                    border-radius: 10px;
+                    padding: 12px;
+                }
+                QLabel {
+                    border: none;
+                    background: transparent;
+                }
+            """
+        return """
+            QFrame {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 12px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """
+
+    def _create_card(self, title: str, is_dark: bool) -> QFrame:
+        """创建带标题的卡片"""
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style(is_dark))
+        layout = QVBoxLayout(card)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 14, 16, 14)
+
+        # 卡片标题
+        title_lbl = QLabel(title)
+        title_lbl.setStyleSheet("""
+            font-size: 15px; font-weight: 600;
+            color: #1e293b; padding-bottom: 4px;
+        """ if not is_dark else """
+            font-size: 15px; font-weight: 600;
+            color: #e2e8f0; padding-bottom: 4px;
+        """)
+        layout.addWidget(title_lbl)
+
+        return card
+
+    def _get_primary_btn_style(self) -> str:
+        """主按钮样式 - 蓝色渐变"""
+        return """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #2563eb);
+                color: white; border: none; border-radius: 8px;
+                font-weight: 600; font-size: 13px; padding: 8px 20px;
+            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #1d4ed8); }
+            QPushButton:pressed { background: #1d4ed8; }
+            QPushButton:disabled { background: #94a3b8; }
+        """
+
+    def _get_secondary_btn_style(self) -> str:
+        """次要按钮样式 - 浅灰色"""
+        return """
+            QPushButton {
+                background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+                border-radius: 8px; padding: 8px 16px; font-weight: 500;
+            }
+            QPushButton:hover { background: #e2e8f0; }
+        """
+
+    def _get_green_btn_style(self) -> str:
+        """绿色按钮样式 - 可视化"""
+        return """
+            QPushButton {
+                background: #10b981; color: white; border: none;
+                border-radius: 8px; font-weight: 500; padding: 8px 16px;
+            }
+            QPushButton:hover { background: #059669; }
+        """
+
+    def _get_purple_btn_style(self) -> str:
+        """紫色按钮样式 - 比较/分析"""
+        return """
+            QPushButton {
+                background: #6366f1; color: white; border: none;
+                border-radius: 8px; font-weight: 500; padding: 8px 16px;
+            }
+            QPushButton:hover { background: #4f46e5; }
+        """

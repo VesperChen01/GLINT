@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 from ..qt_adapter import (
     Qt, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QCheckBox, QComboBox, QGroupBox, QGridLayout, QTabWidget, QSpinBox,
-    QFileDialog, QMessageBox
+    QFileDialog, QMessageBox, QFrame
 )
 
 from ..utils import t
@@ -49,6 +49,34 @@ class CommonTab(QWidget):
         self.log: Callable[[str], None] = parent.log
         self.on_error: Callable[[str], None] = parent.on_error
         self.refresh_objects: Callable[[], None] = parent.refresh_objects
+
+    def _get_card_style_common(self, is_dark: bool) -> str:
+        """获取卡片样式"""
+        if is_dark:
+            return """
+                QFrame {
+                    background: #1e2530;
+                    border: 1px solid #30363d;
+                    border-radius: 10px;
+                    padding: 12px;
+                }
+                QLabel {
+                    border: none;
+                    background: transparent;
+                }
+            """
+        return """
+            QFrame {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 12px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """
 
     def _create_pocket_detection_card(self) -> QWidget:
         """Create pocket detection and visualization card"""
@@ -278,11 +306,17 @@ class CommonTab(QWidget):
         
         return card
     
-    def _create_mutation_analysis_card(self) -> QWidget:
+    def _create_mutation_analysis_card(self, is_dark: bool = False) -> QWidget:
         """Create mutation analysis card"""
-        card = QGroupBox("Protein Mutation & ΔΔG Analysis")
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style_common(is_dark))
         layout = QVBoxLayout(card)
-        layout.setSpacing(8)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 14, 16, 14)
+
+        title = QLabel("Protein Mutation & ΔΔG Analysis")
+        title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        layout.addWidget(title)
         
         # Input area
         input_grid = QGridLayout()

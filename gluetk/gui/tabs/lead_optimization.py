@@ -18,29 +18,51 @@ from .common import CommonTab
 class LeadOptimizationTab(CommonTab):
     def __init__(self, parent):
         super().__init__(parent)
-        
+
         # Remove proxies for methods implemented here
         for attr in ['run_mutation', 'run_minimize', 'run_mutation_analysis']:
             if attr in self.__dict__:
                 del self.__dict__[attr]
-                
+
         self.init_ui()
-        
+
     def init_ui(self):
+        """初始化UI - 现代卡片式布局"""
         self.setObjectName("scroll_content")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.parent_window._lead_scroll_content = self
 
-        bg_color = "#0d1117" if getattr(self.parent_window, "_dark_mode", True) else "#f8fafc"
+        is_dark = getattr(self.parent_window, "_dark_mode", False)
+        bg_color = "#161b22" if is_dark else "#f8fafc"
         self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
 
         layout = QVBoxLayout(self)
         layout.setSpacing(16)
-        layout.setContentsMargins(12, 12, 12, 12)
-        
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # === 页面标题 ===
+        header = QHBoxLayout()
+        title = QLabel("Lead Optimization")
+        title.setStyleSheet("""
+            font-size: 20px; font-weight: 600;
+            color: #3b82f6; padding: 4px 0;
+        """)
+        header.addWidget(title)
+        header.addStretch(1)
+        layout.addLayout(header)
+
         # 1. Protein-Protein Interface (PPI) Analysis
-        grp_ppi = QGroupBox("Protein-Protein Interface (PPI) Analysis")
-        ppi_grid = QGridLayout(grp_ppi)
+        grp_ppi = QFrame()
+        grp_ppi.setStyleSheet(self._get_card_style(is_dark))
+        ppi_layout = QVBoxLayout(grp_ppi)
+        ppi_layout.setSpacing(12)
+        ppi_layout.setContentsMargins(16, 14, 16, 14)
+
+        ppi_title = QLabel("Protein-Protein Interface (PPI) Analysis")
+        ppi_title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        ppi_layout.addWidget(ppi_title)
+
+        ppi_grid = QGridLayout()
         ppi_grid.setContentsMargins(12, 16, 12, 8)
         ppi_grid.setColumnStretch(1, 1); ppi_grid.setColumnStretch(3, 1)
         ppi_grid.setHorizontalSpacing(12); ppi_grid.setVerticalSpacing(4)
@@ -75,25 +97,40 @@ class LeadOptimizationTab(CommonTab):
         ppi_grid.addWidget(QLabel("Display Mode:"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.ppi_display_mode = QComboBox()
         self.parent_window.ppi_display_mode.setMinimumHeight(32)
-        self.parent_window.ppi_display_mode.addItems(["Cartoon + Surface + Interactions", "Surface + Interactions"])
+        self.parent_window.ppi_display_mode.addItems(["Cartoon + Surface + Interaction", "Cartoon + Interaction"])
         ppi_grid.addWidget(self.parent_window.ppi_display_mode, 3, 1)
         
         self.parent_window.ppi_show_labels = QCheckBox("Show Distance Labels")
         self.parent_window.ppi_show_labels.setChecked(True)
         ppi_grid.addWidget(self.parent_window.ppi_show_labels, 3, 3)
-        
+
+        ppi_layout.addLayout(ppi_grid)
+
         ppi_btn_row = QHBoxLayout()
-        self.parent_window.ppi_analyze_btn = QPushButton("Analyze PPI Interface"); self.parent_window.ppi_analyze_btn.setObjectName("highlight_btn"); self.parent_window.ppi_analyze_btn.setMinimumHeight(32)
+        ppi_btn_row.setSpacing(10)
+
+        self.parent_window.ppi_analyze_btn = QPushButton("Analyze PPI Interface")
+        self.parent_window.ppi_analyze_btn.setMinimumHeight(36)
+        self.parent_window.ppi_analyze_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.ppi_analyze_btn.clicked.connect(self.run_ppi_analysis)
         ppi_btn_row.addWidget(self.parent_window.ppi_analyze_btn)
         ppi_btn_row.addStretch(1)
-        
+
         layout.addWidget(grp_ppi)
         layout.addLayout(ppi_btn_row)
-        
+
         # 2. Protein-Ligand Interactions
-        grp_pl = QGroupBox("Protein-Ligand Interactions")
-        pl_grid = QGridLayout(grp_pl)
+        grp_pl = QFrame()
+        grp_pl.setStyleSheet(self._get_card_style(is_dark))
+        pl_layout = QVBoxLayout(grp_pl)
+        pl_layout.setSpacing(12)
+        pl_layout.setContentsMargins(16, 14, 16, 14)
+
+        pl_title = QLabel("Protein-Ligand Interactions")
+        pl_title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        pl_layout.addWidget(pl_title)
+
+        pl_grid = QGridLayout()
         pl_grid.setContentsMargins(12, 16, 12, 8)
         pl_grid.setColumnStretch(1, 1); pl_grid.setColumnStretch(3, 1)
         pl_grid.setHorizontalSpacing(12); pl_grid.setVerticalSpacing(4)
@@ -121,10 +158,16 @@ class LeadOptimizationTab(CommonTab):
         # See below for new layout positioning
         
         pl_btn_row = QHBoxLayout()
-        self.parent_window.pl_analyze_btn = QPushButton("Analyze Protein-Ligand"); self.parent_window.pl_analyze_btn.setObjectName("highlight_btn"); self.parent_window.pl_analyze_btn.setMinimumHeight(32)
+        pl_btn_row.setSpacing(10)
+
+        self.parent_window.pl_analyze_btn = QPushButton("Analyze Protein-Ligand")
+        self.parent_window.pl_analyze_btn.setMinimumHeight(36)
+        self.parent_window.pl_analyze_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.pl_analyze_btn.clicked.connect(self.run_pl_analysis)
-        
-        self.parent_window.pl_2d_btn = QPushButton("Generate 2D Diagram"); self.parent_window.pl_2d_btn.setMinimumHeight(32)
+
+        self.parent_window.pl_2d_btn = QPushButton("Generate 2D Diagram")
+        self.parent_window.pl_2d_btn.setMinimumHeight(36)
+        self.parent_window.pl_2d_btn.setStyleSheet(self._get_secondary_btn_style())
         self.parent_window.pl_2d_btn.clicked.connect(self.run_pl_2d_diagram)
         
         pl_btn_row.addWidget(self.parent_window.pl_analyze_btn)
@@ -154,10 +197,21 @@ class LeadOptimizationTab(CommonTab):
         
         r2_pl = QHBoxLayout(); r2_pl.addWidget(self.parent_window.pl_csv, 1); r2_pl.addWidget(self.parent_window.pl_csv_btn)
         pl_grid.addLayout(r2_pl, 3, 1, 1, 3)
-        
+
+        pl_layout.addLayout(pl_grid)
+
         # 3. Ligand-Ligand Interactions
-        grp_ll = QGroupBox("Ligand-Ligand Interactions (Small Molecule - Small Molecule)")
-        ll_grid = QGridLayout(grp_ll)
+        grp_ll = QFrame()
+        grp_ll.setStyleSheet(self._get_card_style(is_dark))
+        ll_layout = QVBoxLayout(grp_ll)
+        ll_layout.setSpacing(12)
+        ll_layout.setContentsMargins(16, 14, 16, 14)
+
+        ll_title = QLabel("Ligand-Ligand Interactions (Small Molecule - Small Molecule)")
+        ll_title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        ll_layout.addWidget(ll_title)
+
+        ll_grid = QGridLayout()
         ll_grid.setContentsMargins(12, 16, 12, 8)
         ll_grid.setColumnStretch(1, 1); ll_grid.setColumnStretch(3, 1)
         ll_grid.setHorizontalSpacing(12); ll_grid.setVerticalSpacing(4)
@@ -187,19 +241,34 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.ll_csv_btn.clicked.connect(lambda: self._browse_save_file(self.parent_window.ll_csv, "CSV (*.csv)"))
         r2_ll = QHBoxLayout(); r2_ll.addWidget(self.parent_window.ll_csv, 1); r2_ll.addWidget(self.parent_window.ll_csv_btn)
         ll_grid.addLayout(r2_ll, 2, 3)
-        
+
+        ll_layout.addLayout(ll_grid)
+
         ll_btn_row = QHBoxLayout()
-        self.parent_window.ll_analyze_btn = QPushButton("Analyze Ligand-Ligand"); self.parent_window.ll_analyze_btn.setObjectName("highlight_btn"); self.parent_window.ll_analyze_btn.setMinimumHeight(32)
+        ll_btn_row.setSpacing(10)
+
+        self.parent_window.ll_analyze_btn = QPushButton("Analyze Ligand-Ligand")
+        self.parent_window.ll_analyze_btn.setMinimumHeight(36)
+        self.parent_window.ll_analyze_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.ll_analyze_btn.clicked.connect(self.run_ll_analysis)
         ll_btn_row.addWidget(self.parent_window.ll_analyze_btn)
         ll_btn_row.addStretch(1)
-        
+
         layout.addWidget(grp_ll)
         layout.addLayout(ll_btn_row)
-        
+
         # 4. Electrostatic Complementarity (EC) Analysis
-        grp_ec = QGroupBox("Electrostatic Complementarity (EC) Analysis")
-        ec_grid = QGridLayout(grp_ec)
+        grp_ec = QFrame()
+        grp_ec.setStyleSheet(self._get_card_style(is_dark))
+        ec_layout = QVBoxLayout(grp_ec)
+        ec_layout.setSpacing(12)
+        ec_layout.setContentsMargins(16, 14, 16, 14)
+
+        ec_title = QLabel("Electrostatic Complementarity (EC) Analysis")
+        ec_title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
+        ec_layout.addWidget(ec_title)
+
+        ec_grid = QGridLayout()
         ec_grid.setContentsMargins(12, 16, 12, 8)
         ec_grid.setColumnStretch(1, 1); ec_grid.setColumnStretch(3, 1)
         ec_grid.setHorizontalSpacing(12); ec_grid.setVerticalSpacing(4)
@@ -277,12 +346,20 @@ class LeadOptimizationTab(CommonTab):
             "Useful for high-resolution crystal structures."
         )
         ec_grid.addWidget(self.parent_window.ec_keep_waters, 5, 3)
-        
+
+        ec_layout.addLayout(ec_grid)
+
         ec_btn_row = QHBoxLayout()
-        self.parent_window.ec_analyze_btn = QPushButton("Calculate EC"); self.parent_window.ec_analyze_btn.setObjectName("highlight_btn"); self.parent_window.ec_analyze_btn.setMinimumHeight(32)
+        ec_btn_row.setSpacing(10)
+
+        self.parent_window.ec_analyze_btn = QPushButton("Calculate EC")
+        self.parent_window.ec_analyze_btn.setMinimumHeight(36)
+        self.parent_window.ec_analyze_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.ec_analyze_btn.clicked.connect(self.run_ec_analysis)
-        
-        self.parent_window.ec_hotspots_btn = QPushButton("Find EC Hotspots"); self.parent_window.ec_hotspots_btn.setMinimumHeight(32)
+
+        self.parent_window.ec_hotspots_btn = QPushButton("Find EC Hotspots")
+        self.parent_window.ec_hotspots_btn.setMinimumHeight(36)
+        self.parent_window.ec_hotspots_btn.setStyleSheet(self._get_secondary_btn_style())
         self.parent_window.ec_hotspots_btn.setToolTip("Identify regions of strong electrostatic complementarity")
         self.parent_window.ec_hotspots_btn.clicked.connect(self.run_ec_hotspots)
         
@@ -327,7 +404,7 @@ class LeadOptimizationTab(CommonTab):
             
             # Get Visualization Options
             display_mode_idx = self.parent_window.ppi_display_mode.currentIndex()
-            display_mode = "backbone_surface" if display_mode_idx == 0 else "surface_only"
+            display_mode = "cartoon_surface_interaction" if display_mode_idx == 0 else "cartoon_interaction"
             show_labels = self.parent_window.ppi_show_labels.isChecked()
 
             result = analyze_protein_protein_interface(
@@ -353,12 +430,20 @@ class LeadOptimizationTab(CommonTab):
                     self.log(f"  BSA: {bsa:.1f} Ų")
                 self.log(f"  Interface Strength: {strength:.1f}/10")
                 self.log(f"  Classification: {'Strong Interface' if is_strong else 'Weak Interface'}")
-                
-                QMessageBox.information(self, "PPI Analysis Complete",
+
+                # 使用自定义大小的QMessageBox确保内容完整显示
+                msg_box = QMessageBox(self)
+                msg_box.setWindowTitle("PPI Analysis Complete")
+                msg_box.setIcon(QMessageBox.Icon.Information)
+                msg_box.setText(
                     f"Interface Contacts: {contacts}\n"
                     f"{'BSA: ' + str(round(bsa, 1)) + ' Ų' if bsa else 'BSA: N/A'}\n"
                     f"Interface Strength: {strength:.1f}/10\n\n"
-                    f"{'Strong Interface' if is_strong else 'Weak Interface'}")
+                    f"{'Strong Interface' if is_strong else 'Weak Interface'}"
+                )
+                msg_box.setMinimumWidth(400)
+                msg_box.setStyleSheet("QLabel{min-width: 350px; font-size: 14px;}")
+                msg_box.exec()
             else:
                 self.log("PPI analysis failed")
         except Exception as e:
@@ -1000,3 +1085,54 @@ class LeadOptimizationTab(CommonTab):
         self.log("FoldX Output:")
         self.log("  - DifferencesBetweenMutantAndWildType_fxout.csv")
         self.log("  - Contains ΔΔG values (kcal/mol)")
+
+    def _get_card_style(self, is_dark: bool) -> str:
+        """获取卡片样式"""
+        if is_dark:
+            return """
+                QFrame {
+                    background: #1e2530;
+                    border: 1px solid #30363d;
+                    border-radius: 10px;
+                    padding: 12px;
+                }
+                QLabel {
+                    border: none;
+                    background: transparent;
+                }
+            """
+        return """
+            QFrame {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 12px;
+            }
+            QLabel {
+                border: none;
+                background: transparent;
+            }
+        """
+
+    def _get_primary_btn_style(self) -> str:
+        """主按钮样式 - 蓝色渐变"""
+        return """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #2563eb);
+                color: white; border: none; border-radius: 8px;
+                font-weight: 600; font-size: 13px; padding: 8px 20px;
+            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #1d4ed8); }
+            QPushButton:pressed { background: #1d4ed8; }
+            QPushButton:disabled { background: #94a3b8; }
+        """
+
+    def _get_secondary_btn_style(self) -> str:
+        """次要按钮样式 - 浅灰色"""
+        return """
+            QPushButton {
+                background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+                border-radius: 8px; padding: 8px 16px; font-weight: 500;
+            }
+            QPushButton:hover { background: #e2e8f0; }
+        """
