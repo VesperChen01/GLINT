@@ -83,14 +83,14 @@ def analyze_protein_protein_interface(obj_name=None,
                                       protein1_color="cyan",
                                       protein2_color="magenta",
                                       show_labels=True,
-                                      display_mode="backbone_surface"):
+                                      display_mode="cartoon_surface_interaction"):
     """
     检测两个蛋白质之间的直接相互作用（分子胶机制的核心特征）
-    
+
     这是区分 PROTAC 和分子胶的关键功能：
     - PROTAC: 通常无/弱 蛋白-蛋白接触
     - 分子胶: 强 蛋白-蛋白直接接触（Glue诱导的界面）
-    
+
     参数:
         obj_name: PyMOL对象名称
         protein1_chains: 蛋白质1的链ID列表（例如 ["A"] - E3 ligase）
@@ -101,7 +101,7 @@ def analyze_protein_protein_interface(obj_name=None,
         visualize: 是否在PyMOL中可视化界面（默认True）
         protein1_color: 蛋白质1的显示颜色（默认cyan）
         protein2_color: 蛋白质2的显示颜色（默认magenta）
-        display_mode: 显示模式 - "backbone_surface" (卡通+表面) 或 "surface_only" (仅表面)
+        display_mode: 显示模式 - "cartoon_surface_interaction" (卡通+表面+相互作用) 或 "cartoon_interaction" (卡通+相互作用)
         show_labels: 是否显示距离标签 (默认True)
     
     返回:
@@ -548,10 +548,10 @@ def visualize_ppi_interface(obj_name, ppi_result,
                             protein2_color="magenta",
                             show_labels=True,
                             clear_old=True,
-                            display_mode="backbone_surface"):
+                            display_mode="cartoon_surface_interaction"):
     """
     在PyMOL中可视化蛋白-蛋白界面 (增强版)
-    
+
     参数:
         obj_name: PyMOL对象名称
         ppi_result: analyze_protein_protein_interface()的返回结果
@@ -559,7 +559,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         protein2_color: 蛋白质2的颜色 (默认magenta)
         show_labels: 是否显示距离标签
         clear_old: 是否清除旧的高亮
-        display_mode: 显示模式 - "backbone_surface" (卡通+表面) 或 "surface_only" (仅表面)
+        display_mode: 显示模式 - "cartoon_surface_interaction" (卡通+表面+相互作用) 或 "cartoon_interaction" (卡通+相互作用)
     
     五种非共价键配色方案:
         - 氢键: 蓝色 (blue)
@@ -621,22 +621,34 @@ def visualize_ppi_interface(obj_name, ppi_result,
     
     print(f"[visualize_ppi_interface] Visualizing {len(interface_interactions)} interactions...")
     print(f"[visualize_ppi_interface] Display mode: {display_mode}")
-    
+
+    # ========== 设置白色背景 ==========
+    cmd.bg_color("white")
+    print("[visualize_ppi_interface] 背景颜色: 白色")
+
     # ========== 设置蛋白显示模式 ==========
-    if display_mode == "backbone_surface":
-        # 模式1: 卡通 + 表面 + 非共价键
+    if display_mode == "cartoon_surface_interaction":
+        # 模式1: 卡通 + 表面 + 相互作用 (白色背景, ChainA/ChainB不同颜色)
         cmd.hide("everything", obj_name)
         cmd.show("cartoon", obj_name)
         cmd.show("surface", obj_name)
         cmd.set("transparency", 0.4, obj_name)
         cmd.set("cartoon_transparency", 0.0, obj_name)
-        print("[visualize_ppi_interface] 显示模式: 卡通 + 表面 + 非共价键")
-    elif display_mode == "surface_only":
-        # 模式2: 仅表面 + 非共价键
+        print("[visualize_ppi_interface] 显示模式: 卡通 + 表面 + 相互作用")
+    elif display_mode == "cartoon_interaction":
+        # 模式2: 卡通 + 相互作用 (白色背景, ChainA/ChainB不同颜色, 无表面)
         cmd.hide("everything", obj_name)
+        cmd.show("cartoon", obj_name)
+        cmd.set("cartoon_transparency", 0.0, obj_name)
+        print("[visualize_ppi_interface] 显示模式: 卡通 + 相互作用")
+    else:
+        # 默认模式: 与cartoon_surface_interaction相同
+        cmd.hide("everything", obj_name)
+        cmd.show("cartoon", obj_name)
         cmd.show("surface", obj_name)
-        cmd.set("transparency", 0.3, obj_name)
-        print("[visualize_ppi_interface] 显示模式: 表面 + 非共价键")
+        cmd.set("transparency", 0.4, obj_name)
+        cmd.set("cartoon_transparency", 0.0, obj_name)
+        print(f"[visualize_ppi_interface] 未知模式 '{display_mode}', 使用默认: 卡通 + 表面 + 相互作用")
     
     # 为蛋白链着色
     for chain in protein1_chains:

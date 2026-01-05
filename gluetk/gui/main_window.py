@@ -25,7 +25,6 @@ from .utils import t, get_lang
 from .tabs.target_discovery import TargetDiscoveryTab
 from .tabs.hit_identification import HitIdentificationTab
 from .tabs.lead_optimization import LeadOptimizationTab
-from .tabs.batch_analysis import BatchAnalysisTab
 from .tabs.ternary_evaluation import TernaryEvaluationTab
 
 # Import worker classes if needed for type hinting or global usage
@@ -180,14 +179,10 @@ class GlueTKDialog(QDialog):
         self.lead_tab = LeadOptimizationTab(self)
         self.content_stack.addWidget(wrap_in_scroll(self.lead_tab))
 
-        # 5. Batch Analysis
-        self.batch_tab = BatchAnalysisTab(self)
-        self.content_stack.addWidget(wrap_in_scroll(self.batch_tab))
-        
-        # 6. README
+        # 5. README
         self.content_stack.addWidget(self.create_readme_tab())
-        
-        # 7. Contact
+
+        # 6. Contact
         self.content_stack.addWidget(self.create_contact_tab())
         
         content_row.addWidget(self.content_stack, 1)
@@ -256,33 +251,27 @@ class GlueTKDialog(QDialog):
             "Hit Identification",
             "Ternary Evaluation",
             "Lead Optimization",
-            "Batch Analysis",
         ]
         self.nav_list.addItems(items)
         self.nav_list.setCurrentRow(0)
         self.nav_list.currentRowChanged.connect(self.on_nav_changed)
         layout.addWidget(self.nav_list, 1)  # stretch factor 1，让列表填充可用空间
-        
+
         # Bottom links
         bottom_bar = QWidget()
         b_layout = QVBoxLayout(bottom_bar)
         b_layout.setSpacing(2)
-        
+
         btn_readme = QPushButton("README")
         btn_readme.setFlat(True)
-        btn_readme.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))  # README is index 6
+        btn_readme.clicked.connect(lambda: self.content_stack.setCurrentIndex(5))  # README is index 5
         b_layout.addWidget(btn_readme)
-        
+
         btn_contact = QPushButton("Contact Us")
         btn_contact.setFlat(True)
-        btn_contact.clicked.connect(lambda: self.content_stack.setCurrentIndex(7))  # Contact is index 7
+        btn_contact.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))  # Contact is index 6
         b_layout.addWidget(btn_contact)
-        
-        btn_resources = QPushButton("Resources")
-        btn_resources.setFlat(True)
-        btn_resources.clicked.connect(self._show_resources)
-        b_layout.addWidget(btn_resources)
-        
+
         btn_check = QPushButton("Check Env")
         btn_check.setFlat(True)
         btn_check.clicked.connect(self.check_environment)
@@ -763,33 +752,7 @@ class GlueTKDialog(QDialog):
                 <li><b>Full Analysis</b> - ΔΔG prediction (requires FoldX/PyRosetta)</li>
             </ul>
         </div>
-        
-        <h2><span class="emoji">📊</span>Batch Analysis Tab</h2>
-        <p>Analyze multiple structures simultaneously.</p>
-        
-        <div class="feature-box">
-            <div class="feature-title">Input Methods</div>
-            <table>
-                <tr><th>Method</th><th>Description</th></tr>
-                <tr><td>PDB IDs</td><td>Enter comma-separated IDs (e.g., 6H0G,6H0F,5FQD)</td></tr>
-                <tr><td>Browse Files</td><td>Select individual PDB/CIF files</td></tr>
-                <tr><td>Browse Folder</td><td>Add all PDB files from a directory</td></tr>
-            </table>
-        </div>
-        
-        <div class="feature-box">
-            <div class="feature-title">Analysis Types</div>
-            <table>
-                <tr><th>Type</th><th>Description</th></tr>
-                <tr><td>G-motif Detection</td><td>Batch G-loop finding</td></tr>
-                <tr><td>PPI Interface</td><td>Compare interfaces across structures</td></tr>
-                <tr><td>Pocket Detection</td><td>Screen for druggable sites</td></tr>
-                <tr><td>Protein-Ligand</td><td>Batch interaction analysis</td></tr>
-                <tr><td>Comprehensive</td><td>Run all analyses</td></tr>
-            </table>
-            <p><b>Output:</b> CSV files with detailed results, summary statistics, JSON reports</p>
-        </div>
-        
+
         <h2><span class="emoji">🎨</span>Visualization (APBS)</h2>
         <p>Generate publication-quality images with electrostatic surfaces.</p>
         
@@ -852,295 +815,183 @@ class GlueTKDialog(QDialog):
         return w
 
     def create_contact_tab(self) -> QWidget:
-        """Create a clean contact page with structured information."""
+        """Create a clean contact page with app info and maintainer cards."""
         from .qt_adapter import QScrollArea, QGridLayout
-        
+
         main_page = QWidget()
         main_layout = QVBoxLayout(main_page)
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
-        
+
         # Scroll Area
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        
+
         content = QWidget()
         content.setStyleSheet("background-color: #ffffff;")
         content_layout = QVBoxLayout(content)
         content_layout.setContentsMargins(60, 50, 60, 50)
         content_layout.setSpacing(30)
-        
-        # Header Section
+        content_layout.setAlignment(Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter)
+
+        # === Header Section (居中) ===
         header_section = QWidget()
         header_layout = QVBoxLayout(header_section)
-        header_layout.setSpacing(10)
-        
-        title_lbl = QLabel("Contact Us")
-        title_lbl.setStyleSheet("font-size: 36px; font-weight: 800; color: #1e293b;")
-        
-        subtitle_lbl = QLabel("We'd love to hear from you.")
-        subtitle_lbl.setStyleSheet("font-size: 20px; color: #3b82f6; font-weight: 500;")
-        
-        desc_lbl = QLabel("If you have any questions, suggestions, or collaboration ideas while using GlueTK, feel free to reach out anytime.")
-        desc_lbl.setStyleSheet("font-size: 14px; color: #64748b;")
-        desc_lbl.setWordWrap(True)
-        
+        header_layout.setSpacing(12)
+        header_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        # App Icon (居中)
+        logo_path = _get_logo_path()
+        if logo_path:
+            icon_lbl = QLabel()
+            pix = QPixmap(logo_path)
+            icon_lbl.setPixmap(pix.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            header_layout.addWidget(icon_lbl)
+
+        # Title: Glue Toolkit (H1, Bold, 高亮黑色)
+        title_lbl = QLabel("Glue Toolkit")
+        title_lbl.setStyleSheet("font-size: 32px; font-weight: bold; color: #0f172a;")
+        title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(title_lbl)
-        header_layout.addWidget(subtitle_lbl)
-        header_layout.addWidget(desc_lbl)
+
+        # Meta Info Row: 版本号 Badge + 描述 (同行显示)
+        meta_row = QWidget()
+        meta_layout = QHBoxLayout(meta_row)
+        meta_layout.setSpacing(12)
+        meta_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        meta_layout.setContentsMargins(0, 0, 0, 0)
+
+        # 版本号 Badge (蓝色描边/背景)
+        version_badge = QLabel("v1.0.0")
+        version_badge.setStyleSheet("""
+            QLabel {
+                background-color: #eff6ff;
+                color: #2563eb;
+                border: 1px solid #3b82f6;
+                border-radius: 12px;
+                padding: 4px 12px;
+                font-size: 13px;
+                font-weight: 600;
+            }
+        """)
+        meta_layout.addWidget(version_badge)
+
+        # 描述文案
+        desc_lbl = QLabel("Professional Toolkit for molecular glue design")
+        desc_lbl.setStyleSheet("font-size: 14px; color: #64748b;")
+        meta_layout.addWidget(desc_lbl)
+
+        header_layout.addWidget(meta_row)
         content_layout.addWidget(header_section)
-        
-        # Divider
-        divider1 = QFrame()
-        divider1.setFrameShape(QFrame.Shape.HLine)
-        divider1.setStyleSheet("background-color: #e2e8f0; max-height: 1px;")
-        content_layout.addWidget(divider1)
-        
-        # About the Maintainer Section
-        maintainer_section = QWidget()
-        maintainer_layout = QVBoxLayout(maintainer_section)
-        maintainer_layout.setSpacing(20)
-        
-        maintainer_title = QLabel("👤 About the Maintainer")
-        maintainer_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #1e293b;")
-        maintainer_layout.addWidget(maintainer_title)
-        
-        # Info Grid
-        info_grid = QGridLayout()
-        info_grid.setSpacing(20)
-        info_grid.setColumnStretch(1, 1)
-        
-        # Name & Affiliation
-        name_card = self._create_info_card("Roufen Chen", "Zhejiang University", "#3b82f6")
-        info_grid.addWidget(name_card, 0, 0)
-        
-        # Email
-        email_card = self._create_info_card("📧 Email", "12319021@zju.edu.cn", "#10b981")
-        info_grid.addWidget(email_card, 0, 1)
-        
-        # GitHub
-        github_card = self._create_info_card("💻 GitHub", "VesperChen01 / GlueTK", "#8b5cf6")
-        info_grid.addWidget(github_card, 1, 0, 1, 2)
-        
-        maintainer_layout.addLayout(info_grid)
-        content_layout.addWidget(maintainer_section)
-        
-        # Divider
-        divider2 = QFrame()
-        divider2.setFrameShape(QFrame.Shape.HLine)
-        divider2.setStyleSheet("background-color: #e2e8f0; max-height: 1px;")
-        content_layout.addWidget(divider2)
-        
-        # Send Us a Message Section
-        message_section = QWidget()
-        message_layout = QVBoxLayout(message_section)
-        message_layout.setSpacing(15)
-        
-        message_title = QLabel("✉️ Send Us a Message")
-        message_title.setStyleSheet("font-size: 18px; font-weight: bold; color: #1e293b;")
-        message_layout.addWidget(message_title)
-        
-        message_desc = QLabel("Please contact us through one of the following ways:")
-        message_desc.setStyleSheet("font-size: 14px; color: #64748b;")
-        message_layout.addWidget(message_desc)
-        
-        # Contact options
-        options = [
-            ("🐛 Bug Report", "Found a bug or unexpected behavior? Please report it with reproduction steps and environment info."),
-            ("💡 Feature Request", "Have a new feature idea or improvement suggestion? We'd love to hear from you."),
-            ("🤝 Collaboration", "Interested in GlueTK and want to collaborate or discuss? Feel free to reach out."),
-            ("📝 Other Inquiries", "Any other questions or ideas."),
-        ]
-        
-        for title, desc in options:
-            option_widget = self._create_contact_option(title, desc)
-            message_layout.addWidget(option_widget)
-        
-        content_layout.addWidget(message_section)
+
+        # === Info Cards Section (两张等宽卡片横向排列) ===
+        cards_container = QWidget()
+        cards_layout = QHBoxLayout(cards_container)
+        cards_layout.setSpacing(20)
+        cards_layout.setContentsMargins(0, 20, 0, 0)
+
+        # 卡片1: Maintainers
+        card1 = self._create_contact_card(
+            "Maintainers",
+            [
+                ("Roufen Chen", "Creator & Lead Maintainer", "12319021@zju.edu.cn"),
+                ("Xinle Yang", "Co-Maintainer", "221124070197@zjut.edu.cn"),
+            ]
+        )
+        cards_layout.addWidget(card1, 1)
+
+        # 卡片2: Repository
+        card2 = self._create_repo_card()
+        cards_layout.addWidget(card2, 1)
+
+        content_layout.addWidget(cards_container)
         content_layout.addStretch()
-        
+
         scroll.setWidget(content)
         main_layout.addWidget(scroll)
-        
+
         return main_page
-    
-    def _create_info_card(self, title: str, value: str, accent_color: str) -> QWidget:
-        """Create an info card for contact page."""
+
+    def _create_contact_card(self, title: str, contacts: list) -> QWidget:
+        """Create a contact info card with multiple contacts."""
         card = QFrame()
-        card.setStyleSheet(f"""
-            QFrame {{
+        card.setStyleSheet("""
+            QFrame {
                 background-color: #f8fafc;
-                border: 1px solid #e2e8f0;
                 border-radius: 12px;
-                padding: 20px;
-            }}
+            }
         """)
-        
+
         layout = QVBoxLayout(card)
-        layout.setSpacing(5)
-        
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+
+        # Card Title
         title_lbl = QLabel(title)
-        title_lbl.setStyleSheet(f"font-size: 16px; font-weight: bold; color: {accent_color};")
-        
-        value_lbl = QLabel(value)
-        value_lbl.setStyleSheet("font-size: 14px; color: #64748b;")
-        
+        title_lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #1e293b;")
         layout.addWidget(title_lbl)
-        layout.addWidget(value_lbl)
-        
+
+        # Contact Items
+        for name, role, email in contacts:
+            item = QWidget()
+            item_layout = QVBoxLayout(item)
+            item_layout.setContentsMargins(0, 0, 0, 0)
+            item_layout.setSpacing(2)
+
+            name_lbl = QLabel(name)
+            name_lbl.setStyleSheet("font-size: 14px; font-weight: 600; color: #334155;")
+
+            role_lbl = QLabel(role)
+            role_lbl.setStyleSheet("font-size: 12px; color: #64748b;")
+
+            email_lbl = QLabel(f"📧 {email}")
+            email_lbl.setStyleSheet("font-size: 12px; color: #3b82f6;")
+
+            item_layout.addWidget(name_lbl)
+            item_layout.addWidget(role_lbl)
+            item_layout.addWidget(email_lbl)
+            layout.addWidget(item)
+
+        layout.addStretch()
         return card
-    
-    def _create_contact_option(self, title: str, desc: str) -> QWidget:
-        """Create a contact option item."""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(15, 10, 15, 10)
-        layout.setSpacing(5)
-        
-        title_lbl = QLabel(title)
-        title_lbl.setStyleSheet("font-size: 15px; font-weight: bold; color: #1e293b;")
-        
-        desc_lbl = QLabel(desc)
-        desc_lbl.setStyleSheet("font-size: 13px; color: #64748b;")
-        desc_lbl.setWordWrap(True)
-        
-        layout.addWidget(title_lbl)
-        layout.addWidget(desc_lbl)
-        
-        widget.setStyleSheet("""
-            QWidget {
+
+    def _create_repo_card(self) -> QWidget:
+        """Create a repository info card."""
+        card = QFrame()
+        card.setStyleSheet("""
+            QFrame {
                 background-color: #f8fafc;
-                border-radius: 8px;
-            }
-            QWidget:hover {
-                background-color: #f1f5f9;
+                border-radius: 12px;
             }
         """)
-        
-        return widget
-    
-    def _show_resources(self):
-        """Show molecular glue resources dialog"""
-        try:
-            # Try to find and open the resources markdown file
-            here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-            resources_path = os.path.join(here, "resources", "molecular_glue_resources.md")
-            
-            if os.path.exists(resources_path):
-                # Create a dialog to show resources
-                from .qt_adapter import QDialog, QVBoxLayout, QTextBrowser, QPushButton
-                
-                dialog = QDialog(self)
-                dialog.setWindowTitle("Molecular Glue Resources")
-                dialog.setMinimumSize(800, 600)
-                
-                layout = QVBoxLayout(dialog)
-                
-                browser = QTextBrowser()
-                browser.setOpenExternalLinks(True)
-                
-                # Read and convert markdown to HTML (simple conversion)
-                with open(resources_path, 'r', encoding='utf-8') as f:
-                    content = f.read()
-                
-                # Simple markdown to HTML conversion
-                html_content = self._markdown_to_html(content)
-                browser.setHtml(html_content)
-                
-                layout.addWidget(browser)
-                
-                close_btn = QPushButton("Close")
-                close_btn.clicked.connect(dialog.close)
-                layout.addWidget(close_btn)
-                
-                dialog.exec_()
-            else:
-                QMessageBox.information(self, "Resources",
-                    "Resources file not found.\n\n"
-                    "Key databases:\n"
-                    "• PROTAC-DB: https://protacdb.weizmann.ac.il/\n"
-                    "• Open Targets: https://www.opentargets.org/\n"
-                    "• PDB: https://www.rcsb.org/\n\n"
-                    "Key PDB structures:\n"
-                    "• 6H0G - CRBN-CC885-GSPT1\n"
-                    "• 5FQD - CRBN-Lenalidomide-CK1α\n"
-                    "• 5S9M - DCAF15-Indisulam-RBM39")
-        except Exception as e:
-            QMessageBox.warning(self, "Error", f"Failed to load resources: {e}")
-    
-    def _markdown_to_html(self, md_content: str) -> str:
-        """Simple markdown to HTML conversion"""
-        import re
-        
-        html = md_content
-        
-        # Headers
-        html = re.sub(r'^### (.+)$', r'<h3>\1</h3>', html, flags=re.MULTILINE)
-        html = re.sub(r'^## (.+)$', r'<h2>\1</h2>', html, flags=re.MULTILINE)
-        html = re.sub(r'^# (.+)$', r'<h1>\1</h1>', html, flags=re.MULTILINE)
-        
-        # Bold
-        html = re.sub(r'\*\*(.+?)\*\*', r'<b>\1</b>', html)
-        
-        # Links
-        html = re.sub(r'\[([^\]]+)\]\(([^)]+)\)', r'<a href="\2">\1</a>', html)
-        
-        # Code blocks
-        html = re.sub(r'```(\w+)?\n(.*?)```', r'<pre><code>\2</code></pre>', html, flags=re.DOTALL)
-        html = re.sub(r'`([^`]+)`', r'<code>\1</code>', html)
-        
-        # Tables (simple)
-        lines = html.split('\n')
-        in_table = False
-        new_lines = []
-        for line in lines:
-            if '|' in line and not line.strip().startswith('```'):
-                if not in_table:
-                    new_lines.append('<table border="1" cellpadding="5" cellspacing="0">')
-                    in_table = True
-                if line.strip().startswith('|---') or line.strip().startswith('| ---'):
-                    continue  # Skip separator line
-                cells = [c.strip() for c in line.split('|')[1:-1]]
-                row = '<tr>' + ''.join(f'<td>{c}</td>' for c in cells) + '</tr>'
-                new_lines.append(row)
-            else:
-                if in_table:
-                    new_lines.append('</table>')
-                    in_table = False
-                new_lines.append(line)
-        if in_table:
-            new_lines.append('</table>')
-        html = '\n'.join(new_lines)
-        
-        # Horizontal rules
-        html = re.sub(r'^---+$', r'<hr>', html, flags=re.MULTILINE)
-        
-        # Line breaks
-        html = html.replace('\n\n', '</p><p>')
-        html = f'<p>{html}</p>'
-        
-        # Style
-        html = f'''
-        <html>
-        <head>
-        <style>
-            body {{ font-family: Arial, sans-serif; padding: 20px; }}
-            h1 {{ color: #1e40af; }}
-            h2 {{ color: #3b82f6; border-bottom: 1px solid #e5e7eb; padding-bottom: 5px; }}
-            h3 {{ color: #6366f1; }}
-            a {{ color: #2563eb; }}
-            code {{ background: #f3f4f6; padding: 2px 6px; border-radius: 4px; }}
-            pre {{ background: #1e293b; color: #e2e8f0; padding: 15px; border-radius: 8px; overflow-x: auto; }}
-            table {{ border-collapse: collapse; margin: 10px 0; }}
-            td {{ border: 1px solid #e5e7eb; padding: 8px; }}
-            tr:nth-child(even) {{ background: #f9fafb; }}
-        </style>
-        </head>
-        <body>
-        {html}
-        </body>
-        </html>
-        '''
-        
-        return html
+
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+
+        # Card Title
+        title_lbl = QLabel("Repository")
+        title_lbl.setStyleSheet("font-size: 16px; font-weight: bold; color: #1e293b;")
+        layout.addWidget(title_lbl)
+
+        # GitHub Info
+        github_item = QWidget()
+        github_layout = QVBoxLayout(github_item)
+        github_layout.setContentsMargins(0, 0, 0, 0)
+        github_layout.setSpacing(4)
+
+        platform_lbl = QLabel("GitHub")
+        platform_lbl.setStyleSheet("font-size: 14px; font-weight: 600; color: #334155;")
+
+        url_lbl = QLabel("https://github.com/VesperChen01/GlueTK")
+        url_lbl.setStyleSheet("font-size: 12px; color: #3b82f6;")
+        url_lbl.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+
+        github_layout.addWidget(platform_lbl)
+        github_layout.addWidget(url_lbl)
+        layout.addWidget(github_item)
+
+        layout.addStretch()
+        return card

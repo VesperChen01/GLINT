@@ -563,17 +563,83 @@ class InstallerApp:
         with open(launcher_script, "w") as f:
             f.write(f'''#!/bin/bash
 # GlueTK Launcher (macOS .app)
+# 修复版：改进 PyMOL 环境检测和启动逻辑
 
 CONDA_EXE="{conda_exe_str}"
 ENV_PATH="{env_path_str}"
 
-if [ -n "$CONDA_EXE" ] && [ -x "$CONDA_EXE" ] && [ -n "$ENV_PATH" ] && [ -d "$ENV_PATH" ]; then
-  echo "Starting GlueTK via conda env: $ENV_PATH"
-  "$CONDA_EXE" run -p "$ENV_PATH" bash -c "export KMP_DUPLICATE_LIB_OK=TRUE && export OMP_NUM_THREADS=1 && pymol -d 'import sys, os; sys.path.insert(0, os.path.expanduser('\"'\"'~/.pymol/startup'\"'\"')); import gluetk; gluetk.gluetk_gui()'"
-else
-  osascript -e 'display alert "Error" message "Conda env gluetk not found or invalid. Please re-run GlueTK Installer to create it."'
+# 日志文件（用于调试）
+LOG_FILE="$HOME/.gluetk_launch.log"
+echo "=== GlueTK Launch $(date) ===" >> "$LOG_FILE"
+
+# 如果传入的 CONDA_EXE 无效，尝试重新查找
+if [ ! -x "$CONDA_EXE" ]; then
+  echo "Stored conda path invalid, searching..." >> "$LOG_FILE"
+  for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "/opt/homebrew/Caskroom/miniconda/base/bin/conda" "$HOME/opt/miniconda3/bin/conda"; do
+    if [ -x "$p" ]; then
+      CONDA_EXE="$p"
+      echo "Found conda at: $CONDA_EXE" >> "$LOG_FILE"
+      break
+    fi
+  done
+fi
+
+# 如果传入的 ENV_PATH 无效，尝试重新查找
+if [ ! -d "$ENV_PATH" ]; then
+  echo "Stored env path invalid, searching..." >> "$LOG_FILE"
+  if [ -x "$CONDA_EXE" ]; then
+    CONDA_BASE=$("$CONDA_EXE" info --base 2>/dev/null)
+    if [ -d "$CONDA_BASE/envs/gluetk" ]; then
+      ENV_PATH="$CONDA_BASE/envs/gluetk"
+      echo "Found env at: $ENV_PATH" >> "$LOG_FILE"
+    fi
+  fi
+fi
+
+# 验证环境
+if [ ! -x "$CONDA_EXE" ] || [ ! -d "$ENV_PATH" ]; then
+  echo "ERROR: Conda or env not found" >> "$LOG_FILE"
+  osascript -e 'display alert "GlueTK Error" message "Conda environment gluetk not found.\\n\\nPlease re-run GlueTK Installer to create it.\\n\\nOr manually run:\\nconda activate gluetk && pymol"'
   exit 1
 fi
+
+echo "Using conda: $CONDA_EXE" >> "$LOG_FILE"
+echo "Using env: $ENV_PATH" >> "$LOG_FILE"
+
+# 设置环境变量（避免 OpenMP 冲突）
+export KMP_DUPLICATE_LIB_OK=TRUE
+export OMP_NUM_THREADS=1
+export QT_MAC_WANTS_LAYER=1
+
+# 初始化 conda
+eval "$($CONDA_EXE shell.bash hook)" 2>/dev/null
+
+# 激活环境
+conda activate "$ENV_PATH" 2>/dev/null || {{
+  echo "ERROR: Failed to activate conda env" >> "$LOG_FILE"
+  osascript -e 'display alert "GlueTK Error" message "Failed to activate conda environment gluetk.\\n\\nPlease check your conda installation."'
+  exit 1
+}}
+
+echo "Conda env activated, starting PyMOL..." >> "$LOG_FILE"
+
+# 启动 PyMOL 并加载 GlueTK
+# 使用 heredoc 避免引号转义问题
+pymol -d "
+import sys, os
+startup_path = os.path.expanduser('~/.pymol/startup')
+if startup_path not in sys.path:
+    sys.path.insert(0, startup_path)
+try:
+    import gluetk
+    gluetk.gluetk_gui()
+except Exception as e:
+    print(f'GlueTK Error: {{e}}')
+    import traceback
+    traceback.print_exc()
+"
+
+echo "PyMOL exited with code: $?" >> "$LOG_FILE"
 ''')
 
         os.chmod(launcher_script, 0o755)

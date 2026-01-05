@@ -25,138 +25,226 @@ class TernaryEvaluationTab(CommonTab):
         self.init_ui()
         
     def init_ui(self):
+        """初始化UI - 现代卡片式布局"""
         self.setObjectName("scroll_content")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
-        bg_color = "#161b22" if getattr(self.parent_window, "_dark_mode", False) else "#ffffff"
+        is_dark = getattr(self.parent_window, "_dark_mode", False)
+        bg_color = "#161b22" if is_dark else "#f8fafc"
         self.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
 
         layout = QVBoxLayout(self)
-        layout.setSpacing(8)
-        layout.setContentsMargins(12, 12, 12, 12)
-        
-        # 标题行
-        title_row = QHBoxLayout()
+        layout.setSpacing(16)
+        layout.setContentsMargins(20, 20, 20, 20)
+
+        # === 页面标题 ===
+        header = QHBoxLayout()
         title = QLabel("Ternary Complex Evaluation")
-        title.setStyleSheet("font-size: 16px; font-weight: bold; color: #3b82f6;")
-        title_row.addWidget(title)
-        title_row.addStretch(1)
-        layout.addLayout(title_row)
-        
-        # === 输入区域 - 紧凑的单行布局 ===
-        grp_input = QGroupBox("Structure Input")
-        input_layout = QHBoxLayout(grp_input)
-        input_layout.setContentsMargins(8, 10, 8, 8)
-        input_layout.setSpacing(6)
-        
-        # PyMOL Object
-        input_layout.addWidget(QLabel("Object:"))
-        self.ternary_obj_combo = QComboBox()
-        self.ternary_obj_combo.setMinimumHeight(26)
-        self.ternary_obj_combo.setMinimumWidth(120)
-        self.ternary_obj_combo.setMaximumWidth(180)
-        self.ternary_obj_combo.setToolTip("Select PyMOL object")
-        self.parent_window.ternary_obj_combo = self.ternary_obj_combo
-        input_layout.addWidget(self.ternary_obj_combo)
-        
-        refresh_btn = QPushButton(t("refresh"))
-        refresh_btn.setFixedWidth(70)
-        refresh_btn.setMinimumHeight(26)
-        refresh_btn.clicked.connect(self._do_refresh)
-        input_layout.addWidget(refresh_btn)
-        
-        input_layout.addSpacing(10)
-        
-        # E3 Chain
-        input_layout.addWidget(QLabel("E3:"))
-        self.parent_window.ternary_e3_chain = QLineEdit("A")
-        self.parent_window.ternary_e3_chain.setFixedWidth(40)
-        self.parent_window.ternary_e3_chain.setMinimumHeight(26)
-        self.parent_window.ternary_e3_chain.setToolTip("E3 ligase chain ID")
-        input_layout.addWidget(self.parent_window.ternary_e3_chain)
-        
-        # POI Chain
-        input_layout.addWidget(QLabel("POI:"))
-        self.parent_window.ternary_poi_chain = QLineEdit("B")
-        self.parent_window.ternary_poi_chain.setFixedWidth(40)
-        self.parent_window.ternary_poi_chain.setMinimumHeight(26)
-        self.parent_window.ternary_poi_chain.setToolTip("POI chain ID")
-        input_layout.addWidget(self.parent_window.ternary_poi_chain)
-        
-        # Ligand Residue Name
-        input_layout.addWidget(QLabel("Ligand:"))
-        self.parent_window.ternary_lig_resn = QLineEdit("UNL")
-        self.parent_window.ternary_lig_resn.setFixedWidth(50)
-        self.parent_window.ternary_lig_resn.setMinimumHeight(26)
-        self.parent_window.ternary_lig_resn.setToolTip("Ligand residue name (e.g., UNL, LIG)")
-        input_layout.addWidget(self.parent_window.ternary_lig_resn)
-        
-        input_layout.addStretch(1)
-        
-        layout.addWidget(grp_input)
-        
-        # === 三个子模块标签页 ===
-        sub_tabs = QTabWidget()
-        sub_tabs.setStyleSheet("""
-            QTabWidget::pane { border: 1px solid #e5e7eb; background: white; padding: 4px; }
-            QTabBar::tab { padding: 4px 12px; }
-            QTabBar::tab:selected { background: #3b82f6; color: white; }
+        title.setStyleSheet("""
+            font-size: 20px; font-weight: 600;
+            color: #3b82f6; padding: 4px 0;
         """)
-        sub_tabs.setMaximumHeight(180)
-        
-        # 1. 界面模块
-        interface_tab = self._create_interface_tab()
-        sub_tabs.addTab(interface_tab, "Interface")
-        
-        # 2. 配体模块
-        ligand_tab = self._create_ligand_tab()
-        sub_tabs.addTab(ligand_tab, "Ligand")
-        
-        # 3. 三元几何模块
-        geometry_tab = self._create_geometry_tab()
-        sub_tabs.addTab(geometry_tab, "Geometry")
-        
-        layout.addWidget(sub_tabs)
-        
-        # === 运行按钮 ===
+        header.addWidget(title)
+        header.addStretch(1)
+        layout.addLayout(header)
+
+        # === 输入卡片 - 两行清晰布局 ===
+        input_card = self._create_input_card(is_dark)
+        layout.addWidget(input_card)
+
+        # === 三列分析卡片 ===
+        analysis_row = QHBoxLayout()
+        analysis_row.setSpacing(12)
+
+        # Interface 卡片
+        interface_card = self._create_interface_card(is_dark)
+        analysis_row.addWidget(interface_card, 1)
+
+        # Ligand 卡片
+        ligand_card = self._create_ligand_card(is_dark)
+        analysis_row.addWidget(ligand_card, 1)
+
+        # Geometry 卡片
+        geometry_card = self._create_geometry_card(is_dark)
+        analysis_row.addWidget(geometry_card, 1)
+
+        layout.addLayout(analysis_row)
+
+        # === 操作按钮行 ===
         btn_row = QHBoxLayout()
-        btn_row.setSpacing(6)
-        self.parent_window.ternary_run_all_btn = QPushButton("Run Evaluation")
+        btn_row.setSpacing(10)
+
+        self.parent_window.ternary_run_all_btn = QPushButton("Run Full Evaluation")
         self.parent_window.ternary_run_all_btn.setObjectName("primary_btn")
-        self.parent_window.ternary_run_all_btn.setMinimumHeight(28)
+        self.parent_window.ternary_run_all_btn.setMinimumHeight(36)
+        self.parent_window.ternary_run_all_btn.setMinimumWidth(180)
+        self.parent_window.ternary_run_all_btn.setStyleSheet("""
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #2563eb);
+                color: white; border: none; border-radius: 8px;
+                font-weight: 600; font-size: 13px; padding: 8px 20px;
+            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #1d4ed8); }
+            QPushButton:pressed { background: #1d4ed8; }
+            QPushButton:disabled { background: #94a3b8; }
+        """)
         self.parent_window.ternary_run_all_btn.clicked.connect(self.run_full_evaluation)
         btn_row.addWidget(self.parent_window.ternary_run_all_btn)
-        
+
         self.parent_window.ternary_visualize_btn = QPushButton("Visualize")
-        self.parent_window.ternary_visualize_btn.setObjectName("highlight_btn")
-        self.parent_window.ternary_visualize_btn.setMinimumHeight(28)
+        self.parent_window.ternary_visualize_btn.setMinimumHeight(36)
+        self.parent_window.ternary_visualize_btn.setStyleSheet("""
+            QPushButton {
+                background: #10b981; color: white; border: none;
+                border-radius: 8px; font-weight: 500; padding: 8px 16px;
+            }
+            QPushButton:hover { background: #059669; }
+        """)
         self.parent_window.ternary_visualize_btn.clicked.connect(self.visualize_geometry)
         btn_row.addWidget(self.parent_window.ternary_visualize_btn)
-        
+
         export_btn = QPushButton("Export")
-        export_btn.setMinimumHeight(28)
+        export_btn.setMinimumHeight(36)
+        export_btn.setStyleSheet("""
+            QPushButton {
+                background: #6366f1; color: white; border: none;
+                border-radius: 8px; font-weight: 500; padding: 8px 16px;
+            }
+            QPushButton:hover { background: #4f46e5; }
+        """)
         export_btn.clicked.connect(self.export_results)
         btn_row.addWidget(export_btn)
-        
+
         btn_row.addStretch(1)
         layout.addLayout(btn_row)
-        
-        # === 结果显示 ===
-        grp_result = QGroupBox("Results")
-        result_layout = QVBoxLayout(grp_result)
-        result_layout.setContentsMargins(6, 10, 6, 6)
-        self.parent_window.ternary_result_text = QTextEdit()
-        self.parent_window.ternary_result_text.setReadOnly(True)
-        self.parent_window.ternary_result_text.setMinimumHeight(150)
-        self.parent_window.ternary_result_text.setStyleSheet(
-            "font-family: 'Consolas', 'Monaco', monospace; font-size: 11px;"
-        )
-        result_layout.addWidget(self.parent_window.ternary_result_text)
-        layout.addWidget(grp_result, 1)
+
+        # === 结果摘要卡片 ===
+        summary_card = self._create_summary_card(is_dark)
+        layout.addWidget(summary_card)
+
+        # === 详细结果区域 ===
+        result_card = self._create_result_card(is_dark)
+        layout.addWidget(result_card, 1)
+
+    def _get_card_style(self, is_dark: bool) -> str:
+        """获取卡片样式"""
+        if is_dark:
+            return """
+                QFrame {
+                    background: #1e2530;
+                    border: 1px solid #30363d;
+                    border-radius: 10px;
+                    padding: 12px;
+                }
+            """
+        return """
+            QFrame {
+                background: white;
+                border: 1px solid #e2e8f0;
+                border-radius: 10px;
+                padding: 12px;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+            }
+        """
+
+    def _create_input_card(self, is_dark: bool) -> QFrame:
+        """创建输入卡片 - 两行清晰布局"""
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style(is_dark))
+        layout = QVBoxLayout(card)
+        layout.setSpacing(12)
+        layout.setContentsMargins(16, 14, 16, 14)
+
+        # 第一行：PyMOL对象选择
+        row1 = QHBoxLayout()
+        row1.setSpacing(10)
+
+        obj_label = QLabel("PyMOL Object:")
+        obj_label.setStyleSheet("font-weight: 500; color: #64748b;" if not is_dark else "font-weight: 500; color: #94a3b8;")
+        row1.addWidget(obj_label)
+
+        self.ternary_obj_combo = QComboBox()
+        self.ternary_obj_combo.setMinimumHeight(32)
+        self.ternary_obj_combo.setMinimumWidth(180)
+        self.ternary_obj_combo.setToolTip("Select PyMOL object containing ternary complex")
+        self.parent_window.ternary_obj_combo = self.ternary_obj_combo
+        row1.addWidget(self.ternary_obj_combo)
+
+        refresh_btn = QPushButton("Refresh")
+        refresh_btn.setMinimumHeight(32)
+        refresh_btn.setStyleSheet("""
+            QPushButton {
+                background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+                border-radius: 6px; padding: 6px 12px; font-weight: 500;
+            }
+            QPushButton:hover { background: #e2e8f0; }
+        """)
+        refresh_btn.clicked.connect(self._do_refresh)
+        row1.addWidget(refresh_btn)
+
+        row1.addStretch(1)
+        layout.addLayout(row1)
+
+        # 分隔线
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("background: #e2e8f0;" if not is_dark else "background: #30363d;")
+        sep.setFixedHeight(1)
+        layout.addWidget(sep)
+
+        # 第二行：链和配体设置
+        row2 = QHBoxLayout()
+        row2.setSpacing(20)
+
+        # E3 Chain
+        e3_group = QHBoxLayout()
+        e3_group.setSpacing(6)
+        e3_label = QLabel("E3 Chain:")
+        e3_label.setStyleSheet("font-weight: 500;")
+        e3_group.addWidget(e3_label)
+        self.parent_window.ternary_e3_chain = QLineEdit("A")
+        self.parent_window.ternary_e3_chain.setFixedWidth(50)
+        self.parent_window.ternary_e3_chain.setMinimumHeight(30)
+        self.parent_window.ternary_e3_chain.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.parent_window.ternary_e3_chain.setToolTip("E3 ligase chain ID")
+        e3_group.addWidget(self.parent_window.ternary_e3_chain)
+        row2.addLayout(e3_group)
+
+        # POI Chain
+        poi_group = QHBoxLayout()
+        poi_group.setSpacing(6)
+        poi_label = QLabel("POI Chain:")
+        poi_label.setStyleSheet("font-weight: 500;")
+        poi_group.addWidget(poi_label)
+        self.parent_window.ternary_poi_chain = QLineEdit("B")
+        self.parent_window.ternary_poi_chain.setFixedWidth(50)
+        self.parent_window.ternary_poi_chain.setMinimumHeight(30)
+        self.parent_window.ternary_poi_chain.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.parent_window.ternary_poi_chain.setToolTip("POI chain ID")
+        poi_group.addWidget(self.parent_window.ternary_poi_chain)
+        row2.addLayout(poi_group)
+
+        # Ligand Residue Name
+        lig_group = QHBoxLayout()
+        lig_group.setSpacing(6)
+        lig_label = QLabel("Ligand Resn:")
+        lig_label.setStyleSheet("font-weight: 500;")
+        lig_group.addWidget(lig_label)
+        self.parent_window.ternary_lig_resn = QLineEdit("UNL")
+        self.parent_window.ternary_lig_resn.setFixedWidth(60)
+        self.parent_window.ternary_lig_resn.setMinimumHeight(30)
+        self.parent_window.ternary_lig_resn.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.parent_window.ternary_lig_resn.setToolTip("Ligand residue name (e.g., UNL, LIG)")
+        lig_group.addWidget(self.parent_window.ternary_lig_resn)
+        row2.addLayout(lig_group)
+
+        row2.addStretch(1)
+        layout.addLayout(row2)
+
+        return card
 
     def _do_refresh(self):
         """刷新PyMOL对象列表"""
-        # 直接获取PyMOL对象，不依赖parent_window.refresh_objects
         names = []
         try:
             from pymol import cmd
@@ -164,134 +252,272 @@ class TernaryEvaluationTab(CommonTab):
             self.log(f"PyMOL objects found: {names}")
         except Exception as e:
             self.log(f"PyMOL connection error: {e}")
-        
+
         if not names:
             names = [t("no_object")]
-        
-        # 更新本地combo
+
         self.ternary_obj_combo.blockSignals(True)
         self.ternary_obj_combo.clear()
         self.ternary_obj_combo.addItems(names)
         self.ternary_obj_combo.blockSignals(False)
-        
+
         self.log(f"Refreshed: {len(names)} objects")
 
-    def _create_interface_tab(self) -> QWidget:
-        """创建界面模块子标签页"""
-        w = QWidget()
-        layout = QHBoxLayout(w)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(12)
-        
-        # 左侧：参数
-        left = QVBoxLayout()
-        left.setSpacing(4)
-        
-        row1 = QHBoxLayout()
-        row1.addWidget(QLabel("Probe (Å):"))
+    def _create_interface_card(self, is_dark: bool) -> QFrame:
+        """创建界面分析卡片"""
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style(is_dark))
+        layout = QVBoxLayout(card)
+        layout.setSpacing(10)
+        layout.setContentsMargins(14, 12, 14, 12)
+
+        # 卡片标题
+        title = QLabel("Interface")
+        title.setStyleSheet("font-size: 14px; font-weight: 600; color: #3b82f6;")
+        layout.addWidget(title)
+
+        desc = QLabel("BSA & Contact Analysis")
+        desc.setStyleSheet("font-size: 11px; color: #94a3b8; margin-bottom: 6px;")
+        layout.addWidget(desc)
+
+        # 参数区域
+        params = QGridLayout()
+        params.setSpacing(8)
+
+        params.addWidget(QLabel("Probe (Å):"), 0, 0)
         self.parent_window.ternary_probe_radius = QDoubleSpinBox()
         self.parent_window.ternary_probe_radius.setRange(0.5, 3.0)
         self.parent_window.ternary_probe_radius.setValue(1.4)
         self.parent_window.ternary_probe_radius.setSingleStep(0.1)
-        self.parent_window.ternary_probe_radius.setFixedWidth(70)
-        row1.addWidget(self.parent_window.ternary_probe_radius)
-        row1.addStretch(1)
-        left.addLayout(row1)
-        
-        row2 = QHBoxLayout()
-        row2.addWidget(QLabel("Contact (Å):"))
+        self.parent_window.ternary_probe_radius.setMinimumHeight(28)
+        params.addWidget(self.parent_window.ternary_probe_radius, 0, 1)
+
+        params.addWidget(QLabel("Contact (Å):"), 1, 0)
         self.parent_window.ternary_contact_dist = QDoubleSpinBox()
         self.parent_window.ternary_contact_dist.setRange(3.0, 8.0)
         self.parent_window.ternary_contact_dist.setValue(4.5)
         self.parent_window.ternary_contact_dist.setSingleStep(0.5)
-        self.parent_window.ternary_contact_dist.setFixedWidth(70)
-        row2.addWidget(self.parent_window.ternary_contact_dist)
-        row2.addStretch(1)
-        left.addLayout(row2)
-        
-        run_btn = QPushButton("Calculate")
-        run_btn.setMinimumHeight(26)
-        run_btn.clicked.connect(self.run_interface_only)
-        left.addWidget(run_btn)
-        
-        layout.addLayout(left)
-        
-        # 右侧：说明
-        desc = QLabel("Calculate BSA and contacts\nbetween E3, POI, and ligand")
-        desc.setStyleSheet("color: #64748b; font-size: 11px;")
-        layout.addWidget(desc)
-        layout.addStretch(1)
-        
-        return w
+        self.parent_window.ternary_contact_dist.setMinimumHeight(28)
+        params.addWidget(self.parent_window.ternary_contact_dist, 1, 1)
 
-    def _create_ligand_tab(self) -> QWidget:
-        """创建配体模块子标签页"""
-        w = QWidget()
-        layout = QHBoxLayout(w)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-        
-        # 属性显示 - 紧凑的网格
-        self.lig_prop_labels = {}
-        props = ["MW", "LogP", "TPSA", "HBD", "HBA", "RotB", "Fsp3", "Ring"]
-        
-        grid = QGridLayout()
-        grid.setSpacing(4)
-        for i, p in enumerate(props):
-            grid.addWidget(QLabel(f"{p}:"), i // 4, (i % 4) * 2)
-            lbl = QLabel("-")
-            lbl.setStyleSheet("font-weight: bold; min-width: 40px;")
-            self.lig_prop_labels[p if p != "RotB" else "RotBonds"] = lbl
-            self.lig_prop_labels[p if p != "Ring" else "Rings"] = lbl
-            grid.addWidget(lbl, i // 4, (i % 4) * 2 + 1)
-        
-        layout.addLayout(grid)
-        
+        layout.addLayout(params)
+        layout.addStretch(1)
+
+        # 计算按钮
         run_btn = QPushButton("Calculate")
-        run_btn.setMinimumHeight(26)
-        run_btn.setFixedWidth(80)
+        run_btn.setMinimumHeight(30)
+        run_btn.setStyleSheet("""
+            QPushButton { background: #e0f2fe; color: #0369a1; border: none; border-radius: 6px; font-weight: 500; }
+            QPushButton:hover { background: #bae6fd; }
+        """)
+        run_btn.clicked.connect(self.run_interface_only)
+        layout.addWidget(run_btn)
+
+        return card
+
+    def _create_ligand_card(self, is_dark: bool) -> QFrame:
+        """创建配体属性卡片"""
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style(is_dark))
+        layout = QVBoxLayout(card)
+        layout.setSpacing(10)
+        layout.setContentsMargins(14, 12, 14, 12)
+
+        # 卡片标题
+        title = QLabel("Ligand")
+        title.setStyleSheet("font-size: 14px; font-weight: 600; color: #10b981;")
+        layout.addWidget(title)
+
+        desc = QLabel("Molecular Properties")
+        desc.setStyleSheet("font-size: 11px; color: #94a3b8; margin-bottom: 6px;")
+        layout.addWidget(desc)
+
+        # 属性网格
+        self.lig_prop_labels = {}
+        props = [("MW", "Da"), ("LogP", ""), ("TPSA", "Å²"), ("HBD", ""),
+                 ("HBA", ""), ("RotB", ""), ("Fsp3", ""), ("Ring", "")]
+
+        grid = QGridLayout()
+        grid.setSpacing(6)
+        for i, (p, unit) in enumerate(props):
+            lbl_name = QLabel(f"{p}:")
+            lbl_name.setStyleSheet("color: #64748b; font-size: 11px;")
+            grid.addWidget(lbl_name, i // 2, (i % 2) * 2)
+
+            lbl_val = QLabel("-")
+            lbl_val.setStyleSheet("font-weight: 600; font-size: 12px; min-width: 45px;")
+            lbl_val.setToolTip(f"{p} ({unit})" if unit else p)
+            key = "RotBonds" if p == "RotB" else ("Rings" if p == "Ring" else p)
+            self.lig_prop_labels[key] = lbl_val
+            grid.addWidget(lbl_val, i // 2, (i % 2) * 2 + 1)
+
+        layout.addLayout(grid)
+        layout.addStretch(1)
+
+        # 计算按钮
+        run_btn = QPushButton("Calculate")
+        run_btn.setMinimumHeight(30)
+        run_btn.setStyleSheet("""
+            QPushButton { background: #d1fae5; color: #047857; border: none; border-radius: 6px; font-weight: 500; }
+            QPushButton:hover { background: #a7f3d0; }
+        """)
         run_btn.clicked.connect(self.run_ligand_only)
         layout.addWidget(run_btn)
-        layout.addStretch(1)
-        
-        return w
 
-    def _create_geometry_tab(self) -> QWidget:
-        """创建三元几何模块子标签页"""
-        w = QWidget()
-        layout = QHBoxLayout(w)
-        layout.setContentsMargins(8, 8, 8, 8)
-        layout.setSpacing(8)
-        
-        # 几何参数显示 - 紧凑网格
+        return card
+
+    def _create_geometry_card(self, is_dark: bool) -> QFrame:
+        """创建几何分析卡片"""
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style(is_dark))
+        layout = QVBoxLayout(card)
+        layout.setSpacing(10)
+        layout.setContentsMargins(14, 12, 14, 12)
+
+        # 卡片标题
+        title = QLabel("Geometry")
+        title.setStyleSheet("font-size: 14px; font-weight: 600; color: #8b5cf6;")
+        layout.addWidget(title)
+
+        desc = QLabel("Ternary Complex Metrics")
+        desc.setStyleSheet("font-size: 11px; color: #94a3b8; margin-bottom: 6px;")
+        layout.addWidget(desc)
+
+        # 几何参数网格
         self.geom_labels = {}
         features = [
-            ("COG", "Å"), ("Angle", "°"), ("E3-POI", "Å"), ("E3-MG", "Å"),
-            ("POI-MG", "Å"), ("Coop", "kcal"), ("Hook", ""), ("Dual", "")
+            ("COG", "Å", "COG Shift"), ("Angle", "°", "Angle"),
+            ("E3-POI", "Å", "E3-POI Dist"), ("E3-MG", "Å", "E3-MG Dist"),
+            ("POI-MG", "Å", "POI-MG Dist"), ("Coop", "kcal", "Cooperativity"),
+            ("Hook", "", "Hook Risk"), ("Dual", "", "Duality")
         ]
-        full_names = ["COG Shift", "Angle", "E3-POI Dist", "E3-MG Dist",
-                      "POI-MG Dist", "Cooperativity", "Hook Risk", "Duality"]
-        
+
         grid = QGridLayout()
-        grid.setSpacing(4)
-        for i, ((name, unit), full) in enumerate(zip(features, full_names)):
-            grid.addWidget(QLabel(f"{name}:"), i // 4, (i % 4) * 2)
-            lbl = QLabel("-")
-            lbl.setStyleSheet("font-weight: bold; min-width: 45px;")
-            lbl.setToolTip(f"{full} ({unit})" if unit else full)
-            self.geom_labels[full] = lbl
-            grid.addWidget(lbl, i // 4, (i % 4) * 2 + 1)
-        
+        grid.setSpacing(6)
+        for i, (name, unit, full) in enumerate(features):
+            lbl_name = QLabel(f"{name}:")
+            lbl_name.setStyleSheet("color: #64748b; font-size: 11px;")
+            grid.addWidget(lbl_name, i // 2, (i % 2) * 2)
+
+            lbl_val = QLabel("-")
+            lbl_val.setStyleSheet("font-weight: 600; font-size: 12px; min-width: 45px;")
+            lbl_val.setToolTip(f"{full} ({unit})" if unit else full)
+            self.geom_labels[full] = lbl_val
+            grid.addWidget(lbl_val, i // 2, (i % 2) * 2 + 1)
+
         layout.addLayout(grid)
-        
+        layout.addStretch(1)
+
+        # 计算按钮
         run_btn = QPushButton("Calculate")
-        run_btn.setMinimumHeight(26)
-        run_btn.setFixedWidth(80)
+        run_btn.setMinimumHeight(30)
+        run_btn.setStyleSheet("""
+            QPushButton { background: #ede9fe; color: #6d28d9; border: none; border-radius: 6px; font-weight: 500; }
+            QPushButton:hover { background: #ddd6fe; }
+        """)
         run_btn.clicked.connect(self.run_geometry_only)
         layout.addWidget(run_btn)
-        layout.addStretch(1)
-        
-        return w
+
+        return card
+
+    def _create_summary_card(self, is_dark: bool) -> QFrame:
+        """创建结果摘要卡片"""
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style(is_dark))
+        layout = QVBoxLayout(card)
+        layout.setSpacing(10)
+        layout.setContentsMargins(16, 14, 16, 14)
+
+        # 标题
+        title = QLabel("Quick Summary")
+        title.setStyleSheet("font-size: 14px; font-weight: 600; color: #f59e0b;")
+        layout.addWidget(title)
+
+        # 摘要指标网格
+        self.summary_labels = {}
+        metrics = [
+            ("Total BSA", "Å²", "#3b82f6"),
+            ("MG-E3 BSA", "Å²", "#3b82f6"),
+            ("MG-POI BSA", "Å²", "#10b981"),
+            ("E3-POI BSA", "Å²", "#8b5cf6"),
+            ("Contacts", "", "#f59e0b"),
+            ("Cooperativity", "kcal", "#ef4444"),
+        ]
+
+        grid = QHBoxLayout()
+        grid.setSpacing(16)
+
+        for name, unit, color in metrics:
+            metric_box = QVBoxLayout()
+            metric_box.setSpacing(2)
+
+            val_lbl = QLabel("-")
+            val_lbl.setStyleSheet(f"font-size: 18px; font-weight: 700; color: {color};")
+            val_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            self.summary_labels[name] = val_lbl
+            metric_box.addWidget(val_lbl)
+
+            name_lbl = QLabel(f"{name}" + (f" ({unit})" if unit else ""))
+            name_lbl.setStyleSheet("font-size: 10px; color: #94a3b8;")
+            name_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            metric_box.addWidget(name_lbl)
+
+            grid.addLayout(metric_box)
+
+        layout.addLayout(grid)
+
+        return card
+
+    def _create_result_card(self, is_dark: bool) -> QFrame:
+        """创建详细结果卡片"""
+        card = QFrame()
+        card.setStyleSheet(self._get_card_style(is_dark))
+        layout = QVBoxLayout(card)
+        layout.setSpacing(8)
+        layout.setContentsMargins(14, 12, 14, 12)
+
+        # 标题行
+        header = QHBoxLayout()
+        title = QLabel("Detailed Results")
+        title.setStyleSheet("font-size: 14px; font-weight: 600; color: #64748b;")
+        header.addWidget(title)
+        header.addStretch(1)
+        layout.addLayout(header)
+
+        # 结果文本区域
+        self.parent_window.ternary_result_text = QTextEdit()
+        self.parent_window.ternary_result_text.setReadOnly(True)
+        self.parent_window.ternary_result_text.setMinimumHeight(180)
+
+        text_style = """
+            QTextEdit {
+                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+                font-size: 11px;
+                background: #0d1117;
+                color: #c9d1d9;
+                border: 1px solid #30363d;
+                border-radius: 6px;
+                padding: 10px;
+            }
+        """ if is_dark else """
+            QTextEdit {
+                font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+                font-size: 11px;
+                background: #f8fafc;
+                color: #334155;
+                border: 1px solid #e2e8f0;
+                border-radius: 6px;
+                padding: 10px;
+            }
+        """
+        self.parent_window.ternary_result_text.setStyleSheet(text_style)
+        self.parent_window.ternary_result_text.setPlaceholderText(
+            "Results will appear here after running evaluation...\n\n"
+            "Click 'Run Full Evaluation' to analyze the ternary complex."
+        )
+        layout.addWidget(self.parent_window.ternary_result_text)
+
+        return card
 
     def _get_pdb_path(self) -> Optional[str]:
         """从PyMOL对象导出PDB文件"""
@@ -344,10 +570,27 @@ class TernaryEvaluationTab(CommonTab):
         self.parent_window.progress_bar.setVisible(False)
         self.parent_window.progress_bar.setRange(0, 1)
         self.parent_window.ternary_run_all_btn.setEnabled(True)
-        
+
         # 更新结果显示
         self.parent_window.ternary_result_text.setText(self._format_results(result))
-        
+
+        # 更新摘要卡片
+        summary_map = {
+            "Total BSA": ("bsa_total", "Å²"),
+            "MG-E3 BSA": ("bsa_mg_e3", "Å²"),
+            "MG-POI BSA": ("bsa_mg_poi", "Å²"),
+            "E3-POI BSA": ("bsa_e3_poi", "Å²"),
+            "Contacts": ("contact_count_45", ""),
+            "Cooperativity": ("cooperativity_energy", "kcal"),
+        }
+        for name, (key, unit) in summary_map.items():
+            if name in self.summary_labels:
+                val = self._safe_get(result, key) if key != "contact_count_45" else (result.get(key, 0) or 0)
+                if isinstance(val, float):
+                    self.summary_labels[name].setText(f"{val:.1f}")
+                else:
+                    self.summary_labels[name].setText(str(val))
+
         # 更新配体属性标签
         for key, lbl in self.lig_prop_labels.items():
             map_key = f"ligand_{key.lower()}"
@@ -355,7 +598,7 @@ class TernaryEvaluationTab(CommonTab):
                 map_key = "ligand_rotatable_bonds"
             val = result.get(map_key, 0)
             lbl.setText(f"{val:.2f}" if isinstance(val, float) else str(val))
-        
+
         # 更新几何标签
         geom_map = {
             "COG Shift": "geom_cog_shift",
@@ -370,7 +613,7 @@ class TernaryEvaluationTab(CommonTab):
         for name, key in geom_map.items():
             val = result.get(key, 0)
             self.geom_labels[name].setText(f"{val:.2f}" if isinstance(val, float) else str(val))
-        
+
         self.log("✅ Full evaluation complete")
 
     def _safe_get(self, result: Dict[str, Any], key: str, default: float = 0.0) -> float:
@@ -419,7 +662,7 @@ class TernaryEvaluationTab(CommonTab):
             "【1. Interface Analysis - BSA (Buried Surface Area)】",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
             "",
-            "  ▶ MG (Molecular Glue) BSA Calculation:",
+            "  * MG (Molecular Glue) BSA Calculation:",
             "",
             "    Formula: BSA_MG = SA(E3-MG) + SA(POI-MG) - SA(E3-POI-MG)",
             "",
@@ -438,7 +681,7 @@ class TernaryEvaluationTab(CommonTab):
             f"      BSA_MG-E3      = {bsa_mg_total:.1f} × {ratio_e3:.2f} = {bsa_mg_e3:>8.1f} Å²",
             f"      BSA_MG-POI     = {bsa_mg_total:.1f} × {ratio_poi:.2f} = {bsa_mg_poi:>8.1f} Å²",
             "",
-            "  ▶ E3-POI BSA Calculation (standard formula):",
+            "  * E3-POI BSA Calculation (standard formula):",
             "",
             "    Formula: BSA = (SA_E3 + SA_POI - SA_E3-POI) / 2",
             "",
@@ -451,7 +694,7 @@ class TernaryEvaluationTab(CommonTab):
             f"      BSA_E3-POI     = ({sa_e3:.1f} + {sa_poi:.1f} - {sa_e3_poi_complex:.1f}) / 2",
             f"                     = {bsa_e3_poi:>10.1f} Å²",
             "",
-            "  ▶ Summary:",
+            "  * Summary:",
             f"    ┌────────────────────────────────────────────────────────────┐",
             f"    │  Total BSA:      {bsa_total:>8.1f} Å²  (= MG-E3 + MG-POI + E3-POI) │",
             f"    │  MG-E3 BSA:      {bsa_mg_e3:>8.1f} Å²  (Ligand ↔ E3 interface)    │",

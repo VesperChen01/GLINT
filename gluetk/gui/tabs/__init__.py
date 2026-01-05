@@ -10,7 +10,6 @@ from .common import CommonTab
 from .target_discovery import TargetDiscoveryTab
 from .hit_identification import HitIdentificationTab
 from .lead_optimization import LeadOptimizationTab
-from .batch_analysis import BatchAnalysisTab
 from .visualization import VisualizationTab
 
 __all__ = [
@@ -18,6 +17,5 @@ __all__ = [
     'TargetDiscoveryTab',
     'HitIdentificationTab',
     'LeadOptimizationTab',
-    'BatchAnalysisTab',
     'VisualizationTab',
 ]
