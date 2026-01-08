@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GlueTK Linux Installer - 图形化安装程序
+GLINT Linux Installer - 图形化安装程序
 Professional GUI installer for Linux, similar to macOS and Windows versions
 """
 
@@ -21,9 +21,9 @@ except ImportError:
     sys.exit(1)
 
 # 配置
-ENV_NAME = "gluetk"
+ENV_NAME = "glint"
 PYTHON_VERSION = "3.10"
-DEFAULT_INSTALL_PATH = os.path.join(os.path.expanduser("~"), ".pymol", "startup", "gluetk")
+DEFAULT_INSTALL_PATH = os.path.join(os.path.expanduser("~"), ".pymol", "startup", "glint")
 
 # Conda 依赖包 (与 macOS 版本保持一致)
 # 注意: haddock_biobb 已移除，因为 haddocking channel 不可用 (HTTP 404)
@@ -38,18 +38,18 @@ CONDA_PACKAGES = [
 PIP_PACKAGES = ["requests", "open3d", "haddock3"]
 
 
-def get_gluetk_source_dir():
-    """获取 GlueTK 源码目录"""
+def get_glint_source_dir():
+    """获取 GLINT 源码目录"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
     
-    # 1. 优先查找同级目录的 gluetk
-    bundled_dir = os.path.join(script_dir, "gluetk")
+    # 1. 优先查找同级目录的 glint
+    bundled_dir = os.path.join(script_dir, "glint")
     if os.path.isdir(bundled_dir):
         return bundled_dir
     
     # 2. PyInstaller 打包后的临时目录
     if hasattr(sys, '_MEIPASS'):
-        bundled_dir = os.path.join(sys._MEIPASS, "gluetk")
+        bundled_dir = os.path.join(sys._MEIPASS, "glint")
         if os.path.isdir(bundled_dir):
             return bundled_dir
     
@@ -59,7 +59,7 @@ def get_gluetk_source_dir():
 class InstallerApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("GlueTK Installer")
+        self.root.title("GLINT Installer")
         self.root.geometry("750x780")
         self.root.minsize(700, 750)
         self.root.resizable(True, True)
@@ -136,7 +136,7 @@ class InstallerApp:
     def _set_icon(self):
         """设置窗口图标"""
         try:
-            icon_path = os.path.join(os.path.dirname(__file__), "gluetk", "assets", "logo.png")
+            icon_path = os.path.join(os.path.dirname(__file__), "glint", "assets", "logo.png")
             if os.path.exists(icon_path):
                 img = tk.PhotoImage(file=icon_path)
                 self.root.iconphoto(True, img)
@@ -164,7 +164,7 @@ class InstallerApp:
         title_frame = ttk.Frame(main)
         title_frame.pack(fill=tk.X, pady=(0, 15))
         
-        title = ttk.Label(title_frame, text="🧬 GlueTK Installer",
+        title = ttk.Label(title_frame, text="🧬 GLINT Installer",
                          font=self.title_font)
         title.pack()
         
@@ -175,7 +175,7 @@ class InstallerApp:
         
         # 从 _version.py 动态获取版本
         try:
-            from gluetk._version import __version__
+            from glint._version import __version__
         except ImportError:
             __version__ = "Unknown"
         version = ttk.Label(title_frame, text=f"Version: v{__version__}",
@@ -218,7 +218,7 @@ class InstallerApp:
         ttk.Button(path_row, text="Browse...", command=self._browse_path).pack(side=tk.RIGHT, padx=(10, 0))
         
         path_note = ttk.Label(path_frame,
-                             text="📌 GlueTK will be installed here. PyMOL loads plugins from ~/.pymol/startup/",
+                             text="📌 GLINT will be installed here. PyMOL loads plugins from ~/.pymol/startup/",
                              font=self.small_font, foreground="#888888")
         path_note.pack(anchor=tk.W, pady=(8, 0))
         
@@ -255,7 +255,7 @@ class InstallerApp:
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=tk.X, pady=(5, 0))
         
-        self.install_btn = ttk.Button(btn_frame, text="🚀 Install GlueTK",
+        self.install_btn = ttk.Button(btn_frame, text="🚀 Install GLINT",
                                       command=self._start_install, width=20)
         self.install_btn.pack(side=tk.RIGHT, padx=(10, 0))
         
@@ -472,7 +472,7 @@ class InstallerApp:
             self._log("=" * 50)
             
             install_path = self.install_path.get()
-            source_dir = get_gluetk_source_dir()
+            source_dir = get_glint_source_dir()
             
             if source_dir and os.path.isdir(source_dir):
                 # 创建目标目录
@@ -527,14 +527,14 @@ class InstallerApp:
             self._log("\n" + "=" * 50)
             self._log("[5/5] ✅ Installation complete!")
             self._log("=" * 50)
-            self._log("\nHow to use GlueTK:")
-            self._log("  1. Double-click 'GlueTK' shortcut on Desktop")
-            self._log("  2. Or run in PyMOL: gluetk_gui")
+            self._log("\nHow to use GLINT:")
+            self._log("  1. Double-click 'GLINT' shortcut on Desktop")
+            self._log("  2. Or run in PyMOL: glint_gui")
             
             self.root.after(0, lambda: messagebox.showinfo(
                 "Success", 
-                "GlueTK installed successfully!\n\n"
-                "You can now launch GlueTK from the Desktop shortcut."))
+                "GLINT installed successfully!\n\n"
+                "You can now launch GLINT from the Desktop shortcut."))
             
         except Exception as e:
             self._log(f"\n❌ Error: {e}")
@@ -552,7 +552,7 @@ class InstallerApp:
         os.makedirs(app_dir, exist_ok=True)
         
         # Create launcher script
-        launcher_script_path = os.path.join(home, ".gluetk", "launch_gluetk.sh")
+        launcher_script_path = os.path.join(home, ".glint", "launch_glint.sh")
         os.makedirs(os.path.dirname(launcher_script_path), exist_ok=True)
         
         with open(launcher_script_path, "w") as f:
@@ -561,18 +561,18 @@ class InstallerApp:
             f.write(f'conda activate {ENV_NAME}\n')
             f.write('export KMP_DUPLICATE_LIB_OK=TRUE\n')
             f.write('export OMP_NUM_THREADS=1\n')
-            f.write('pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser(\'~/.pymol/startup\')); import gluetk; gluetk.gluetk_gui()"\n')
+            f.write('pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser(\'~/.pymol/startup\')); import glint; glint.glint_gui()"\n')
         os.chmod(launcher_script_path, 0o755) # Make executable
         
         # Create .desktop file
-        desktop_file_path = os.path.join(app_dir, "gluetk.desktop")
+        desktop_file_path = os.path.join(app_dir, "glint.desktop")
         icon_path = os.path.join(self.install_path.get(), "assets", "logo.png") # Assuming logo.png is copied to install_path/assets
         
         with open(desktop_file_path, "w") as f:
             f.write("[Desktop Entry]\n")
             f.write("Version=1.0\n")
             f.write("Type=Application\n")
-            f.write(f"Name=GlueTK\n")
+            f.write(f"Name=GLINT\n")
             f.write(f"Comment=PyMOL Plugin for Molecular Glue Analysis\n")
             f.write(f"Exec={launcher_script_path}\n")
             f.write(f"Icon={icon_path}\n")
@@ -582,7 +582,7 @@ class InstallerApp:
         # Copy to Desktop for easy access
         try:
             shutil.copy(desktop_file_path, desktop_dir)
-            self._log(f"  ✅ Created desktop shortcut: {os.path.join(desktop_dir, 'gluetk.desktop')}")
+            self._log(f"  ✅ Created desktop shortcut: {os.path.join(desktop_dir, 'glint.desktop')}")
         except Exception as e:
             self._log(f"  ⚠️ Failed to copy shortcut to desktop: {e}")
         

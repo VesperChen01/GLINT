@@ -1,12 +1,12 @@
 <div align="center">
 
-<img src="gluetk/assets/logo.png" alt="GlueTK Logo" width="180"/>
+<img src="glint/assets/logo.png" alt="GLINT Logo" width="180"/>
 
-# GlueTK
+# GLINT
 
 ### 🧬 PyMOL Plugin for Molecular Glue Discovery & Analysis
 
-[![GitHub](https://img.shields.io/badge/GitHub-VesperChen01/GlueTK-181717?style=flat-square&logo=github)](https://github.com/VesperChen01/GlueTK)
+[![GitHub](https://img.shields.io/badge/GitHub-VesperChen01/GLINT-181717?style=flat-square&logo=github)](https://github.com/VesperChen01/GLINT)
 [![License](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.8+-3776AB?style=flat-square&logo=python&logoColor=white)](https://python.org)
 [![PyMOL](https://img.shields.io/badge/PyMOL-Plugin-green?style=flat-square)](https://pymol.org)
@@ -19,7 +19,7 @@
 
 ## 📖 Overview
 
-**GlueTK** is a comprehensive PyMOL plugin designed for molecular glue discovery and protein-ligand interaction analysis. It provides specialized tools for analyzing ternary complexes, detecting G-motifs, identifying neo-epitopes, and performing batch structure analysis.
+**GLINT** is a comprehensive PyMOL plugin designed for molecular glue discovery and protein-ligand interaction analysis. It provides specialized tools for analyzing ternary complexes, detecting G-motifs, identifying neo-epitopes, and performing batch structure analysis.
 
 <details>
 <summary><b>🔬 What are Molecular Glues?</b></summary>
@@ -96,7 +96,7 @@ Molecular glues are small molecules that induce or stabilize protein-protein int
 <details open>
 <summary><b>🍎 macOS Installer (Recommended)</b></summary>
 
-1. Download `GlueTK_Installer_v0.1.6-beta.dmg` from [Releases](https://github.com/VesperChen01/GlueTK/releases)
+1. Download `GLINT_Installer_v0.1.6-beta.dmg` from [Releases](https://github.com/VesperChen01/GLINT/releases)
 2. Open the DMG and run the installer
 3. Follow the on-screen instructions
 
@@ -106,14 +106,14 @@ Molecular glues are small molecules that induce or stabilize protein-protein int
 <summary><b>🚀 One-Shot Setup Script</b></summary>
 
 ```bash
-# Clone or download GlueTK
-cd /path/to/gluetk
+# Clone or download GLINT
+cd /path/to/glint
 
 # Run the setup script
-bash install_gluetk.sh
+bash install_glint.sh
 ```
 
-This creates a Conda environment `gluetk` with all dependencies.
+This creates a Conda environment `glint` with all dependencies.
 
 </details>
 
@@ -122,8 +122,8 @@ This creates a Conda environment `gluetk` with all dependencies.
 
 ```bash
 # Create conda environment
-conda create -n gluetk python=3.9 -y
-conda activate gluetk
+conda create -n glint python=3.9 -y
+conda activate glint
 
 # Install dependencies
 conda install -c conda-forge rdkit scipy matplotlib pillow numpy pandas seaborn pyqt -y
@@ -131,8 +131,8 @@ conda install -c conda-forge rdkit scipy matplotlib pillow numpy pandas seaborn 
 # Optional: Install PyMOL
 conda install -c conda-forge pymol-open-source -y
 
-# Copy gluetk folder to PyMOL startup directory
-cp -r gluetk ~/.pymol/startup/
+# Copy glint folder to PyMOL startup directory
+cp -r glint ~/.pymol/startup/
 ```
 
 </details>
@@ -140,7 +140,7 @@ cp -r gluetk ~/.pymol/startup/
 <details>
 <summary><b>📦 PyMOL Plugin Manager</b></summary>
 
-1. Download `gluetk.zip` from releases
+1. Download `glint.zip` from releases
 2. In PyMOL: `Plugin → Plugin Manager → Install New Plugin`
 3. Select the ZIP file
 
@@ -154,10 +154,10 @@ cp -r gluetk ~/.pymol/startup/
 
 ```python
 # In PyMOL command line
-gluetk_gui
+glint_gui
 ```
 
-Or via menu: `Plugin → GlueTK - Molecular Glue Analyzer`
+Or via menu: `Plugin → GLINT - Molecular Glue Analyzer`
 
 ### Command Line Examples
 
@@ -182,7 +182,7 @@ generate_2d_diagram 6h0g, CC9
 
 ## 🖥️ GUI Interface Guide
 
-GlueTK provides a modern, intuitive graphical interface with five main modules:
+GLINT provides a modern, intuitive graphical interface with five main modules:
 
 ### Welcome Page
 
@@ -492,7 +492,7 @@ fetch 6H0G
 
 #### Step 2: Launch GUI
 ```python
-gluetk_gui
+glint_gui
 ```
 
 #### Step 3: G-Motif Detection
@@ -676,7 +676,7 @@ analyze_protein_ligand_interactions 6h0g, docked_pose
 ## 📖 Documentation
 
 - 📄 [WARP.md](WARP.md) - Development documentation
-- 📚 [Resources](gluetk/resources/molecular_glue_resources.md) - Databases, tools, and literature
+- 📚 [Resources](glint/resources/molecular_glue_resources.md) - Databases, tools, and literature
 
 ---
 
@@ -695,14 +695,14 @@ analyze_protein_ligand_interactions 6h0g, docked_pose
 
 ## 📝 Citation
 
-If you use GlueTK in your research, please cite:
+If you use GLINT in your research, please cite:
 
 ```bibtex
-@software{gluetk2024,
-  title = {GlueTK: A PyMOL Plugin for Molecular Glue Discovery and Analysis},
+@software{glint2024,
+  title = {GLINT: A PyMOL Plugin for Molecular Glue Discovery and Analysis},
   author = {Chen, Roufen},
   year = {2024},
-  url = {https://github.com/VesperChen01/GlueTK}
+  url = {https://github.com/VesperChen01/GLINT}
 }
 ```
 

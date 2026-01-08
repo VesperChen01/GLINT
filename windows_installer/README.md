@@ -1,13 +1,13 @@
-# GlueTK Windows Installer
+# GLINT Windows Installer
 
-This directory contains files to build a professional Windows installer for GlueTK.
+This directory contains files to build a professional Windows installer for GLINT.
 
 ## Files
 
-- `GlueTK_Installer.py` - GUI installer application (similar to macOS version)
+- `GLINT_Installer.py` - GUI installer application (similar to macOS version)
 - `build_exe.bat` - Batch script to build the .exe installer
 - `build_exe.ps1` - PowerShell script (alternative, more reliable)
-- `GlueTK_Installer.spec` - PyInstaller specification file for advanced builds
+- `GLINT_Installer.spec` - PyInstaller specification file for advanced builds
 
 ## Quick Start
 
@@ -21,16 +21,16 @@ This directory contains files to build a professional Windows installer for Glue
 
 #### Step 1: Prepare the folder structure
 
-Copy the `gluetk` source folder into `windows_installer/`:
+Copy the `glint` source folder into `windows_installer/`:
 
 ```
 windows_installer/
-├── GlueTK_Installer.py
+├── GLINT_Installer.py
 ├── build_exe.bat
 ├── build_exe.ps1
-├── GlueTK_Installer.spec
+├── GLINT_Installer.spec
 ├── README.md
-└── gluetk/          <-- Copy this from the project root
+└── glint/          <-- Copy this from the project root
     ├── __init__.py
     ├── gui/
     ├── assets/
@@ -57,7 +57,7 @@ build_exe.bat
 
 The installer will be created at:
 ```
-windows_installer/dist/GlueTK_Installer.exe
+windows_installer/dist/GLINT_Installer.exe
 ```
 
 ### Manual Build (Alternative)
@@ -69,22 +69,22 @@ REM Install PyInstaller
 pip install pyinstaller
 
 REM Build using spec file
-pyinstaller GlueTK_Installer.spec
+pyinstaller GLINT_Installer.spec
 
 REM Or build directly
-pyinstaller --onefile --windowed --name GlueTK_Installer --add-data "gluetk;gluetk" GlueTK_Installer.py
+pyinstaller --onefile --windowed --name GLINT_Installer --add-data "glint;glint" GLINT_Installer.py
 ```
 
 ## Distribution
 
-Distribute the single `GlueTK_Installer.exe` file to Windows users. They can:
+Distribute the single `GLINT_Installer.exe` file to Windows users. They can:
 
 1. Double-click the .exe to launch the installer
 2. The installer will:
    - Check for Miniconda installation
-   - Create a `gluetk` conda environment
+   - Create a `glint` conda environment
    - Install all dependencies (PyMOL, RDKit, etc.)
-   - Copy GlueTK plugin files
+   - Copy GLINT plugin files
    - Create a desktop shortcut
 
 ## End User Requirements
@@ -104,8 +104,8 @@ Distribute the single `GlueTK_Installer.exe` file to Windows users. They can:
 - Use the PowerShell script instead: `build_exe.ps1`
 - Or run: `chcp 65001` before running the batch file
 
-### "gluetk not found"
-Make sure you copied the `gluetk` folder into the `windows_installer` directory.
+### "glint not found"
+Make sure you copied the `glint` folder into the `windows_installer` directory.
 
 ### "Conda not found" (for end users)
 Install Miniconda from https://docs.conda.io/en/latest/miniconda.html
