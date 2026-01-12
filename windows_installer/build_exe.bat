@@ -1,13 +1,13 @@
 @echo off
 chcp 65001 >nul 2>&1
 REM build_exe.bat
-REM Build GlueTK Installer as .exe using PyInstaller
+REM Build GLINT Installer as .exe using PyInstaller
 REM Must be run on Windows
 
 setlocal enabledelayedexpansion
 
 echo ========================================
-echo   GlueTK Windows EXE Builder
+echo   GLINT Windows EXE Builder
 echo ========================================
 echo.
 
@@ -41,35 +41,35 @@ REM Get current directory
 set "SCRIPT_DIR=%~dp0"
 set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
 
-REM Check if gluetk folder exists
-if not exist "%SCRIPT_DIR%\gluetk" (
-    echo [INFO] gluetk folder not found in current directory
+REM Check if glint folder exists
+if not exist "%SCRIPT_DIR%\glint" (
+    echo [INFO] glint folder not found in current directory
     echo [INFO] Checking parent directory...
-    
-    if exist "%SCRIPT_DIR%\..\gluetk" (
-        echo [INFO] Copying gluetk from parent directory...
-        xcopy /E /I /Y /Q "%SCRIPT_DIR%\..\gluetk" "%SCRIPT_DIR%\gluetk"
+
+    if exist "%SCRIPT_DIR%\..\glint" (
+        echo [INFO] Copying glint from parent directory...
+        xcopy /E /I /Y /Q "%SCRIPT_DIR%\..\glint" "%SCRIPT_DIR%\glint"
         if errorlevel 1 (
-            echo [ERROR] Failed to copy gluetk source
+            echo [ERROR] Failed to copy glint source
             echo.
-            echo Please manually copy the gluetk folder into this directory:
+            echo Please manually copy the glint folder into this directory:
             echo   %SCRIPT_DIR%
             echo.
             pause
             exit /b 1
         )
-        echo [OK] gluetk copied successfully
+        echo [OK] glint copied successfully
     ) else (
-        echo [ERROR] gluetk folder not found!
+        echo [ERROR] glint folder not found!
         echo.
-        echo Please copy the gluetk folder into this directory:
+        echo Please copy the glint folder into this directory:
         echo   %SCRIPT_DIR%
         echo.
         echo Expected structure:
         echo   windows_installer\
         echo   +-- build_exe.bat
-        echo   +-- GlueTK_Installer.py
-        echo   +-- gluetk\
+        echo   +-- GLINT_Installer.py
+        echo   +-- glint\
         echo       +-- __init__.py
         echo       +-- gui\
         echo       +-- assets\
@@ -79,12 +79,12 @@ if not exist "%SCRIPT_DIR%\gluetk" (
         exit /b 1
     )
 ) else (
-    echo [OK] gluetk folder found
+    echo [OK] glint folder found
 )
 
 REM Remove __pycache__ directories
 echo [INFO] Cleaning __pycache__ directories...
-for /d /r "%SCRIPT_DIR%\gluetk" %%d in (__pycache__) do (
+for /d /r "%SCRIPT_DIR%\glint" %%d in (__pycache__) do (
     if exist "%%d" (
         rmdir /s /q "%%d" 2>nul
     )
@@ -102,14 +102,14 @@ cd /d "%SCRIPT_DIR%"
 pyinstaller --noconfirm ^
     --onefile ^
     --windowed ^
-    --name "GlueTK_Installer" ^
-    --add-data "gluetk;gluetk" ^
-    --add-data "gluetk\assets;gluetk\assets" ^
+    --name "GLINT_Installer" ^
+    --add-data "glint;glint" ^
+    --add-data "glint\assets;glint\assets" ^
     --hidden-import tkinter ^
     --hidden-import tkinter.ttk ^
     --hidden-import tkinter.filedialog ^
     --hidden-import tkinter.messagebox ^
-    GlueTK_Installer.py
+    GLINT_Installer.py
 
 if errorlevel 1 (
     echo.
@@ -129,7 +129,7 @@ echo ========================================
 echo   Build Complete!
 echo ========================================
 echo.
-echo Output: %SCRIPT_DIR%\dist\GlueTK_Installer.exe
+echo Output: %SCRIPT_DIR%\dist\GLINT_Installer.exe
 echo.
 echo You can distribute this EXE file to Windows users.
 echo.

@@ -1,0 +1,33 @@
+#!/bin/bash
+# GLINT Installer Launcher
+
+CONDA_EXE=""
+if command -v conda &> /dev/null; then
+    CONDA_EXE=$(command -v conda)
+else
+    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda"; do
+        if [ -x "$p" ]; then
+            CONDA_EXE="$p"
+            break
+        fi
+    done
+fi
+
+if [ -z "$CONDA_EXE" ]; then
+  osascript -e 'display alert "Conda Not Found" message "Please install Miniconda first."'
+  exit 1
+fi
+
+eval "$($CONDA_EXE shell.bash hook)"
+CONDA_BASE="$(conda info --base 2>/dev/null)"
+PYTHON="${CONDA_BASE}/bin/python"
+
+if [ ! -x "$PYTHON" ]; then
+  PYTHON=$(command -v python)
+fi
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+RESOURCES_DIR="$(dirname "$DIR")/Resources"
+INSTALLER_SCRIPT="${RESOURCES_DIR}/GLINT_Installer.py"
+
+"$PYTHON" "$INSTALLER_SCRIPT"

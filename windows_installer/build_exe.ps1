@@ -1,9 +1,9 @@
 # build_exe.ps1
-# PowerShell script to build GlueTK Windows Installer
+# PowerShell script to build GLINT Windows Installer
 # Run: powershell -ExecutionPolicy Bypass -File build_exe.ps1
 
 Write-Host "========================================"
-Write-Host "  GlueTK Windows EXE Builder"
+Write-Host "  GLINT Windows EXE Builder"
 Write-Host "========================================"
 Write-Host ""
 
@@ -36,27 +36,27 @@ Write-Host ""
 # Prepare files
 Write-Host "[3/4] Preparing files..."
 
-$GluetkDir = Join-Path $ScriptDir "gluetk"
-$ParentGluetkDir = Join-Path (Split-Path -Parent $ScriptDir) "gluetk"
+$GlintDir = Join-Path $ScriptDir "glint"
+$ParentGlintDir = Join-Path (Split-Path -Parent $ScriptDir) "glint"
 
-if (-not (Test-Path $GluetkDir)) {
-    Write-Host "[INFO] gluetk folder not found in current directory"
-    
-    if (Test-Path $ParentGluetkDir) {
-        Write-Host "[INFO] Copying gluetk from parent directory..."
-        Copy-Item -Path $ParentGluetkDir -Destination $GluetkDir -Recurse -Force
-        Write-Host "[OK] gluetk copied successfully"
+if (-not (Test-Path $GlintDir)) {
+    Write-Host "[INFO] glint folder not found in current directory"
+
+    if (Test-Path $ParentGlintDir) {
+        Write-Host "[INFO] Copying glint from parent directory..."
+        Copy-Item -Path $ParentGlintDir -Destination $GlintDir -Recurse -Force
+        Write-Host "[OK] glint copied successfully"
     } else {
-        Write-Host "[ERROR] gluetk folder not found!"
+        Write-Host "[ERROR] glint folder not found!"
         Write-Host ""
-        Write-Host "Please copy the gluetk folder into this directory:"
+        Write-Host "Please copy the glint folder into this directory:"
         Write-Host "  $ScriptDir"
         Write-Host ""
         Write-Host "Expected structure:"
         Write-Host "  windows_installer\"
         Write-Host "  +-- build_exe.ps1"
-        Write-Host "  +-- GlueTK_Installer.py"
-        Write-Host "  +-- gluetk\"
+        Write-Host "  +-- GLINT_Installer.py"
+        Write-Host "  +-- glint\"
         Write-Host "      +-- __init__.py"
         Write-Host "      +-- gui\"
         Write-Host "      +-- assets\"
@@ -65,12 +65,12 @@ if (-not (Test-Path $GluetkDir)) {
         exit 1
     }
 } else {
-    Write-Host "[OK] gluetk folder found"
+    Write-Host "[OK] glint folder found"
 }
 
 # Remove __pycache__ directories
 Write-Host "[INFO] Cleaning __pycache__ directories..."
-Get-ChildItem -Path $GluetkDir -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+Get-ChildItem -Path $GlintDir -Recurse -Directory -Filter "__pycache__" | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 Write-Host "[OK] Files prepared"
 Write-Host ""
 
@@ -84,14 +84,14 @@ Set-Location $ScriptDir
 pyinstaller --noconfirm `
     --onefile `
     --windowed `
-    --name "GlueTK_Installer" `
-    --add-data "gluetk;gluetk" `
-    --add-data "gluetk\assets;gluetk\assets" `
+    --name "GLINT_Installer" `
+    --add-data "glint;glint" `
+    --add-data "glint\assets;glint\assets" `
     --hidden-import tkinter `
     --hidden-import tkinter.ttk `
     --hidden-import tkinter.filedialog `
     --hidden-import tkinter.messagebox `
-    GlueTK_Installer.py
+    GLINT_Installer.py
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
@@ -111,7 +111,7 @@ Write-Host "========================================"
 Write-Host "  Build Complete!"
 Write-Host "========================================"
 Write-Host ""
-Write-Host "Output: $ScriptDir\dist\GlueTK_Installer.exe"
+Write-Host "Output: $ScriptDir\dist\GLINT_Installer.exe"
 Write-Host ""
 Write-Host "You can distribute this EXE file to Windows users."
 Write-Host ""
