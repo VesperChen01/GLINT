@@ -12,7 +12,7 @@ from ..qt_adapter import (
     QComboBox, QCheckBox, QSpinBox, QGridLayout
 )
 
-from ..utils import t
+from ..utils import t, show_message_box
 from .common import CommonTab
 
 class HitIdentificationTab(CommonTab):
@@ -364,7 +364,7 @@ class HitIdentificationTab(CommonTab):
             from pymol import cmd
             selection = self.parent_window.vina_selection.text().strip()
             if not selection:
-                QMessageBox.warning(self, "Warning", "Enter a PyMOL selection (e.g. resn LIG)")
+                show_message_box(self, "Warning", "Enter a PyMOL selection (e.g. resn LIG)", "warning")
                 return
             try:
                 com = cmd.centerofmass(selection)
@@ -374,26 +374,26 @@ class HitIdentificationTab(CommonTab):
                     self.parent_window.vina_cz.setText(f"{com[2]:.2f}")
                     self.log(f"Center: ({com[0]:.2f}, {com[1]:.2f}, {com[2]:.2f})")
                 else:
-                    QMessageBox.warning(self, "Warning", f"Could not get center for '{selection}'")
+                    show_message_box(self, "Warning", f"Could not get center for '{selection}'", "warning")
             except Exception as e:
-                QMessageBox.warning(self, "Warning", f"Error: {e}")
+                show_message_box(self, "Warning", f"Error: {e}", "warning")
         except Exception as e:
             self.on_error(str(e))
 
     def run_vina_docking(self):
         try:
             from pymol import cmd
-            
+
             receptor_obj = self.parent_window.vina_receptor_combo.currentText().strip()
             if not receptor_obj or receptor_obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Select a receptor object")
+                show_message_box(self, "Warning", "Select a receptor object", "warning")
                 return
-            
+
             ligand_path = self.parent_window.vina_ligand.text().strip()
             if not ligand_path or not os.path.exists(ligand_path):
-                QMessageBox.warning(self, "Warning", "Select a valid ligand file or folder")
+                show_message_box(self, "Warning", "Select a valid ligand file or folder", "warning")
                 return
-            
+
             try:
                 box = {
                     'center_x': float(self.parent_window.vina_cx.text().strip()),
@@ -404,28 +404,28 @@ class HitIdentificationTab(CommonTab):
                     'size_z': float(self.parent_window.vina_sz.text().strip())
                 }
             except ValueError:
-                QMessageBox.warning(self, "Warning", "Invalid box parameters. Use 'Get Center' first.")
+                show_message_box(self, "Warning", "Invalid box parameters. Use 'Get Center' first.", "warning")
                 return
-            
+
             exhaustiveness = self.parent_window.vina_exhaustiveness.value()
             num_modes = self.parent_window.vina_num_modes.value()
             output_dir = self.parent_window.vina_output_dir.text().strip() or None
             remove_selection = self.parent_window.vina_selection.text().strip() or None
-            
+
             try:
                 from ...vina_integration import batch_docking, get_ligand_files, check_vina_available
             except ImportError:
                 from vina_integration import batch_docking, get_ligand_files, check_vina_available
-            
+
             if not check_vina_available():
-                QMessageBox.warning(self, "Error", "AutoDock Vina not found")
+                show_message_box(self, "Error", "AutoDock Vina not found", "warning")
                 return
-            
+
             ligand_files = get_ligand_files(ligand_path)
             if not ligand_files:
-                QMessageBox.warning(self, "Warning", "No valid ligand files found")
+                show_message_box(self, "Warning", "No valid ligand files found", "warning")
                 return
-            
+
             is_batch = len(ligand_files) > 1
             
             if is_batch:
@@ -459,17 +459,17 @@ class HitIdentificationTab(CommonTab):
                 if is_batch:
                     self.log(f"✅ Batch complete: {result['successful']}/{result['total']} successful")
                     self.log(f"   Results: {result['csv_path']}")
-                    QMessageBox.information(self, "Success", 
+                    show_message_box(self, "Success",
                         f"Batch docking complete.\n"
                         f"Successful: {result['successful']}/{result['total']}\n"
                         f"Results saved to: {result['csv_path']}")
                 else:
                     affinity = result['results'][0].get('affinity', 0) if result.get('results') else 0
                     self.log(f"✅ Done! Best: {affinity:.2f} kcal/mol")
-                    QMessageBox.information(self, "Success", f"Docking complete.\nBest: {affinity:.2f} kcal/mol")
+                    show_message_box(self, "Success", f"Docking complete.\nBest: {affinity:.2f} kcal/mol")
             else:
                 self.log(f"❌ Failed: {result.get('error')}")
-                QMessageBox.warning(self, "Error", f"Docking failed: {result.get('error')}")
+                show_message_box(self, "Error", f"Docking failed: {result.get('error')}", "warning")
         except Exception as e:
             self.on_error(str(e))
             self.parent_window.vina_dock_btn.setEnabled(True)
@@ -503,28 +503,28 @@ class HitIdentificationTab(CommonTab):
     def run_hdock(self):
         rec = self.parent_window.hdock_receptor.text().strip()
         lig = self.parent_window.hdock_ligand.text().strip()
-        
+
         if not rec or not lig:
-            QMessageBox.warning(self, "Warning", "Select both Receptor and Ligand PDB files")
+            show_message_box(self, "Warning", "Select both Receptor and Ligand PDB files", "warning")
             return
         if not os.path.exists(rec) or not os.path.exists(lig):
-            QMessageBox.warning(self, "Warning", "Selected files do not exist")
+            show_message_box(self, "Warning", "Selected files do not exist", "warning")
             return
-            
+
         self.log(f"HADDOCK3: {os.path.basename(rec)} + {os.path.basename(lig)}")
-        
+
         try:
             from ...haddock3_integration import check_haddock3_available, Haddock3Runner
             info = check_haddock3_available()
             if not info.get('available'):
-                QMessageBox.warning(self, "Error", "HADDOCK3 not found. Install: pip install -U haddock3")
+                show_message_box(self, "Error", "HADDOCK3 not found. Install: pip install -U haddock3", "warning")
                 return
-                
+
             runner = Haddock3Runner()
             self.parent_window.hdock_run_btn.setEnabled(False)
             self.parent_window.hdock_run_btn.setText("Running...")
             self.parent_window.repaint()
-            
+
             mode_map = {
                 "Blind (Random AIR)": "blind_ranair",
                 "Blind (Centroid)": "blind_cm",
@@ -532,7 +532,7 @@ class HitIdentificationTab(CommonTab):
                 "Pocket-constrained": "air_from_residues",
             }
             mode = mode_map.get(self.parent_window.haddock_mode.currentText(), 'blind_ranair')
-            
+
             result = runner.run_docking(
                 rec, lig,
                 output_dir=self.parent_window.hdock_output.text().strip() or None,
@@ -541,19 +541,19 @@ class HitIdentificationTab(CommonTab):
                 mode=mode,
                 expand_passive=self.parent_window.haddock_auto_passive.isChecked()
             )
-            
+
             self.parent_window.hdock_run_btn.setEnabled(True)
             self.parent_window.hdock_run_btn.setText("Run HADDOCK3")
-            
+
             if result.get('success'):
                 self.log("✅ HADDOCK3 complete!")
                 from pymol import cmd
                 cmd.load(result['models_pdb'], "haddock3_models")
-                QMessageBox.information(self, "Success", "Docking complete. Models loaded.")
+                show_message_box(self, "Success", "Docking complete. Models loaded.")
             else:
                 self.log(f"❌ Failed: {result.get('error')}")
-                QMessageBox.critical(self, "Error", f"HADDOCK3 failed: {result.get('error')}")
-                
+                show_message_box(self, "Error", f"HADDOCK3 failed: {result.get('error')}", "critical")
+
         except Exception as e:
             self.on_error(str(e))
             self.parent_window.hdock_run_btn.setEnabled(True)
@@ -610,9 +610,9 @@ class HitIdentificationTab(CommonTab):
         """Run full mutation ΔΔG analysis using FoldX"""
         obj_name = self.parent_window.mut_obj_combo.currentText()
         if not obj_name or obj_name == t("no_object"):
-            QMessageBox.warning(self, "Warning", "Please select a structure object")
+            show_message_box(self, "Warning", "Please select a structure object", "warning")
             return
-        
+
         try:
             from ...mutation_analyzer import _detect_foldx
         except ImportError:
@@ -621,15 +621,15 @@ class HitIdentificationTab(CommonTab):
             except ImportError:
                 self.log("❌ mutation_analyzer module not found")
                 return
-        
+
         foldx_path = _detect_foldx()
         if not foldx_path:
-            QMessageBox.warning(self, "FoldX Not Found",
+            show_message_box(self, "FoldX Not Found",
                 "FoldX is required for ΔΔG analysis.\n\n"
                 "Installation:\n"
                 "1. Download FoldX: https://foldxsuite.crg.eu/\n"
                 "2. Set environment variable: export FOLDX=/path/to/foldx\n"
-                "   Or add FoldX to your PATH")
+                "   Or add FoldX to your PATH", "warning")
             self.log("❌ FoldX not found. Please install FoldX for ΔΔG analysis.")
             return
         

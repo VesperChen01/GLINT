@@ -17,7 +17,7 @@ from ..qt_adapter import (
     QFileDialog, QMessageBox, QFrame
 )
 
-from ..utils import t
+from ..utils import t, show_message_box
 
 
 class CommonTab(QWidget):

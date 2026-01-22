@@ -12,7 +12,7 @@ from ..qt_adapter import (
     QFileDialog, QMessageBox, QTextEdit, QDoubleSpinBox, QCheckBox
 )
 
-from ..utils import t
+from ..utils import t, show_message_box
 from .common import CommonTab
 
 
@@ -538,15 +538,15 @@ class TernaryEvaluationTab(CommonTab):
         """运行完整评估"""
         pdb_path = self._get_pdb_path()
         if not pdb_path:
-            QMessageBox.warning(self, "Warning", "Please select a PyMOL object.")
+            show_message_box(self, "Warning", "Please select a PyMOL object.", "warning")
             return
-        
+
         e3 = self.parent_window.ternary_e3_chain.text().strip()
         poi = self.parent_window.ternary_poi_chain.text().strip()
         lig_resn = self.parent_window.ternary_lig_resn.text().strip()
-        
+
         if not all([e3, poi, lig_resn]):
-            QMessageBox.warning(self, "Warning", "Please specify E3 chain, POI chain, and ligand residue name.")
+            show_message_box(self, "Warning", "Please specify E3 chain, POI chain, and ligand residue name.", "warning")
             return
         
         self.parent_window.ternary_run_all_btn.setEnabled(False)
@@ -762,28 +762,28 @@ class TernaryEvaluationTab(CommonTab):
         """仅运行配体计算 - 从结构中提取配体信息"""
         lig_resn = self.parent_window.ternary_lig_resn.text().strip()
         if not lig_resn:
-            QMessageBox.warning(self, "Warning", "Please specify ligand residue name.")
+            show_message_box(self, "Warning", "Please specify ligand residue name.", "warning")
             return
-        
+
         obj = self.ternary_obj_combo.currentText().strip()
         if not obj or obj == t("no_object"):
-            QMessageBox.warning(self, "Warning", "Please select a PyMOL object.")
+            show_message_box(self, "Warning", "Please select a PyMOL object.", "warning")
             return
-        
+
         try:
             from pymol import cmd
             import tempfile
-            
+
             # 只导出配体部分到临时 PDB 文件
             fd, lig_pdb_path = tempfile.mkstemp(suffix=".pdb")
             os.close(fd)
-            
+
             # 选择并保存配体
             lig_sel = f"{obj} and resn {lig_resn}"
             lig_count = cmd.count_atoms(lig_sel)
-            
+
             if lig_count == 0:
-                QMessageBox.warning(self, "Warning", f"No atoms found for ligand residue '{lig_resn}'.")
+                show_message_box(self, "Warning", f"No atoms found for ligand residue '{lig_resn}'.", "warning")
                 return
             
             cmd.save(lig_pdb_path, lig_sel)
@@ -845,7 +845,7 @@ class TernaryEvaluationTab(CommonTab):
                 
                 self.log(f"✅ Ligand properties: MW={props.molecular_weight:.1f}, LogP={props.logp:.2f}")
             else:
-                QMessageBox.information(self, "Info",
+                show_message_box(self, "Info",
                     "Could not extract SMILES from ligand structure.\n"
                     "Please ensure OpenBabel or RDKit is installed.")
                 self.log("⚠️ Could not extract SMILES from ligand")
@@ -861,7 +861,7 @@ class TernaryEvaluationTab(CommonTab):
     def visualize_geometry(self):
         """可视化几何"""
         if not self._last_result:
-            QMessageBox.warning(self, "Warning", "Please run evaluation first.")
+            show_message_box(self, "Warning", "Please run evaluation first.", "warning")
             return
         
         try:
@@ -910,7 +910,7 @@ class TernaryEvaluationTab(CommonTab):
     def export_results(self):
         """导出结果到CSV"""
         if not self._last_result:
-            QMessageBox.warning(self, "Warning", "No results to export.")
+            show_message_box(self, "Warning", "No results to export.", "warning")
             return
         
         fn, _ = QFileDialog.getSaveFileName(self, "Save Results", "", "CSV (*.csv)")

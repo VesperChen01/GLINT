@@ -67,36 +67,55 @@ fi
 echo -e "\n${BLUE}[3/6]${NC} 检测 PyMOL..."
 PYMOL_TYPE=""
 PYMOL_PATH=""
+HAS_SYSTEM_PYMOL=false
 
 # 3a. 检查系统 PyMOL.app (macOS 商业版/开源版)
 if [ -d "/Applications/PyMOL.app" ]; then
     PYMOL_APP_BIN="/Applications/PyMOL.app/Contents/MacOS/PyMOL"
     if [ -x "$PYMOL_APP_BIN" ]; then
-        PYMOL_TYPE="app"
-        PYMOL_PATH="$PYMOL_APP_BIN"
-        echo -e "${GREEN}✅ 找到 PyMOL.app: $PYMOL_PATH${NC}"
+        HAS_SYSTEM_PYMOL=true
+        echo -e "${GREEN}✅ 检测到系统 PyMOL.app: $PYMOL_APP_BIN${NC}"
     fi
 fi
 
-# 3b. 检查 conda 环境中的 pymol
-if [ -z "$PYMOL_TYPE" ]; then
-    echo "   系统中未找到 PyMOL.app，将在 conda 环境中安装..."
-    echo "   这可能需要几分钟..."
+# 3b. 优先在 conda 环境中安装 PyMOL（推荐方式，避免依赖冲突）
+echo "   在 conda 环境中安装 PyMOL（推荐方式）..."
+echo "   这可能需要几分钟..."
 
-    # 尝试安装 pymol-open-source
-    if conda install -n "$ENV_NAME" -c conda-forge pymol-open-source -y; then
-        # 验证安装
-        if conda run -n "$ENV_NAME" which pymol &> /dev/null; then
-            PYMOL_TYPE="conda"
-            PYMOL_PATH="conda"
-            echo -e "${GREEN}✅ PyMOL 已安装到 conda 环境${NC}"
+# 尝试安装 pymol-open-source
+if conda install -n "$ENV_NAME" -c conda-forge pymol-open-source -y; then
+    # 验证安装
+    if conda run -n "$ENV_NAME" which pymol &> /dev/null; then
+        PYMOL_TYPE="conda"
+        PYMOL_PATH="conda"
+        echo -e "${GREEN}✅ PyMOL 已安装到 conda 环境${NC}"
+
+        if [ "$HAS_SYSTEM_PYMOL" = true ]; then
+            echo -e "${YELLOW}💡 提示: 检测到系统已有 PyMOL.app，但 GLINT 将使用 conda 环境中的 PyMOL${NC}"
+            echo -e "${YELLOW}   这样可以避免依赖冲突，确保所有功能正常工作${NC}"
+        fi
+    else
+        echo -e "${RED}❌ PyMOL 安装验证失败${NC}"
+
+        if [ "$HAS_SYSTEM_PYMOL" = true ]; then
+            echo -e "${YELLOW}⚠️  将尝试使用系统 PyMOL.app（可能存在依赖冲突）${NC}"
+            PYMOL_TYPE="app"
+            PYMOL_PATH="$PYMOL_APP_BIN"
         else
-            echo -e "${RED}❌ PyMOL 安装失败${NC}"
+            echo -e "${RED}❌ 无法安装 PyMOL${NC}"
             echo "建议手动安装 PyMOL.app: https://pymol.org/"
             exit 1
         fi
+    fi
+else
+    echo -e "${YELLOW}⚠️  无法通过 conda 安装 PyMOL${NC}"
+
+    if [ "$HAS_SYSTEM_PYMOL" = true ]; then
+        echo -e "${YELLOW}   将使用系统 PyMOL.app（可能存在依赖冲突）${NC}"
+        PYMOL_TYPE="app"
+        PYMOL_PATH="$PYMOL_APP_BIN"
     else
-        echo -e "${RED}❌ 无法通过 conda 安装 PyMOL${NC}"
+        echo -e "${RED}❌ 未找到可用的 PyMOL${NC}"
         echo "请手动安装 PyMOL.app 到 /Applications/ 目录"
         exit 1
     fi
@@ -331,14 +350,29 @@ LAUNCHER_EOF
 
 # 根据 PyMOL 类型添加启动命令
 if [ "$PYMOL_TYPE" = "app" ]; then
-    # 使用系统 PyMOL.app
+    # 使用系统 PyMOL.app（需要注入 conda 环境路径）
     cat >> "$MACOS/launcher" << 'LAUNCHER_EOF'
 # 启动系统 PyMOL.app 并加载 GLINT
+# 注意：需要将 conda 环境的 site-packages 添加到 PYTHONPATH
+CONDA_ENV_PYTHON="$ENV_PATH/lib/python3.10/site-packages"
+if [ -d "$CONDA_ENV_PYTHON" ]; then
+    export PYTHONPATH="$CONDA_ENV_PYTHON:$PYTHONPATH"
+    echo "Added conda env to PYTHONPATH: $CONDA_ENV_PYTHON" >> "$LOG_FILE"
+fi
+
 /Applications/PyMOL.app/Contents/MacOS/PyMOL -d "
 import sys, os
+# 添加 conda 环境路径（确保能找到依赖）
+conda_site_packages = os.path.expanduser('~/miniconda3/envs/glint/lib/python3.10/site-packages')
+if os.path.exists(conda_site_packages) and conda_site_packages not in sys.path:
+    sys.path.insert(0, conda_site_packages)
+    print(f'Added conda env to sys.path: {conda_site_packages}')
+
+# 添加 GLINT 启动路径
 startup_path = os.path.expanduser('~/.pymol/startup')
 if startup_path not in sys.path:
     sys.path.insert(0, startup_path)
+
 try:
     import glint
     glint.glint_gui()
@@ -351,7 +385,7 @@ except Exception as e:
 echo "PyMOL exited with code: $?" >> "$LOG_FILE"
 LAUNCHER_EOF
 else
-    # 使用 conda 环境中的 PyMOL
+    # 使用 conda 环境中的 PyMOL（推荐方式）
     cat >> "$MACOS/launcher" << 'LAUNCHER_EOF'
 # 启动 conda PyMOL 并加载 GLINT
 pymol -d "
@@ -389,10 +423,16 @@ echo "     import glint"
 echo "     glint.glint_gui()"
 echo ""
 echo "PyMOL 类型: $PYMOL_TYPE"
-if [ "$PYMOL_TYPE" = "app" ]; then
-    echo -e "${BLUE}💡 提示: 使用的是系统 PyMOL.app，性能更好${NC}"
+if [ "$PYMOL_TYPE" = "conda" ]; then
+    echo -e "${GREEN}✅ 使用 conda 环境中的 PyMOL（推荐）${NC}"
+    echo -e "${GREEN}   所有依赖已隔离，避免与系统 PyMOL 冲突${NC}"
+    if [ "$HAS_SYSTEM_PYMOL" = true ]; then
+        echo -e "${BLUE}💡 提示: 检测到系统 PyMOL.app，但 GLINT 使用独立的 conda PyMOL${NC}"
+        echo -e "${BLUE}   这样可以确保依赖兼容性，您的系统 PyMOL 不会受影响${NC}"
+    fi
 else
-    echo -e "${YELLOW}💡 提示: 使用的是 conda PyMOL，建议安装 PyMOL.app 以获得更好体验${NC}"
+    echo -e "${YELLOW}⚠️  使用系统 PyMOL.app（可能存在依赖冲突）${NC}"
+    echo -e "${YELLOW}   如果遇到问题，建议重新安装并使用 conda PyMOL${NC}"
 fi
 echo ""
 echo -e "${BLUE}📝 注意: 项目已从 GlueTK 重命名为 GLINT${NC}"

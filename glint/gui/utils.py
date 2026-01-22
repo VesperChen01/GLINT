@@ -118,9 +118,10 @@ def t(key: str) -> str:
 # ============================================================================
 
 def show_message_box(parent, title: str, message: str, icon_type: str = "information",
-                     min_width: int = 500, font_size: int = 13) -> Any:
+                     min_width: int = 400, font_size: int = 13) -> Any:
     """
     显示一个格式良好的 QMessageBox，确保内容完整显示
+    弹窗大小会根据文本内容自动调整
 
     Args:
         parent: 父窗口
@@ -160,17 +161,37 @@ def show_message_box(parent, title: str, message: str, icon_type: str = "informa
     # 设置消息文本
     msg_box.setText(message)
 
-    # 设置最小宽度和样式
-    msg_box.setMinimumWidth(min_width)
-    msg_box.setStyleSheet(f"QLabel{{min-width: {min_width-50}px; font-size: {font_size}px;}}")
+    # 根据文本内容动态计算宽度
+    lines = message.split('\n')
+    max_line_len = max(len(line) for line in lines) if lines else 0
+    num_lines = len(lines)
+
+    # 估算宽度：每个字符约 10 像素，加上边距
+    estimated_width = max(min_width, min(max_line_len * 10 + 100, 800))
+    # 估算高度：每行约 30 像素，加上边距 (Base height 150)
+    estimated_height = max(150, min(num_lines * 30 + 150, 600))
+
+    # 设置最小尺寸和样式，确保内容完整显示
+    msg_box.setMinimumWidth(estimated_width)
+    msg_box.setMinimumHeight(estimated_height)
+    msg_box.setStyleSheet(f"""
+        QMessageBox {{
+            min-width: {estimated_width}px;
+            min-height: {estimated_height}px;
+        }}
+        QMessageBox QLabel {{
+            min-width: {estimated_width - 80}px;
+            font-size: {font_size}px;
+        }}
+    """)
 
     return msg_box.exec()
 
 
 def show_question_box(parent, title: str, message: str,
-                      min_width: int = 500, font_size: int = 13) -> bool:
+                      min_width: int = 400, font_size: int = 13) -> bool:
     """
-    显示一个 Yes/No 问题对话框
+    显示一个 Yes/No 问题对话框，大小根据内容自动调整
 
     Args:
         parent: 父窗口
@@ -195,8 +216,22 @@ def show_question_box(parent, title: str, message: str,
     msg_box.setIcon(QMessageBox.Icon.Question)
     msg_box.setText(message)
     msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
-    msg_box.setMinimumWidth(min_width)
-    msg_box.setStyleSheet(f"QLabel{{min-width: {min_width-50}px; font-size: {font_size}px;}}")
+
+    # 根据文本内容动态计算宽度
+    lines = message.split('\n')
+    max_line_len = max(len(line) for line in lines) if lines else 0
+    estimated_width = max(min_width, min(max_line_len * 9 + 100, 800))
+
+    msg_box.setMinimumWidth(estimated_width)
+    msg_box.setStyleSheet(f"""
+        QMessageBox {{
+            min-width: {estimated_width}px;
+        }}
+        QMessageBox QLabel {{
+            min-width: {estimated_width - 80}px;
+            font-size: {font_size}px;
+        }}
+    """)
 
     result = msg_box.exec()
     return result == QMessageBox.StandardButton.Yes
