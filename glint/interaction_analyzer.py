@@ -557,12 +557,13 @@ def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7, return_names=Fa
     """
     # 1. 筛选可能参与芳香环的原子（主要是 C 和 N）
     aromatic_elements = {"C", "N"}  # 主要关注碳和氮
-    
+
     ring_candidates = []
     for atom in atoms:
         elem = get_element_from_atom_name(atom[3])
-        # 排除主链原子
-        if atom[3].strip() in ["C", "CA", "N", "O"]:
+        # ⚠️ 修复：对于配体，不应该排除 C/N/O 原子名
+        # 只排除氢原子
+        if elem == "H":
             continue
         if elem in aromatic_elements:
             ring_candidates.append(atom)
@@ -1830,14 +1831,24 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                         interaction_type = "盐桥"
                     else:
                         # ② 次优先级：氢键
-                        is_hb, hb_dist, hb_angle = is_hbond_precise(lig_atom, prot_atom, all_atoms_by_residue)
-                        if not is_hb:
-                            is_hb, hb_dist, hb_angle = is_hbond_precise(prot_atom, lig_atom, all_atoms_by_residue)
-                        
-                        if is_hb:
-                            interaction_type = "氢键"
+                        # DEBUG: 检查氢键检测
+                        lig_elem = get_element_from_atom_name(lig_atom[3])
+                        prot_elem = get_element_from_atom_name(prot_atom[3])
+
+                        # 只对可能的氢键供体/受体进行检测
+                        if (lig_elem in {"N", "O", "S"} or prot_elem in {"N", "O", "S"}) and d <= 3.5:
+                            is_hb, hb_dist, hb_angle = is_hbond_precise(lig_atom, prot_atom, all_atoms_by_residue)
+                            if not is_hb:
+                                is_hb, hb_dist, hb_angle = is_hbond_precise(prot_atom, lig_atom, all_atoms_by_residue)
+
+                            if is_hb:
+                                interaction_type = "氢键"
+                                print(f"[DEBUG] ✓ 氢键: {lig_name} {lig_atom[3]} ({lig_elem}) <-> {prot_name} {prot_atom[3]} ({prot_elem}), d={d:.2f}Å, angle={hb_angle:.1f}°")
+                            elif d <= 3.5 and checked_pairs < 10:  # 只打印前几个失败的案例
+                                print(f"[DEBUG] ✗ 氢键失败: {lig_name} {lig_atom[3]} ({lig_elem}) <-> {prot_name} {prot_atom[3]} ({prot_elem}), d={d:.2f}Å")
+
                         # ③ 最低优先级：疏水
-                        elif not key_interactions_only and is_hydrophobic(lig_name, prot_name, lig_atom, prot_atom, d):
+                        if not interaction_type and not key_interactions_only and is_hydrophobic(lig_name, prot_name, lig_atom, prot_atom, d):
                             interaction_type = "疏水相互作用"
 
                     # 严格模式：只检测关键相互作用
@@ -2743,12 +2754,20 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     # 定义配体选择
     if ligand_resname:
         lig_sel = f"{obj_name} and resn {ligand_resname}"
+        # Debug: 检查配体选择
+        n_lig_atoms = cmd.count_atoms(lig_sel)
+        print(f"[visualize_protein_ligand_3d] 🔍 配体选择: {lig_sel}")
+        print(f"[visualize_protein_ligand_3d] 🔍 配体原子数: {n_lig_atoms}")
     else:
         print(f"[visualize_protein_ligand_3d] ❌ No ligand; cannot proceed")
         return
 
     # ========== 第三步：隐藏所有，准备重新显示 ==========
+    print(f"[visualize_protein_ligand_3d] 🧹 步骤3: 隐藏所有显示")
     cmd.hide("everything", obj_name)
+
+    # Debug: 检查隐藏后的状态
+    print(f"[visualize_protein_ligand_3d] 🔍 隐藏后检查: 应该看不到任何 sticks/licorice")
     
     # ========== 第四步：选择并创建口袋区域 ==========
     cmd.select("lig_pocket", f"byres ({obj_name} and polymer within 5 of ({lig_sel}))")
@@ -2771,19 +2790,39 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         try:
             cmd.h_add("lig_pocket")
             print(f"[visualize_protein_ligand_3d]    ✓ 已为口袋残基添加氢原子")
+            # ⚠️ 关键修复：h_add 会自动显示 sticks，必须立即隐藏
+            cmd.hide("everything", "lig_pocket")
         except Exception as e:
             print(f"[visualize_protein_ligand_3d]    ⚠️ 为口袋残基添加氢原子失败: {e}")
 
+    # 删除 lig_pocket 选择，避免PyMOL自动显示
+    cmd.delete("lig_pocket")
+
+    # 再次明确隐藏所有 sticks/licorice（h_add 可能会自动显示）
+    # 注意:这里隐藏整个对象,包括配体,后面会重新显示配体
+    cmd.hide("everything", obj_name)
+    print(f"[visualize_protein_ligand_3d] 🧹 清除所有默认显示")
+
     # ========== 第六步：基础显示设置 ==========
+    print(f"[visualize_protein_ligand_3d] 🎨 步骤6: 基础显示设置")
     # 背景白色
     cmd.bg_color("white")
-    
+
     # 蛋白整体：半透明cartoon
     cmd.show("cartoon", obj_name)
     cmd.set("cartoon_transparency", 0.3, obj_name)
-    
+
     # 只显示配体为 sticks；口袋残基本身不单独高亮，后面只高亮真正有高置信度相互作用的残基
+    print(f"[visualize_protein_ligand_3d] 🔍 显示配体 sticks: {lig_sel}")
     cmd.show("sticks", lig_sel)
+
+    # 明确隐藏蛋白部分的 sticks/licorice（防止意外显示）
+    print(f"[visualize_protein_ligand_3d] 🔍 隐藏蛋白质 sticks/licorice")
+    cmd.hide("sticks", f"{obj_name} and polymer")
+    cmd.hide("licorice", f"{obj_name} and polymer")
+
+    # Debug: 检查当前显示状态
+    print(f"[visualize_protein_ligand_3d] 🔍 此时应该只看到: cartoon + 配体sticks")
     
     # 隐藏连接到碳原子的氢（只保留极性氢：NH, OH, SH）
     cmd.hide("(h. and (e. c extend 1))")
@@ -2845,55 +2884,8 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     except:
         pass
     
-    # ========== 第十步：提取并显示相互作用残基 ==========
-    protein_residues = set()
-    for inter in interactions:
-        prot_chain = inter.get("Protein_Chain", "")
-        prot_res = inter.get("Protein_Residue", "")
-        if prot_res:
-            res_parts = prot_res.split()
-            if len(res_parts) >= 2:
-                res_name, res_id = res_parts[0], res_parts[1]
-                protein_residues.add((prot_chain, res_name, res_id))
-    
-    if protein_residues:
-        print(f"[visualize_protein_ligand_3d] 📍 显示 {len(protein_residues)} 个相互作用残基")
-        
-        # 3字母氨基酸代码 -> 1字母代码
-        aa_map = {
-            "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D",
-            "CYS": "C", "GLN": "Q", "GLU": "E", "GLY": "G",
-            "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K",
-            "MET": "M", "PHE": "F", "PRO": "P", "SER": "S",
-            "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
-        }
-        
-        # 显示相互作用残基为 licorice 并添加标签
-        for i, (chain, res_name, res_id) in enumerate(protein_residues, 1):
-            res_sel = f"{obj_name} and chain {chain} and resi {res_id}"
-            cmd.show("licorice", res_sel)
-            # 隐藏这些残基上连接到碳的氢
-            cmd.hide("everything", f"({res_sel}) and (elem H and neighbor elem C)")
-            
-            # 添加残基标签（使用一字母代码 + 残基号）
-            label_text = aa_map.get(res_name.upper(), res_name[:1]) + res_id
-            try:
-                # 使用CA原子位置放置标签
-                ca_sel = f"{res_sel} and name CA"
-                if cmd.count_atoms(ca_sel) > 0:
-                    coords = cmd.get_atom_coords(ca_sel)
-                    label_obj = f"res_label_{i}"
-                    cmd.pseudoatom(label_obj, pos=coords, label=label_text)
-                    cmd.set("label_size", 16, label_obj)
-                    cmd.set("label_color", "black", label_obj)
-                    cmd.set("label_font_id", 7, label_obj)  # Times-like font
-                    cmd.hide("everything", label_obj)
-                    cmd.show("label", label_obj)
-            except Exception as e:
-                pass  # 静默失败
-    
-    # ========== 第十一步：绘制其他类型相互作用 ==========
-    print(f"[visualize_protein_ligand_3d] 🎨 正在绘制关键药物设计相互作用...")
+    # ========== 第十步：预处理与筛选 (关键修复：先筛选再高亮残基) ==========
+    print(f"[visualize_protein_ligand_3d] 🎨 正在处理关键药物设计相互作用...")
     
     # 相互作用类型到颜色的映射（已更新为统一配色）
     color_map = {
@@ -2966,6 +2958,80 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             "疏水相互作用": 0 if not show_hydrophobic else 5  # 默认不显示疏水（除非指定）
         }
     
+    sorted_types = sorted(interactions_by_type.keys(), 
+                         key=lambda x: interaction_priority.get(x, 999))
+
+    # --- 这里是新的筛选逻辑: 预先计算要显示的相互作用 ---
+    visible_interactions_flat = []
+    visible_interactions_map = {} # type -> list of interactions
+    
+    for interaction_type in sorted_types:
+        # Filter: Hydrophobic
+        if not show_hydrophobic and ("疏水" in interaction_type or "Hydrophobic" in interaction_type):
+            continue
+            
+        # Filter: Max count
+        max_for_type = max_interactions_per_type.get(interaction_type, 3)
+        subset = interactions_by_type.get(interaction_type, [])[:max_for_type]
+        
+        if subset:
+            visible_interactions_map[interaction_type] = subset
+            visible_interactions_flat.extend(subset)
+            
+    # ========== 第十一步（新）：高亮成键残基 (只基于筛选后的可见相互作用) ==========
+    protein_residues = set()
+    for inter in visible_interactions_flat: # 使用筛选后的列表
+        prot_chain = inter.get("Protein_Chain", "")
+        prot_res = inter.get("Protein_Residue", "")
+        if prot_res:
+            res_parts = prot_res.split()
+            if len(res_parts) >= 2:
+                res_name, res_id = res_parts[0], res_parts[1]
+                protein_residues.add((prot_chain, res_name, res_id))
+    
+    if protein_residues:
+        print(f"[visualize_protein_ligand_3d] 📍 显示 {len(protein_residues)} 个相互作用残基 (已基于显示策略过滤)")
+
+        # 再次确保所有蛋白残基默认隐藏 sticks/licorice
+        print(f"[visualize_protein_ligand_3d] 🔍 再次隐藏所有蛋白质 sticks/licorice")
+        cmd.hide("sticks", f"{obj_name} and polymer")
+        cmd.hide("licorice", f"{obj_name} and polymer")
+        print(f"[visualize_protein_ligand_3d] 🔍 隐藏完成，准备显示 {len(protein_residues)} 个残基")
+        
+        # 3字母氨基酸代码 -> 1字母代码
+        aa_map = {
+            "ALA": "A", "ARG": "R", "ASN": "N", "ASP": "D",
+            "CYS": "C", "GLN": "Q", "GLU": "E", "GLY": "G",
+            "HIS": "H", "ILE": "I", "LEU": "L", "LYS": "K",
+            "MET": "M", "PHE": "F", "PRO": "P", "SER": "S",
+            "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
+        }
+        
+        # 显示相互作用残基为 licorice 并添加标签
+        for i, (chain, res_name, res_id) in enumerate(protein_residues, 1):
+            res_sel = f"{obj_name} and chain {chain} and resi {res_id}"
+            print(f"[visualize_protein_ligand_3d] DEBUG: Showing licorice for {res_name}{res_id} (chain {chain})")
+            cmd.show("licorice", res_sel)
+            # 隐藏这些残基上连接到碳的氢
+            cmd.hide("everything", f"({res_sel}) and (elem H and neighbor elem C)")
+            
+            # 添加残基标签（使用一字母代码 + 残基号）
+            label_text = aa_map.get(res_name.upper(), res_name[:1]) + res_id
+            try:
+                # 使用CA原子位置放置标签
+                ca_sel = f"{res_sel} and name CA"
+                if cmd.count_atoms(ca_sel) > 0:
+                    coords = cmd.get_atom_coords(ca_sel)
+                    label_obj = f"res_label_{i}"
+                    cmd.pseudoatom(label_obj, pos=coords, label=label_text)
+                    cmd.set("label_size", 16, label_obj)
+                    cmd.set("label_color", "black", label_obj)
+                    cmd.set("label_font_id", 7, label_obj)  # Times-like font
+                    cmd.hide("everything", label_obj)
+                    cmd.show("label", label_obj)
+            except Exception as e:
+                pass  # 静默失败
+    
     interaction_count = {}
     
     # 先删除旧的相互作用对象
@@ -2975,28 +3041,15 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     except:
         pass
     
-    # 按优先级顺序处理相互作用
-    sorted_types = sorted(interactions_by_type.keys(), 
-                         key=lambda x: interaction_priority.get(x, 999))
-    
     total_shown = 0
     hbonds_drawn_from_csv = 0  # 追踪从 CSV 绘制的氢键数量
+    
+    # ========== 第十二步：绘制相互作用线条 (遍历可见集) ==========
     for interaction_type in sorted_types:
-        # 跳过不显示的疏水相互作用
-        if not show_hydrophobic and ("疏水" in interaction_type or "Hydrophobic" in interaction_type):
+        # 获取筛选后的结果 (如果为空则跳过)
+        interactions_to_show = visible_interactions_map.get(interaction_type, [])
+        if not interactions_to_show:
             continue
-        
-        # 获取该类型的最大显示数量
-        max_for_type = max_interactions_per_type.get(interaction_type, 3)
-        if interaction_count.get(interaction_type, 0) >= max_for_type:
-            continue
-        
-        # ⚠️ 关键修复：删除跳过氢键的逻辑
-        # 现在所有相互作用（包括氢键）都从 CSV/result 数据绘制
-        # 只有当 interactions 为空时，use_geom_hbonds=True，才会使用PyMOL的几何检测
-        
-        # 筛选相互作用
-        interactions_to_show = interactions_by_type.get(interaction_type, [])[:max_for_type]
         
         for idx, inter in enumerate(interactions_to_show, 1):
             try:
@@ -3068,31 +3121,42 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                                     x = sum(c[0] for c in coords) / len(coords)
                                     y = sum(c[1] for c in coords) / len(coords)
                                     z = sum(c[2] for c in coords) / len(coords)
+                                    print(f"[visualize_protein_ligand_3d] DEBUG: 蛋白质环中心 {resname}: ({x:.2f}, {y:.2f}, {z:.2f})")
                                     return (x, y, z)
+                                print(f"[visualize_protein_ligand_3d] DEBUG: 蛋白质环 {resname} 坐标不足: {len(coords)} < 3")
                                 return None
-                            
+
                             # 配体：使用动态检测
                             if chain and chain.strip():
                                 sel = f"{obj} and chain {chain} and resi {resi}"
                             else:
                                 sel = f"{obj} and resi {resi}"
-                            
+
+                            print(f"[visualize_protein_ligand_3d] DEBUG: 配体选择: {sel}")
+
                             # 获取配体所有原子
                             model = cmd.get_model(sel)
                             if not model.atom:
+                                print(f"[visualize_protein_ligand_3d] DEBUG: 配体选择无原子")
                                 return None
-                            
-                            atoms = [(a.chain, a.resn, a.resi, a.name, (a.coord[0], a.coord[1], a.coord[2])) 
+
+                            print(f"[visualize_protein_ligand_3d] DEBUG: 配体原子数: {len(model.atom)}")
+
+                            atoms = [(a.chain, a.resn, a.resi, a.name, (a.coord[0], a.coord[1], a.coord[2]))
                                      for a in model.atom]
-                            
+
                             # 检测配体环
                             detected_rings = detect_ligand_rings(atoms)
+                            print(f"[visualize_protein_ligand_3d] DEBUG: 检测到的环数: {len(detected_rings) if detected_rings else 0}")
+
                             if detected_rings:
                                 ring_coords = detected_rings[0]  # 使用第一个检测到的环
                                 x = sum(c[0] for c in ring_coords) / len(ring_coords)
                                 y = sum(c[1] for c in ring_coords) / len(ring_coords)
                                 z = sum(c[2] for c in ring_coords) / len(ring_coords)
+                                print(f"[visualize_protein_ligand_3d] DEBUG: 配体环中心: ({x:.2f}, {y:.2f}, {z:.2f})")
                                 return (x, y, z)
+                            print(f"[visualize_protein_ligand_3d] DEBUG: 配体未检测到环")
                             return None
                         
                         # 计算配体环中心
@@ -3253,9 +3317,21 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     cmd.set("dash_width", 3.0, "interact_*")
     cmd.set("dash_width", 3.0, "hbonds_*")
     
-    # ========== 第十二步：调整视角 ==========\
-    cmd.zoom(f"({lig_sel}) or lig_pocket", buffer=8)
-    cmd.orient(f"({lig_sel}) or lig_pocket")
+    # ========== 第十二步：调整视角 ==========
+    # 创建临时选择用于视角调整
+    if protein_residues:
+        # 选择配体和有相互作用的残基
+        res_sels = []
+        for chain, res_name, res_id in protein_residues:
+            res_sels.append(f"(chain {chain} and resi {res_id})")
+        pocket_sel = " or ".join(res_sels)
+        cmd.zoom(f"({lig_sel}) or ({pocket_sel})", buffer=8)
+        cmd.orient(f"({lig_sel}) or ({pocket_sel})")
+    else:
+        # 如果没有相互作用残基,只聚焦配体
+        cmd.zoom(lig_sel, buffer=8)
+        cmd.orient(lig_sel)
+
     
     # ========== 第十三步：美化参数（参考脚本）==========
     cmd.set("stick_radius", 0.15)
@@ -3267,7 +3343,32 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     cmd.set("label_font_id", 5)
     cmd.set("label_color", "black")
     
-    # ========== 第十四步：输出统计 ==========
+    # ========== 第十四步:最终清理 ==========
+    # 最后再次确保只显示配体和有相互作用的残基
+    print(f"[visualize_protein_ligand_3d] 🧹 最终清理: 确保只显示配体和相互作用残基")
+
+    # 隐藏所有蛋白的 sticks/licorice
+    print(f"[visualize_protein_ligand_3d] 🔍 最终清理: 隐藏所有蛋白质 sticks/licorice")
+    cmd.hide("sticks", f"{obj_name} and polymer")
+    cmd.hide("licorice", f"{obj_name} and polymer")
+
+    # 只显示配体的 sticks
+    print(f"[visualize_protein_ligand_3d] 🔍 最终清理: 显示配体 sticks: {lig_sel}")
+    cmd.show("sticks", lig_sel)
+
+    # 只显示有相互作用的残基的 licorice
+    if protein_residues:
+        print(f"[visualize_protein_ligand_3d] 🔍 最终清理: 显示 {len(protein_residues)} 个残基的 licorice")
+        for chain, res_name, res_id in protein_residues:
+            res_sel = f"{obj_name} and chain {chain} and resi {res_id}"
+            print(f"[visualize_protein_ligand_3d] 🔍   - 显示: {res_sel}")
+            cmd.show("licorice", res_sel)
+
+    # Debug: 最终检查
+    print(f"[visualize_protein_ligand_3d] 🔍 最终状态: 应该只看到配体sticks + {len(protein_residues) if protein_residues else 0}个残基licorice")
+    
+    # ========== 第十五步：输出统计 ==========
+
     print(f"\n[visualize_protein_ligand_3d] ✅ 3D 可视化完成!")
     print(f"   📊 相互作用统计 (来自分析结果):")
     
