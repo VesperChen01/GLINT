@@ -30,7 +30,8 @@ _COMMON_CLASSES = [
     'QTimer', 'QSize', 'QSettings', 'QPainter', 'QGraphicsDropShadowEffect', 'QGridLayout',
     'QScrollArea', 'QTextBrowser', 'QLineEdit', 'QComboBox', 'QSpinBox', 'QDoubleSpinBox', 'QGroupBox',
     'QTabWidget', 'QTabBar', 'QAction', 'QMainWindow', 'QFileDialog', 'QCheckBox',
-    'QFormLayout', 'QAbstractItemView', 'QListWidgetItem', 'QThread'
+    'QFormLayout', 'QAbstractItemView', 'QListWidgetItem', 'QThread',
+    'QDesktopServices', 'QUrl'
 ]
 
 def _get_loaded_binding():

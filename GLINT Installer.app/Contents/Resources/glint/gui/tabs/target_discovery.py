@@ -11,7 +11,7 @@ from ..qt_adapter import (
     QFileDialog, QMessageBox
 )
 
-from ..utils import t
+from ..utils import t, show_message_box
 from .common import CommonTab
 from ..workers import GMotifWorker, SurfaceAnalysisWorker, SurfaceSimilarityWorker
 
@@ -383,7 +383,7 @@ class TargetDiscoveryTab(CommonTab):
         pdb = self.parent_window.gm_pdb.text().strip() or None
         outcsv = self.parent_window.gm_out_csv.text().strip() or None
         if not obj or obj == t("no_object"):
-            QMessageBox.warning(self, t("title"), t("no_object")); return
+            show_message_box(self, t("title"), t("no_object"), "warning"); return
         try:
             rmsd = float(self.parent_window.gm_rmsd.text().strip() or "3.5")
         except Exception:
@@ -456,9 +456,9 @@ class TargetDiscoveryTab(CommonTab):
     def show_gloop_surface(self):
         """Manually show G-loop surface"""
         if not self._gmotif_hits:
-            QMessageBox.warning(self, "Warning", "No G-loop hits found. Please run detection first.")
+            show_message_box(self, "Warning", "No G-loop hits found. Please run detection first.", "warning")
             return
-        
+
         try:
             from pymol import cmd
             try:
@@ -467,7 +467,7 @@ class TargetDiscoveryTab(CommonTab):
                 try:
                     from highlight_residues import highlight_gloop_surface
                 except ImportError:
-                    QMessageBox.warning(self, "Error", "highlight_gloop_surface not available")
+                    show_message_box(self, "Error", "highlight_gloop_surface not available", "warning")
                     return
             
             obj = self.parent_window.obj_combo_gm.currentText().strip()
@@ -496,14 +496,14 @@ class TargetDiscoveryTab(CommonTab):
     def export_gloop_coords(self):
         """Manually export G-loop coordinates"""
         if not self._gmotif_hits:
-            QMessageBox.warning(self, "Warning", "No G-loop hits found. Please run detection first.")
+            show_message_box(self, "Warning", "No G-loop hits found. Please run detection first.", "warning")
             return
-        
+
         # Select save path
         fn, _ = QFileDialog.getSaveFileName(self, "Save Coordinates CSV", "", "CSV (*.csv);;All Files (*)")
         if not fn:
             return
-        
+
         try:
             try:
                 from ...highlight_residues import get_gloop_coordinates
@@ -511,21 +511,21 @@ class TargetDiscoveryTab(CommonTab):
                 try:
                     from highlight_residues import get_gloop_coordinates
                 except ImportError:
-                    QMessageBox.warning(self, "Error", "get_gloop_coordinates not available")
+                    show_message_box(self, "Error", "get_gloop_coordinates not available", "warning")
                     return
-            
+
             obj = self.parent_window.obj_combo_gm.currentText().strip()
-            
+
             # Export coordinates for first hit (or all hits)
             first_hit = self._gmotif_hits[0]
             ch, resi_s, resi_e, seq8, rmsd = first_hit
-            
+
             result = get_gloop_coordinates(
                 obj=obj, chain=ch, start_resi=resi_s, end_resi=resi_e,
                 atom_types=["all"],
                 output_csv=fn
             )
-            
+
             if result:
                 self._last_gmotif_coords = result
                 centroid = result.get('centroid', (0, 0, 0))
@@ -533,27 +533,27 @@ class TargetDiscoveryTab(CommonTab):
                 self.log(f"✅ Coordinates exported: {n_atoms} atoms")
                 self.log(f"   Centroid: ({centroid[0]:.2f}, {centroid[1]:.2f}, {centroid[2]:.2f})")
                 self.log(f"   Saved to: {fn}")
-                QMessageBox.information(self, "Success", f"Coordinates saved to:\n{fn}")
-            
+                show_message_box(self, "Success", f"Coordinates saved to:\n{fn}")
+
         except Exception as e:
             self.on_error(f"Coordinate export failed: {e}")
 
     def analyze_gloop_surface(self):
         """Analyze protein surface properties around G-loop patches"""
         if not self._gmotif_hits:
-            QMessageBox.warning(self, "Warning", "No G-loop hits found. Please run detection first.")
+            show_message_box(self, "Warning", "No G-loop hits found. Please run detection first.", "warning")
             return
         
         try:
             from pymol import cmd
-            
+
             obj = self.parent_window.obj_combo_gm.currentText().strip()
             if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, t("title"), t("no_object"))
+                show_message_box(self, t("title"), t("no_object"), "warning")
                 return
-            
+
             self.log("🔬 Starting G-loop surface analysis...")
-            
+
             # Import surface analyzer
             try:
                 from ..protein_surface_analyzer import SurfaceAnalyzer, SurfacePatch
@@ -561,17 +561,17 @@ class TargetDiscoveryTab(CommonTab):
                 try:
                     from protein_surface_analyzer import SurfaceAnalyzer, SurfacePatch
                 except ImportError:
-                    QMessageBox.warning(self, "Error", "SurfaceAnalyzer not available")
+                    show_message_box(self, "Error", "SurfaceAnalyzer not available", "warning")
                     return
-            
+
             # Build selection for G-loop regions + surrounding area
             gloop_regions = []
             for hit in self._gmotif_hits:
                 ch, resi_s, resi_e, seq8, rmsd = hit
                 gloop_regions.append((ch, resi_s, resi_e))
-            
+
             if not gloop_regions:
-                QMessageBox.warning(self, "Warning", "No valid G-loop regions found.")
+                show_message_box(self, "Warning", "No valid G-loop regions found.", "warning")
                 return
             
             # Create selection for G-loop + 10Å surrounding
@@ -746,9 +746,9 @@ class TargetDiscoveryTab(CommonTab):
         """Start Surface Analysis"""
         obj = self.parent_window.obj_combo_surf.currentText().strip()
         outcsv = self.parent_window.surf_out_csv.text().strip() or None
-        
+
         if not obj or obj == t("no_object"):
-            QMessageBox.warning(self, t("title"), t("no_object")); return
+            show_message_box(self, t("title"), t("no_object"), "warning"); return
             
         self.parent_window.surf_btn.setEnabled(False)
         self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
@@ -775,9 +775,9 @@ class TargetDiscoveryTab(CommonTab):
         try:
             from pymol import cmd
             obj = self.parent_window.obj_combo_surf.currentText().strip()
-            
+
             if not getattr(self, '_last_surf_patches', None):
-                QMessageBox.warning(self, "Warning", "No analysis results to visualize. Please run analysis first.")
+                show_message_box(self, "Warning", "No analysis results to visualize. Please run analysis first.", "warning")
                 return
 
             # Prepare main object visualization (show cartoon, hide old patches)
@@ -836,7 +836,7 @@ class TargetDiscoveryTab(CommonTab):
         """Start single surface analysis"""
         obj1 = self.parent_window.obj_combo_sim1.currentText().strip()
         if not obj1 or obj1 == t("no_object"):
-            QMessageBox.warning(self, t("title"), t("no_object")); return
+            show_message_box(self, t("title"), t("no_object"), "warning"); return
         
         sel1 = self.parent_window.sim_sel1.text().strip() or "all"
         outcsv = self.parent_window.sim_out_csv.text().strip() or None
@@ -877,7 +877,7 @@ class TargetDiscoveryTab(CommonTab):
         obj2_text = self.parent_window.obj_combo_sim2.currentText().strip()
         
         if not obj1 or obj1 == t("no_object"):
-            QMessageBox.warning(self, t("title"), t("no_object")); return
+            show_message_box(self, t("title"), t("no_object"), "warning"); return
         
         # Check if obj2 is selected
         if obj2_text == "(None - Single Surface)" or not obj2_text:
@@ -1006,15 +1006,15 @@ class TargetDiscoveryTab(CommonTab):
         """Visualize surface features in PyMOL"""
         try:
             from pymol import cmd
-            
+
             obj1 = self.parent_window.obj_combo_sim1.currentText().strip()
             if not obj1 or obj1 == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select an object first.")
+                show_message_box(self, "Warning", "Please select an object first.", "warning")
                 return
-            
+
             # Check if we have analysis results
             if not self._last_similarity_result:
-                QMessageBox.warning(self, "Warning", "Please run surface analysis first.")
+                show_message_box(self, "Warning", "Please run surface analysis first.", "warning")
                 return
             
             result = self._last_similarity_result

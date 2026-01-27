@@ -688,6 +688,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
             cmd.label(ca_sel, f"'{label_text}'")
             cmd.set("label_color", "black", ca_sel)
             cmd.set("label_size", 14, ca_sel)
+            cmd.show("labels", ca_sel)  # 显式显示标签
     
     # ========== 绘制相互作用虚线 ==========
     interaction_counts = {}  # 统计每种相互作用的数量
@@ -896,30 +897,36 @@ def visualize_ppi_interface(obj_name, ppi_result,
             traceback.print_exc()
             print(f"[visualize_ppi_interface] Failed to draw interaction {idx}: {e}")
     
-    # ========== 创建图例 (使用伪原子) ==========
+    # ========== Print statistics (terminal only, no PyMOL legend) ==========
     print("\n" + "=" * 60)
-    print("相互作用可视化统计:")
+    print("Interaction Visualization Statistics:")
     print("=" * 60)
-    
-    legend_y = 0
+
+    # Color descriptions for friendly terminal output
+    COLOR_DESCRIPTIONS = {
+        "氢键": "Blue",
+        "盐桥": "Orange-Red",
+        "疏水接触": "Green",
+        "π-π堆积": "Purple",
+        "阳离子-π": "Pink"
+    }
+
+    # English labels for interaction types
+    INTERACTION_LABELS = {
+        "氢键": "Hydrogen Bonds",
+        "盐桥": "Salt Bridges",
+        "疏水接触": "Hydrophobic Contacts",
+        "π-π堆积": "Pi-Pi Stacking",
+        "阳离子-π": "Cation-Pi"
+    }
+
     for int_type in ["氢键", "盐桥", "疏水接触", "π-π堆积", "阳离子-π"]:
         count = interaction_counts.get(int_type, 0)
         if count > 0:
-            color_info = INTERACTION_COLORS[int_type]
-            print(f"  {int_type}: {count} 个 (颜色: {color_info['color']})")
-            
-            # 创建图例伪原子 - 使用英文名称
-            type_en = TYPE_NAME_MAP.get(int_type, "other")
-            legend_name = f"ppi_legend_{type_en}"
-            try:
-                cmd.pseudoatom(legend_name, pos=[100, legend_y, 0], 
-                              label=f"{int_type}: {count}")
-                cmd.color(color_info["color"], legend_name)
-                cmd.set("label_size", 18, legend_name)
-                legend_y += 8
-            except:
-                pass
-    
+            color_desc = COLOR_DESCRIPTIONS.get(int_type, "Gray")
+            label = INTERACTION_LABELS.get(int_type, int_type)
+            print(f"  {label}: {count} (Color: {color_desc})")
+
     print("=" * 60)
     
     # ========== 缩放到界面区域 ==========

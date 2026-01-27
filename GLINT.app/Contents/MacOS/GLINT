@@ -1,0 +1,44 @@
+#!/bin/bash
+# GLINT Launcher
+
+# Find conda
+CONDA_EXE=""
+if command -v conda &> /dev/null; then
+    CONDA_EXE=$(command -v conda)
+else
+    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "/opt/homebrew/Caskroom/miniconda/base/bin/conda"; do
+        if [ -x "$p" ]; then
+            CONDA_EXE="$p"
+            break
+        fi
+    done
+fi
+
+if [ -z "$CONDA_EXE" ]; then
+    osascript -e 'display alert "Conda Not Found" message "Please install GLINT first using the GLINT Installer.\n\nOr install Miniconda and run the installer."'
+    exit 1
+fi
+
+# Check if glint environment exists
+eval "$($CONDA_EXE shell.bash hook)"
+if ! conda env list | grep -q "^glint "; then
+    osascript -e 'display alert "GLINT Not Installed" message "Please run the GLINT Installer first to set up the environment and dependencies."'
+    exit 1
+fi
+
+# Activate glint environment
+conda activate glint
+
+# Set environment variables
+export KMP_DUPLICATE_LIB_OK=TRUE
+export OMP_NUM_THREADS=1
+
+# Get the Resources directory
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+RESOURCES_DIR="$(dirname "$DIR")/Resources"
+
+# Add GLINT to Python path
+export PYTHONPATH="${RESOURCES_DIR}:${PYTHONPATH}"
+
+# Launch PyMOL with GLINT
+pymol -d "import sys, os; sys.path.insert(0, '${RESOURCES_DIR}'); import glint; glint.glint_gui()"

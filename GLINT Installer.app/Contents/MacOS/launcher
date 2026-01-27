@@ -5,7 +5,7 @@ CONDA_EXE=""
 if command -v conda &> /dev/null; then
     CONDA_EXE=$(command -v conda)
 else
-    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda"; do
+    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "/opt/homebrew/Caskroom/miniconda/base/bin/conda"; do
         if [ -x "$p" ]; then
             CONDA_EXE="$p"
             break
@@ -23,7 +23,7 @@ CONDA_BASE="$(conda info --base 2>/dev/null)"
 PYTHON="${CONDA_BASE}/bin/python"
 
 if [ ! -x "$PYTHON" ]; then
-  PYTHON=$(command -v python)
+  PYTHON=$(command -v python3)
 fi
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"

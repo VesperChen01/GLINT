@@ -11,7 +11,7 @@ from ..qt_adapter import (
 )
 
 from .common import CommonTab
-from ..utils import t
+from ..utils import t, show_message_box
 
 class VisualizationTab(CommonTab):
     def __init__(self, parent):
@@ -140,7 +140,7 @@ class VisualizationTab(CommonTab):
         try:
             obj = self.parent_window.obj_combo_apbs.currentText().strip()
             if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, t("title"), t("no_object"))
+                show_message_box(self, t("title"), t("no_object"), "warning")
                 return
             try:
                 grid = float(self.parent_window.apbs_grid.text().strip() or "1.0")
@@ -170,7 +170,7 @@ class VisualizationTab(CommonTab):
         try:
             obj = self.parent_window.obj_combo_apbs.currentText().strip()
             if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, t("title"), t("no_object"))
+                show_message_box(self, t("title"), t("no_object"), "warning")
                 return
 
             apbs_tools = None
@@ -256,7 +256,7 @@ class VisualizationTab(CommonTab):
         try:
             obj = self.parent_window.obj_combo_apbs.currentText().strip()
             if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, t("title"), t("no_object"))
+                show_message_box(self, t("title"), t("no_object"), "warning")
                 return
             self._export_png_for_object(obj)
         except Exception as e:

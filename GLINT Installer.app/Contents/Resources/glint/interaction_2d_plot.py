@@ -1005,57 +1005,125 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     # 智能布局算法 (基于相互作用点的局部扩展)
     placed_badges = [] # list of {"x": x, "y": y, "r": radius, "res": res_name}
     badge_radius = 28.0 # 缩小气泡：比文字稍大即可 (原 55.0 太大)
-    padding = 8.0
+    padding = 15.0  # 增加气泡之间的间距，避免重叠
     used_residue_types = set()  # 用于构建 Discovery Studio 风格的残基图例
     
     sorted_res = sorted(res_map.items())
-    
+
     for i, (res, inters) in enumerate(sorted_res):
         # 1. 计算该残基所有相互作用点的平均位置 (目标中心)
         tx_sum, ty_sum = 0, 0
         count = 0
+        interaction_points = []  # 调试用
         for inter in inters:
             tid, ttype = inter["idx"], inter["type"]
             if ttype == "ring" and tid in px_rings:
                 tx, ty = px_rings[tid]
+                interaction_points.append((tid, ttype, tx, ty))
             elif tid in px_atoms:
                 tx, ty = px_atoms[tid]
+                interaction_points.append((tid, ttype, tx, ty))
             else:
                 continue
             tx_sum += tx
             ty_sum += ty
             count += 1
-        
+
         if count == 0: continue
-        
+
         target_x, target_y = tx_sum / count, ty_sum / count
-        
+
+        # 调试输出：显示相互作用点
+        print(f"\n残基 {res} 的相互作用点:")
+        for tid, ttype, tx, ty in interaction_points:
+            print(f"  - {ttype} {tid}: ({tx:.1f}, {ty:.1f})")
+
         # 2. 计算从配体中心指向目标中心的向量
         vx, vy = target_x - c_x, target_y - c_y
         dist = math.hypot(vx, vy)
+
+        # ⚠️ 关键修复：如果目标点在配体内部（如环中心），需要特殊处理
+        is_ring_center = any(inter["type"] == "ring" for inter in inters)
+
+        if dist < 50.0:  # 目标点在配体内部或非常接近
+            # 计算配体的最大半径（从中心到最远原子）
+            max_radius = 0
+            for atom_idx, (atom_x, atom_y) in px_atoms.items():
+                r = math.hypot(atom_x - c_x, atom_y - c_y)
+                if r > max_radius:
+                    max_radius = r
+
+            # 如果距离太近，选择一个默认方向
+            if dist < 1.0:
+                # 根据已放置的气泡数量，选择不同的默认方向
+                default_angles = [270, 0, 90, 180, 315, 45, 225, 135]  # 上、右、下、左、对角线
+                angle_idx = len(placed_badges) % len(default_angles)
+                angle_deg = default_angles[angle_idx]
+                angle_rad = math.radians(angle_deg)
+                ux, uy = math.cos(angle_rad), math.sin(angle_rad)
+            else:
+                # 归一化方向向量
+                ux, uy = vx / dist, vy / dist
+
+            # 从配体边界外侧开始放置
+            standoff = max_radius + 80.0  # 配体半径 + 额外距离
+        else:
+            # 目标点在配体外部（正常情况）
+            ux, uy = vx / dist, vy / dist
+            standoff = 120.0  # 基础站立距离
+
+        # ⚠️ 关键改进：扇形分布
+        # 如果多个残基与同一个原子相互作用，需要在角度上分散它们
+        # 检查已放置的气泡中，有多少个与相同的目标点相互作用
+        angle_offset = 0.0
+        similar_count = 0
+
+        for placed in placed_badges:
+            # 计算已放置气泡的目标点（反推）
+            placed_vx = placed["x"] - c_x
+            placed_vy = placed["y"] - c_y
+            placed_dist = math.hypot(placed_vx, placed_vy)
+
+            if placed_dist > 1.0:
+                placed_ux = placed_vx / placed_dist
+                placed_uy = placed_vy / placed_dist
+
+                # 计算方向相似度（点积）
+                dot = ux * placed_ux + uy * placed_uy
+
+                # 如果方向非常接近（cos > 0.95，即角度 < 18°）
+                # 说明它们可能与同一个原子或非常接近的原子相互作用
+                if dot > 0.95:
+                    similar_count += 1
+
+        # 根据相似气泡的数量，计算角度偏移
+        if similar_count > 0:
+            # 每个相似气泡增加 30° 的偏移
+            angle_offset = similar_count * (math.pi / 6.0)  # 30° = π/6
+
+            # 应用角度偏移（旋转方向向量）
+            cos_offset = math.cos(angle_offset)
+            sin_offset = math.sin(angle_offset)
+            ux_new = ux * cos_offset - uy * sin_offset
+            uy_new = ux * sin_offset + uy * cos_offset
+            ux, uy = ux_new, uy_new
+
+            print(f"  ⚠️ 检测到 {similar_count} 个相似方向的气泡，应用 {math.degrees(angle_offset):.1f}° 角度偏移")
+
+        # 计算气泡位置：从配体中心出发
+        bx = c_x + ux * standoff
+        by = c_y + uy * standoff
+
+        # 调试输出
+        print(f"  配体中心: ({c_x:.1f}, {c_y:.1f})")
+        print(f"  目标点平均: ({target_x:.1f}, {target_y:.1f})")
+        print(f"  方向向量: ({ux:.2f}, {uy:.2f})")
+        print(f"  初始气泡位置: ({bx:.1f}, {by:.1f})")
+        print(f"  气泡到中心距离: {math.hypot(bx - c_x, by - c_y):.1f}")
         
-        # 如果距离太近（比如在中心），默认向上
-        if dist < 1.0:
-            vx, vy = 0, -1 # Y轴向下是正，PyMOL/Cairo坐标系通常左上角为0? Matplotlib是左下角?
-            # 这里的 ax.imshow 用的 extent=[0, dw, dh, 0]，origin='upper'
-            # 说明 y 轴向下增大。
-            # 无论如何，我们只需要一个方向向量。
-            dist = 1.0
-            
-        # 归一化方向向量
-        ux, uy = vx / dist, vy / dist
-        
-        # 3. 初始放置位置：在目标点外侧一定距离
-        # 距离取决于相互作用类型，如果是氢键/卤素键可以近一点，疏水/Pi堆积可以远一点？
-        # 为了整齐，统一距离，但要保证不遮挡
-        standoff = 70.0 # 基础站立距离
-        
-        bx = target_x + ux * standoff
-        by = target_y + uy * standoff
-        
-        # 4. 碰撞检测与解决 (简单的迭代推挤)
-        # 尝试最多 10 轮推挤
-        for _ in range(10):
+        # 4. 碰撞检测与解决 (增强的迭代推挤)
+        # 增加迭代次数，确保充分分离
+        for iteration in range(30):  # 从 10 增加到 30
             moved = False
             # 5. 增强的碰撞检测：同时避开其他气泡和配体原子
             # 检查与已放置气泡的重叠
@@ -1064,14 +1132,15 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 dy = by - badge["y"]
                 d = math.hypot(dx, dy)
                 min_dist = badge_radius * 2 + padding
-                
+
                 if d < min_dist:
                     # 发生重叠，推开 (气泡之间互斥)
-                    if d < 1.0: dx, dy, d = 1.0, 0.0, 1.0 
+                    if d < 1.0: dx, dy, d = 1.0, 0.0, 1.0
                     overlap = min_dist - d
-                    # 只移动当前气泡 (向外推)
-                    push_x = (dx / d) * overlap * 0.8
-                    push_y = (dy / d) * overlap * 0.8
+                    # 增加推挤力度，确保充分分离
+                    push_factor = 1.2 if iteration < 10 else 0.8  # 前期强力推挤，后期微调
+                    push_x = (dx / d) * overlap * push_factor
+                    push_y = (dy / d) * overlap * push_factor
                     bx += push_x
                     by += push_y
                     moved = True

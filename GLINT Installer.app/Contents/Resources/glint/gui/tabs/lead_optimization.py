@@ -382,14 +382,14 @@ class LeadOptimizationTab(CommonTab):
         try:
             obj = self.parent_window.ppi_obj_combo.currentText().strip()
             if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select a structure object")
+                show_message_box(self, "Warning", "Please select a structure object", "warning")
                 return
-            
+
             p1_chains = self.parent_window.ppi_protein1_chains.text().strip()
             p2_chains = self.parent_window.ppi_protein2_chains.text().strip()
-            
+
             if not p1_chains or not p2_chains:
-                QMessageBox.warning(self, "Warning", "Please specify both protein chain groups")
+                show_message_box(self, "Warning", "Please specify both protein chain groups", "warning")
                 return
             
             self.log(f"Starting PPI analysis for {obj}...")
@@ -431,19 +431,12 @@ class LeadOptimizationTab(CommonTab):
                 self.log(f"  Interface Strength: {strength:.1f}/10")
                 self.log(f"  Classification: {'Strong Interface' if is_strong else 'Weak Interface'}")
 
-                # 使用自定义大小的QMessageBox确保内容完整显示
-                msg_box = QMessageBox(self)
-                msg_box.setWindowTitle("PPI Analysis Complete")
-                msg_box.setIcon(QMessageBox.Icon.Information)
-                msg_box.setText(
+                show_message_box(self, "PPI Analysis Complete",
                     f"Interface Contacts: {contacts}\n"
                     f"{'BSA: ' + str(round(bsa, 1)) + ' Ų' if bsa else 'BSA: N/A'}\n"
                     f"Interface Strength: {strength:.1f}/10\n\n"
                     f"{'Strong Interface' if is_strong else 'Weak Interface'}"
                 )
-                msg_box.setMinimumWidth(400)
-                msg_box.setStyleSheet("QLabel{min-width: 350px; font-size: 14px;}")
-                msg_box.exec()
             else:
                 self.log("PPI analysis failed")
         except Exception as e:
@@ -458,15 +451,15 @@ class LeadOptimizationTab(CommonTab):
         try:
             obj_name = self.parent_window.pl_obj_combo.currentText()
             if obj_name == t("no_object"):
-                QMessageBox.warning(self, "Warning", "Please select a structure object")
+                show_message_box(self, "Warning", "Please select a structure object", "warning")
                 return
-            
+
             ligand_name = self.parent_window.pl_ligand_name.text().strip() or None
             protein_chains_str = self.parent_window.pl_protein_chains.text().strip()
             protein_chains = [c.strip() for c in protein_chains_str.split(",")] if protein_chains_str else None
             distance = float(self.parent_window.pl_distance.text())
             output_csv = self.parent_window.pl_csv.text().strip() or None
-            
+
             # Get 3D Visualization Options
             show_hydrophobic = self.parent_window.pl_show_hydrophobic.isChecked()
             min_conf_str = self.parent_window.pl_min_confidence.currentText().split()[0]
@@ -474,16 +467,16 @@ class LeadOptimizationTab(CommonTab):
                 min_confidence = float(min_conf_str)
             except:
                 min_confidence = 0.0
-            
+
             self.log(f"Starting Protein-Ligand analysis for {obj_name}...")
             if ligand_name:
                 self.log(f"  Ligand: {ligand_name}")
             else:
                 self.log(f"  Ligand: Auto-detect")
-            
+
             try: from ...interaction_analyzer import analyze_protein_ligand_interactions
             except ImportError: from interaction_analyzer import analyze_protein_ligand_interactions
-            
+
             result = analyze_protein_ligand_interactions(
                 obj_name=obj_name,
                 ligand_resname=ligand_name,
@@ -491,7 +484,7 @@ class LeadOptimizationTab(CommonTab):
                 distance_cutoff=distance,
                 output_csv=output_csv
             )
-            
+
             if result:
                 n = len(result.get("interactions", []))
                 ligand_used = result.get("ligand_resname", ligand_name or "Unknown")
@@ -499,22 +492,22 @@ class LeadOptimizationTab(CommonTab):
                 self.log(f"  Ligand: {ligand_used}")
                 self.log(f"  Interactions found: {n}")
                 self.parent_window.current_pl_result = result
-                
+
                 # Add 3D visualization
                 if n > 0:
                     try:
                         try: from ...interaction_analyzer import visualize_protein_ligand_3d
                         except ImportError: from interaction_analyzer import visualize_protein_ligand_3d
-                        
+
                         # Get actual ligand name
                         actual_ligand = ligand_name
                         if result.get("ligand_residues"):
                             actual_ligand = result["ligand_residues"][0].get("resname", ligand_name)
-                        
+
                         visualize_protein_ligand_3d(
-                            obj_name, 
-                            result, 
-                            actual_ligand, 
+                            obj_name,
+                            result,
+                            actual_ligand,
                             show_hydrophobic=show_hydrophobic,
                             min_confidence=min_confidence
                         )
@@ -522,8 +515,8 @@ class LeadOptimizationTab(CommonTab):
                     except Exception as viz_e:
                         self.log(f"  3D visualization failed: {viz_e}")
                         import traceback; traceback.print_exc()
-                
-                QMessageBox.information(self, "Analysis Complete", 
+
+                show_message_box(self, "Analysis Complete",
                     f"Ligand: {ligand_used}\nInteractions found: {n}")
             else:
                 self.log("No interactions found")
@@ -539,7 +532,7 @@ class LeadOptimizationTab(CommonTab):
             try:
                 import rdkit
             except ImportError:
-                QMessageBox.critical(self, "Error", "RDKit is required for 2D diagrams.\nPlease install it: pip install rdkit")
+                show_message_box(self, "Error", "RDKit is required for 2D diagrams.\nPlease install it: pip install rdkit", "critical")
                 return
 
             # Get parameters
@@ -558,18 +551,18 @@ class LeadOptimizationTab(CommonTab):
             if not csv_path or not os.path.exists(csv_path):
                 # Try to use the last analysis result if available
                 # But generate_2d_interaction_diagram requires a CSV path currently
-                
+
                 # If we have a result object, maybe we can save it to temp
                 if hasattr(self.parent_window, "current_pl_result") and self.parent_window.current_pl_result:
                     import tempfile, csv
                     result = self.parent_window.current_pl_result
-                    
+
                     # Check if result has interactions
                     interactions = result.get("interactions", [])
                     if not interactions:
-                        QMessageBox.warning(self, "Warning", "No interactions to plot.")
+                        show_message_box(self, "Warning", "No interactions to plot.", "warning")
                         return
-                        
+
                     # Infer ligand name from result if not provided
                     if not ligand_name and result.get("ligand_residues"):
                          ligand_name = result["ligand_residues"][0].get("resname", "LIG")
@@ -586,11 +579,11 @@ class LeadOptimizationTab(CommonTab):
                     csv_path = tmp.name
                     self.log(f"Using temporary CSV: {csv_path}")
                 else:
-                    QMessageBox.warning(self, "Missing Data", "Please run analysis first (with output CSV) or select an existing CSV file.")
+                    show_message_box(self, "Missing Data", "Please run analysis first (with output CSV) or select an existing CSV file.", "warning")
                     return
 
             if not ligand_name:
-                QMessageBox.warning(self, "Missing Input", "Please specify the Ligand Name (Residue Name).")
+                show_message_box(self, "Missing Input", "Please specify the Ligand Name (Residue Name).", "warning")
                 return
 
             # Use the same visualization options as 3D view
@@ -607,30 +600,23 @@ class LeadOptimizationTab(CommonTab):
             if not out_path: return
 
             self.log(f"Generating 2D diagram for {ligand_name}...")
-            
+
             try: from ...interaction_2d_plot import generate_2d_interaction_diagram
             except ImportError: from interaction_2d_plot import generate_2d_interaction_diagram
-            
+
             final_path = generate_2d_interaction_diagram(
-                csv_path=csv_path, 
-                ligand_resname=ligand_name, 
-                obj_name=obj_name, 
+                csv_path=csv_path,
+                ligand_resname=ligand_name,
+                obj_name=obj_name,
                 output_path=out_path,
                 min_confidence=min_confidence
             )
-            
+
             if final_path and os.path.exists(final_path):
                 self.log(f"2D Diagram saved: {final_path}")
 
-                # 使用自定义大小的QMessageBox确保路径完整显示
-                msg_box = QMessageBox(self)
-                msg_box.setWindowTitle("Success")
-                msg_box.setIcon(QMessageBox.Icon.Information)
-                msg_box.setText("2D Diagram saved successfully!")
-                msg_box.setInformativeText(f"File location:\n{final_path}")
-                msg_box.setMinimumWidth(500)
-                msg_box.setStyleSheet("QLabel{min-width: 450px; font-size: 13px;}")
-                msg_box.exec()
+                show_message_box(self, "Success",
+                    f"2D Diagram saved successfully!\n\nFile location:\n{final_path}")
 
                  # Try to open the file (Mac/Linux/Windows)
                 try:
@@ -645,7 +631,7 @@ class LeadOptimizationTab(CommonTab):
                     pass
             else:
                 self.log("Failed to generate 2D diagram.")
-                QMessageBox.warning(self, "Error", "Failed to generate diagram. See log for details.")
+                show_message_box(self, "Error", "Failed to generate diagram. See log for details.", "warning")
     #
         except Exception as e:
             self.on_error(f"2D Diagram Error: {str(e)}")
@@ -673,7 +659,7 @@ class LeadOptimizationTab(CommonTab):
             except ImportError:
                 try: from ligand_ligand_analyzer import analyze_ligand_ligand_interactions
                 except ImportError:
-                    QMessageBox.critical(self, "Error", "Ligand-Ligand analysis module not found.")
+                    show_message_box(self, "Error", "Ligand-Ligand analysis module not found.", "critical")
                     return
             
             obj = self.parent_window.ll_obj_combo.currentText()
@@ -683,30 +669,30 @@ class LeadOptimizationTab(CommonTab):
             csv_path = self.parent_window.ll_csv.text().strip() or None
             
             if not obj or obj == t("no_object"):
-                QMessageBox.warning(self, "Missing Input", "Please select a target object.")
+                show_message_box(self, "Missing Input", "Please select a target object.", "warning")
                 return
             if not sel1 or not sel2:
-                QMessageBox.warning(self, "Missing Input", "Please define both Selection 1 and Selection 2.")
+                show_message_box(self, "Missing Input", "Please define both Selection 1 and Selection 2.", "warning")
                 return
-            
+
             try:
                 dist = float(dist_str) if dist_str else 4.5
             except ValueError:
-                QMessageBox.warning(self, "Invalid Input", "Distance must be a number.")
+                show_message_box(self, "Invalid Input", "Distance must be a number.", "warning")
                 return
-            
+
             self.log(f"Starting Ligand-Ligand analysis for {obj}...")
             self.log(f"  Selection 1: {sel1}")
             self.log(f"  Selection 2: {sel2}")
             self.log(f"  Distance cutoff: {dist} Å")
-            
+
             try:
                 import pymol
-                
+
                 # Build complete PyMOL selection
                 full_sel1 = f"({obj}) and ({sel1})"
                 full_sel2 = f"({obj}) and ({sel2})"
-                
+
                 interactions = analyze_ligand_ligand_interactions(
                     obj_name=obj,
                     sel1=full_sel1,
@@ -715,20 +701,20 @@ class LeadOptimizationTab(CommonTab):
                     output_csv=csv_path,
                     visualize=True
                 )
-                
+
                 self.log(f"Ligand-Ligand Analysis Complete:")
                 self.log(f"  Interactions found: {len(interactions)}")
-                
+
                 msg = f"Analysis complete.\nFound {len(interactions)} interactions."
                 if csv_path:
                     msg += f"\n\nSaved to: {csv_path}"
-                
-                QMessageBox.information(self, "Success", msg)
-                
+
+                show_message_box(self, "Success", msg)
+
             except pymol.CmdException as e:
                 msg = str(e)
                 if "Invalid selection" in msg:
-                    QMessageBox.critical(self, "Selection Error",
+                    show_message_box(self, "Selection Error",
                         f"PyMOL could not understand your selection.\n\n"
                         f"Error: {msg}\n\n"
                         f"Tip: Please use valid PyMOL selection syntax.\n"
@@ -736,9 +722,9 @@ class LeadOptimizationTab(CommonTab):
                         f"\u2022 resn LIG (by residue name)\n"
                         f"\u2022 resi 900 (by residue index)\n"
                         f"\u2022 chain A (by chain)\n\n"
-                        f"You entered: '{sel1}' and '{sel2}'")
+                        f"You entered: '{sel1}' and '{sel2}'", "critical")
                 else:
-                    QMessageBox.critical(self, "PyMOL Error", str(e))
+                    show_message_box(self, "PyMOL Error", str(e), "critical")
                 return
                 
         except Exception as e:
@@ -770,30 +756,30 @@ class LeadOptimizationTab(CommonTab):
         try:
             obj_name = self.parent_window.ec_obj_combo.currentText()
             if obj_name == t("no_object") or not obj_name:
-                QMessageBox.warning(self, "Warning", "Please select a structure object")
+                show_message_box(self, "Warning", "Please select a structure object", "warning")
                 return
-            
+
             ligand_name = self.parent_window.ec_ligand_name.text().strip()
             if not ligand_name:
-                QMessageBox.warning(self, "Warning", "Please specify the ligand/glue residue name")
+                show_message_box(self, "Warning", "Please specify the ligand/glue residue name", "warning")
                 return
-            
+
             mode = self.parent_window.ec_mode_combo.currentIndex()
             ph = float(self.parent_window.ec_ph.text().strip() or "7.4")
             surface_density = float(self.parent_window.ec_surface_density.text().strip() or "10.0")
             output_dir = self.parent_window.ec_output_dir.text().strip() or None
             visualize = self.parent_window.ec_visualize.isChecked()
-            
+
             # Get advanced options
             use_sigma_holes = self.parent_window.ec_use_sigma_holes.isChecked()
             use_lone_pairs = self.parent_window.ec_use_lone_pairs.isChecked()
             keep_bridging_waters = self.parent_window.ec_keep_waters.isChecked()
-            
+
             self.log(f"Starting EC analysis for {obj_name}...")
             self.log(f"  Ligand/Glue: {ligand_name}")
             self.log(f"  Mode: {'Ternary Complex' if mode == 1 else 'Protein-Ligand'}")
             self.log(f"  pH: {ph}")
-            
+
             # Log advanced options
             if use_sigma_holes:
                 self.log(f"  ✨ σ-hole virtual points: ENABLED")
@@ -801,7 +787,7 @@ class LeadOptimizationTab(CommonTab):
                 self.log(f"  ✨ Lone pair virtual points: ENABLED")
             if keep_bridging_waters:
                 self.log(f"  ✨ Bridging waters: ENABLED")
-            
+
             # Import EC calculator
             try:
                 from ...ligand_ec_calculator import calculate_ligand_ec, analyze_ternary_ec
@@ -809,11 +795,11 @@ class LeadOptimizationTab(CommonTab):
                 try:
                     from ligand_ec_calculator import calculate_ligand_ec, analyze_ternary_ec
                 except ImportError:
-                    QMessageBox.critical(self, "Error",
+                    show_message_box(self, "Error",
                         "EC Calculator module not found.\n\n"
-                        "Please ensure ligand_ec_calculator.py is installed.")
+                        "Please ensure ligand_ec_calculator.py is installed.", "critical")
                     return
-            
+
             if mode == 0:
                 # Protein-Ligand EC
                 result = calculate_ligand_ec(
@@ -827,16 +813,16 @@ class LeadOptimizationTab(CommonTab):
                     use_lone_pairs=use_lone_pairs,
                     keep_bridging_waters=keep_bridging_waters
                 )
-                
+
                 if result:
                     ec_score = result.get('ec_score', 0)
                     ec_stats = result.get('ec_statistics', {})
-                    
+
                     self.log(f"EC Analysis Complete:")
                     self.log(f"  EC Score: {ec_score:.4f}")
                     self.log(f"  EC Mean: {ec_stats.get('ec_mean', 0):.4f}")
                     self.log(f"  Positive EC fraction: {ec_stats.get('ec_positive_fraction', 0)*100:.1f}%")
-                    
+
                     # Interpretation
                     if ec_score > 0.3:
                         interpretation = "Strong electrostatic complementarity - favorable binding"
@@ -844,10 +830,10 @@ class LeadOptimizationTab(CommonTab):
                         interpretation = "Moderate electrostatic complementarity"
                     else:
                         interpretation = "Poor electrostatic complementarity - potential clash"
-                    
+
                     self.log(f"  Interpretation: {interpretation}")
-                    
-                    QMessageBox.information(self, "EC Analysis Complete",
+
+                    show_message_box(self, "EC Analysis Complete",
                         f"EC Score: {ec_score:.4f}\n"
                         f"EC Mean: {ec_stats.get('ec_mean', 0):.4f}\n"
                         f"Positive EC: {ec_stats.get('ec_positive_fraction', 0)*100:.1f}%\n\n"
@@ -855,21 +841,21 @@ class LeadOptimizationTab(CommonTab):
                         f"Output: {result.get('output_dir', 'N/A')}")
                 else:
                     self.log("EC analysis failed")
-                    QMessageBox.warning(self, "Error", "EC analysis failed. Check the log for details.")
-            
+                    show_message_box(self, "Error", "EC analysis failed. Check the log for details.", "warning")
+
             else:
                 # Ternary Complex EC (Molecular Glue)
                 protein_a_chains = self.parent_window.ec_protein_a_chains.text().strip()
                 protein_b_chains = self.parent_window.ec_protein_b_chains.text().strip()
-                
+
                 if not protein_a_chains or not protein_b_chains:
-                    QMessageBox.warning(self, "Warning",
-                        "For ternary complex analysis, please specify both Protein A and Protein B chains")
+                    show_message_box(self, "Warning",
+                        "For ternary complex analysis, please specify both Protein A and Protein B chains", "warning")
                     return
-                
+
                 protein_a_list = [c.strip() for c in protein_a_chains.split(",")]
                 protein_b_list = [c.strip() for c in protein_b_chains.split(",")]
-                
+
                 self.log(f"  Protein A chains: {protein_a_list}")
                 self.log(f"  Protein B chains: {protein_b_list}")
                 
@@ -912,8 +898,8 @@ class LeadOptimizationTab(CommonTab):
                         interpretation = "Poor complementarity (<50% positive)"
                     
                     self.log(f"  Interpretation: {interpretation}")
-                    
-                    QMessageBox.information(self, "Ternary EC Analysis Complete",
+
+                    show_message_box(self, "Ternary EC Analysis Complete",
                         f"Bridging Zone Analysis ({n_overlap} points):\n\n"
                         f"Positive EC (A-Glue): {pos_frac_a*100:.1f}%\n"
                         f"Positive EC (B-Glue): {pos_frac_b*100:.1f}%\n"
@@ -922,7 +908,7 @@ class LeadOptimizationTab(CommonTab):
                         f"Output: {result.get('output_dir', 'N/A')}")
                 else:
                     self.log("Ternary EC analysis failed or incomplete")
-                    QMessageBox.warning(self, "Error", "Ternary EC analysis failed. Check the log for details.")
+                    show_message_box(self, "Error", "Ternary EC analysis failed. Check the log for details.", "warning")
                     
         except Exception as e:
             self.on_error(str(e))
@@ -933,24 +919,24 @@ class LeadOptimizationTab(CommonTab):
         try:
             obj_name = self.parent_window.ec_obj_combo.currentText()
             if obj_name == t("no_object") or not obj_name:
-                QMessageBox.warning(self, "Warning", "Please select a structure object")
+                show_message_box(self, "Warning", "Please select a structure object", "warning")
                 return
-            
+
             ligand_name = self.parent_window.ec_ligand_name.text().strip()
             if not ligand_name:
-                QMessageBox.warning(self, "Warning", "Please specify the ligand residue name")
+                show_message_box(self, "Warning", "Please specify the ligand residue name", "warning")
                 return
-            
+
             ph = float(self.parent_window.ec_ph.text().strip() or "7.4")
             output_dir = self.parent_window.ec_output_dir.text().strip() or None
-            
+
             # Get advanced options
             use_sigma_holes = self.parent_window.ec_use_sigma_holes.isChecked()
             use_lone_pairs = self.parent_window.ec_use_lone_pairs.isChecked()
-            
+
             self.log(f"Starting EC hotspot analysis for {obj_name}...")
             self.log(f"  Ligand: {ligand_name}")
-            
+
             # Import EC calculator
             try:
                 from ...ligand_ec_calculator import calculate_ec_hotspots
@@ -958,11 +944,11 @@ class LeadOptimizationTab(CommonTab):
                 try:
                     from ligand_ec_calculator import calculate_ec_hotspots
                 except ImportError:
-                    QMessageBox.critical(self, "Error",
+                    show_message_box(self, "Error",
                         "EC Calculator module not found.\n\n"
-                        "Please ensure ligand_ec_calculator.py is installed.")
+                        "Please ensure ligand_ec_calculator.py is installed.", "critical")
                     return
-            
+
             result = calculate_ec_hotspots(
                 obj_name=obj_name,
                 ligand_resname=ligand_name,
@@ -971,19 +957,19 @@ class LeadOptimizationTab(CommonTab):
                 surface_density=15.0,  # Higher density for hotspot detection
                 hotspot_threshold=0.5
             )
-            
+
             if result and 'hotspots' in result:
                 pos_hotspots = result['hotspots']['positive']
                 neg_hotspots = result['hotspots']['negative']
-                
+
                 self.log(f"EC Hotspot Analysis Complete:")
                 self.log(f"  Positive hotspots (complementary): {pos_hotspots['count']} points ({pos_hotspots['fraction']*100:.1f}%)")
                 self.log(f"  Negative hotspots (clash): {neg_hotspots['count']} points ({neg_hotspots['fraction']*100:.1f}%)")
-                
+
                 if 'n_clusters' in pos_hotspots:
                     self.log(f"  Distinct complementary regions: {pos_hotspots['n_clusters']}")
-                
-                QMessageBox.information(self, "EC Hotspot Analysis Complete",
+
+                show_message_box(self, "EC Hotspot Analysis Complete",
                     f"Positive Hotspots (Complementary):\n"
                     f"  Count: {pos_hotspots['count']} points\n"
                     f"  Fraction: {pos_hotspots['fraction']*100:.1f}%\n"
@@ -995,7 +981,7 @@ class LeadOptimizationTab(CommonTab):
                     f"Output: {result.get('output_dir', 'N/A')}")
             else:
                 self.log("EC hotspot analysis failed")
-                QMessageBox.warning(self, "Error", "EC hotspot analysis failed. Check the log for details.")
+                show_message_box(self, "Error", "EC hotspot analysis failed. Check the log for details.", "warning")
                 
         except Exception as e:
             self.on_error(str(e))
@@ -1059,9 +1045,9 @@ class LeadOptimizationTab(CommonTab):
         """Run full mutation ΔΔG analysis using FoldX"""
         obj_name = self.parent_window.mut_obj_combo.currentText()
         if not obj_name or obj_name == t("no_object"):
-            QMessageBox.warning(self, "Warning", "Please select a structure object")
+            show_message_box(self, "Warning", "Please select a structure object", "warning")
             return
-        
+
         # Check if FoldX is available
         try:
             from ...mutation_analyzer import _detect_foldx
@@ -1071,15 +1057,15 @@ class LeadOptimizationTab(CommonTab):
             except ImportError:
                 self.log("❌ mutation_analyzer module not found")
                 return
-        
+
         foldx_path = _detect_foldx()
         if not foldx_path:
-            QMessageBox.warning(self, "FoldX Not Found",
+            show_message_box(self, "FoldX Not Found",
                 "FoldX is required for ΔΔG analysis.\n\n"
                 "Installation:\n"
                 "1. Download FoldX: https://foldxsuite.crg.eu/\n"
                 "2. Set environment variable: export FOLDX=/path/to/foldx\n"
-                "   Or add FoldX to your PATH")
+                "   Or add FoldX to your PATH", "warning")
             self.log("❌ FoldX not found. Please install FoldX for ΔΔG analysis.")
             return
         

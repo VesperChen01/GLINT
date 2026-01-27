@@ -18,7 +18,7 @@ from .qt_adapter import (
     QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QStackedWidget,
     QWidget, QPushButton, QLabel, QFrame, QTextEdit, QProgressBar, QMessageBox,
     QIcon, QPixmap, QColor, QBrush, QRadialGradient, QLinearGradient,
-    QTimer, QSize, QSettings, QScrollArea
+    QTimer, QSize, QSettings, QScrollArea, QDesktopServices, QUrl
 )
 
 from .utils import t, get_lang, show_message_box, show_question_box
@@ -68,7 +68,7 @@ class HeroHeader(QWidget):
     """Custom widget for the hero section with adaptive background and overlay."""
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(300)
+        self.setFixedHeight(220)
         self.bg_path = _get_welcome_bg_path()
         
     def paintEvent(self, event):
@@ -160,6 +160,7 @@ class GLINTDialog(QDialog):
             scroll = QScrollArea()
             scroll.setWidgetResizable(True)
             scroll.setFrameShape(QFrame.Shape.NoFrame)
+            scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
             scroll.setWidget(tab_widget)
             return scroll
 
@@ -211,13 +212,14 @@ class GLINTDialog(QDialog):
         
         # Logo Area
         logo_frame = QFrame()
-        logo_frame.setFixedHeight(80)
+        logo_frame.setFixedHeight(130)
         logo_layout = QVBoxLayout(logo_frame)
+        logo_layout.setContentsMargins(0, 0, 0, 0)
         logo_path = _get_logo_path()
         if logo_path:
             logo_lbl = QLabel()
             pix = QPixmap(logo_path)
-            logo_lbl.setPixmap(pix.scaled(180, 60, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            logo_lbl.setPixmap(pix.scaledToHeight(120, Qt.TransformationMode.SmoothTransformation))
             logo_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             logo_layout.addWidget(logo_lbl)
         layout.addWidget(logo_frame)
@@ -440,55 +442,51 @@ class GLINTDialog(QDialog):
         main_layout.setContentsMargins(0, 0, 0, 0)
         main_layout.setSpacing(0)
 
-        # Scroll Area for the whole page
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        # Direct layout without scroll
         content_container = QWidget()
         layout = QVBoxLayout(content_container)
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(0)
-        scroll.setWidget(content_container)
-        main_layout.addWidget(scroll)
+        main_layout.addWidget(content_container)
 
-        # Hero Section (Top)
+        # Hero Section (Top) - Compact
         hero_widget = HeroHeader()
         hero_layout = QVBoxLayout(hero_widget)
-        hero_layout.setContentsMargins(40, 40, 40, 40)
-        
+        hero_layout.setContentsMargins(40, 30, 40, 20)
+
         title_lbl = QLabel("GLINT")
-        title_lbl.setStyleSheet("font-size: 80px; font-weight: 900; color: #ffffff; background: transparent; letter-spacing: 4px;")
-        
+        title_lbl.setStyleSheet("font-size: 64px; font-weight: 900; color: #ffffff; background: transparent; letter-spacing: 4px;")
+
         # Add a subtle glow/shadow to Title
         title_shadow = QGraphicsDropShadowEffect()
         title_shadow.setBlurRadius(20)
         title_shadow.setColor(Qt.GlobalColor.black)
         title_shadow.setOffset(0, 0)
         title_lbl.setGraphicsEffect(title_shadow)
-        
-        slogan_lbl = QLabel("Professional Toolkit for Molecular Glue Engineering")
-        slogan_lbl.setStyleSheet("font-size: 24px; color: #f8fafc; background: transparent; font-weight: 500; letter-spacing: 1px;")
-        
+
+        slogan_lbl = QLabel("A Toolkit for Molecular Glue Interface Analysis and Rational Design")
+        slogan_lbl.setStyleSheet("font-size: 16px; color: #f8fafc; background: transparent; font-weight: 500; letter-spacing: 1px;")
+
         # Add shadow to Slogan
         slogan_shadow = QGraphicsDropShadowEffect()
         slogan_shadow.setBlurRadius(10)
         slogan_shadow.setColor(Qt.GlobalColor.black)
         slogan_shadow.setOffset(2, 2)
         slogan_lbl.setGraphicsEffect(slogan_shadow)
-        
+
         hero_layout.addWidget(title_lbl)
         hero_layout.addWidget(slogan_lbl)
         hero_layout.addStretch()
         layout.addWidget(hero_widget)
 
-        # Content Section
+        # Content Section - Compact
         content_area = QWidget()
         content_layout = QVBoxLayout(content_area)
-        content_layout.setContentsMargins(40, 40, 40, 40)
-        content_layout.setSpacing(40)
+        content_layout.setContentsMargins(30, 20, 30, 20)
+        content_layout.setSpacing(12)
 
-        # SECTION 1: CORE TOOLS
-        tools_lbl = QLabel("CORE MODULES")
+        # SECTION 1: WORKFLOW
+        tools_lbl = QLabel("WORKFLOW")
         tools_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #3b82f6; letter-spacing: 1px;")
         content_layout.addWidget(tools_lbl)
 
@@ -503,89 +501,98 @@ class GLINTDialog(QDialog):
                 #feature_card {
                     background-color: rgba(255, 255, 255, 0.05);
                     border: 1px solid rgba(255, 255, 255, 0.1);
-                    border-radius: 12px; padding: 20px;
+                    border-radius: 12px; padding: 18px;
                 }
                 #feature_card:hover { background-color: rgba(59, 130, 246, 0.1); border: 1px solid #3b82f6; }
             """ if self._dark_mode else """
                 #feature_card {
                     background-color: #ffffff; border: 1px solid #e2e8f0;
-                    border-radius: 12px; padding: 20px;
+                    border-radius: 12px; padding: 18px;
                 }
                 #feature_card:hover { border-color: #3b82f6; background-color: #f8fafc; }
             """)
-            
+
             shadow = QGraphicsDropShadowEffect()
-            shadow.setBlurRadius(15)
+            shadow.setBlurRadius(10)
             shadow.setXOffset(0)
-            shadow.setYOffset(4)
+            shadow.setYOffset(3)
             shadow.setColor(Qt.GlobalColor.black if self._dark_mode else Qt.GlobalColor.lightGray)
             card.setGraphicsEffect(shadow)
 
-            c_layout = QVBoxLayout(card)
-            ico = QLabel(icon_text); ico.setStyleSheet("font-size: 32px; background: transparent;")
-            t_lbl = QLabel(title); t_lbl.setStyleSheet("font-size: 18px; font-weight: bold; color: #3b82f6; background: transparent;")
-            d_lbl = QLabel(desc); d_lbl.setWordWrap(True); d_lbl.setStyleSheet("color: #64748b; background: transparent;")
-            
-            c_layout.addWidget(ico); c_layout.addWidget(t_lbl); c_layout.addWidget(d_lbl); c_layout.addStretch()
+            c_layout = QHBoxLayout(card)
+            c_layout.setSpacing(16)
+            c_layout.setContentsMargins(16, 18, 16, 18)
+            ico = QLabel(icon_text); ico.setStyleSheet("font-size: 28px; background: transparent;")
+            text_container = QWidget()
+            text_layout = QVBoxLayout(text_container)
+            text_layout.setContentsMargins(0, 0, 0, 0)
+            text_layout.setSpacing(6)
+            t_lbl = QLabel(title); t_lbl.setStyleSheet("font-size: 15px; font-weight: bold; color: #3b82f6; background: transparent;")
+            d_lbl = QLabel(desc); d_lbl.setWordWrap(True); d_lbl.setStyleSheet("font-size: 12px; color: #64748b; background: transparent;")
+            text_layout.addWidget(t_lbl)
+            text_layout.addWidget(d_lbl)
+
+            c_layout.addWidget(ico)
+            c_layout.addWidget(text_container, 1)
             card.mousePressEvent = lambda e: self.nav_list.setCurrentRow(index)
             return card
 
-        grid_layout.addWidget(create_card("Target Discovery", "Identify promising residues for ternary complex formation.", "🎯", 1), 0, 0)
-        grid_layout.addWidget(create_card("Hit Identification", "Analyze interactions and interface complementarity.", "🔍", 2), 0, 1)
-        grid_layout.addWidget(create_card("Lead Optimization", "Fine-tune molecules for better binding affinity.", "⚡", 3), 1, 0)
-        grid_layout.addWidget(create_card("Visualization", "High-quality rendering of interaction networks.", "🎨", 4), 1, 1)
+        grid_layout.addWidget(create_card("Target Discovery", "G-motif detection, surface analysis", "🎯", 1), 0, 0)
+        grid_layout.addWidget(create_card("Hit Identification", "Pocket detection, docking integration", "🔍", 2), 0, 1)
+        grid_layout.addWidget(create_card("Ternary Evaluation", "Neo-epitope mapping, interface scoring", "🔬", 3), 1, 0)
+        grid_layout.addWidget(create_card("Lead Optimization", "PPI analysis, interaction profiling, mutation analysis", "⚡", 4), 1, 1)
         content_layout.addLayout(grid_layout)
 
-        # SECTION 2: CLASSIC CASES (User Request)
-        case_lbl = QLabel("FEATURED CASES")
-        case_lbl.setStyleSheet("font-size: 14px; font-weight: bold; color: #3b82f6; margin-top: 20px; letter-spacing: 1px;")
-        content_layout.addWidget(case_lbl)
+        # Community Section
+        community_section = QWidget()
+        community_section.setStyleSheet("background: transparent;")
+        community_layout = QVBoxLayout(community_section)
+        community_layout.setContentsMargins(0, 20, 0, 0)
+        community_layout.setSpacing(12)
 
-        case_row = QHBoxLayout()
-        case_row.setSpacing(20)
+        community_title = QLabel("COMMUNITY")
+        community_title.setStyleSheet("font-size: 11px; font-weight: bold; color: #94a3b8; letter-spacing: 2px; background: transparent;")
+        community_layout.addWidget(community_title)
 
-        def create_case_box(name: str, pdb_id: str, desc: str):
-            box = QFrame()
-            box.setCursor(Qt.CursorShape.PointingHandCursor)
-            box.setStyleSheet("""
-                QFrame { background: #f1f5f9; border-radius: 8px; padding: 15px; border: 1px solid #e2e8f0; }
-                QFrame:hover { background: #e2e8f0; border-color: #3b82f6; }
-            """ if not self._dark_mode else """
-                QFrame { background: #1e293b; border-radius: 8px; padding: 15px; border: 1px solid #334155; }
-                QFrame:hover { background: #334155; border-color: #3b82f6; }
+        # Community buttons row
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(12)
+
+        def create_community_btn(text, icon, url):
+            btn = QPushButton(f"{icon}  {text}")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: #f1f5f9;
+                    border: 1px solid #e2e8f0;
+                    border-radius: 8px;
+                    padding: 12px 20px;
+                    font-size: 13px;
+                    font-weight: 500;
+                    color: #475569;
+                }
+                QPushButton:hover {
+                    background: #e2e8f0;
+                    border-color: #3b82f6;
+                    color: #3b82f6;
+                }
             """)
-            b_layout = QVBoxLayout(box)
-            h_lbl = QLabel(f"{name} ({pdb_id})")
-            h_lbl.setStyleSheet("font-weight: bold; color: #0f172a;" if not self._dark_mode else "font-weight: bold; color: #f1f5f9;")
-            d_lbl = QLabel(desc); d_lbl.setStyleSheet("font-size: 12px; color: #64748b;"); d_lbl.setWordWrap(True)
-            b_layout.addWidget(h_lbl); b_layout.addWidget(d_lbl)
-            
-            box.mousePressEvent = lambda e: self._load_case(pdb_id)
-            return box
+            btn.clicked.connect(lambda: QDesktopServices.openUrl(QUrl(url)))
+            return btn
 
-        case_row.addWidget(create_case_box("Thalidomide", "4CIW", "CRBN degrader, the classic prototype."))
-        case_row.addWidget(create_case_box("Indisulam", "5S9M", "DCAF15-RBM39 splicing factor degrader."))
-        case_row.addWidget(create_case_box("QS1", "8P1D", "GSPT1 degrader, next-gen target."))
-        content_layout.addLayout(case_row)
+        btn_row.addWidget(create_community_btn("GitHub", "⭐", "https://github.com/Augus1999/GlueTK"))
+        btn_row.addWidget(create_community_btn("Documentation", "📖", "https://github.com/Augus1999/GlueTK#readme"))
+        btn_row.addWidget(create_community_btn("Report Issue", "🐛", "https://github.com/Augus1999/GlueTK/issues"))
+        btn_row.addWidget(create_community_btn("Discussions", "💬", "https://github.com/Augus1999/GlueTK/discussions"))
+        btn_row.addWidget(create_community_btn("Cite", "📝", "https://github.com/Augus1999/GlueTK#citation"))
+        btn_row.addStretch()
+
+        community_layout.addLayout(btn_row)
+        content_layout.addWidget(community_section)
 
         layout.addWidget(content_area)
         layout.addStretch()
         return main_page
-
-    def _load_case(self, pdb_id: str):
-        """Helper to load a PDB structure in PyMOL."""
-        try:
-            from pymol import cmd
-            self.log(f"Fetching PDB: {pdb_id}")
-            cmd.reinitialize()
-            cmd.fetch(pdb_id)
-            cmd.show_as("cartoon")
-            cmd.show("sticks", f"resn {pdb_id}") # Simple attempt to show ligand if named like PDB
-            cmd.zoom()
-            QMessageBox.information(self, "Case Loaded", f"Successfully loaded {pdb_id} from PDB.")
-            self.refresh_objects()
-        except Exception as e:
-            self.on_error(f"Failed to load PDB: {str(e)}")
 
     def create_readme_tab(self) -> QWidget:
         """Create a comprehensive README tab with GUI documentation."""
@@ -626,7 +633,7 @@ class GLINTDialog(QDialog):
         <body>
         
         <h1>🧬 GLINT User Guide</h1>
-        <p>Welcome to GLINT - Professional Toolkit for Molecular Glue Engineering</p>
+        <p>Welcome to GLINT - Professional Toolkit for Molecular Glue Interface Analysis and Rational Design</p>
         
         <h2><span class="emoji">🎯</span>Target Discovery Tab</h2>
         <p>Identify potential molecular glue targets and binding sites.</p>
@@ -827,6 +834,7 @@ class GLINTDialog(QDialog):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
 
         content = QWidget()
         content.setStyleSheet("background-color: #ffffff;")
@@ -846,12 +854,12 @@ class GLINTDialog(QDialog):
         if logo_path:
             icon_lbl = QLabel()
             pix = QPixmap(logo_path)
-            icon_lbl.setPixmap(pix.scaled(80, 80, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
+            icon_lbl.setPixmap(pix.scaled(100, 110, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation))
             icon_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
             header_layout.addWidget(icon_lbl)
 
-        # Title: Glue Toolkit (H1, Bold, 高亮黑色)
-        title_lbl = QLabel("Glue Toolkit")
+        # Title: Glint (H1, Bold, 高亮黑色)
+        title_lbl = QLabel("GLue INTerface analyzer")
         title_lbl.setStyleSheet("font-size: 32px; font-weight: bold; color: #0f172a;")
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(title_lbl)
@@ -879,7 +887,7 @@ class GLINTDialog(QDialog):
         meta_layout.addWidget(version_badge)
 
         # 描述文案
-        desc_lbl = QLabel("Professional Toolkit for molecular glue design")
+        desc_lbl = QLabel("Professional Toolkit for Molecular Glue Interface Analysis and Rational Design")
         desc_lbl.setStyleSheet("font-size: 14px; color: #64748b;")
         meta_layout.addWidget(desc_lbl)
 
