@@ -1355,21 +1355,98 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         
         cmd.save(protein_pdb, protein_sel)
         
+        # Build ligand selection and validate it exists
         if ligand_resname:
-            cmd.save(ligand_sdf, f"{obj_name} and resn {ligand_resname}", format='sdf')
+            ligand_sel = f"{obj_name} and resn {ligand_resname}"
         else:
-            # Auto-detect ligand
-            cmd.save(ligand_sdf, f"{obj_name} and organic and not polymer", format='sdf')
+            # Auto-detect ligand (organic molecules that are not polymer)
+            ligand_sel = f"{obj_name} and organic and not polymer"
+        
+        # Check if ligand selection has atoms
+        ligand_atom_count = cmd.count_atoms(ligand_sel)
+        if ligand_atom_count == 0:
+            if ligand_resname:
+                print(f"[calculate_ligand_ec] ❌ No atoms found for ligand '{ligand_resname}' in object '{obj_name}'")
+                print(f"[calculate_ligand_ec] 💡 Available residue names in structure:")
+                # List available organic residues
+                try:
+                    organic_residues = set()
+                    cmd.iterate(f"{obj_name} and organic and not polymer",
+                               "organic_residues.add(resn)",
+                               space={'organic_residues': organic_residues})
+                    if organic_residues:
+                        print(f"[calculate_ligand_ec]    Organic residues: {', '.join(sorted(organic_residues))}")
+                    else:
+                        print(f"[calculate_ligand_ec]    No organic residues found in structure")
+                except Exception as e:
+                    print(f"[calculate_ligand_ec]    Could not list residues: {e}")
+            else:
+                print(f"[calculate_ligand_ec] ❌ No organic molecules found in object '{obj_name}'")
+            return None
+        
+        print(f"[calculate_ligand_ec] Found {ligand_atom_count} atoms in ligand selection")
+        
+        # Save ligand to SDF format
+        try:
+            cmd.save(ligand_sdf, ligand_sel, format='sdf')
+        except Exception as e:
+            print(f"[calculate_ligand_ec] ❌ Failed to save ligand to SDF: {e}")
+            # Try alternative: save as MOL2 then convert
+            try:
+                ligand_mol2 = os.path.join(output_dir, 'ligand.mol2')
+                cmd.save(ligand_mol2, ligand_sel, format='mol2')
+                print(f"[calculate_ligand_ec] Saved ligand as MOL2, converting to SDF...")
+                mol = Chem.MolFromMol2File(ligand_mol2, removeHs=False)
+                if mol:
+                    writer = Chem.SDWriter(ligand_sdf)
+                    writer.write(mol)
+                    writer.close()
+                    print(f"[calculate_ligand_ec] ✅ Converted MOL2 to SDF successfully")
+            except Exception as e2:
+                print(f"[calculate_ligand_ec] ❌ Alternative conversion also failed: {e2}")
+                return None
     else:
         # Parse PDB file manually
         _extract_protein_ligand_from_pdb(complex_pdb, protein_pdb, ligand_sdf, ligand_resname)
     
+    # Verify SDF file exists and is not empty
+    if not os.path.exists(ligand_sdf):
+        print(f"[calculate_ligand_ec] ❌ Ligand SDF file was not created: {ligand_sdf}")
+        return None
+    
+    sdf_size = os.path.getsize(ligand_sdf)
+    if sdf_size == 0:
+        print(f"[calculate_ligand_ec] ❌ Ligand SDF file is empty: {ligand_sdf}")
+        print(f"[calculate_ligand_ec] 💡 This usually means the ligand selection matched no atoms")
+        return None
+    
+    print(f"[calculate_ligand_ec] Ligand SDF file size: {sdf_size} bytes")
+    
     # Load ligand with RDKit
-    supplier = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
-    ligand_mol = supplier[0] if len(supplier) > 0 else None
+    try:
+        supplier = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
+        ligand_mol = supplier[0] if len(supplier) > 0 else None
+    except Exception as e:
+        print(f"[calculate_ligand_ec] ❌ RDKit failed to read SDF file: {e}")
+        # Try to read file content for debugging
+        try:
+            with open(ligand_sdf, 'r') as f:
+                content = f.read(500)  # First 500 chars
+                print(f"[calculate_ligand_ec] SDF file content preview:\n{content}")
+        except:
+            pass
+        return None
     
     if ligand_mol is None:
-        print("[calculate_ligand_ec] ❌ Failed to load ligand")
+        print(f"[calculate_ligand_ec] ❌ Failed to load ligand from SDF file")
+        print(f"[calculate_ligand_ec] 💡 The SDF file may have invalid format")
+        # Try to read file content for debugging
+        try:
+            with open(ligand_sdf, 'r') as f:
+                content = f.read(500)
+                print(f"[calculate_ligand_ec] SDF file content preview:\n{content}")
+        except:
+            pass
         return None
     
     print(f"[calculate_ligand_ec] Ligand: {ligand_mol.GetNumAtoms()} atoms")

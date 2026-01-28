@@ -764,6 +764,33 @@ class LeadOptimizationTab(CommonTab):
                 show_message_box(self, "Warning", "Please specify the ligand/glue residue name", "warning")
                 return
 
+            # Validate ligand exists in structure before proceeding
+            try:
+                from pymol import cmd
+                ligand_sel = f"{obj_name} and resn {ligand_name}"
+                atom_count = cmd.count_atoms(ligand_sel)
+                if atom_count == 0:
+                    # List available organic residues to help user
+                    organic_residues = set()
+                    cmd.iterate(f"{obj_name} and organic and not polymer",
+                               "organic_residues.add(resn)",
+                               space={'organic_residues': organic_residues})
+                    
+                    if organic_residues:
+                        residue_list = ', '.join(sorted(organic_residues))
+                        show_message_box(self, "Ligand Not Found",
+                            f"No atoms found for ligand '{ligand_name}' in structure '{obj_name}'.\n\n"
+                            f"Available organic residues:\n{residue_list}\n\n"
+                            f"Please check the ligand residue name and try again.", "warning")
+                    else:
+                        show_message_box(self, "No Ligand Found",
+                            f"No organic molecules found in structure '{obj_name}'.\n\n"
+                            f"Please ensure the structure contains a ligand.", "warning")
+                    return
+                self.log(f"Found {atom_count} atoms in ligand '{ligand_name}'")
+            except Exception as e:
+                self.log(f"Warning: Could not validate ligand: {e}")
+
             mode = self.parent_window.ec_mode_combo.currentIndex()
             ph = float(self.parent_window.ec_ph.text().strip() or "7.4")
             surface_density = float(self.parent_window.ec_surface_density.text().strip() or "10.0")
