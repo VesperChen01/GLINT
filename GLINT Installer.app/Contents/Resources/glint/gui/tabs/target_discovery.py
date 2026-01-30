@@ -213,6 +213,28 @@ class TargetDiscoveryTab(CommonTab):
         r0b_surf = QHBoxLayout(); r0b_surf.addWidget(self.parent_window.surf_out_csv, 1); r0b_surf.addWidget(self.parent_window.surf_out_browse)
         surf_grid.addLayout(r0b_surf, 0, 3)
 
+        # Row 1: pH option (APBS is always used)
+        surf_grid.addWidget(QLabel("pH:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.surf_ph = QLineEdit("7.4")
+        self.parent_window.surf_ph.setMinimumHeight(32)
+        self.parent_window.surf_ph.setToolTip("pH value for PDB2PQR protonation state (default: 7.4)")
+        surf_grid.addWidget(self.parent_window.surf_ph, 1, 1)
+        
+        # Row 1 continued: Surface color mode
+        surf_grid.addWidget(QLabel("Surface Property:"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.surf_color_mode = QComboBox()
+        self.parent_window.surf_color_mode.setMinimumHeight(32)
+        self.parent_window.surf_color_mode.addItems([
+            "Electrostatic Potential",
+            "Hydrophobicity"
+        ])
+        self.parent_window.surf_color_mode.setToolTip(
+            "Select surface coloring mode:\n"
+            "• Electrostatic Potential: Red (negative) → White (neutral) → Blue (positive)\n"
+            "• Hydrophobicity: White (hydrophilic) → Green (hydrophobic)"
+        )
+        surf_grid.addWidget(self.parent_window.surf_color_mode, 1, 3)
+
         surf_layout.addLayout(surf_grid)
 
         # Buttons - 使用 Ternary Evaluation 风格
@@ -229,8 +251,18 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.surf_vis_btn.setStyleSheet(self._get_green_btn_style())
         self.parent_window.surf_vis_btn.clicked.connect(self.render_surface_patches)
 
+        self.parent_window.surf_full_btn = QPushButton("Full Surface")
+        self.parent_window.surf_full_btn.setMinimumHeight(36)
+        self.parent_window.surf_full_btn.setStyleSheet(self._get_purple_btn_style())
+        self.parent_window.surf_full_btn.setToolTip(
+            "Render complete protein surface with continuous color mapping.\n"
+            "Red = negative potential, White = neutral, Blue = positive potential"
+        )
+        self.parent_window.surf_full_btn.clicked.connect(self.render_full_surface)
+
         surf_btn_row.addWidget(self.parent_window.surf_btn)
         surf_btn_row.addWidget(self.parent_window.surf_vis_btn)
+        surf_btn_row.addWidget(self.parent_window.surf_full_btn)
         surf_btn_row.addStretch(1)
 
         layout.addWidget(grp_surf)
@@ -749,11 +781,19 @@ class TargetDiscoveryTab(CommonTab):
 
         if not obj or obj == t("no_object"):
             show_message_box(self, t("title"), t("no_object"), "warning"); return
+        
+        # Get pH value (APBS is always used)
+        try:
+            ph = float(self.parent_window.surf_ph.text().strip() or "7.4")
+        except:
+            ph = 7.4
             
         self.parent_window.surf_btn.setEnabled(False)
         self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
         
-        self.parent_window.surf_thread = SurfaceAnalysisWorker(obj, outcsv)
+        self.log(f"🔬 Starting surface analysis with APBS (pH={ph})...")
+        
+        self.parent_window.surf_thread = SurfaceAnalysisWorker(obj, outcsv, use_apbs=True, ph=ph)
         self.parent_window.surf_thread.progress.connect(self.log)
         self.parent_window.surf_thread.error.connect(self.on_error)
         self.parent_window.surf_thread.finished.connect(self.on_finished_surface)
@@ -826,6 +866,84 @@ class TargetDiscoveryTab(CommonTab):
         
         except Exception as e:
             self.on_error(str(e))
+
+    def render_full_surface(self):
+        """Render complete protein surface with continuous color mapping"""
+        try:
+            from pymol import cmd
+            obj = self.parent_window.obj_combo_surf.currentText().strip()
+
+            if not obj or obj == t("no_object"):
+                show_message_box(self, "Warning", "Please select an object first.", "warning")
+                return
+
+            # Get pH value (APBS is always used)
+            try:
+                ph = float(self.parent_window.surf_ph.text().strip() or "7.4")
+            except:
+                ph = 7.4
+            
+            # Get color mode: 0=potential, 1=hydrophobicity
+            color_mode_idx = self.parent_window.surf_color_mode.currentIndex()
+            color_modes = ['potential', 'hydrophobicity']
+            color_by = color_modes[color_mode_idx]
+
+            self.log(f"🎨 Rendering full surface for {obj}...")
+            if color_by == 'potential':
+                self.log(f"   Using APBS electrostatics (pH={ph})")
+            elif color_by == 'hydrophobicity':
+                self.log("   Coloring by hydrophobicity (Kyte-Doolittle scale)")
+
+            # Import and run
+            try:
+                from ...protein_surface_analyzer import render_protein_surface
+            except ImportError:
+                try:
+                    from protein_surface_analyzer import render_protein_surface
+                except ImportError:
+                    show_message_box(self, "Error", "render_protein_surface not available", "warning")
+                    return
+
+            # Check if output directory is specified (use Output CSV directory)
+            output_csv = self.parent_window.surf_out_csv.text().strip()
+            save_files = False
+            output_dir = None
+            if output_csv:
+                output_dir = os.path.dirname(output_csv)
+                if output_dir:
+                    save_files = True
+                    self.log(f"   Output files will be saved to: {output_dir}")
+
+            success = render_protein_surface(
+                obj_name=obj,
+                use_apbs=True,  # Always use APBS
+                ph=ph,
+                color_by=color_by,
+                transparency=0.0,
+                save_files=save_files,
+                output_dir=output_dir
+            )
+
+            if success:
+                self.log(f"✅ Full surface rendered for {obj}")
+                if color_by == 'potential':
+                    self.log("   Color scheme: Red (negative) → White (neutral) → Blue (positive)")
+                    # ESP group contains: {obj}_ESP_surf, {obj}_ESP_map, {obj}_ESP_ramp
+                    surface_name = f"{obj}_ESP_surf"
+                elif color_by == 'hydrophobicity':
+                    self.log("   Color scheme: White (hydrophilic) → Green (hydrophobic)")
+                    surface_name = f"{obj}_hydro"
+                else:
+                    surface_name = f"{obj}_surface"
+                # Zoom to the surface
+                cmd.zoom(surface_name, buffer=5.0)
+            else:
+                self.log("❌ Surface rendering failed")
+
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            self.on_error(f"Full surface rendering failed: {e}")
 
     # --- Surface Similarity & Complementarity Logic ---
     def browse_sim_out_csv(self):

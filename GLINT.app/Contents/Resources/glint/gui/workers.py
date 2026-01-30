@@ -258,19 +258,38 @@ class SurfaceAnalysisWorker(QThread):
     finished = pyqtSignal(list, str) # (patches, out_csv)
     error = pyqtSignal(str)
 
-    def __init__(self, obj_name: str, out_csv: str):
+    def __init__(self, obj_name: str, out_csv: str, use_apbs: bool = True, ph: float = 7.4):
+        """
+        Initialize the SurfaceAnalysisWorker.
+        
+        Args:
+            obj_name: Name of the PyMOL object to analyze
+            out_csv: Optional path for CSV output
+            use_apbs: Use APBS/PDB2PQR for accurate electrostatics (default: True)
+            ph: pH for PDB2PQR protonation state (default: 7.4)
+        """
         super().__init__()
         self.obj_name = obj_name
         self.out_csv = out_csv
+        self.use_apbs = use_apbs
+        self.ph = ph
         
     def run(self):
         try:
             self.progress.emit(f"Starting surface analysis for {self.obj_name}...")
+            if self.use_apbs:
+                self.progress.emit(f"  Using APBS/PDB2PQR for accurate electrostatics (pH={self.ph})")
+            else:
+                self.progress.emit("  Using residue-based electrostatic approximation")
             
             # Late import to avoid circular dependencies if any
             from ..protein_surface_analyzer import SurfaceAnalyzer
             
-            analyzer = SurfaceAnalyzer(self.obj_name)
+            analyzer = SurfaceAnalyzer(
+                self.obj_name, 
+                use_apbs=self.use_apbs, 
+                ph=self.ph
+            )
             patches = analyzer.analyze()
             
             self.progress.emit(f"Analysis complete. Found {len(patches)} patches.")
@@ -279,7 +298,7 @@ class SurfaceAnalysisWorker(QThread):
             if self.out_csv:
                 import csv
                 with open(self.out_csv, 'w', newline='', encoding='utf-8') as f:
-                    fieldnames = ['id', 'type', 'area', 'score', 'center', 'residues']
+                    fieldnames = ['id', 'type', 'area', 'score', 'center', 'avg_potential', 'residues']
                     writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
                     writer.writeheader()
                     for p in patches:
