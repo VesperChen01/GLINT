@@ -29,8 +29,15 @@ try:
     from rdkit import Chem
     from rdkit.Chem import AllChem, rdDepictor
     from rdkit.Chem.Draw import rdMolDraw2D
+    # 尝试导入 rdDetermineBonds 模块 (RDKit 2022.09+)，用于从 3D 坐标推断键级
+    try:
+        from rdkit.Chem import rdDetermineBonds
+        HAS_DETERMINE_BONDS = True
+    except ImportError:
+        HAS_DETERMINE_BONDS = False
 except ImportError:
     print("[GLINT] RDKit required for 2D plotting.")
+    HAS_DETERMINE_BONDS = False
 
 # Import unified color scheme
 try:
@@ -362,8 +369,177 @@ def try_load_mol_from_smiles(pdb_file, ligand_resname):
                 os.remove(tmp_smi)
     except Exception as e:
         print(f"[2D Diagram] SMILES fallback failed: {e}")
-    
+
     return None
+
+
+def determine_bond_orders_from_3d(mol, temp_pdb_path=None, ligand_resname=None):
+    """
+    使用多种策略从 3D 坐标推断键级（单键/双键/芳香键）
+
+    策略优先级：
+    1. Open Babel SMILES 转换（最可靠）
+    2. rdDetermineBonds 推断（RDKit 2022.09+）
+    3. 返回原始分子（回退）
+
+    Args:
+        mol: RDKit 分子对象（必须有 3D 构象）
+        temp_pdb_path: 配体 PDB 文件路径（用于 Open Babel 转换）
+        ligand_resname: 配体残基名称（用于日志）
+
+    Returns:
+        修改后的分子对象（如果推断失败则返回原始分子）
+    """
+    if mol is None:
+        print("[2D Diagram] ⚠️ mol 为 None，跳过键级推断")
+        return mol
+
+    # ============ 策略 1: Open Babel SMILES 转换 ============
+    # 这是最可靠的方法，因为 Open Babel 可以正确解析 PDB 并生成包含键级的 SMILES
+    if temp_pdb_path and os.path.exists(temp_pdb_path):
+        print(f"[2D Diagram] 🔧 尝试使用 Open Babel 推断键级...")
+        print(f"[2D Diagram] PDB 文件: {temp_pdb_path}")
+
+        import subprocess
+        import tempfile
+        import shutil
+
+        obabel_bin = os.environ.get("OBABEL_BINARY") or shutil.which("obabel")
+        print(f"[2D Diagram] obabel 路径: {obabel_bin}")
+
+        if obabel_bin:
+            tmp_smi = None
+            try:
+                with tempfile.NamedTemporaryFile(suffix='.smi', delete=False, mode='w') as tmp:
+                    tmp_smi = tmp.name
+
+                cmd_args = [obabel_bin, temp_pdb_path, "-O", tmp_smi, "-osmi"]
+                print(f"[2D Diagram] 执行命令: {' '.join(cmd_args)}")
+
+                # 使用 Popen 以获得更好的控制，避免卡住
+                proc = subprocess.Popen(
+                    cmd_args,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    # 关键：设置 stdin 为 DEVNULL，防止 obabel 等待输入
+                    stdin=subprocess.DEVNULL
+                )
+
+                try:
+                    stdout, stderr = proc.communicate(timeout=30)
+                    print(f"[2D Diagram] obabel 返回码: {proc.returncode}")
+                    if stderr:
+                        print(f"[2D Diagram] obabel stderr: {stderr[:200]}")
+                    if stdout:
+                        print(f"[2D Diagram] obabel stdout: {stdout[:200]}")
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.communicate()
+                    print("[2D Diagram] Open Babel 超时 (30s)")
+                    if tmp_smi and os.path.exists(tmp_smi):
+                        os.remove(tmp_smi)
+                    # 继续尝试其他策略
+                else:
+                    if proc.returncode == 0 and tmp_smi and os.path.exists(tmp_smi):
+                        with open(tmp_smi, 'r') as f:
+                            smiles_line = f.readline().strip()
+
+                        print(f"[2D Diagram] SMILES: {smiles_line[:100] if smiles_line else 'empty'}")
+
+                        if smiles_line:
+                            smiles = smiles_line.split()[0]
+                            mol_from_smiles = Chem.MolFromSmiles(smiles)
+
+                            if mol_from_smiles:
+                                # 使用 SMILES 分子的键级，但保留原始分子的 3D 坐标
+                                # 通过 AssignBondOrdersFromTemplate 实现
+                                try:
+                                    from rdkit.Chem import AllChem
+                                    # 将原始分子作为 3D 模板
+                                    mol_with_orders = AllChem.AssignBondOrdersFromTemplate(mol_from_smiles, mol)
+
+                                    # 统计键类型
+                                    bond_types = {}
+                                    for bond in mol_with_orders.GetBonds():
+                                        bt = str(bond.GetBondType())
+                                        bond_types[bt] = bond_types.get(bt, 0) + 1
+
+                                    print(f"[2D Diagram] ✅ Open Babel + AssignBondOrdersFromTemplate 成功: {bond_types}")
+
+                                    if tmp_smi and os.path.exists(tmp_smi):
+                                        os.remove(tmp_smi)
+
+                                    return mol_with_orders
+                                except Exception as e:
+                                    print(f"[2D Diagram] AssignBondOrdersFromTemplate 失败: {e}")
+                                    # 回退：直接使用 SMILES 分子（会丢失 3D 坐标，但键级正确）
+                                    try:
+                                        AllChem.Compute2DCoords(mol_from_smiles)
+
+                                        bond_types = {}
+                                        for bond in mol_from_smiles.GetBonds():
+                                            bt = str(bond.GetBondType())
+                                            bond_types[bt] = bond_types.get(bt, 0) + 1
+
+                                        print(f"[2D Diagram] ✅ 使用 Open Babel SMILES 分子（键级正确）: {bond_types}")
+
+                                        if tmp_smi and os.path.exists(tmp_smi):
+                                            os.remove(tmp_smi)
+
+                                        return mol_from_smiles
+                                    except:
+                                        pass
+
+                    if tmp_smi and os.path.exists(tmp_smi):
+                        os.remove(tmp_smi)
+
+            except Exception as e:
+                print(f"[2D Diagram] Open Babel 失败: {e}")
+                import traceback
+                traceback.print_exc()
+                if tmp_smi and os.path.exists(tmp_smi):
+                    try:
+                        os.remove(tmp_smi)
+                    except:
+                        pass
+        else:
+            print("[2D Diagram] Open Babel 未找到，跳过此策略")
+
+    # ============ 策略 2: rdDetermineBonds ============
+    if HAS_DETERMINE_BONDS and mol.GetNumConformers() > 0:
+        print(f"[2D Diagram] 🔧 尝试使用 rdDetermineBonds 推断键级...")
+
+        charges_to_try = [0, -1, -2, 1, 2]
+
+        for charge in charges_to_try:
+            try:
+                rw_mol = Chem.RWMol(mol)
+                rdDetermineBonds.DetermineBonds(rw_mol, charge=charge)
+                result_mol = rw_mol.GetMol()
+
+                # 检查结果是否合理（不应该有三键，除非配体确实有炔基）
+                bond_types = {}
+                for bond in result_mol.GetBonds():
+                    bt = str(bond.GetBondType())
+                    bond_types[bt] = bond_types.get(bt, 0) + 1
+
+                # 如果有三键，可能是推断错误，跳过这个电荷值
+                if bond_types.get('TRIPLE', 0) > 0:
+                    print(f"[2D Diagram] ⚠️ charge={charge} 产生了 {bond_types.get('TRIPLE', 0)} 个三键，可能不正确")
+                    continue
+
+                print(f"[2D Diagram] ✅ rdDetermineBonds 成功 (charge={charge}): {bond_types}")
+                return result_mol
+
+            except Exception as e:
+                if "does not match input" in str(e) or "valence" in str(e).lower():
+                    continue
+                print(f"[2D Diagram] rdDetermineBonds 失败 (charge={charge}): {e}")
+
+    # ============ 策略 3: 回退 ============
+    print("[2D Diagram] ⚠️ 所有键级推断策略失败，使用原始分子")
+    return mol
 
 
 def rebuild_bonds_by_distance(mol):
@@ -582,6 +758,11 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 mol_draw = Chem.MolFromPDBFile(temp_pdb, removeHs=True, sanitize=True)
                 if mol_draw:
                     print(f"[2D Diagram] Standard load: {mol_draw.GetNumAtoms()} atoms, {mol_draw.GetNumBonds()} bonds")
+
+                    # 🔧 关键修复：推断正确的键级（双键、芳香键等）
+                    # PDB 格式不存储键级，需要通过 Open Babel 或 rdDetermineBonds 推断
+                    mol_draw = determine_bond_orders_from_3d(mol_draw, temp_pdb, ligand_resname)
+
             except Exception as e:
                 print(f"[2D Diagram] Standard load exception: {e}")
                 mol_draw = None
@@ -613,6 +794,9 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                                            Chem.SanitizeFlags.SANITIZE_SETHYBRIDIZATION|
                                            Chem.SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
                         except: pass
+
+                        # 🔧 推断键级
+                        mol_draw = determine_bond_orders_from_3d(mol_draw, temp_pdb, ligand_resname)
                     else:
                         print(f"[2D Diagram] Text cleaning load failed, mol_draw is None")
                     
@@ -717,9 +901,11 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                         try:
                             Chem.SanitizeMol(mol_draw, catchErrors=True)
                         except: pass
-                
+
                 if mol_draw:
                     print(f"[2D Diagram] Loaded ligand: {mol_draw.GetNumAtoms()} atoms, {mol_draw.GetNumBonds()} bonds")
+                    # 🔧 推断键级
+                    mol_draw = determine_bond_orders_from_3d(mol_draw, saved_temp_pdb, ligand_resname)
         except Exception as e:
             print(f"[2D Diagram] PDB Load Error: {e}")
             import traceback
@@ -739,17 +925,26 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
 
     # 再次确认清理 (三层保险：处理可能的残留)
     try:
-        # 强制移除所有氢原子
-        mol_draw = Chem.RemoveHs(mol_draw)
-        
-        # 再次检查原子序数
+        # 强制移除所有氢原子 - 使用更彻底的方法
+        mol_draw = Chem.RemoveAllHs(mol_draw)  # 🔧 使用 RemoveAllHs 替代 RemoveHs，更彻底
+
+        # 再次检查原子序数，手动移除任何残留的氢原子
         mw = Chem.RWMol(mol_draw)
         atoms_to_remove = [i for i in range(mw.GetNumAtoms()) if mw.GetAtomWithIdx(i).GetAtomicNum() <= 1]
         if atoms_to_remove:
+            print(f"[2D Diagram] 🔧 手动移除 {len(atoms_to_remove)} 个残留氢原子")
             atoms_to_remove.sort(reverse=True)
-            for i in atoms_to_remove: mw.RemoveAtom(i)
+            for i in atoms_to_remove:
+                mw.RemoveAtom(i)
         mol_draw = mw.GetMol()
-    except Exception as e: 
+
+        # 🔧 再次尝试 RemoveAllHs，确保完全清除
+        try:
+            mol_draw = Chem.RemoveAllHs(mol_draw)
+        except:
+            pass
+
+    except Exception as e:
         print(f"[2D Diagram] H Removal Error: {e}")
     
     # 2. 提前提取 3D 坐标 (关键！必须在投影到 2D 之前完成)
@@ -838,14 +1033,17 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                                 target_idx, target_type = best_rid, "ring"
                         
                         # 原子匹配 (如果环没匹配上或不是环)
+                        # 放宽阈值：从 0.3 Å 改为 1.5 Å，因为 RDKit 加载后原子可能有轻微偏移
                         if target_idx is None:
                             best_aid, best_adist = None, float('inf')
                             for aid, ac in atom_coords_3d.items():
                                 d = ((ac[0]-lx)**2 + (ac[1]-ly)**2 + (ac[2]-lz)**2)**0.5
                                 if d < best_adist: best_adist, best_aid = d, aid
-                            if best_aid is not None and best_adist < 0.3:
+                            # 使用更宽松的阈值（1.5 Å）以确保匹配成功
+                            if best_aid is not None and best_adist < 1.5:
                                 target_idx, target_type = best_aid, "atom"
-                
+                                print(f"[2D DEBUG] Coordinate matched: {lig_atom_name} -> atom {target_idx} (dist={best_adist:.3f}Å)")
+
                 # 方案2：通过原子名称匹配（如果 CSV 中没有坐标列）
                 if target_idx is None and lig_atom_name:
                     # 特殊处理：Ring(...) 或 ring 表示环中心
@@ -863,22 +1061,36 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                             target_type = "ring"
                             print(f"[2D DEBUG] Matched Cation to ring centroid {target_idx}")
                     else:
-                        # 通过 PDB 原子名称匹配
+                        # 通过 PDB 原子名称匹配 - 改进版：找到所有匹配的原子，选择离 3D 坐标最近的
+                        # 这样即使配体有多个同名原子（如多个 O），也能正确区分
+                        matching_atoms = []
                         for aid in range(mol_draw.GetNumAtoms()):
                             atom = mol_draw.GetAtomWithIdx(aid)
                             pdb_info = atom.GetPDBResidueInfo()
                             if pdb_info:
                                 atom_name = pdb_info.GetName().strip()
                                 if atom_name == lig_atom_name:
-                                    target_idx = aid
-                                    target_type = "atom"
-                                    break
+                                    matching_atoms.append(aid)
+
+                        if len(matching_atoms) == 1:
+                            # 只有一个匹配，直接使用
+                            target_idx = matching_atoms[0]
+                            target_type = "atom"
+                            print(f"[2D DEBUG] Name matched (unique): {lig_atom_name} -> atom {target_idx}")
+                        elif len(matching_atoms) > 1:
+                            # 多个同名原子，无法区分（没有坐标信息）
+                            # 警告用户并使用第一个
+                            print(f"[2D DEBUG] ⚠️ Multiple atoms named '{lig_atom_name}' found ({len(matching_atoms)} total)")
+                            print(f"[2D DEBUG] ⚠️ Cannot distinguish without coordinates - using first match (atom {matching_atoms[0]})")
+                            print(f"[2D DEBUG] ⚠️ For accurate mapping, re-run interaction analysis to generate CSV with coordinates")
+                            target_idx = matching_atoms[0]
+                            target_type = "atom"
                 
                 if target_idx is not None:
                     # 标准化相互作用类型 (与 3D 视图一致)
                     normalized_itype = normalize_interaction_type(itype)
-                    
-                    # 特殊处理：Pi-Pi 和 Pi-Cation 应该连接到环中心
+
+                    # 🔧 特殊处理：Pi-Pi 和 Pi-Cation 应该连接到环中心
                     # 如果当前匹配的是原子，检查该原子是否属于某个环
                     if normalized_itype in ['pipi', 'pication'] and target_type == "atom":
                         atom_idx = target_idx
@@ -888,11 +1100,28 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                             if atom_idx in r_data["indices"]:
                                 best_rid = r_data["id"]
                                 break
-                        
+
                         if best_rid is not None:
                             target_idx = best_rid
                             target_type = "ring"
-                            print(f"   -> Upgraded {lig_atom_name} to Ring {target_idx} Center")
+                            print(f"   -> Upgraded {lig_atom_name} to Ring {target_idx} Center (pipi/pication)")
+                        else:
+                            # 原子不在任何环中，但可能环检测失败
+                            # 尝试找离这个原子最近的环中心
+                            if ring_centroids_3d:
+                                atom_coord = atom_coords_3d.get(atom_idx)
+                                if atom_coord:
+                                    best_rid, best_dist = None, float('inf')
+                                    for r_data in ring_centroids_3d:
+                                        rc = r_data["coord"]
+                                        d = ((rc[0]-atom_coord[0])**2 + (rc[1]-atom_coord[1])**2 + (rc[2]-atom_coord[2])**2)**0.5
+                                        if d < best_dist:
+                                            best_dist, best_rid = d, r_data["id"]
+                                    # 如果距离小于 3 Å，认为是同一个环
+                                    if best_rid is not None and best_dist < 3.0:
+                                        target_idx = best_rid
+                                        target_type = "ring"
+                                        print(f"   -> Upgraded {lig_atom_name} to nearest Ring {target_idx} (dist={best_dist:.2f}Å)")
 
                     interaction_types_found.add(normalized_itype)
                     interactions.append({
@@ -913,7 +1142,14 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     try:
         # 确保使用 CoordGen，而不是基于当前 3D 构象的小幅调整
         rdDepictor.SetPreferCoordGen(True)
-        rdDepictor.Compute2DCoords(mol_draw)
+        # 🔧 使用 coordGen 时尝试更宽松的参数
+        try:
+            from rdkit.Chem import rdCoordGen
+            # 设置 CoordGen 参数以获得更好的布局
+            rdCoordGen.AddCoords(mol_draw)
+            print("[2D Diagram] Using rdCoordGen.AddCoords for layout")
+        except Exception:
+            rdDepictor.Compute2DCoords(mol_draw)
     except Exception as e:
         print(f"[2D Diagram] Layout error (CoordGen failed, falling back to RDKit 2D): {e}")
         try:
@@ -945,29 +1181,54 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     try:
         drawer = rdMolDraw2D.MolDraw2DCairo(dw, dh)
         opts = drawer.drawOptions()
-        opts.padding = 0.15
+        opts.padding = 0.20  # 适度的 padding
         opts.prepareMolsBeforeDrawing = True
         opts.bondLineWidth = 3.0
-        opts.addStereoAnnotation = False
+        opts.addStereoAnnotation = False  # 不显示 R/S 标签
         opts.addAtomIndices = False
         opts.includeAtomTags = False
         opts.explicitMethyl = False
         # opts.addHBonds = False # Not supported in some RDKit versions
-        opts.minFontSize = 12
-        
-        # 只有重原子，不显示任何 H
+        opts.minFontSize = 10
+        # 🔧 关键修复：调整字体大小和原子标签显示
+        opts.maxFontSize = 14  # 限制最大字体大小
+        opts.annotationFontScale = 0.8  # 减小注释字体比例
+        # 🔧 尝试设置 addChiralHs（某些 RDKit 版本可能不支持）
+        try:
+            opts.addChiralHs = False  # 不显示手性中心的氢原子
+        except AttributeError:
+            pass  # 如果属性不存在，忽略
+        # 不使用 fixedBondLength，让 RDKit 自动计算更好的布局
+
+        # 🔧 不显示原子电荷和氢原子计数
+        opts.noAtomLabels = False  # 仍然显示原子符号
+
+        # 🔧 关键修复：直接修改 mol_draw 的原子属性，而不是创建副本
+        # 这样可以确保绘图和坐标提取使用的是同一个分子对象
+        for atom in mol_draw.GetAtoms():
+            # 清除形式电荷（不显示 +/-）
+            atom.SetFormalCharge(0)
+            # 清除显式氢原子计数，让 RDKit 只显示原子符号
+            atom.SetNoImplicit(False)
+            atom.SetNumExplicitHs(0)
+            # 清除手性标签（不显示 R/S）
+            atom.SetChiralTag(Chem.ChiralType.CHI_UNSPECIFIED)
+
+        # 🔧 直接使用修改后的 mol_draw 绘制
         drawer.DrawMolecule(mol_draw)
         drawer.FinishDrawing()
     except Exception as e:
         print(f"[2D Diagram] Drawing error: {e}")
         return None
-    
+
     # 提取渲染后的像素坐标 (用于连线)
+    # 🔧 现在 drawer 绑定的就是 mol_draw，坐标索引一致
     px_atoms = {i: (drawer.GetDrawCoords(i).x, drawer.GetDrawCoords(i).y) for i in range(mol_draw.GetNumAtoms())}
     px_rings = {}
     for ri, ring in enumerate(mol_draw.GetRingInfo().AtomRings()):
-        r_pts = [px_atoms[aid] for aid in ring]
-        px_rings[ri] = (sum(p[0] for p in r_pts)/len(r_pts), sum(p[1] for p in r_pts)/len(r_pts))
+        r_pts = [px_atoms[aid] for aid in ring if aid in px_atoms]
+        if r_pts:
+            px_rings[ri] = (sum(p[0] for p in r_pts)/len(r_pts), sum(p[1] for p in r_pts)/len(r_pts))
 
     # 5. Matplotlib 组装 (使用 io.BytesIO 优化内存)
     import io
@@ -1004,8 +1265,8 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     
     # 智能布局算法 (基于相互作用点的局部扩展)
     placed_badges = [] # list of {"x": x, "y": y, "r": radius, "res": res_name}
-    badge_radius = 28.0 # 缩小气泡：比文字稍大即可 (原 55.0 太大)
-    padding = 15.0  # 增加气泡之间的间距，避免重叠
+    badge_radius = 22.0 # 再次缩小气泡半径（从 28 减小到 22）
+    padding = 12.0  # 减小气泡之间的间距（从 15 减小到 12）
     used_residue_types = set()  # 用于构建 Discovery Studio 风格的残基图例
     
     sorted_res = sorted(res_map.items())
@@ -1024,12 +1285,16 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 tx, ty = px_atoms[tid]
                 interaction_points.append((tid, ttype, tx, ty))
             else:
+                # 🔧 修复：如果找不到原子索引，尝试跳过而不是忽略整个残基
+                print(f"  ⚠️ 警告：残基 {res} 的相互作用 {ttype} 索引 {tid} 未找到对应原子")
                 continue
             tx_sum += tx
             ty_sum += ty
             count += 1
 
-        if count == 0: continue
+        if count == 0:
+            print(f"  ⚠️ 警告：残基 {res} 没有有效的相互作用点，跳过")
+            continue
 
         target_x, target_y = tx_sum / count, ty_sum / count
 
@@ -1037,40 +1302,68 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         print(f"\n残基 {res} 的相互作用点:")
         for tid, ttype, tx, ty in interaction_points:
             print(f"  - {ttype} {tid}: ({tx:.1f}, {ty:.1f})")
+        print(f"  配体中心: ({c_x:.1f}, {c_y:.1f}), 目标点: ({target_x:.1f}, {target_y:.1f})")
 
         # 2. 计算从配体中心指向目标中心的向量
         vx, vy = target_x - c_x, target_y - c_y
         dist = math.hypot(vx, vy)
 
-        # ⚠️ 关键修复：如果目标点在配体内部（如环中心），需要特殊处理
-        is_ring_center = any(inter["type"] == "ring" for inter in inters)
+        # 计算配体的边界框（用于后续的方向判断）
+        min_y_mol = min(p[1] for p in px_atoms.values())
+        max_y_mol = max(p[1] for p in px_atoms.values())
+        min_x_mol = min(p[0] for p in px_atoms.values())
+        max_x_mol = max(p[0] for p in px_atoms.values())
+        mol_width = max(max_x_mol - min_x_mol, 100)
+        mol_height = max(max_y_mol - min_y_mol, 100)
 
-        if dist < 50.0:  # 目标点在配体内部或非常接近
-            # 计算配体的最大半径（从中心到最远原子）
-            max_radius = 0
-            for atom_idx, (atom_x, atom_y) in px_atoms.items():
-                r = math.hypot(atom_x - c_x, atom_y - c_y)
-                if r > max_radius:
-                    max_radius = r
+        # 计算配体的最大半径（从中心到最远原子）
+        max_radius = 0
+        for atom_idx, (atom_x, atom_y) in px_atoms.items():
+            r = math.hypot(atom_x - c_x, atom_y - c_y)
+            if r > max_radius:
+                max_radius = r
 
-            # 如果距离太近，选择一个默认方向
-            if dist < 1.0:
-                # 根据已放置的气泡数量，选择不同的默认方向
-                default_angles = [270, 0, 90, 180, 315, 45, 225, 135]  # 上、右、下、左、对角线
-                angle_idx = len(placed_badges) % len(default_angles)
-                angle_deg = default_angles[angle_idx]
-                angle_rad = math.radians(angle_deg)
-                ux, uy = math.cos(angle_rad), math.sin(angle_rad)
-            else:
-                # 归一化方向向量
-                ux, uy = vx / dist, vy / dist
+        # 🔧 新策略：气泡放在目标原子的「外侧」（远离分子中心的方向）
+        # 这样连线就会从分子边缘延伸出去，而不是穿过分子
 
-            # 从配体边界外侧开始放置
-            standoff = max_radius + 80.0  # 配体半径 + 额外距离
+        # 打印调试信息
+        mol_center_y = (min_y_mol + max_y_mol) / 2
+        print(f"  分子边界: y=[{min_y_mol:.1f}, {max_y_mol:.1f}], x=[{min_x_mol:.1f}, {max_x_mol:.1f}]")
+        print(f"  目标位置: ({target_x:.1f}, {target_y:.1f}), 分子中心: ({c_x:.1f}, {c_y:.1f})")
+
+        # 增加边距，让气泡远离分子边界
+        margin = 50  # 50 像素边距
+
+        # 🔧 核心改变：总是沿着「目标原子相对于分子中心」的方向放置气泡
+        # 这样气泡就会在目标原子的外侧，连线不会穿过分子
+        if dist < 1.0:
+            # 距离太近，选择默认方向
+            default_angles = [270, 180, 0, 90, 225, 315, 45, 135]
+            angle_idx = len(placed_badges) % len(default_angles)
+            angle_deg = default_angles[angle_idx]
+            angle_rad = math.radians(angle_deg)
+            ux, uy = math.cos(angle_rad), math.sin(angle_rad)
+            print(f"  方向：默认角度 {angle_deg}° (距离太近)")
         else:
-            # 目标点在配体外部（正常情况）
+            # 气泡方向 = 从分子中心指向目标原子的方向（向外延伸）
             ux, uy = vx / dist, vy / dist
-            standoff = 120.0  # 基础站立距离
+            print(f"  方向：外侧延伸 ({ux:.2f}, {uy:.2f})")
+
+        # 不使用边界固定位置，使用 standoff 方式
+        use_boundary_placement = False
+        bx_start, by_start = 0, 0  # 占位符
+
+        # 🔧 关键修改：缩短 standoff 距离，让气泡更靠近目标原子
+        # 这样连线就不会太长，不容易穿过分子
+        # standoff = 从目标原子位置 + 一点点距离（而不是从分子中心 + 最大半径）
+
+        # 计算目标点到分子中心的距离
+        target_dist_from_center = math.hypot(target_x - c_x, target_y - c_y)
+
+        # 气泡位置 = 目标点位置 + 向外延伸一小段距离
+        # 这样连线从气泡到目标原子只有很短的距离
+        extra_offset = badge_radius + 40  # 气泡半径 + 40 像素间距
+        standoff = target_dist_from_center + extra_offset
 
         # ⚠️ 关键改进：扇形分布
         # 如果多个残基与同一个原子相互作用，需要在角度上分散它们
@@ -1091,15 +1384,15 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 # 计算方向相似度（点积）
                 dot = ux * placed_ux + uy * placed_uy
 
-                # 如果方向非常接近（cos > 0.95，即角度 < 18°）
+                # 如果方向非常接近（cos > 0.85，即角度 < 32°）
                 # 说明它们可能与同一个原子或非常接近的原子相互作用
-                if dot > 0.95:
+                if dot > 0.85:
                     similar_count += 1
 
         # 根据相似气泡的数量，计算角度偏移
         if similar_count > 0:
-            # 每个相似气泡增加 30° 的偏移
-            angle_offset = similar_count * (math.pi / 6.0)  # 30° = π/6
+            # 每个相似气泡增加 45° 的偏移（从 30° 增加到 45°）
+            angle_offset = similar_count * (math.pi / 4.0)  # 45° = π/4
 
             # 应用角度偏移（旋转方向向量）
             cos_offset = math.cos(angle_offset)
@@ -1110,20 +1403,27 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
 
             print(f"  ⚠️ 检测到 {similar_count} 个相似方向的气泡，应用 {math.degrees(angle_offset):.1f}° 角度偏移")
 
-        # 计算气泡位置：从配体中心出发
-        bx = c_x + ux * standoff
-        by = c_y + uy * standoff
+        # 计算气泡位置
+        if use_boundary_placement:
+            # 使用边界计算的位置
+            bx = bx_start
+            by = by_start
+        else:
+            # 使用 standoff 计算位置
+            bx = c_x + ux * standoff
+            by = c_y + uy * standoff
 
         # 调试输出
         print(f"  配体中心: ({c_x:.1f}, {c_y:.1f})")
         print(f"  目标点平均: ({target_x:.1f}, {target_y:.1f})")
         print(f"  方向向量: ({ux:.2f}, {uy:.2f})")
+        print(f"  max_radius={max_radius:.1f}, standoff={standoff:.1f}")
         print(f"  初始气泡位置: ({bx:.1f}, {by:.1f})")
         print(f"  气泡到中心距离: {math.hypot(bx - c_x, by - c_y):.1f}")
         
         # 4. 碰撞检测与解决 (增强的迭代推挤)
         # 增加迭代次数，确保充分分离
-        for iteration in range(30):  # 从 10 增加到 30
+        for iteration in range(50):  # 从 30 增加到 50
             moved = False
             # 5. 增强的碰撞检测：同时避开其他气泡和配体原子
             # 检查与已放置气泡的重叠
@@ -1131,24 +1431,24 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 dx = bx - badge["x"]
                 dy = by - badge["y"]
                 d = math.hypot(dx, dy)
-                min_dist = badge_radius * 2 + padding
+                min_dist = badge_radius * 2 + padding + 10  # 额外增加 10 像素间距
 
                 if d < min_dist:
                     # 发生重叠，推开 (气泡之间互斥)
                     if d < 1.0: dx, dy, d = 1.0, 0.0, 1.0
                     overlap = min_dist - d
                     # 增加推挤力度，确保充分分离
-                    push_factor = 1.2 if iteration < 10 else 0.8  # 前期强力推挤，后期微调
+                    push_factor = 1.5 if iteration < 15 else 1.0  # 前期强力推挤，后期微调
                     push_x = (dx / d) * overlap * push_factor
                     push_y = (dy / d) * overlap * push_factor
                     bx += push_x
                     by += push_y
                     moved = True
-            
+
             # 检查与配体原子的重叠 (关键修复！)
             # 遍历所有配体原子，确保气泡不覆盖它们
             # 为了效率，可以只检查凸包或者采样点，但原子数不多，直接遍历即可
-            min_atom_dist = badge_radius + 20 # 气泡半径 + 安全边距
+            min_atom_dist = badge_radius + 40  # 气泡半径 + 安全边距（从 20 增加到 40）
             
             
             for aid, (atom_x, atom_y) in px_atoms.items():
@@ -1167,8 +1467,8 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                         push_dir_x, push_dir_y = dx/d, dy/d
                     
                     overlap = min_atom_dist - d
-                    bx += push_dir_x * overlap * 1.2 # 稍微多推一点
-                    by += push_dir_y * overlap * 1.2
+                    bx += push_dir_x * overlap * 1.5 # 推挤系数从 1.2 增加到 1.5
+                    by += push_dir_y * overlap * 1.5
                     moved = True
             
             # 额外的几何约束：确保气泡不"陷入"配体内部 concave 区域并遮挡内部原子
@@ -1195,35 +1495,167 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 break
         
         placed_badges.append({"x": bx, "y": by, "r": badge_radius, "res": res})
-        
+
         # 绘制
         style, res_type = get_residue_style(res)
         used_residue_types.add(res_type)
-        ax.add_patch(Circle((bx, by), badge_radius, facecolor=style['facecolor'], edgecolor=style['edgecolor'], lw=1.5, zorder=10))
+        ax.add_patch(Circle((bx, by), badge_radius, facecolor=style['facecolor'], edgecolor=style['edgecolor'], lw=1.2, zorder=10))
         r_name, r_num = parse_residue_label(res)
-        # 字体稍小一点以适应小气泡
-        ax.text(bx, by, f"{r_name}\n{r_num}", ha='center', va='center', fontweight='bold', fontsize=8, color=style['textcolor'], zorder=11)
-        
-        # 绘制每个相互作用的连线
+        # 字体再小一点以适应更小的气泡
+        ax.text(bx, by, f"{r_name}\n{r_num}", ha='center', va='center', fontweight='bold', fontsize=6.5, color=style['textcolor'], zorder=11)
+
+        # 绘制相互作用连线（每个相互作用都画一条线）
+        # 关键改进：连线绕开其他气泡（使用贝塞尔曲线或折线）
         for inter in inters:
             tid, ttype = inter["idx"], inter["type"]
-            tx, ty = px_rings[tid] if ttype == "ring" else px_atoms[tid]
-            
+            if ttype == "ring" and tid in px_rings:
+                tx, ty = px_rings[tid]
+            elif tid in px_atoms:
+                tx, ty = px_atoms[tid]
+            else:
+                continue
+
             normalized_itype = inter.get("normalized_itype", normalize_interaction_type(inter["itype"]))
+
+            if normalized_itype == 'hydrophobic':
+                # 疏水相互作用不画连线
+                continue
+
             ls = INTERACTION_LINE_STYLE.get(normalized_itype, INTERACTION_LINE_STYLE['other'])
-            
-            # 计算截断点：从气泡中心向目标点方向延伸半径长度
-            # 这样线看起来是从气泡边缘发出的
+            interaction_types_found.add(normalized_itype)
+
+            # 计算截断点：从气泡边缘发出
             angle_to_target = math.atan2(ty - by, tx - bx)
             sx = bx + badge_radius * math.cos(angle_to_target)
             sy = by + badge_radius * math.sin(angle_to_target)
-            
-            if normalized_itype == 'hydrophobic':
-                # 用户要求：疏水相互作用不画连线，只显示绿色气泡 (已通过配色方案实现)
-                continue
+
+            # 🔧 关键修复：连线终点从目标原子 (tx,ty) 往线起点 (sx,sy) 方向缩进
+            # 不是从气泡中心方向，而是从实际连线起点方向
+            atom_margin = 18  # 原子符号的大约半径（像素）
+
+            # 计算从起点到目标的实际距离和方向
+            line_dx = tx - sx
+            line_dy = ty - sy
+            line_dist = math.hypot(line_dx, line_dy)
+
+            if line_dist > atom_margin + 5:
+                # 从目标点往起点方向缩进 atom_margin 距离
+                # 单位向量：从目标指向起点
+                ux = -line_dx / line_dist
+                uy = -line_dy / line_dist
+                # 终点 = 目标点 + 单位向量 * margin
+                tx_end = tx + ux * atom_margin
+                ty_end = ty + uy * atom_margin
             else:
-                # zorder=1: 相互作用线在最底层，不遮挡配体分子
-                ax.plot([sx, tx], [sy, ty], color=ls['color'], lw=ls['linewidth'], ls=ls['linestyle'], zorder=1)
+                tx_end, ty_end = tx, ty
+
+            # 检查连线是否会穿过其他气泡或原子，如果是则添加中间控制点绕开
+            blocking_obstacles = []
+
+            # 🔧 检查是否穿过其他气泡
+            for other_badge in placed_badges:
+                if other_badge["res"] == res:
+                    continue  # 跳过自己
+                obx, oby, obr = other_badge["x"], other_badge["y"], other_badge["r"]
+
+                # 线段 (sx, sy) -> (tx_end, ty_end)
+                line_len = math.hypot(tx_end - sx, ty_end - sy)
+                if line_len < 1.0:
+                    continue
+
+                # 计算点到线段的最短距离
+                t_param = max(0, min(1, ((obx - sx) * (tx_end - sx) + (oby - sy) * (ty_end - sy)) / (line_len * line_len)))
+                closest_x = sx + t_param * (tx_end - sx)
+                closest_y = sy + t_param * (ty_end - sy)
+                dist_to_line = math.hypot(obx - closest_x, oby - closest_y)
+
+                # 检查是否穿过气泡（包含一定边距）
+                if dist_to_line < obr + 15:
+                    blocking_obstacles.append({
+                        "x": obx, "y": oby, "r": obr,
+                        "t": t_param,  # 在线段上的位置
+                        "dist": dist_to_line,
+                        "type": "badge"
+                    })
+
+            # 🔧 新增：检查是否穿过分子中的其他原子
+            atom_display_radius = 20  # 原子符号的显示半径（像素）
+            for atom_idx, (ax_pos, ay_pos) in px_atoms.items():
+                # 跳过目标原子本身
+                if atom_idx == tid:
+                    continue
+
+                line_len = math.hypot(tx_end - sx, ty_end - sy)
+                if line_len < 1.0:
+                    continue
+
+                # 计算原子到线段的最短距离
+                t_param = max(0, min(1, ((ax_pos - sx) * (tx_end - sx) + (ay_pos - sy) * (ty_end - sy)) / (line_len * line_len)))
+
+                # 只检查线段中间部分（避免起点和终点附近的误判）
+                if t_param < 0.1 or t_param > 0.9:
+                    continue
+
+                closest_x = sx + t_param * (tx_end - sx)
+                closest_y = sy + t_param * (ty_end - sy)
+                dist_to_line = math.hypot(ax_pos - closest_x, ay_pos - closest_y)
+
+                # 检查是否穿过原子符号
+                if dist_to_line < atom_display_radius:
+                    blocking_obstacles.append({
+                        "x": ax_pos, "y": ay_pos, "r": atom_display_radius,
+                        "t": t_param,
+                        "dist": dist_to_line,
+                        "type": "atom"
+                    })
+
+            if blocking_obstacles:
+                # 需要绕开障碍物
+                # 策略：使用二次贝塞尔曲线，控制点在障碍物外侧
+                # 找出最靠近线段中点的障碍物
+                blocking_obstacles.sort(key=lambda b: abs(b["t"] - 0.5))
+                main_blocker = blocking_obstacles[0]
+
+                # 计算绕开方向：垂直于线段方向
+                line_dx, line_dy = tx_end - sx, ty_end - sy
+                line_len = math.hypot(line_dx, line_dy)
+                perp_x, perp_y = -line_dy / line_len, line_dx / line_len
+
+                # 确定绕开方向（选择远离其他障碍物的方向）
+                # 简单策略：使用气泡中心到线段最近点的方向的反方向
+                blocker_to_closest_x = main_blocker["x"] - (sx + main_blocker["t"] * (tx_end - sx))
+                blocker_to_closest_y = main_blocker["y"] - (sy + main_blocker["t"] * (ty_end - sy))
+
+                # 选择垂直方向中远离障碍物的那个
+                if blocker_to_closest_x * perp_x + blocker_to_closest_y * perp_y > 0:
+                    perp_x, perp_y = -perp_x, -perp_y
+
+                # 控制点：在线段中点沿垂直方向偏移
+                mid_x = (sx + tx_end) / 2
+                mid_y = (sy + ty_end) / 2
+                offset_dist = main_blocker["r"] + 40  # 绕开距离
+                ctrl_x = mid_x + perp_x * offset_dist
+                ctrl_y = mid_y + perp_y * offset_dist
+
+                # 使用二次贝塞尔曲线绘制
+                # matplotlib 可以用 Path 和 PathPatch，但为简化，用多段折线近似
+
+                # 生成曲线点
+                curve_points = []
+                for t in [i / 20.0 for i in range(21)]:
+                    # 二次贝塞尔曲线公式
+                    px = (1 - t) ** 2 * sx + 2 * (1 - t) * t * ctrl_x + t ** 2 * tx_end
+                    py = (1 - t) ** 2 * sy + 2 * (1 - t) * t * ctrl_y + t ** 2 * ty_end
+                    curve_points.append((px, py))
+
+                # 绘制曲线
+                xs, ys = zip(*curve_points)
+                ax.plot(xs, ys, color=ls['color'], lw=ls['linewidth'] + 0.5,
+                       ls=ls['linestyle'], zorder=2, alpha=0.9)
+            else:
+                # 无障碍物，直接画直线（使用缩进后的终点）
+                ax.plot([sx, tx_end], [sy, ty_end], color=ls['color'], lw=ls['linewidth'] + 0.5,
+                       ls=ls['linestyle'], zorder=2, alpha=0.9)
 
     # 图例：Discovery Studio 风格
     # 1) 相互作用类型连线 (氢键、Pi-Pi、Pi-阳离子等)

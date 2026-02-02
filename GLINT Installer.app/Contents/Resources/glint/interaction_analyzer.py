@@ -2001,12 +2001,14 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
     print(f"[DEBUG] 距离内的原子对: {close_pairs_count}")
     print(f"[DEBUG] 检测到的相互作用: {len(interactions)}")
     
-    # 输出到CSV
+    # 输出到CSV（包含配体原子3D坐标用于2D绘图精确匹配）
     if output_csv and interactions:
         try:
             with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
+                # 添加 Ligand_Atom_X/Y/Z 列用于2D绘图时精确匹配原子位置
                 writer.writerow(["Ligand_Chain", "Ligand_Residue", "Ligand_Atom",
+                               "Ligand_Atom_X", "Ligand_Atom_Y", "Ligand_Atom_Z",
                                "Protein_Chain", "Protein_Residue", "Protein_Atom",
                                "Distance", "Interaction", "Confidence"])
                 for inter in interactions:
@@ -2014,6 +2016,9 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                         inter["Ligand_Chain"],
                         inter["Ligand_Residue"],
                         inter["Ligand_Atom"],
+                        inter.get("Ligand_Atom_X", ""),
+                        inter.get("Ligand_Atom_Y", ""),
+                        inter.get("Ligand_Atom_Z", ""),
                         inter["Protein_Chain"],
                         inter["Protein_Residue"],
                         inter["Protein_Atom"],
