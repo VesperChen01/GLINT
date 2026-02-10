@@ -35,7 +35,8 @@ CONDA_PACKAGES = [
 ]
 
 # Pip 包 (open3d 在 conda 上不稳定, haddock3 因 haddocking channel 不可用改用 pip)
-PIP_PACKAGES = ["requests", "open3d", "haddock3"]
+# apbs-binary: 通过 pip 安装 Linux APBS 二进制，用于 EC 静电互补性分析
+PIP_PACKAGES = ["requests", "open3d", "haddock3", "apbs-binary"]
 
 
 def get_glint_source_dir():
@@ -461,6 +462,17 @@ class InstallerApp:
                         self._log("  ✅ Pip packages installed")
                     else:
                         self._log("  ⚠️ Some pip packages may have failed")
+
+                # 验证 APBS 是否安装成功（EC 分析的核心依赖）
+                apbs_check = subprocess.run(
+                    [self.conda_exe, "run", "-p", self.env_path, "apbs", "--version"],
+                    capture_output=True, text=True, timeout=30
+                )
+                if apbs_check.returncode == 0:
+                    self._log("  ✅ APBS verified")
+                else:
+                    self._log("  ⚠️ APBS not found — EC analysis may not work")
+                    self._log("  💡 Try: pip install apbs-binary (in glint env)")
             else:
                 self._log("\n[2/5] Skipping dependencies (unchecked)")
             

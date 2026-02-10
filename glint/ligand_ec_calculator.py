@@ -847,12 +847,26 @@ class PDB2PQRRunner:
             return False
 
 
-# Try to import APBS Python module
+# 尝试导入 APBS 原生 Python 模块（如 conda install apbs）
+APBS_PYTHON_AVAILABLE = False
+_apbs_module = None
 try:
     import apbs
+    _apbs_module = apbs
     APBS_PYTHON_AVAILABLE = True
 except ImportError:
-    APBS_PYTHON_AVAILABLE = False
+    pass
+
+# 尝试导入 apbs-binary pip 包（安装器通过 pip install apbs-binary 安装）
+# 该包提供 run_apbs / popen_apbs 函数，内部调用打包的 apbs 可执行文件
+APBS_BINARY_AVAILABLE = False
+_apbs_binary_run = None
+try:
+    from apbs_binary import run_apbs as _apbs_binary_run_fn
+    _apbs_binary_run = _apbs_binary_run_fn
+    APBS_BINARY_AVAILABLE = True
+except ImportError:
+    pass
 
 
 class APBSRunner:
@@ -872,37 +886,74 @@ class APBSRunner:
         """
         self.apbs_path = apbs_path or self._find_apbs()
         self.use_python_api = APBS_PYTHON_AVAILABLE
+        # 标记 apbs-binary pip 包是否可用，作为第二优先级运行方式
+        self.use_apbs_binary = APBS_BINARY_AVAILABLE
     
     def _find_apbs(self) -> str:
-        """Try to find APBS in PATH or common locations."""
+        """尝试在 PATH、conda 环境、apbs-binary 包等多个位置查找 APBS。"""
+        # 1. 系统 PATH 中查找
         path = shutil.which('apbs')
         if path:
             return path
 
-        # Try Python module
+        # 2. 原生 Python API 可用时直接使用
         if APBS_PYTHON_AVAILABLE:
             return 'python_api'
 
-        # Try conda environment
+        # 3. 通过 apbs-binary pip 包定位其内置的 apbs 可执行文件
+        if APBS_BINARY_AVAILABLE:
+            try:
+                import apbs_binary
+                pkg_dir = os.path.dirname(apbs_binary.__file__)
+                # apbs-binary 包通常在包目录或 bin 子目录下放置可执行文件
+                for candidate in [
+                    os.path.join(pkg_dir, 'apbs'),
+                    os.path.join(pkg_dir, 'apbs.exe'),
+                    os.path.join(pkg_dir, 'bin', 'apbs'),
+                    os.path.join(pkg_dir, 'bin', 'apbs.exe'),
+                ]:
+                    if os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                        return candidate
+            except Exception:
+                pass
+
+        # 4. 通过当前 Python 解释器路径推断 conda 环境的 bin 目录
+        #    从 .app 束启动 PyMOL 时 CONDA_PREFIX 可能未设置，
+        #    但 sys.executable 仍指向 conda 环境内的 python
+        try:
+            python_dir = os.path.dirname(os.path.realpath(sys.executable))
+            # python 通常在 envs/glint/bin/ 下
+            inferred_apbs = os.path.join(python_dir, 'apbs')
+            if os.path.isfile(inferred_apbs) and os.access(inferred_apbs, os.X_OK):
+                return inferred_apbs
+        except Exception:
+            pass
+
+        # 5. CONDA_PREFIX 环境变量（终端启动时可用）
         conda_env = os.environ.get('CONDA_PREFIX')
         if conda_env:
             conda_path = os.path.join(conda_env, 'bin', 'apbs')
             if os.path.exists(conda_path):
                 return conda_path
 
-        # Try common conda locations
-        for conda_dir in [os.path.expanduser('~/miniconda3'), os.path.expanduser('~/anaconda3')]:
-            if os.path.exists(conda_dir):
-                conda_path = os.path.join(conda_dir, 'bin', 'apbs')
-                if os.path.exists(conda_path):
-                    return conda_path
+        # 6. GLINT 安装器创建的 glint conda 环境（硬编码路径兜底）
+        for conda_root in [os.path.expanduser('~/miniconda3'), os.path.expanduser('~/anaconda3')]:
+            if os.path.exists(conda_root):
+                # 优先检查 glint 虚拟环境
+                glint_env_apbs = os.path.join(conda_root, 'envs', 'glint', 'bin', 'apbs')
+                if os.path.exists(glint_env_apbs):
+                    return glint_env_apbs
+                # 再检查 base 环境
+                base_apbs = os.path.join(conda_root, 'bin', 'apbs')
+                if os.path.exists(base_apbs):
+                    return base_apbs
 
-        # Try homebrew on macOS
-        homebrew_path = '/usr/local/opt/apbs/bin/apbs'
-        if os.path.exists(homebrew_path):
-            return homebrew_path
+        # 7. macOS Homebrew 路径
+        for homebrew_path in ['/usr/local/opt/apbs/bin/apbs', '/opt/homebrew/bin/apbs']:
+            if os.path.exists(homebrew_path):
+                return homebrew_path
 
-        # Common installation locations
+        # 8. 其他常见安装路径
         common_paths = [
             '/usr/local/bin/apbs',
             '/usr/bin/apbs',
@@ -914,7 +965,11 @@ class APBSRunner:
             if os.path.exists(p):
                 return p
 
-        return 'apbs'  # Hope it's in PATH
+        # 如果 apbs-binary 可用，可以通过其 run_apbs 函数运行，无需可执行文件路径
+        if APBS_BINARY_AVAILABLE:
+            return 'apbs_binary_api'
+
+        return 'apbs'  # 兜底：期望它在 PATH 中
     
     def generate_input(self, pqr_file: str, output_prefix: str,
                       grid_center: np.ndarray = None,
@@ -988,26 +1043,35 @@ quit
     
     def run(self, input_file: str, working_dir: str = None) -> Optional[str]:
         """
-        Run APBS calculation.
+        运行 APBS 计算。
+        
+        优先级：原生 Python API > apbs-binary 包 > CLI 命令行
         
         Args:
-            input_file: APBS input file
-            working_dir: Working directory (use input file dir if None)
+            input_file: APBS 输入文件
+            working_dir: 工作目录（默认使用输入文件所在目录）
             
         Returns:
-            Path to output DX file, or None if failed
+            输出 DX 文件路径，失败则返回 None
         """
         if working_dir is None:
             working_dir = os.path.dirname(input_file) or '.'
         
-        # Try Python API first
+        # 方式1: 原生 Python API（如 conda install apbs 提供的模块）
         if self.use_python_api and APBS_PYTHON_AVAILABLE:
             result = self._run_python_api(input_file, working_dir)
             if result:
                 return result
-            print("[APBS] Python API failed, falling back to command line...")
+            print("[APBS] Python API 执行失败，尝试其他方式...")
         
-        # Fall back to command line
+        # 方式2: apbs-binary pip 包（安装器通过 pip install apbs-binary 安装）
+        if self.use_apbs_binary and APBS_BINARY_AVAILABLE:
+            result = self._run_apbs_binary(input_file, working_dir)
+            if result:
+                return result
+            print("[APBS] apbs-binary 包执行失败，尝试命令行...")
+        
+        # 方式3: 命令行 CLI（直接调用 apbs 可执行文件）
         return self._run_command_line(input_file, working_dir)
     
     def _run_python_api(self, input_file: str, working_dir: str) -> Optional[str]:
@@ -1068,6 +1132,56 @@ quit
             
         except Exception as e:
             print(f"[APBS] Python API error: {e}")
+            return None
+    
+    def _run_apbs_binary(self, input_file: str, working_dir: str) -> Optional[str]:
+        """通过 apbs-binary pip 包运行 APBS。
+        
+        apbs-binary 包提供 run_apbs() 函数，内部调用打包的 apbs 可执行文件。
+        返回 subprocess.CompletedProcess 对象。
+        """
+        print("[APBS] 通过 apbs-binary 包运行...")
+        print(f"[APBS] 输入文件: {input_file}")
+        
+        try:
+            from apbs_binary import run_apbs
+            
+            # run_apbs 在当前工作目录下运行，需要切换到工作目录
+            old_cwd = os.getcwd()
+            try:
+                os.chdir(working_dir)
+                # run_apbs 接受输入文件路径，返回 subprocess.CompletedProcess
+                completed = run_apbs(input_file)
+                
+                if completed.returncode != 0:
+                    stderr_text = completed.stderr if hasattr(completed, 'stderr') and completed.stderr else ''
+                    print(f"[APBS] apbs-binary 返回非零退出码: {completed.returncode}")
+                    if stderr_text:
+                        print(f"[APBS] 错误输出:\n{stderr_text}")
+                    # APBS 有时返回非零但仍生成输出，继续查找
+            finally:
+                os.chdir(old_cwd)
+            
+            # 查找输出 DX 文件（复用与其他方式相同的查找逻辑）
+            base_name = os.path.splitext(os.path.basename(input_file))[0]
+            dx_file = os.path.join(working_dir, base_name + '.dx')
+            
+            if os.path.exists(dx_file):
+                print(f"[APBS] ✅ 生成: {dx_file}")
+                return dx_file
+            
+            # 尝试其他命名方式（APBS 可能使用不同的输出文件名）
+            for f in os.listdir(working_dir):
+                if f.endswith('.dx'):
+                    dx_file = os.path.join(working_dir, f)
+                    print(f"[APBS] ✅ 找到输出: {dx_file}")
+                    return dx_file
+            
+            print("[APBS] ❌ 未找到输出 DX 文件")
+            return None
+            
+        except Exception as e:
+            print(f"[APBS] apbs-binary 执行错误: {e}")
             return None
     
     def _run_command_line(self, input_file: str, working_dir: str) -> Optional[str]:
@@ -3391,4 +3505,5 @@ if __name__ == '__main__':
     print("\nElectrostatics Tools:")
     print(f"  PDB2PQR Python API: {'✅' if PDB2PQR_PYTHON_AVAILABLE else '❌ (pip install pdb2pqr)'}")
     print(f"  APBS Python API: {'✅' if APBS_PYTHON_AVAILABLE else '❌ (pip install apbs or use CLI)'}")
+    print(f"  APBS Binary Pkg: {'✅' if APBS_BINARY_AVAILABLE else '❌ (pip install apbs-binary)'}")
     print("\nNote: If Python APIs are not available, command-line tools will be used as fallback.")

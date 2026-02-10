@@ -32,7 +32,6 @@ CONDA_PACKAGES = [
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
     "meeko", "vina", "scikit-image",
     "pdb2pqr",
-    # "apbs", # 暂时移除 apbs，因为它与 PyMOL 的 numpy 依赖存在冲突
 ]
 
 # Pip 包 (open3d 在 conda 上不稳定, haddock3 因 haddocking channel 不可用改用 pip)
@@ -474,6 +473,22 @@ class InstallerApp:
                         self._log("  ✅ Pip packages installed")
                     else:
                         self._log("  ⚠️ Some pip packages may have failed")
+
+                # 安装 APBS (Windows 需要单独处理，apbs-binary 不支持 Windows)
+                self._log("\n  Installing APBS (electrostatics solver)...")
+                apbs_cmd = [
+                    self.conda_exe, "install",
+                    "-p", self.env_path,
+                    "-c", "conda-forge",
+                    "apbs", "-y"
+                ]
+                apbs_result = subprocess.run(apbs_cmd, capture_output=True, text=True, timeout=600)
+                if apbs_result.returncode == 0:
+                    self._log("  ✅ APBS installed")
+                else:
+                    self._log("  ⚠️ APBS auto-install failed (may conflict with numpy)")
+                    self._log("  💡 Manual install: download from https://github.com/Electrostatics/apbs/releases")
+                    self._log("  💡 Or try: conda install -c conda-forge apbs --force-reinstall")
             else:
                 self._log("\n[2/5] Skipping dependencies (unchecked)")
             
