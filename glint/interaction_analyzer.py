@@ -78,6 +78,8 @@ except ImportError:
     print("[GLINT] ⚠️ SciPy not installed; spatial acceleration unavailable")
 
 try:
+    import matplotlib
+    matplotlib.use('Agg')  # 非交互式后端，避免与 PyMOL Qt 事件循环死锁
     import matplotlib.pyplot as plt
     MPL_AVAILABLE = True
 except ImportError:

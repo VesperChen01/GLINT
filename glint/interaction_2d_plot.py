@@ -20,6 +20,7 @@ import numpy as np
 import re
 from PIL import Image
 import matplotlib
+matplotlib.use('Agg')  # 非交互式后端，避免与 PyMOL Qt 事件循环死锁
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
 from matplotlib.patches import Circle
