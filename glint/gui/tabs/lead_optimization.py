@@ -291,6 +291,7 @@ class LeadOptimizationTab(CommonTab):
         ec_grid.addWidget(QLabel("Analysis Mode:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.ec_mode_combo = QComboBox(); self.parent_window.ec_mode_combo.setMinimumHeight(32)
         self.parent_window.ec_mode_combo.addItems(["Protein-Ligand EC", "Ternary Complex EC (Molecular Glue)"])
+        self.parent_window.ec_mode_combo.setCurrentIndex(1)  # 默认选择三元复合物分析
         self.parent_window.ec_mode_combo.currentIndexChanged.connect(self._on_ec_mode_changed)
         ec_grid.addWidget(self.parent_window.ec_mode_combo, 1, 1)
         
@@ -382,11 +383,11 @@ class LeadOptimizationTab(CommonTab):
         ec_btn_row.addWidget(self.parent_window.ec_hotspots_btn)
         ec_btn_row.addStretch(1)
         
-        layout.addWidget(grp_ec)
-        layout.addLayout(ec_btn_row)
+        layout.insertWidget(1, grp_ec)
+        layout.insertLayout(2, ec_btn_row)
         
-        # Initially hide ternary-specific fields
-        self._on_ec_mode_changed(0)
+        # 默认显示三元复合物模式的字段
+        self._on_ec_mode_changed(1)
         
         
         layout.addStretch(1)
