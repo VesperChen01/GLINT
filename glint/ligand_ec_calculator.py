@@ -1521,30 +1521,43 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     
     print(f"[calculate_ligand_ec] Ligand SDF file size: {sdf_size} bytes")
     
-    # Load ligand with RDKit
+    # 使用 RDKit 加载配体 SDF（含 sanitize=False 降级策略）
+    ligand_mol = None
     try:
+        # 优先尝试正常加载（sanitize=True，默认值）
         supplier = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
         ligand_mol = supplier[0] if len(supplier) > 0 else None
     except Exception as e:
-        print(f"[calculate_ligand_ec] ❌ RDKit failed to read SDF file: {e}")
-        # Try to read file content for debugging
-        try:
-            with open(ligand_sdf, 'r') as f:
-                content = f.read(500)  # First 500 chars
-                print(f"[calculate_ligand_ec] SDF file content preview:\n{content}")
-        except OSError:  # 文件读取可能失败
-            pass
-        return None
+        print(f"[calculate_ligand_ec] ⚠️ RDKit standard read failed: {e}")
     
+    # 降级策略：关闭 sanitize 重新加载（常见于 MD 快照或 PyMOL 导出的 SDF）
+    if ligand_mol is None:
+        try:
+            print(f"[calculate_ligand_ec] 🔄 Retrying with sanitize=False (common for MD snapshots)...")
+            supplier = Chem.SDMolSupplier(ligand_sdf, removeHs=False, sanitize=False)
+            ligand_mol = supplier[0] if len(supplier) > 0 else None
+            if ligand_mol is not None:
+                # 尝试部分清理：跳过严格的价态检查，保留其他校验
+                try:
+                    Chem.SanitizeMol(ligand_mol, 
+                        sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES)
+                    print(f"[calculate_ligand_ec] ✅ Loaded with partial sanitization (valence check skipped)")
+                except Exception:
+                    # 部分清理也失败，使用未清理的分子（坐标和原子类型仍然可用）
+                    print(f"[calculate_ligand_ec] ⚠️ Partial sanitization failed, using unsanitized molecule")
+                    print(f"[calculate_ligand_ec] 💡 Coordinates and atom types are valid; charges may be approximate")
+        except Exception as e2:
+            print(f"[calculate_ligand_ec] ❌ Fallback read also failed: {e2}")
+    
+    # 最终检查：如果仍然无法加载，输出调试信息并返回
     if ligand_mol is None:
         print(f"[calculate_ligand_ec] ❌ Failed to load ligand from SDF file")
         print(f"[calculate_ligand_ec] 💡 The SDF file may have invalid format")
-        # Try to read file content for debugging
         try:
             with open(ligand_sdf, 'r') as f:
                 content = f.read(500)
                 print(f"[calculate_ligand_ec] SDF file content preview:\n{content}")
-        except OSError:  # 文件读取可能失败
+        except OSError:
             pass
         return None
     
