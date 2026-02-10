@@ -153,6 +153,15 @@ conda run -n "$ENV_NAME" python -m pip install open3d scikit-image --quiet --dis
 }
 unset PYTHONWARNINGS # 安装完成后取消设置
 
+# 安装 APBS（EC 静电互补性分析必需）
+echo "   安装 APBS 求解器..."
+conda run -n "$ENV_NAME" python -m pip install apbs-binary --quiet --disable-pip-version-check || {
+    echo -e "${YELLOW}⚠️  apbs-binary 安装失败，尝试通过 conda 安装...${NC}"
+    conda install -n "$ENV_NAME" -c conda-forge apbs -y || {
+        echo -e "${YELLOW}⚠️  APBS 安装失败，EC分析将无法运行${NC}"
+    }
+}
+
 echo -e "${GREEN}✅ 依赖包安装完成${NC}"
 
 # 4b. 检查并安装 GCC (HADDOCK3/CNS 依赖)
@@ -195,6 +204,18 @@ if command -v pdb2pqr &> /dev/null; then
     echo -e "${GREEN}✅ PDB2PQR CLI 可用${NC}"
 else
     echo -e "${YELLOW}⚠️  PDB2PQR CLI 不可用${NC}"
+fi
+
+# 检查 APBS
+if conda run -n "$ENV_NAME" python -c "from apbs_binary import run_apbs" 2>/dev/null; then
+    echo -e "${GREEN}✅ APBS (apbs-binary) 可用${NC}"
+elif conda run -n "$ENV_NAME" python -c "import apbs" 2>/dev/null; then
+    echo -e "${GREEN}✅ APBS (Python API) 可用${NC}"
+elif command -v apbs &> /dev/null; then
+    echo -e "${GREEN}✅ APBS CLI 可用${NC}"
+else
+    echo -e "${YELLOW}⚠️  APBS 不可用，EC分析将无法运行${NC}"
+    EC_DEPS_OK=false
 fi
 
 if [ "$EC_DEPS_OK" = false ]; then

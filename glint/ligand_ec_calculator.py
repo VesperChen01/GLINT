@@ -768,6 +768,8 @@ class PDB2PQRRunner:
             main_driver(parsed_args)
             
             if os.path.exists(output_pqr):
+                # 修复 PQR 格式：将固定列格式转为空格分隔，防止 APBS 解析失败
+                _fix_pqr_format(output_pqr)
                 print(f"[PDB2PQR] ✅ Generated: {output_pqr}")
                 return True
             else:
@@ -822,6 +824,8 @@ class PDB2PQRRunner:
                         timeout=300
                     )
                     if result.returncode == 0 and os.path.exists(output_pqr):
+                        # 修复 PQR 格式：将固定列格式转为空格分隔，防止 APBS 解析失败
+                        _fix_pqr_format(output_pqr)
                         print(f"[PDB2PQR] ✅ Generated (without keep-chain): {output_pqr}")
                         return True
                 
@@ -829,6 +833,8 @@ class PDB2PQRRunner:
                 return False
             
             if os.path.exists(output_pqr):
+                # 修复 PQR 格式：将固定列格式转为空格分隔，防止 APBS 解析失败
+                _fix_pqr_format(output_pqr)
                 print(f"[PDB2PQR] ✅ Generated: {output_pqr}")
                 return True
             else:
@@ -2439,8 +2445,11 @@ def _extract_protein_ligand_from_pdb(complex_pdb: str, protein_pdb: str,
 
 
 def _simple_pdb_to_pqr(pdb_file: str, pqr_file: str) -> Optional[str]:
-    """Simple PDB to PQR conversion with basic charges (fallback)."""
-    # Simple charge assignment based on residue type
+    """Simple PDB to PQR conversion with basic charges (fallback).
+    
+    使用空格分隔的 PQR 格式输出，避免固定列拼接导致 APBS 解析失败。
+    """
+    # 基于残基类型的简单电荷分配
     charges = {
         'ARG': {'NH1': 0.5, 'NH2': 0.5, 'NE': 0.0},
         'LYS': {'NZ': 1.0},
@@ -2449,37 +2458,259 @@ def _simple_pdb_to_pqr(pdb_file: str, pqr_file: str) -> Optional[str]:
         'HIS': {'ND1': 0.25, 'NE2': 0.25}
     }
     
-    # Default radii
+    # 默认原子半径
     radii = {'C': 1.7, 'N': 1.55, 'O': 1.52, 'S': 1.8, 'H': 1.2}
     
     try:
         with open(pdb_file, 'r') as f_in, open(pqr_file, 'w') as f_out:
             for line in f_in:
                 if line.startswith(('ATOM', 'HETATM')):
+                    # 从 PDB 固定列位置提取各字段
+                    record_type = line[0:6].strip()
+                    serial = line[6:11].strip()
+                    atom_name = line[12:16].strip()
                     resname = line[17:20].strip()
-                    atomname = line[12:16].strip()
-                    element = line[76:78].strip() if len(line) > 76 else atomname[0]
+                    chain = line[21:22].strip()
+                    resseq = line[22:26].strip()
+                    x = float(line[30:38])
+                    y = float(line[38:46])
+                    z = float(line[46:54])
+                    element = line[76:78].strip() if len(line) > 76 else atom_name[0]
                     
-                    # Get charge
+                    # 获取电荷
                     charge = 0.0
-                    if resname in charges and atomname in charges[resname]:
-                        charge = charges[resname][atomname]
+                    if resname in charges and atom_name in charges[resname]:
+                        charge = charges[resname][atom_name]
                     
-                    # Get radius
+                    # 获取半径
                     radius = radii.get(element.upper(), 1.7)
                     
-                    # Write PQR line
+                    # 格式化原子名称（保持 PDB 对齐规则：1字符元素右移一位）
+                    if len(atom_name) < 4:
+                        atom_name_fmt = f" {atom_name:<3s}"
+                    else:
+                        atom_name_fmt = f"{atom_name:<4s}"
+                    
+                    # 使用空格分隔的 PQR 格式写入，确保 APBS 可正确解析
                     pqr_line = (
-                        f"{line[:54]}"
-                        f"{charge:8.4f}"
-                        f"{radius:7.4f}\n"
+                        f"{record_type:<6s}{int(serial):>5d} {atom_name_fmt} "
+                        f"{resname:<3s} {chain:1s}{resseq:>4s}    "
+                        f"{x:8.3f} {y:8.3f} {z:8.3f} "
+                        f"{charge:7.4f} {radius:6.4f}\n"
                     )
                     f_out.write(pqr_line)
+                elif line.startswith(('END', 'TER', 'REMARK')):
+                    # 保留结构标记行
+                    f_out.write(line)
         
         return pqr_file
     except Exception as e:
         print(f"[_simple_pdb_to_pqr] Error: {e}")
         return None
+
+
+def _fix_pqr_format(pqr_file: str) -> bool:
+    """修复 PQR 文件格式，将固定列格式转为空格分隔格式。
+    
+    PDB2PQR（Python API 或命令行）生成的 PQR 文件可能使用 PDB 式固定列格式，
+    当坐标值较大（如 y=-104.24）时，相邻字段会连在一起（字段拼接），
+    导致 APBS 无法解析并报错：
+      "Valist_readPQR: Error parsing atom! ...no concatenated fields."
+    
+    本函数将 PQR 文件重写为空格分隔格式，确保每个字段之间至少有一个空格。
+    
+    Args:
+        pqr_file: PQR 文件路径
+        
+    Returns:
+        True 表示修复成功，False 表示修复失败（原文件不受影响）
+    """
+    try:
+        with open(pqr_file, 'r') as f:
+            lines = f.readlines()
+        
+        # 调试日志：打印修复前第一条 ATOM/HETATM 行
+        first_atom_line = next((l for l in lines if l.startswith(('ATOM', 'HETATM'))), None)
+        if first_atom_line:
+            print(f"[_fix_pqr_format] 修复前第一行: {first_atom_line.rstrip()}")
+        
+        fixed_lines = []
+        first_fixed_logged = False
+        for line in lines:
+            # 仅处理 ATOM/HETATM 记录行
+            if not line.startswith(('ATOM', 'HETATM')):
+                fixed_lines.append(line)
+                continue
+            
+            # 尝试方法一：按 PDB 固定列位置解析
+            parsed = _parse_pqr_fixed_columns(line)
+            
+            # 如果固定列解析失败，尝试方法二：按空格分割
+            if parsed is None:
+                parsed = _parse_pqr_whitespace(line)
+            
+            if parsed is None:
+                # 两种方式都失败，保留原行（不破坏数据）
+                print(f"[_fix_pqr_format] ⚠️ 无法解析行，保留原样: {line.rstrip()}")
+                fixed_lines.append(line)
+                continue
+            
+            record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius = parsed
+            
+            # 格式化原子名称（保持 PDB 对齐规则）
+            if len(atom_name) < 4:
+                atom_name_fmt = f" {atom_name:<3s}"
+            else:
+                atom_name_fmt = f"{atom_name:<4s}"
+            
+            # 使用纯空格分隔格式，APBS 解析更可靠
+            # 注意: x/y/z 之间必须有空格，否则当值为负数（如 -104.24）时字段会拼接
+            fixed_line = (
+                f"{record_type:<6s}"     # ATOM or HETATM
+                f"{serial:>5d} "         # 原子序号 + 空格
+                f"{atom_name_fmt} "      # 原子名 + 空格
+                f"{resname:<4s}"         # 残基名(4字符)
+                f"{chain:1s}"            # 链ID
+                f"{resseq:>4s}    "      # 残基序号 + 4空格
+                f"{x:8.3f} "            # x坐标 + 空格
+                f"{y:8.3f} "            # y坐标 + 空格
+                f"{z:8.3f} "            # z坐标 + 空格
+                f"{charge:7.4f} "        # 电荷 + 空格
+                f"{radius:6.4f}\n"       # 半径
+            )
+            fixed_lines.append(fixed_line)
+            
+            # 调试日志：打印修复后第一条行，方便对比
+            if not first_fixed_logged:
+                print(f"[_fix_pqr_format] 修复后第一行: {fixed_line.rstrip()}")
+                first_fixed_logged = True
+        
+        # 写回文件
+        with open(pqr_file, 'w') as f:
+            f.writelines(fixed_lines)
+        
+        print(f"[_fix_pqr_format] ✅ PQR 格式已修复: {pqr_file}")
+        return True
+        
+    except Exception as e:
+        print(f"[_fix_pqr_format] ❌ 修复失败: {e}")
+        return False
+
+
+def _parse_pqr_fixed_columns(line: str):
+    """按 PDB 固定列位置解析 PQR 行。
+    
+    PDB/PQR 固定列定义：
+      record_type: [0:6], serial: [6:11], atom_name: [12:16],
+      resname: [17:20], chain: [21:22], resseq: [22:26],
+      x: [30:38], y: [38:46], z: [46:54],
+      charge: [54:62], radius: [62:69] (PQR 扩展字段)
+    
+    Returns:
+        解析成功返回元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
+        解析失败返回 None
+    """
+    try:
+        # 行长度不够则无法按固定列解析
+        if len(line) < 54:
+            return None
+        
+        record_type = line[0:6].strip()
+        serial = int(line[6:11].strip())
+        atom_name = line[12:16].strip()
+        resname = line[17:20].strip()
+        chain = line[21:22].strip() if line[21:22].strip() else ' '
+        resseq = line[22:26].strip()
+        x = float(line[30:38])
+        y = float(line[38:46])
+        z = float(line[46:54])
+        
+        # 电荷和半径为 PQR 扩展字段，可能不存在或位置不同
+        charge = 0.0
+        radius = 0.0
+        if len(line) >= 62:
+            charge_str = line[54:62].strip()
+            if charge_str:
+                charge = float(charge_str)
+        if len(line) >= 69:
+            radius_str = line[62:69].strip()
+            if radius_str:
+                radius = float(radius_str)
+        elif len(line) > 62:
+            # 行尾可能有半径但列宽不足 69
+            radius_str = line[62:].strip()
+            if radius_str:
+                try:
+                    radius = float(radius_str)
+                except ValueError:
+                    pass
+        
+        return (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
+        
+    except (ValueError, IndexError):
+        return None
+
+
+def _parse_pqr_whitespace(line: str):
+    """按空格分割解析 PQR 行（兜底方案）。
+    
+    PQR 空格分隔格式通常为：
+      ATOM serial atom_name resname [chain] resseq x y z charge radius
+    
+    注意：chain 字段可能缺失，需要根据字段数量判断。
+    
+    Returns:
+        解析成功返回元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
+        解析失败返回 None
+    """
+    try:
+        parts = line.split()
+        
+        # 最少需要 10 个字段（无 chain 时）：record serial name resname resseq x y z charge radius
+        # 有 chain 时为 11 个字段：record serial name resname chain resseq x y z charge radius
+        if len(parts) < 10:
+            return None
+        
+        record_type = parts[0]
+        serial = int(parts[1])
+        atom_name = parts[2]
+        resname = parts[3]
+        
+        if len(parts) == 11:
+            # 包含 chain 字段
+            chain = parts[4]
+            resseq = parts[5]
+            x = float(parts[6])
+            y = float(parts[7])
+            z = float(parts[8])
+            charge = float(parts[9])
+            radius = float(parts[10])
+        elif len(parts) == 10:
+            # 无 chain 字段
+            chain = ' '
+            resseq = parts[4]
+            x = float(parts[5])
+            y = float(parts[6])
+            z = float(parts[7])
+            charge = float(parts[8])
+            radius = float(parts[9])
+        else:
+            # 字段过多，尝试取最后 5 个为坐标+电荷+半径
+            chain = parts[4] if not parts[4].lstrip('-').replace('.', '').isdigit() else ' '
+            idx = 5 if chain != ' ' else 4
+            resseq = parts[idx]
+            # 从末尾往前取 5 个浮点数
+            radius = float(parts[-1])
+            charge = float(parts[-2])
+            z = float(parts[-3])
+            y = float(parts[-4])
+            x = float(parts[-5])
+        
+        return (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
+        
+    except (ValueError, IndexError):
+        return None
+
 
 
 def _get_molecule_center(mol: 'Chem.Mol', conformer_id: int = 0) -> np.ndarray:
