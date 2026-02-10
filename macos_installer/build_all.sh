@@ -1,6 +1,7 @@
 #!/bin/bash
 # Complete build script for GLINT macOS distribution
 # Creates both installer DMG and drag-and-drop DMG
+set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
@@ -11,12 +12,16 @@ echo "=========================================="
 echo ""
 
 # Get version
-VERSION=$(grep "__version__" ../glint/_version.py | cut -d'"' -f2)
-if [ -z "$VERSION" ]; then
-    VERSION="0.1.28-beta"
+VERSION=""
+if [ -f ../glint/_version.py ]; then
+    VERSION=$(grep "__version__" ../glint/_version.py | cut -d'"' -f2 || true)
 fi
+if [ -z "$VERSION" ]; then
+    VERSION="0.2.1"
+fi
+VERSION_CLEAN="${VERSION#v}"
 
-echo "Building GLINT v${VERSION}"
+echo "Building GLINT v${VERSION_CLEAN}"
 echo ""
 
 # Step 1: Build GLINT Installer.app
@@ -65,7 +70,7 @@ INSTALLER_DMG=$(ls -t GLINT_Installer_v*.dmg 2>/dev/null | head -1)
 DRAGDROP_DMG=$(ls -t GLINT_v*.dmg 2>/dev/null | head -1)
 
 if [ -n "$INSTALLER_DMG" ]; then
-    STANDARD_INSTALLER="GLINT_Installer_v${VERSION}.dmg"
+    STANDARD_INSTALLER="GLINT_Installer_v${VERSION_CLEAN}.dmg"
     if [ "$INSTALLER_DMG" != "$STANDARD_INSTALLER" ]; then
         mv "$INSTALLER_DMG" "$STANDARD_INSTALLER"
     fi
@@ -73,7 +78,7 @@ if [ -n "$INSTALLER_DMG" ]; then
 fi
 
 if [ -n "$DRAGDROP_DMG" ]; then
-    STANDARD_DRAGDROP="GLINT_v${VERSION}.dmg"
+    STANDARD_DRAGDROP="GLINT_v${VERSION_CLEAN}.dmg"
     if [ "$DRAGDROP_DMG" != "$STANDARD_DRAGDROP" ]; then
         mv "$DRAGDROP_DMG" "$STANDARD_DRAGDROP"
     fi
@@ -87,12 +92,12 @@ echo "=========================================="
 echo ""
 echo "Two distribution options created:"
 echo ""
-echo "1. GLINT_Installer_v${VERSION}.dmg"
+echo "1. GLINT_Installer_v${VERSION_CLEAN}.dmg"
 echo "   - Full installer with setup wizard"
 echo "   - Installs conda environment and dependencies"
 echo "   - Recommended for first-time users"
 echo ""
-echo "2. GLINT_v${VERSION}.dmg"
+echo "2. GLINT_v${VERSION_CLEAN}.dmg"
 echo "   - Drag-and-drop installation"
 echo "   - Drag GLINT.app to Applications"
 echo "   - Requires dependencies already installed"

@@ -1,4 +1,31 @@
+## Python 编译缓存
 __pycache__/
 *.pyc
+*.pyo
+
+## macOS 系统文件
 .DS_Store
+.AppleDouble
+.LSOverride
+
+## 构建产物与发布包
 *.zip
+*.dmg
+*.app/
+dist/
+build/
+*.spec
+
+## 备份文件
+*.bak
+*.backup
+*.orig
+*~
+
+## IDE / 工具
+.ace-tool/
+.magi/
+.vscode/
+.idea/
+*.swp
+*.swo

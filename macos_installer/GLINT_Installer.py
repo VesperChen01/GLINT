@@ -37,6 +37,13 @@ CONDA_PACKAGES = [
 # Pip 包 (open3d 在 conda 上不稳定, haddock3 因 haddocking channel 不可用改用 pip)
 PIP_PACKAGES = ["requests", "open3d", "haddock3"]
 
+# Conda Terms of Service channels (newer conda requires explicit acceptance in non-interactive mode)
+CONDA_TOS_CHANNELS = [
+    "https://repo.anaconda.com/pkgs/main",
+    "https://repo.anaconda.com/pkgs/r",
+]
+
+
 
 def get_glint_source_dir():
     """获取 GLINT 源码目录"""
@@ -68,10 +75,10 @@ class InstallerApp:
         self.root.geometry("750x780")
         self.root.minsize(700, 750)
         self.root.resizable(True, True)
-        
+
         self._configure_styles()
         self._set_icon()
-        
+
         self.install_path = tk.StringVar(value=DEFAULT_INSTALL_PATH)
         self.create_shortcut = tk.BooleanVar(value=True)
         self.install_deps = tk.BooleanVar(value=True)
@@ -79,45 +86,23 @@ class InstallerApp:
         self.env_ok = False
         self.conda_exe = None
         self.env_path = None
-        
+
         self._build_ui()
         self._center_window()
-        
+
         self.root.after(500, lambda: threading.Thread(target=self._check_environment, daemon=True).start())
-    
+
     def _configure_styles(self):
-        """Configure better fonts and styles for macOS"""
-        style = ttk.Style()
-
-        # Use aqua theme on macOS
-        available_themes = style.theme_names()
-        if 'aqua' in available_themes:
-            style.theme_use('aqua')
-
-        # macOS system fonts
-        self.title_font = ("SF Pro Display", 22, "bold")
-        self.subtitle_font = ("SF Pro Text", 11)
-        self.normal_font = ("SF Pro Text", 10)
-        self.small_font = ("SF Pro Text", 9)
+        """Use minimal, compatibility-first style settings."""
+        # Keep styling intentionally minimal to avoid rendering issues
+        # on some macOS + Tk combinations.
+        self.title_font = ("Helvetica", 22, "bold")
+        self.subtitle_font = ("Helvetica", 11)
+        self.normal_font = ("Helvetica", 10)
+        self.small_font = ("Helvetica", 9)
         self.mono_font = ("Menlo", 9)
 
-        # Fallback to Helvetica if SF Pro is not available
-        try:
-            import tkinter.font as tkfont
-            available_fonts = tkfont.families()
-
-            if "SF Pro Display" not in available_fonts:
-                self.title_font = ("Helvetica Neue", 22, "bold")
-                self.subtitle_font = ("Helvetica Neue", 11)
-                self.normal_font = ("Helvetica Neue", 10)
-                self.small_font = ("Helvetica Neue", 9)
-
-            if "Menlo" not in available_fonts:
-                self.mono_font = ("Monaco", 9)
-        except:
-            pass
-
-        # Configure ttk styles with better fonts
+        style = ttk.Style()
         style.configure("TLabel", font=self.normal_font)
         style.configure("TButton", font=self.normal_font, padding=6)
         style.configure("TCheckbutton", font=self.normal_font)
@@ -125,8 +110,17 @@ class InstallerApp:
         style.configure("TLabelframe", font=self.normal_font)
         style.configure("TLabelframe.Label", font=self.normal_font)
 
-        self.root.configure(bg='#f0f0f0')
-    
+        try:
+            import tkinter.font as tkfont
+            available_fonts = tkfont.families()
+            if "Menlo" not in available_fonts:
+                self.mono_font = ("Monaco", 9)
+        except Exception:
+            pass
+
+        # Keep system default theme/colors for maximum compatibility.
+        # Only fonts are customized above.
+
     def _set_icon(self):
         """设置窗口图标"""
         try:
@@ -144,7 +138,7 @@ class InstallerApp:
                 self.root.iconphoto(True, img)
         except:
             pass
-    
+
     def _center_window(self):
         """居中窗口"""
         self.root.update_idletasks()
@@ -155,39 +149,39 @@ class InstallerApp:
         x = (sw - w) // 2
         y = (sh - h) // 2
         self.root.geometry(f"{w}x{h}+{x}+{y}")
-    
+
     def _build_ui(self):
         """Build user interface with improved fonts"""
         # Main frame
         main = ttk.Frame(self.root, padding=20)
         main.pack(fill=tk.BOTH, expand=True)
-        
+
         # Title section
         title_frame = ttk.Frame(main)
         title_frame.pack(fill=tk.X, pady=(0, 15))
-        
+
         title = ttk.Label(title_frame, text="🧬 GLINT Installer",
                          font=self.title_font)
         title.pack()
-        
+
         subtitle = ttk.Label(title_frame,
                             text="PyMOL Plugin for Molecular Glue Analysis",
                             font=self.subtitle_font, foreground="#666666")
         subtitle.pack(pady=(5, 0))
-        
+
         # 从 _version.py 动态获取版本
         try:
             from glint._version import __version__
         except ImportError:
             __version__ = "Unknown"
-        version = ttk.Label(title_frame, text=f"Version: v{__version__}",
+        version = ttk.Label(title_frame, text=f"Version: {__version__}",
                            font=self.small_font, foreground="#888888")
         version.pack(pady=(3, 0))
-        
+
         # Environment Status section
         status_frame = ttk.LabelFrame(main, text=" Environment Status ", padding=12)
         status_frame.pack(fill=tk.X, pady=(0, 15))
-        
+
         # Conda status row
         conda_row = ttk.Frame(status_frame)
         conda_row.pack(fill=tk.X, pady=5)
@@ -198,7 +192,7 @@ class InstallerApp:
         self.conda_install_btn = ttk.Button(conda_row, text="Download Miniconda",
                                             command=self._install_conda, state=tk.DISABLED)
         self.conda_install_btn.pack(side=tk.RIGHT)
-        
+
         # Environment status row
         env_row = ttk.Frame(status_frame)
         env_row.pack(fill=tk.X, pady=5)
@@ -207,62 +201,62 @@ class InstallerApp:
         self.env_status = ttk.Label(env_row, text="⏳ Checking...",
                                     font=self.normal_font, foreground="#E67E22")
         self.env_status.pack(side=tk.LEFT, padx=10)
-        
+
         # Installation Path section
         path_frame = ttk.LabelFrame(main, text=" Installation Path ", padding=12)
         path_frame.pack(fill=tk.X, pady=(0, 15))
-        
+
         path_row = ttk.Frame(path_frame)
         path_row.pack(fill=tk.X)
         self.path_entry = ttk.Entry(path_row, textvariable=self.install_path,
                                     width=60, font=self.normal_font)
         self.path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
         ttk.Button(path_row, text="Browse...", command=self._browse_path).pack(side=tk.RIGHT, padx=(10, 0))
-        
+
         path_note = ttk.Label(path_frame,
                              text="📌 GLINT will be installed here. PyMOL loads plugins from ~/.pymol/startup/",
                              font=self.small_font, foreground="#888888")
         path_note.pack(anchor=tk.W, pady=(8, 0))
-        
+
         # Options section
         opts_frame = ttk.LabelFrame(main, text=" Options ", padding=12)
         opts_frame.pack(fill=tk.X, pady=(0, 15))
-        
+
         ttk.Checkbutton(opts_frame, text="Install/Update dependencies (conda packages + PyMOL)",
                        variable=self.install_deps).pack(anchor=tk.W, pady=3)
         ttk.Checkbutton(opts_frame, text="Create desktop shortcut",
                        variable=self.create_shortcut).pack(anchor=tk.W, pady=3)
-        
+
         # Progress section
         progress_frame = ttk.LabelFrame(main, text=" Progress ", padding=12)
         progress_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
-        
+
         self.progress = ttk.Progressbar(progress_frame, mode="determinate", length=500)
         self.progress.pack(fill=tk.X, pady=(0, 10))
-        
+
         # Log text area with better styling
         log_frame = ttk.Frame(progress_frame)
         log_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         self.log_text = tk.Text(log_frame, height=12, state=tk.DISABLED,
-                               font=self.mono_font, bg="#1a1a2e", fg="#eaeaea",
-                               insertbackground="#ffffff", selectbackground="#3d5a80",
-                               relief=tk.FLAT, padx=10, pady=8)
+                               font=self.mono_font, bg="#ffffff", fg="#222222",
+                               insertbackground="#222222", selectbackground="#cfe8ff",
+                               relief=tk.SOLID, bd=1, padx=10, pady=8)
         scrollbar = ttk.Scrollbar(log_frame, orient=tk.VERTICAL, command=self.log_text.yview)
         self.log_text.configure(yscrollcommand=scrollbar.set)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        
+
         # Button section
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=tk.X, pady=(5, 0))
-        
+
         self.install_btn = ttk.Button(btn_frame, text="🚀 Install GLINT",
                                       command=self._start_install, width=20)
         self.install_btn.pack(side=tk.RIGHT, padx=(10, 0))
-        
+
         ttk.Button(btn_frame, text="Cancel", command=self.root.quit, width=12).pack(side=tk.RIGHT)
-    
+
     def _log(self, msg):
         """写入日志"""
         self.log_text.configure(state=tk.NORMAL)
@@ -270,24 +264,24 @@ class InstallerApp:
         self.log_text.see(tk.END)
         self.log_text.configure(state=tk.DISABLED)
         self.root.update()
-    
+
     def _browse_path(self):
         """浏览安装路径"""
         path = filedialog.askdirectory(title="Select Installation Directory",
                                        initialdir=os.path.dirname(self.install_path.get()))
         if path:
             self.install_path.set(path)
-    
+
     def _check_environment(self):
         """检查环境"""
         self._log("Checking environment...")
-        
+
         # 1. 查找 Conda
         self.conda_exe = self._find_conda()
-        
+
         if self.conda_exe:
             try:
-                result = subprocess.run([self.conda_exe, "--version"], 
+                result = subprocess.run([self.conda_exe, "--version"],
                                        capture_output=True, text=True, timeout=10)
                 if result.returncode == 0:
                     version = result.stdout.strip()
@@ -310,18 +304,18 @@ class InstallerApp:
             self._log("  Conda: Not found")
             self._log("  Please install Miniconda first!")
             return
-        
+
         # 2. 检查环境
         try:
             base_result = subprocess.run([self.conda_exe, "info", "--base"],
                                         capture_output=True, text=True, timeout=10)
             conda_base = base_result.stdout.strip() if base_result.returncode == 0 else ""
-            
+
             if not conda_base:
                 raise Exception("Cannot determine conda base")
-            
+
             self.env_path = os.path.join(conda_base, "envs", ENV_NAME)
-            
+
             if os.path.isdir(self.env_path):
                 self.root.after(0, lambda: self.env_status.configure(
                     text="✅ Exists", foreground="green"))
@@ -335,9 +329,9 @@ class InstallerApp:
             self.root.after(0, lambda: self.env_status.configure(
                 text="❓ Unknown", foreground="gray"))
             self._log(f"  Environment check failed: {e}")
-        
+
         self._log("Ready to install.")
-    
+
     def _find_conda(self):
         """查找 Conda 安装路径 (macOS)"""
         # 检查 PATH
@@ -369,34 +363,66 @@ class InstallerApp:
                 return path
 
         return None
-    
+
     def _install_conda(self):
-        """打开 Miniconda 下载页面"""
+        """打开 Miniconda 下载页面（macOS）"""
         webbrowser.open("https://docs.conda.io/en/latest/miniconda.html")
-        messagebox.showinfo("Install Miniconda", 
-                           "Please download and install Miniconda for Linux.\n\n"
-                           "After installation, restart this installer.")
-    
+        messagebox.showinfo(
+            "Install Miniconda",
+            "Please download and install Miniconda for macOS.\n\n"
+            "Recommended: choose Miniconda3 macOS installer matching your CPU (Apple Silicon or Intel).\n"
+            "After installation, restart this installer."
+        )
+
+
+    def _ensure_conda_tos_accepted(self):
+        """Ensure required conda ToS channels are accepted for non-interactive install."""
+        self._log("  Checking conda Terms of Service...")
+        for ch in CONDA_TOS_CHANNELS:
+            cmd = [
+                self.conda_exe, "tos", "accept",
+                "--override-channels",
+                "--channel", ch,
+            ]
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+            if result.returncode == 0:
+                self._log(f"  ✅ ToS accepted: {ch}")
+            else:
+                stderr = (result.stderr or "").strip()
+                stdout = (result.stdout or "").strip()
+                # If already accepted, continue
+                merged = f"{stdout}\n{stderr}".lower()
+                if "already" in merged and "accept" in merged:
+                    self._log(f"  ℹ️ ToS already accepted: {ch}")
+                    continue
+                self._log(f"  ❌ Failed accepting ToS for: {ch}")
+                if stderr:
+                    self._log(f"  {stderr[:400]}")
+                raise Exception(f"Conda ToS acceptance failed for channel: {ch}")
+
+
+
+
     def _start_install(self):
         """开始安装"""
         if not self.conda_ok:
             messagebox.showerror("Error", "Please install Miniconda first!")
             return
-        
+
         self.install_btn.configure(state=tk.DISABLED)
         threading.Thread(target=self._do_install, daemon=True).start()
-    
+
     def _do_install(self):
         """执行安装"""
         try:
             self.progress["value"] = 0
-            
+
             # 1. 创建/检查 Conda 环境
             self._log("\n" + "=" * 50)
             self._log("[1/5] Checking conda environment...")
             self._log("=" * 50)
             self.progress["value"] = 10
-            
+
             if not self.env_path:
                 try:
                     base_result = subprocess.run([self.conda_exe, "info", "--base"],
@@ -408,7 +434,10 @@ class InstallerApp:
                         raise Exception("Cannot determine conda base")
                 except Exception as e:
                     raise Exception(f"Failed to determine environment path: {e}")
-            
+
+            # Ensure conda ToS is accepted before any non-interactive conda action
+            self._ensure_conda_tos_accepted()
+
             if not self.env_ok:
                 self._log(f"  Creating environment at {self.env_path}...")
                 result = subprocess.run(
@@ -421,19 +450,19 @@ class InstallerApp:
                 self._log("  ✅ Environment created")
             else:
                 self._log(f"  Environment exists: {self.env_path}")
-            
+
             self.progress["value"] = 20
-            
+
             # 2. 安装依赖
             if self.install_deps.get():
                 self._log("\n" + "=" * 50)
                 self._log("[2/5] Installing dependencies...")
                 self._log("=" * 50)
                 self._log("  This may take 10-20 minutes, please wait...")
-                
+
                 pkg_str = " ".join(CONDA_PACKAGES)
                 self._log(f"  Installing: {pkg_str}")
-                
+
                 # 注意: haddocking channel 已不可用 (HTTP 404)，移除该 channel
                 cmd = [
                     self.conda_exe, "install",
@@ -442,18 +471,18 @@ class InstallerApp:
                     "-c", "schrodinger", # Add schrodinger channel for pymol-open-source
                     "-y"
                 ] + CONDA_PACKAGES
-                
+
                 result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
-                
+
                 if result.returncode == 0:
                     self._log("  ✅ Conda packages installed")
                 else:
                     self._log(f"  ⚠️ Some packages may have failed")
                     if result.stderr:
                         self._log(f"  {result.stderr[:500]}")
-                
+
                 self.progress["value"] = 50
-                
+
                 # 安装 pip 包
                 if PIP_PACKAGES:
                     self._log("\n  Installing pip packages...")
@@ -461,7 +490,7 @@ class InstallerApp:
                         self.conda_exe, "run", "-p", self.env_path,
                         "python", "-m", "pip", "install", "--quiet"
                     ] + PIP_PACKAGES
-                    
+
                     pip_result = subprocess.run(pip_cmd, capture_output=True, text=True, timeout=600)
                     if pip_result.returncode == 0:
                         self._log("  ✅ Pip packages installed")
@@ -469,21 +498,21 @@ class InstallerApp:
                         self._log("  ⚠️ Some pip packages may have failed")
             else:
                 self._log("\n[2/5] Skipping dependencies (unchecked)")
-            
+
             self.progress["value"] = 60
-            
+
             # 3. 复制插件文件
             self._log("\n" + "=" * 50)
             self._log("[3/5] Installing plugin files...")
             self._log("=" * 50)
-            
+
             install_path = self.install_path.get()
             source_dir = get_glint_source_dir()
-            
+
             if source_dir and os.path.isdir(source_dir):
                 # 创建目标目录
                 os.makedirs(install_path, exist_ok=True)
-                
+
                 # 删除旧安装
                 if os.path.exists(install_path):
                     for item in os.listdir(install_path):
@@ -495,7 +524,7 @@ class InstallerApp:
                                 os.remove(item_path)
                         except:
                             pass
-                
+
                 # 复制文件
                 IGNORED = {'__pycache__', '.DS_Store', '.git', '.gitignore', '*.pyc'}
                 for item in os.listdir(source_dir):
@@ -505,19 +534,19 @@ class InstallerApp:
                     dst = os.path.join(install_path, item)
                     try:
                         if os.path.isdir(src):
-                            shutil.copytree(src, dst, 
+                            shutil.copytree(src, dst,
                                           ignore=shutil.ignore_patterns(*IGNORED))
                         else:
                             shutil.copy2(src, dst)
                     except Exception as e:
                         self._log(f"  ⚠️ Failed to copy {item}: {e}")
-                
+
                 self._log(f"  ✅ Copied to {install_path}")
             else:
                 self._log(f"  ⚠️ Source directory not found: {source_dir}")
-            
+
             self.progress["value"] = 80
-            
+
             # 4. 创建快捷方式
             if self.create_shortcut.get():
                 self._log("\n" + "=" * 50)
@@ -526,9 +555,9 @@ class InstallerApp:
                 self._create_shortcut()
             else:
                 self._log("\n[4/5] Skipping shortcut creation")
-            
+
             self.progress["value"] = 100
-            
+
             # 5. 完成
             self._log("\n" + "=" * 50)
             self._log("[5/5] ✅ Installation complete!")
@@ -541,7 +570,7 @@ class InstallerApp:
                 "Success",
                 "GLINT installed successfully!\n\n"
                 "You can now launch GLINT from ~/Applications/GLINT.app"))
-            
+
         except Exception as e:
             self._log(f"\n❌ Error: {e}")
             import traceback
@@ -549,7 +578,7 @@ class InstallerApp:
             self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
         finally:
             self.root.after(0, lambda: self.install_btn.configure(state=tk.NORMAL))
-    
+
     def _create_shortcut(self):
         """Create macOS application shortcut"""
         home = os.path.expanduser("~")

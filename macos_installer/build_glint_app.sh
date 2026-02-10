@@ -1,6 +1,7 @@
 #!/bin/bash
 # Build GLINT.app - A standalone app that can be dragged to Applications
 # This app will launch PyMOL with GLINT loaded
+set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR/.."
@@ -23,7 +24,13 @@ echo "Created app bundle structure at: $APP_NAME"
 
 # Copy GLINT source code to Resources
 echo "Copying GLINT source code..."
-cp -r "glint" "$RESOURCES_DIR/"
+GLINT_SOURCE_DIR="glint"
+if [ ! -d "$GLINT_SOURCE_DIR" ]; then
+    echo "❌ Error: GLINT source directory not found: $GLINT_SOURCE_DIR"
+    echo "   Please ensure project structure includes ./glint at repository root."
+    exit 1
+fi
+cp -R "$GLINT_SOURCE_DIR" "$RESOURCES_DIR/"
 
 # Copy icon
 if [ -f "glint/assets/logo.png" ]; then
@@ -102,7 +109,7 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.28</string>
+    <string>0.2.1</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>

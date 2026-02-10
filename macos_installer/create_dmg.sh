@@ -1,20 +1,25 @@
 #!/bin/bash
 # Create DMG installer for GLINT
+set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR/.."
 
-# Get version from _version.py
-VERSION=$(grep "__version__" glint/_version.py | cut -d'"' -f2)
+# Get version from source tree
+VERSION=""
+if [ -f "glint/_version.py" ]; then
+    VERSION=$(grep "__version__" "glint/_version.py" | cut -d'"' -f2 || true)
+fi
 if [ -z "$VERSION" ]; then
-    VERSION="0.1.28-beta"
+    VERSION="0.2.1"
 fi
 
 APP_NAME="GLINT Installer.app"
-DMG_NAME="GLINT_Installer_v${VERSION}.dmg"
+VERSION_CLEAN="${VERSION#v}"
+DMG_NAME="GLINT_Installer_v${VERSION_CLEAN}.dmg"
 VOLUME_NAME="GLINT Installer"
 
-echo "Creating DMG for GLINT Installer v${VERSION}..."
+echo "Creating DMG for GLINT Installer v${VERSION_CLEAN}..."
 
 # Check if app exists
 if [ ! -d "$APP_NAME" ]; then

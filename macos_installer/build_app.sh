@@ -1,5 +1,6 @@
 #!/bin/bash
 # macOS App Bundle Build Script for GLINT Installer
+set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
@@ -23,11 +24,20 @@ echo "Created app bundle structure at: $APP_PATH"
 
 # 复制 GLINT 源码到 Resources
 echo "Copying GLINT source code..."
-cp -r "../glint" "$RESOURCES_DIR/"
+
+GLINT_SOURCE_DIR="../glint"
+if [ ! -d "$GLINT_SOURCE_DIR" ]; then
+    echo "❌ Error: GLINT source directory not found: $GLINT_SOURCE_DIR"
+    echo "   Please ensure project structure includes ./glint at repository root."
+    exit 1
+fi
+
+cp -R "$GLINT_SOURCE_DIR" "$RESOURCES_DIR/glint"
+echo "Copied GLINT source from: $GLINT_SOURCE_DIR"
 
 # 复制图标
-if [ -f "../glint/assets/logo.png" ]; then
-    cp "../glint/assets/logo.png" "$RESOURCES_DIR/AppIcon.png"
+if [ -f "$GLINT_SOURCE_DIR/assets/logo.png" ]; then
+    cp "$GLINT_SOURCE_DIR/assets/logo.png" "$RESOURCES_DIR/AppIcon.png"
     echo "Copied icon"
 fi
 
@@ -40,36 +50,59 @@ cat > "$MACOS_DIR/launcher" << 'EOF'
 #!/bin/bash
 # GLINT Installer Launcher
 
-CONDA_EXE=""
-if command -v conda &> /dev/null; then
-    CONDA_EXE=$(command -v conda)
-else
-    for p in "$HOME/miniconda3/bin/conda" "$HOME/anaconda3/bin/conda" "/opt/miniconda3/bin/conda" "/opt/anaconda3/bin/conda" "/usr/local/bin/conda" "/opt/homebrew/bin/conda" "/opt/homebrew/Caskroom/miniconda/base/bin/conda"; do
-        if [ -x "$p" ]; then
-            CONDA_EXE="$p"
-            break
-        fi
-    done
-fi
+# Finder launches apps with a very limited PATH.
+# Normalize PATH first, then choose a Python with tkinter support.
+export PATH="/Library/Frameworks/Python.framework/Versions/Current/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
-if [ -z "$CONDA_EXE" ]; then
-  osascript -e 'display alert "Conda Not Found" message "Please install Miniconda first."'
+LOG_DIR="$HOME/Library/Logs"
+LOG_FILE="$LOG_DIR/GLINT_Installer.log"
+mkdir -p "$LOG_DIR"
+
+PYTHON=""
+CANDIDATES=(
+  "/Library/Frameworks/Python.framework/Versions/Current/bin/python3"
+  "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
+  "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"
+  "$(command -v python3 || true)"
+  "/usr/local/bin/python3"
+  "/opt/homebrew/bin/python3"
+  "/usr/bin/python3"
+)
+
+for p in "${CANDIDATES[@]}"; do
+  if [ -n "$p" ] && [ -x "$p" ]; then
+    if "$p" -c "import tkinter" >/dev/null 2>&1; then
+      PYTHON="$p"
+      break
+    fi
+  fi
+done
+
+if [ -z "$PYTHON" ]; then
+  osascript -e 'display alert "Tkinter Not Available" message "GLINT Installer requires Python with tkinter GUI support.\n\nPlease install Python from python.org (3.12/3.13 recommended), then relaunch installer.\n\nDetails in ~/Library/Logs/GLINT_Installer.log"'
+  {
+    echo "[$(date)] tkinter not available in detected python interpreters."
+    printf 'Checked candidates:\n'; printf '  %s\n' "${CANDIDATES[@]}"
+  } >>"$LOG_FILE"
   exit 1
-fi
-
-eval "$($CONDA_EXE shell.bash hook)"
-CONDA_BASE="$(conda info --base 2>/dev/null)"
-PYTHON="${CONDA_BASE}/bin/python"
-
-if [ ! -x "$PYTHON" ]; then
-  PYTHON=$(command -v python3)
 fi
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 RESOURCES_DIR="$(dirname "$DIR")/Resources"
 INSTALLER_SCRIPT="${RESOURCES_DIR}/GLINT_Installer.py"
 
-"$PYTHON" "$INSTALLER_SCRIPT"
+{
+  echo "[$(date)] Launching installer"
+  echo "Python: $PYTHON"
+  "$PYTHON" -c 'import sys, tkinter as tk; print("Python:", sys.version); print("Tk:", tk.TkVersion, "Tcl:", tk.TclVersion)' 2>&1
+} >>"$LOG_FILE"
+
+"$PYTHON" "$INSTALLER_SCRIPT" >>"$LOG_FILE" 2>&1
+EXIT_CODE=$?
+if [ $EXIT_CODE -ne 0 ]; then
+  osascript -e 'display alert "GLINT Installer Error" message "Failed to launch installer UI. See ~/Library/Logs/GLINT_Installer.log for details."'
+  exit $EXIT_CODE
+fi
 EOF
 
 chmod +x "$MACOS_DIR/launcher"
@@ -92,11 +125,13 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.1.28</string>
+    <string>0.2.1</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
     <string>10.13</string>
+    <key>NSRequiresAquaSystemAppearance</key>
+    <true/>
     <key>NSHighResolutionCapable</key>
     <true/>
 </dict>

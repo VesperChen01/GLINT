@@ -1,26 +1,31 @@
 #!/bin/bash
 # Create a drag-and-drop DMG installer for GLINT
 # This creates a DMG with the app and a link to /Applications
+set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR/.."
 
-# Get version from _version.py
-VERSION=$(grep "__version__" glint/_version.py | cut -d'"' -f2)
-if [ -z "$VERSION" ]; then
-    VERSION="0.1.28-beta"
+# Get version from source tree
+VERSION=""
+if [ -f "glint/_version.py" ]; then
+    VERSION=$(grep "__version__" glint/_version.py | cut -d'"' -f2 || true)
 fi
+if [ -z "$VERSION" ]; then
+    VERSION="0.2.1"
+fi
+VERSION_CLEAN="${VERSION#v}"
 
 APP_NAME="GLINT.app"
-DMG_NAME="GLINT_v${VERSION}.dmg"
+DMG_NAME="GLINT_v${VERSION_CLEAN}.dmg"
 VOLUME_NAME="GLINT"
-SOURCE_APP="GLINT Installer.app"
+SOURCE_APP="GLINT.app"
 
-echo "Creating drag-and-drop DMG for GLINT v${VERSION}..."
+echo "Creating drag-and-drop DMG for GLINT v${VERSION_CLEAN}..."
 
 # Check if source app exists
 if [ ! -d "$SOURCE_APP" ]; then
-    echo "Error: $SOURCE_APP not found. Run build_app.sh first."
+    echo "Error: $SOURCE_APP not found. Run build_glint_app.sh first."
     exit 1
 fi
 
@@ -51,47 +56,51 @@ hdiutil create -volname "$VOLUME_NAME" \
     -ov -format UDRW \
     "$TEMP_DMG"
 
-# Mount the temporary DMG
+# Mount the temporary DMG (use fixed mountpoint to avoid parsing issues)
 echo "Mounting temporary DMG..."
-MOUNT_DIR=$(hdiutil attach "$TEMP_DMG" | grep "/Volumes" | tail -1 | awk '{print $NF}')
-
-if [ -z "$MOUNT_DIR" ]; then
-    echo "Failed to mount temporary DMG"
-    rm -rf "$TMP_DIR"
-    rm -f "$TEMP_DMG"
-    exit 1
-fi
+MOUNT_DIR="$TMP_DIR/mount"
+mkdir -p "$MOUNT_DIR"
+hdiutil attach "$TEMP_DMG" -mountpoint "$MOUNT_DIR" -nobrowse >/dev/null
 
 echo "Mounted at: $MOUNT_DIR"
 
-# Set custom view options using AppleScript
+# Set custom view options using AppleScript (best effort)
 echo "Setting DMG window properties..."
-osascript <<EOF
-tell application "Finder"
-    tell disk "$VOLUME_NAME"
-        open
-        set current view of container window to icon view
-        set toolbar visible of container window to false
-        set statusbar visible of container window to false
-        set the bounds of container window to {100, 100, 700, 500}
-        set viewOptions to the icon view options of container window
-        set arrangement of viewOptions to not arranged
-        set icon size of viewOptions to 128
-        set background picture of viewOptions to file ".background:background.png"
-        
-        -- Position the app icon
-        set position of item "$APP_NAME" of container window to {150, 200}
-        
-        -- Position the Applications link
-        set position of item "Applications" of container window to {450, 200}
-        
-        close
-        open
-        update without registering applications
-        delay 2
+if ! osascript <<EOF
+with timeout of 60 seconds
+    tell application "Finder"
+        tell disk "$VOLUME_NAME"
+            open
+            set current view of container window to icon view
+            set toolbar visible of container window to false
+            set statusbar visible of container window to false
+            set the bounds of container window to {100, 100, 700, 500}
+            set viewOptions to the icon view options of container window
+            set arrangement of viewOptions to not arranged
+            set icon size of viewOptions to 128
+
+            -- Set background only if the file exists
+            try
+                set background picture of viewOptions to file ".background:background.png"
+            end try
+
+            -- Position the app icon
+            set position of item "$APP_NAME" of container window to {150, 200}
+
+            -- Position the Applications link
+            set position of item "Applications" of container window to {450, 200}
+
+            close
+            open
+            update without registering applications
+            delay 2
+        end tell
     end tell
-end tell
+end timeout
 EOF
+then
+    echo "⚠️ Finder customization timed out; continuing with default DMG layout."
+fi
 
 # Sync and unmount
 sync
