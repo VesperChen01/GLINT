@@ -39,7 +39,9 @@ try:
         get_element_from_atom_name, calculate_angle_three_points,
         identify_molecule_type, INTERACTION_PARAMS,
         is_hbond_precise, is_ionic_precise, is_hydrophobic,
-        is_pipi, is_cationpi, is_pipi_precise
+        is_pipi, is_cationpi, is_pipi_precise,
+        ALWAYS_POSITIVE_RESIDUES, PROTONATED_HIS,
+        ALL_POSITIVE_RESIDUES, ALWAYS_NEGATIVE_RESIDUES,
     )
 except ImportError:
     from interaction_analyzer import (
@@ -47,7 +49,9 @@ except ImportError:
         get_element_from_atom_name, calculate_angle_three_points,
         identify_molecule_type, INTERACTION_PARAMS,
         is_hbond_precise, is_ionic_precise, is_hydrophobic,
-        is_pipi, is_cationpi, is_pipi_precise
+        is_pipi, is_cationpi, is_pipi_precise,
+        ALWAYS_POSITIVE_RESIDUES, PROTONATED_HIS,
+        ALL_POSITIVE_RESIDUES, ALWAYS_NEGATIVE_RESIDUES,
     )
 
 # Import unified color scheme
@@ -289,12 +293,15 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
     """
     分析界面残基对之间的详细相互作用类型(使用精确原子级标准)
     
-    检测五种非共价键:
+    检测八种非共价键:
     1. 氢键 (Hydrogen Bond)
     2. 盐桥 (Salt Bridge)
-    3. 疏水接触 (Hydrophobic Contact)
-    4. π-π堆积 (Pi-Pi Stacking)
-    5. 阳离子-π (Cation-Pi Interaction)
+    3. 疏水相互作用 (Hydrophobic Interaction)
+    4. π–π 堆积 (Pi-Pi Stacking)
+    5. π–阳离子相互作用 (Cation-Pi Interaction)
+    6. 卤素键 (Halogen Bond)
+    7. 金属配位 (Metal Coordination)
+    8. 水桥 (Water Bridge)
     
     返回: list of dict，每个dict包含详细的相互作用信息
     """
@@ -313,7 +320,7 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
         if is_pipi_result:
             # Store ring center info for later pseudoatom creation
             interactions.append({
-                "type": "π-π堆积",
+                "type": "Pi-Pi Stacking",  # Unified English naming
                 "atom1": f"{res1_chain}:{res1_name} {res1_id}",
                 "atom2": f"{res2_chain}:{res2_name} {res2_id}",
                 "distance": round(pipi_dist, 2),
@@ -357,7 +364,7 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
                 ring_atoms = res1_atoms
             
             interactions.append({
-                "type": "阳离子-π",
+                "type": "Pi-Cation",  # Unified English naming
                 "atom1": f"{cation_chain}:{cation_res} {cation_id}",
                 "atom2": f"{ring_chain}:{ring_res_name} {ring_id}",
                 "distance": round(min_dist, 2),
@@ -378,8 +385,9 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
         is_ionic, ionic_dist = is_ionic_precise(res1_name, res1_atoms, res2_name, res2_atoms)
         if is_ionic:
             # Find the closest charged atoms
-            positive = {"ARG", "LYS", "HIS"}
-            negative = {"ASP", "GLU"}
+            # 使用模块级常量：HIS 在 pH 7.4 下为中性，仅 HIP/HSP 带正电
+            positive = ALL_POSITIVE_RESIDUES
+            negative = ALWAYS_NEGATIVE_RESIDUES
             
             charged_atoms1 = []
             charged_atoms2 = []
@@ -407,7 +415,7 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
                         closest_atom2 = a2[3]
             
             interactions.append({
-                "type": "盐桥",
+                "type": "Salt Bridge",
                 "atom1": f"{res1_chain}:{res1_name} {res1_id}",
                 "atom2": f"{res2_chain}:{res2_name} {res2_id}",
                 "distance": round(ionic_dist, 2),
@@ -441,7 +449,7 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
                     
                     if is_hb:
                         interactions.append({
-                            "type": "氢键",
+                            "type": "Hydrogen Bond",
                             "atom1": f"{atom1[0]}:{atom1[1]} {atom1[2]}:{atom1[3]}",
                             "atom2": f"{atom2[0]}:{atom2[1]} {atom2[2]}:{atom2[3]}",
                             "distance": round(d, 2),
@@ -457,10 +465,10 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
                         hbond_found = True
                         continue
                 
-                # 4b. 疏水接触 (排除极性原子)
+                # 4b. 疏水相互作用 (排除极性原子，统一命名)
                 if not hydrophobic_found and is_hydrophobic(res1_name, res2_name, atom1, atom2, d):
                     interactions.append({
-                        "type": "疏水接触",
+                        "type": "Hydrophobic",  # Unified English naming
                         "atom1": f"{atom1[0]}:{atom1[1]} {atom1[2]}:{atom1[3]}",
                         "atom2": f"{atom2[0]}:{atom2[1]} {atom2[2]}:{atom2[3]}",
                         "distance": round(d, 2),
@@ -494,8 +502,8 @@ def _calculate_interface_strength(contact_count, interactions, bsa):
     score += min(4.0, contact_count / 5.0)
     
     # 相互作用质量贡献 (0-4分)
-    hbond_count = sum(1 for i in interactions if "氢键" in i["type"])
-    ionic_count = sum(1 for i in interactions if "盐桥" in i["type"])
+    hbond_count = sum(1 for i in interactions if "Hydrogen Bond" in i["type"])
+    ionic_count = sum(1 for i in interactions if "Salt Bridge" in i["type"])
     
     score += min(2.0, hbond_count * 0.5)
     score += min(2.0, ionic_count * 0.8)
@@ -578,9 +586,12 @@ def visualize_ppi_interface(obj_name, ppi_result,
     五种非共价键配色方案:
         - 氢键: 蓝色 (blue)
         - 盐桥: 红色 (red)
-        - 疏水接触: 绿色 (green)
-        - π-π堆积: 黄色 (yellow)
-        - 阳离子-π: 紫色 (purple)
+        - 疏水相互作用: 绿色 (green)
+        - π–π 堆积: 黄色 (yellow)
+        - π–阳离子相互作用: 紫色 (purple)
+        - 卤素键: 橙色 (orange)
+        - 金属配位: 紫红色 (magenta)
+        - 水桥: 青色 (cyan)
     """
     # 统一配置入口：优先使用 VisualizationSettings，保持旧参数向后兼容
     settings = viz_settings or VisualizationSettings(
@@ -612,13 +623,16 @@ def visualize_ppi_interface(obj_name, ppi_result,
     except Exception as e:
         print(f"[visualize_ppi_interface] Warning: Failed to register colors: {e}")
 
-    # 使用统一的相互作用配色
+    # 使用统一的相互作用配色（扩展到 8 种类型）
     INTERACTION_COLORS = {
-        "氢键": {"color": PYMOL_COLOR_NAMES['hbond'], "width": 2.0, "gap": 0.3},
-        "盐桥": {"color": PYMOL_COLOR_NAMES['salt'], "width": 2.5, "gap": 0.25},
-        "疏水接触": {"color": PYMOL_COLOR_NAMES['hydrophobic'], "width": 1.5, "gap": 0.35},
-        "π-π堆积": {"color": PYMOL_COLOR_NAMES['pipi'], "width": 2.0, "gap": 0.3},
-        "阳离子-π": {"color": PYMOL_COLOR_NAMES['pication'], "width": 2.0, "gap": 0.3}
+        "Hydrogen Bond": {"color": PYMOL_COLOR_NAMES['hbond'], "width": 2.0, "gap": 0.3},
+        "Salt Bridge": {"color": PYMOL_COLOR_NAMES['salt'], "width": 2.5, "gap": 0.25},
+        "Hydrophobic": {"color": PYMOL_COLOR_NAMES['hydrophobic'], "width": 1.5, "gap": 0.35},
+        "Pi-Pi Stacking": {"color": PYMOL_COLOR_NAMES['pipi'], "width": 2.0, "gap": 0.3},
+        "Pi-Cation": {"color": PYMOL_COLOR_NAMES['pication'], "width": 2.0, "gap": 0.3},
+        "Halogen Bond": {"color": PYMOL_COLOR_NAMES['halogen'], "width": 2.0, "gap": 0.3},
+        "Metal Coordination": {"color": PYMOL_COLOR_NAMES['metal'], "width": 2.5, "gap": 0.25},
+        "Water Bridge": {"color": PYMOL_COLOR_NAMES['water'], "width": 2.0, "gap": 0.3},
     }
     
     if not ppi_result or "interface_interactions" not in ppi_result:
@@ -728,20 +742,23 @@ def visualize_ppi_interface(obj_name, ppi_result,
     # ========== 绘制相互作用虚线 ==========
     interaction_counts = {}  # 统计每种相互作用的数量
     
-    # 中文到英文的映射（PyMOL不支持中文对象名）
+    # Type to PyMOL object name map (PyMOL doesn't support special chars in names)
     TYPE_NAME_MAP = {
-        "氢键": "hbond",
-        "盐桥": "saltbridge",
-        "疏水接触": "hydrophobic",
-        "π-π堆积": "pipi",
-        "阳离子-π": "cationpi"
+        "Hydrogen Bond": "hbond",
+        "Salt Bridge": "saltbridge",
+        "Hydrophobic": "hydrophobic",
+        "Pi-Pi Stacking": "pipi",
+        "Pi-Cation": "cationpi",
+        "Halogen Bond": "halogen",
+        "Metal Coordination": "metal",
+        "Water Bridge": "water",
     }
     
     for idx, interaction in enumerate(interface_interactions):
         interaction_type = interaction["type"]
         
         # Skip hydrophobic interactions if not requested
-        if interaction_type == "疏水接触" and not show_hydrophobic:
+        if interaction_type == "Hydrophobic" and not show_hydrophobic:
             continue
 
         # 统计
@@ -816,7 +833,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
                 
                 # For cation-pi, one residue is aromatic and one is cationic
                 # If one center is None (cationic residue), calculate cation center instead
-                if center1 is None and interaction_type == "阳离子-π":
+                if center1 is None and interaction_type == "Pi-Cation":
                     # Res1 is cationic (ARG, LYS, HIS), calculate cation center
                     cation_atoms_sel = f"{obj_name} and chain {interaction['chain1']} and resi {interaction['resid1']} and name NZ+NH1+NH2+NE+ND1+NE2"
                     try:
@@ -831,7 +848,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
                     except Exception as e:
                         print(f"[DEBUG]   Failed to calculate cation center: {e}")
                 
-                if center2 is None and interaction_type == "阳离子-π":
+                if center2 is None and interaction_type == "Pi-Cation":
                     # Res2 is cationic, calculate cation center
                     cation_atoms_sel = f"{obj_name} and chain {interaction['chain2']} and resi {interaction['resid2']} and name NZ+NH1+NH2+NE+ND1+NE2"
                     try:
@@ -944,24 +961,31 @@ def visualize_ppi_interface(obj_name, ppi_result,
     print("=" * 60)
 
     # Color descriptions for friendly terminal output
+    # Color descriptions (8 interaction types)
     COLOR_DESCRIPTIONS = {
-        "氢键": "Blue",
-        "盐桥": "Orange-Red",
-        "疏水接触": "Green",
-        "π-π堆积": "Purple",
-        "阳离子-π": "Pink"
+        "Hydrogen Bond": "Blue",
+        "Salt Bridge": "Orange-Red",
+        "Hydrophobic": "Green",
+        "Pi-Pi Stacking": "Purple",
+        "Pi-Cation": "Pink",
+        "Halogen Bond": "Orange",
+        "Metal Coordination": "Deep Purple",
+        "Water Bridge": "Cyan"
     }
 
-    # English labels for interaction types
+    # English labels (8 interaction types)
     INTERACTION_LABELS = {
-        "氢键": "Hydrogen Bonds",
-        "盐桥": "Salt Bridges",
-        "疏水接触": "Hydrophobic Contacts",
-        "π-π堆积": "Pi-Pi Stacking",
-        "阳离子-π": "Cation-Pi"
+        "Hydrogen Bond": "Hydrogen Bonds",
+        "Salt Bridge": "Salt Bridges",
+        "Hydrophobic": "Hydrophobic Interactions",
+        "Pi-Pi Stacking": "Pi-Pi Stacking",
+        "Pi-Cation": "Cation-Pi",
+        "Halogen Bond": "Halogen Bonds",
+        "Metal Coordination": "Metal Coordination",
+        "Water Bridge": "Water Bridges"
     }
 
-    for int_type in ["氢键", "盐桥", "疏水接触", "π-π堆积", "阳离子-π"]:
+    for int_type in ["Hydrogen Bond", "Salt Bridge", "Hydrophobic", "Pi-Pi Stacking", "Pi-Cation", "Halogen Bond", "Metal Coordination", "Water Bridge"]:
         count = interaction_counts.get(int_type, 0)
         if count > 0:
             color_desc = COLOR_DESCRIPTIONS.get(int_type, "Gray")

@@ -45,40 +45,40 @@ class VisualizationSettings:
 # ============================================================================
 
 INTERACTION_COLORS_HEX = {
-    'hbond':       '#2196F3',  # Blue - Hydrogen bonds
-    'salt':        '#FF5722',  # Orange-red - Salt bridges
-    'pipi':        '#9C27B0',  # Purple - π-π stacking
-    'pication':    '#E91E63',  # Pink - π-cation
-    'hydrophobic': '#4CAF50',  # Green - Hydrophobic interactions
-    'halogen':     '#FF9800',  # Orange - Halogen bonds
-    'metal':       '#673AB7',  # Deep purple - Metal coordination
-    'water':       '#00BCD4',  # Cyan - Water bridges
+    'hbond':       '#2979FF',  # Blue - Hydrogen bonds
+    'salt':        '#D32F2F',  # Red - Salt bridges
+    'pipi':        '#7B1FA2',  # Purple - π-π stacking
+    'pication':    '#F57C00',  # Orange - π-cation
+    'hydrophobic': '#388E3C',  # Green - Hydrophobic interactions
+    'halogen':     '#FFB300',  # Amber/Gold - Halogen bonds
+    'metal':       '#795548',  # Brown - Metal coordination
+    'water':       '#00ACC1',  # Cyan - Water bridges
     'other':       '#9E9E9E',  # Gray - Other/unknown
 }
 
 # PyMOL-compatible RGB (0-1 range)
 INTERACTION_COLORS_PYMOL = {
-    'hbond':       [0.129, 0.588, 0.953],  # #2196F3
-    'salt':        [1.000, 0.341, 0.133],  # #FF5722
-    'pipi':        [0.612, 0.153, 0.690],  # #9C27B0
-    'pication':    [0.914, 0.118, 0.388],  # #E91E63
-    'hydrophobic': [0.298, 0.686, 0.314],  # #4CAF50
-    'halogen':     [1.000, 0.596, 0.000],  # #FF9800
-    'metal':       [0.404, 0.227, 0.718],  # #673AB7
-    'water':       [0.000, 0.737, 0.831],  # #00BCD4
+    'hbond':       [0.161, 0.475, 1.000],  # #2979FF
+    'salt':        [0.827, 0.184, 0.184],  # #D32F2F
+    'pipi':        [0.482, 0.122, 0.635],  # #7B1FA2
+    'pication':    [0.961, 0.486, 0.000],  # #F57C00
+    'hydrophobic': [0.220, 0.557, 0.235],  # #388E3C
+    'halogen':     [1.000, 0.702, 0.000],  # #FFB300
+    'metal':       [0.475, 0.333, 0.282],  # #795548
+    'water':       [0.000, 0.675, 0.757],  # #00ACC1
     'other':       [0.620, 0.620, 0.620],  # #9E9E9E
 }
 
 # Qt/GUI-compatible RGB (0-255 range)
 INTERACTION_COLORS_QT = {
-    'hbond':       (33, 150, 243),   # #2196F3
-    'salt':        (255, 87, 34),    # #FF5722
-    'pipi':        (156, 39, 176),   # #9C27B0
-    'pication':    (233, 30, 99),    # #E91E63
-    'hydrophobic': (76, 175, 80),    # #4CAF50
-    'halogen':     (255, 152, 0),    # #FF9800
-    'metal':       (103, 58, 183),   # #673AB7
-    'water':       (0, 188, 212),    # #00BCD4
+    'hbond':       (41, 121, 255),   # #2979FF
+    'salt':        (211, 47, 47),    # #D32F2F
+    'pipi':        (123, 31, 162),   # #7B1FA2
+    'pication':    (245, 124, 0),    # #F57C00
+    'hydrophobic': (56, 142, 60),    # #388E3C
+    'halogen':     (255, 179, 0),    # #FFB300
+    'metal':       (121, 85, 72),   # #795548
+    'water':       (0, 172, 193),    # #00ACC1
     'other':       (158, 158, 158),  # #9E9E9E
 }
 
@@ -87,11 +87,11 @@ INTERACTION_COLORS_QT = {
 # ============================================================================
 
 RESIDUE_COLORS_HEX = {
-    'hydrophobic': {'face': '#C5E1A5', 'edge': '#4CAF50', 'text': '#2E7D32'},  # Light green
-    'nonpolar':    {'face': '#FFE0B2', 'edge': '#FF9800', 'text': '#E65100'},  # Light orange
-    'polar':       {'face': '#BBDEFB', 'edge': '#2196F3', 'text': '#1565C0'},  # Light blue
+    'hydrophobic': {'face': '#C5E1A5', 'edge': '#388E3C', 'text': '#2E7D32'},  # Light green
+    'nonpolar':    {'face': '#FFE0B2', 'edge': '#FFB300', 'text': '#E65100'},  # Light orange
+    'polar':       {'face': '#BBDEFB', 'edge': '#2979FF', 'text': '#1565C0'},  # Light blue
     'negative':    {'face': '#FFCDD2', 'edge': '#F44336', 'text': '#C62828'},  # Light red (ASP/GLU)
-    'positive':    {'face': '#E1BEE7', 'edge': '#9C27B0', 'text': '#6A1B9A'},  # Light purple (LYS/ARG/HIS)
+    'positive':    {'face': '#E1BEE7', 'edge': '#7B1FA2', 'text': '#6A1B9A'},  # Light purple (LYS/ARG/HIS)
 }
 
 # ============================================================================
@@ -198,7 +198,7 @@ def hex_to_rgb_0_1(hex_color):
     Convert hex color to RGB tuple (0-1 range) for PyMOL
     
     Args:
-        hex_color: Hex color string (e.g., '#2196F3')
+        hex_color: Hex color string (e.g., '#2979FF')
     
     Returns:
         tuple: (r, g, b) with values in 0-1 range
@@ -212,7 +212,7 @@ def hex_to_rgb_0_255(hex_color):
     Convert hex color to RGB tuple (0-255 range) for Qt
     
     Args:
-        hex_color: Hex color string (e.g., '#2196F3')
+        hex_color: Hex color string (e.g., '#2979FF')
     
     Returns:
         tuple: (r, g, b) with values in 0-255 range

@@ -840,11 +840,11 @@ class BatchAnalyzer:
                     "Yes" if r["success"] else "No",
                     r.get("ligand", ""),
                     r.get("interaction_count", 0),
-                    type_counts.get("氢键", type_counts.get("Hydrogen Bond", 0)),
-                    type_counts.get("盐桥", type_counts.get("Salt Bridge", 0)),
-                    type_counts.get("疏水接触", type_counts.get("Hydrophobic", 0)),
-                    type_counts.get("π-π堆积", type_counts.get("Pi-Pi", 0)),
-                    type_counts.get("阳离子-π", type_counts.get("Cation-Pi", 0))
+                    type_counts.get("Hydrogen Bond", 0),
+                    type_counts.get("Salt Bridge", 0),
+                    type_counts.get("Hydrophobic", 0),
+                    type_counts.get("Pi-Pi Stacking", 0),
+                    type_counts.get("Pi-Cation", 0)
                 ])
         
         print(f"📄 相互作用结果已保存: {output_csv}")

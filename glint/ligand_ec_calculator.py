@@ -1715,10 +1715,16 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     
     dx_file = apbs.run(apbs_input, output_dir)
 
+    # 追踪是否使用了 Coulomb 近似回退
+    _coulomb_fallback = False
+    _coulomb_fallback_reason = ""
+    
     if dx_file is None:
         print("[calculate_ligand_ec] ⚠️ APBS failed, using Coulomb approximation...")
         # Fallback: Use Coulomb potential from protein charges
         protein_grid = None
+        _coulomb_fallback = True
+        _coulomb_fallback_reason = "APBS 执行失败或未安装，已使用 Coulomb 近似计算蛋白静电势。结果精度可能较低。"
     else:
         # Step 4: Load protein potential grid
         print("\n[Step 4] Loading protein potential...")
@@ -1824,6 +1830,9 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         },
         'output_dir': output_dir,
         'advanced_features': advanced_features,
+        # Coulomb 回退标记：当 APBS 不可用时通知 GUI 层
+        'coulomb_fallback': _coulomb_fallback,
+        'coulomb_fallback_reason': _coulomb_fallback_reason,
     }
     
     return result
@@ -1887,7 +1896,10 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         'glue_resname': glue_resname,
         'protein_a_chains': protein_a_chains,
         'protein_b_chains': protein_b_chains,
-        'interfaces': {}
+        'interfaces': {},
+        # Coulomb 回退追踪
+        'coulomb_fallback': False,
+        'coulomb_fallback_reason': '',
     }
     
     # Extract complex
@@ -2076,46 +2088,56 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     )
     dx_file_a = apbs.run(apbs_input_a, protein_a_dir)
     
+    # APBS 成功时使用 DX 网格插值，失败时回退到 Coulomb 近似
     if dx_file_a:
         grid_a = DXGrid(dx_file_a)
         phi_protein_a = grid_a.interpolate(surface_points)
-        
-        # 使用面朝向 mask（优先）或距离截断来筛选有效界面点
-        phi_protein_a_masked = phi_protein_a.copy()
-        if face_a_mask is not None:
-            # 三元复合物改进：只保留朝向 Protein A 的 Glue 表面点
-            mask_a_invalid = ~face_a_mask
-            phi_protein_a_masked[mask_a_invalid] = 0.0
-            print(f"[Interface A-Glue] 使用面朝向 mask: {int(np.sum(face_a_mask))}/{len(surface_points)} 有效点")
-        elif SCIPY_AVAILABLE:
-            # 降级：使用 PDB 坐标 + 距离截断
-            prot_a_mol = Chem.MolFromPDBFile(protein_a_pdb, removeHs=False)
-            if prot_a_mol:
-                prot_coords = prot_a_mol.GetConformer().GetPositions()
-                tree = cKDTree(prot_coords)
-                dists, _ = tree.query(surface_points)
-                mask = dists > INTERFACE_CUTOFF
-                phi_protein_a_masked[mask] = 0.0
+    else:
+        # Coulomb 近似回退：当 APBS 失败（如 PQR 解析错误）时，使用 Gasteiger 电荷直接计算静电势
+        print("[analyze_ternary_ec] ⚠️ APBS failed for Protein A, using Coulomb approximation...")
+        grid_a = None
+        charge_calc_a = GasteigerChargeCalculator()
+        phi_protein_a = charge_calc_a.calculate_potential_from_pqr(protein_a_pqr, surface_points)
+        # 标记 Coulomb 回退
+        results['coulomb_fallback'] = True
+        results['coulomb_fallback_reason'] = "Protein A APBS 计算失败，已使用 Coulomb 近似。"
+    
+    # 使用面朝向 mask（优先）或距离截断来筛选有效界面点（无论 APBS 是否成功都执行）
+    phi_protein_a_masked = phi_protein_a.copy()
+    if face_a_mask is not None:
+        # 三元复合物改进：只保留朝向 Protein A 的 Glue 表面点
+        mask_a_invalid = ~face_a_mask
+        phi_protein_a_masked[mask_a_invalid] = 0.0
+        print(f"[Interface A-Glue] 使用面朝向 mask: {int(np.sum(face_a_mask))}/{len(surface_points)} 有效点")
+    elif SCIPY_AVAILABLE:
+        # 降级：使用 PDB 坐标 + 距离截断
+        prot_a_mol = Chem.MolFromPDBFile(protein_a_pdb, removeHs=False)
+        if prot_a_mol:
+            prot_coords = prot_a_mol.GetConformer().GetPositions()
+            tree = cKDTree(prot_coords)
+            dists, _ = tree.query(surface_points)
+            mask = dists > INTERFACE_CUTOFF
+            phi_protein_a_masked[mask] = 0.0
 
-        ec_calc = ECCalculator()
-        ec_a_glue = ec_calc.calculate_ec_local(phi_protein_a_masked, phi_glue)
-        ec_score_a = ec_calc.calculate_ec_score(ec_a_glue)
-        ec_stats_a = ec_calc.calculate_ec_statistics(ec_a_glue, exclude_zeros=True)
-        
-        results['interfaces']['A_glue'] = {
-            'ec_score': ec_score_a,
-            'ec_statistics': ec_stats_a,
-            'ec_values': ec_a_glue,
-            'phi_protein': phi_protein_a,
-            'chains': protein_a_chains,
-            'n_face_points': int(np.sum(face_a_mask)) if face_a_mask is not None else len(surface_points)
-        }
-        
-        print(f"EC(A-Glue) Score: {ec_score_a:.4f}")
-        
-        # Write EC map with chain-based name
-        ec_pdb_a = os.path.join(protein_a_dir, f'ec_map_{chains_a_str}_glue.pdb')
-        ECMapWriter.write_pseudo_pdb(ec_pdb_a, surface_points, ec_a_glue)
+    ec_calc = ECCalculator()
+    ec_a_glue = ec_calc.calculate_ec_local(phi_protein_a_masked, phi_glue)
+    ec_score_a = ec_calc.calculate_ec_score(ec_a_glue)
+    ec_stats_a = ec_calc.calculate_ec_statistics(ec_a_glue, exclude_zeros=True)
+    
+    results['interfaces']['A_glue'] = {
+        'ec_score': ec_score_a,
+        'ec_statistics': ec_stats_a,
+        'ec_values': ec_a_glue,
+        'phi_protein': phi_protein_a,
+        'chains': protein_a_chains,
+        'n_face_points': int(np.sum(face_a_mask)) if face_a_mask is not None else len(surface_points)
+    }
+    
+    print(f"EC(A-Glue) Score: {ec_score_a:.4f}")
+    
+    # Write EC map with chain-based name
+    ec_pdb_a = os.path.join(protein_a_dir, f'ec_map_{chains_a_str}_glue.pdb')
+    ECMapWriter.write_pseudo_pdb(ec_pdb_a, surface_points, ec_a_glue)
     
     # Interface 2: Protein B - Glue
     print("\n" + "="*60)
@@ -2166,45 +2188,57 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     )
     dx_file_b = apbs.run(apbs_input_b, protein_b_dir)
     
+    # APBS 成功时使用 DX 网格插值，失败时回退到 Coulomb 近似
     if dx_file_b:
         grid_b = DXGrid(dx_file_b)
         phi_protein_b = grid_b.interpolate(surface_points)
-        
-        # 使用面朝向 mask（优先）或距离截断来筛选有效界面点
-        phi_protein_b_masked = phi_protein_b.copy()
-        if face_b_mask is not None:
-            # 三元复合物改进：只保留朝向 Protein B 的 Glue 表面点
-            mask_b_invalid = ~face_b_mask
-            phi_protein_b_masked[mask_b_invalid] = 0.0
-            print(f"[Interface B-Glue] 使用面朝向 mask: {int(np.sum(face_b_mask))}/{len(surface_points)} 有效点")
-        elif SCIPY_AVAILABLE:
-            # 降级：使用 PDB 坐标 + 距离截断
-            prot_b_mol = Chem.MolFromPDBFile(protein_b_pdb, removeHs=False)
-            if prot_b_mol:
-                prot_coords = prot_b_mol.GetConformer().GetPositions()
-                tree = cKDTree(prot_coords)
-                dists, _ = tree.query(surface_points)
-                mask = dists > INTERFACE_CUTOFF
-                phi_protein_b_masked[mask] = 0.0
+    else:
+        # Coulomb 近似回退：当 APBS 失败（如 PQR 解析错误）时，使用 Gasteiger 电荷直接计算静电势
+        print("[analyze_ternary_ec] ⚠️ APBS failed for Protein B, using Coulomb approximation...")
+        grid_b = None
+        charge_calc_b = GasteigerChargeCalculator()
+        phi_protein_b = charge_calc_b.calculate_potential_from_pqr(protein_b_pqr, surface_points)
+        # 标记 Coulomb 回退
+        results['coulomb_fallback'] = True
+        reason_b = "Protein B APBS 计算失败，已使用 Coulomb 近似。"
+        existing_reason = results.get('coulomb_fallback_reason', '')
+        results['coulomb_fallback_reason'] = (existing_reason + " " + reason_b).strip()
+    
+    # 使用面朝向 mask（优先）或距离截断来筛选有效界面点（无论 APBS 是否成功都执行）
+    phi_protein_b_masked = phi_protein_b.copy()
+    if face_b_mask is not None:
+        # 三元复合物改进：只保留朝向 Protein B 的 Glue 表面点
+        mask_b_invalid = ~face_b_mask
+        phi_protein_b_masked[mask_b_invalid] = 0.0
+        print(f"[Interface B-Glue] 使用面朝向 mask: {int(np.sum(face_b_mask))}/{len(surface_points)} 有效点")
+    elif SCIPY_AVAILABLE:
+        # 降级：使用 PDB 坐标 + 距离截断
+        prot_b_mol = Chem.MolFromPDBFile(protein_b_pdb, removeHs=False)
+        if prot_b_mol:
+            prot_coords = prot_b_mol.GetConformer().GetPositions()
+            tree = cKDTree(prot_coords)
+            dists, _ = tree.query(surface_points)
+            mask = dists > INTERFACE_CUTOFF
+            phi_protein_b_masked[mask] = 0.0
 
-        ec_b_glue = ec_calc.calculate_ec_local(phi_protein_b_masked, phi_glue)
-        ec_score_b = ec_calc.calculate_ec_score(ec_b_glue)
-        ec_stats_b = ec_calc.calculate_ec_statistics(ec_b_glue, exclude_zeros=True)
-        
-        results['interfaces']['B_glue'] = {
-            'ec_score': ec_score_b,
-            'ec_statistics': ec_stats_b,
-            'ec_values': ec_b_glue,
-            'phi_protein': phi_protein_b,
-            'chains': protein_b_chains,
-            'n_face_points': int(np.sum(face_b_mask)) if face_b_mask is not None else len(surface_points)
-        }
-        
-        print(f"EC(B-Glue) Score: {ec_score_b:.4f}")
-        
-        # Write EC map with chain-based name
-        ec_pdb_b = os.path.join(protein_b_dir, f'ec_map_{chains_b_str}_glue.pdb')
-        ECMapWriter.write_pseudo_pdb(ec_pdb_b, surface_points, ec_b_glue)
+    ec_b_glue = ec_calc.calculate_ec_local(phi_protein_b_masked, phi_glue)
+    ec_score_b = ec_calc.calculate_ec_score(ec_b_glue)
+    ec_stats_b = ec_calc.calculate_ec_statistics(ec_b_glue, exclude_zeros=True)
+    
+    results['interfaces']['B_glue'] = {
+        'ec_score': ec_score_b,
+        'ec_statistics': ec_stats_b,
+        'ec_values': ec_b_glue,
+        'phi_protein': phi_protein_b,
+        'chains': protein_b_chains,
+        'n_face_points': int(np.sum(face_b_mask)) if face_b_mask is not None else len(surface_points)
+    }
+    
+    print(f"EC(B-Glue) Score: {ec_score_b:.4f}")
+    
+    # Write EC map with chain-based name
+    ec_pdb_b = os.path.join(protein_b_dir, f'ec_map_{chains_b_str}_glue.pdb')
+    ECMapWriter.write_pseudo_pdb(ec_pdb_b, surface_points, ec_b_glue)
     
     # Combined analysis
     print("\n" + "="*60)
@@ -2304,8 +2338,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
             print("\n⚠️ Poor electrostatic complementarity in bridging zone (<50% positive)")
 
     # Interface 3: Protein A - Protein B (PPI interface with glue)
-    # 注意：PPI 分析依赖 dx_file_b（Protein B 的 APBS 结果），
-    # 如果 Interface B 的 APBS 失败，PPI 分析将跳过
+    # 注意：PPI 分析使用 APBS 网格或 Coulomb 近似来计算 Protein B 在界面的电势
     print("\n" + "="*60)
     print("Interface 3: Protein A - Protein B (PPI with Glue)")
     print("="*60)
@@ -2348,39 +2381,42 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
                 ppi_points_a, _ = ppi_sampler.sample_from_coords(
                     np.array(interface_a_coords), interface_a_elements)
                 
-                # Calculate EC at PPI interface
-                # Use protein B potential at interface A surface
+                # 计算 Protein B 在 PPI 界面表面点的静电势
+                # 优先使用 APBS 网格插值，APBS 失败时回退到 Coulomb 近似
                 if grid_b is not None:
                     phi_b_at_interface = grid_b.interpolate(ppi_points_a)
-                    
-                    # Calculate "potential" from interface A atoms (simplified)
-                    # 修复: 预计算 charges 和坐标数组，避免循环内重复创建
-                    charges_a = np.array([_get_element_charge(e) for e in interface_a_elements])
-                    interface_a_np = np.array(interface_a_coords)
-                    phi_a_at_interface = np.zeros(len(ppi_points_a))
-                    for i, point in enumerate(ppi_points_a):
-                        distances = np.linalg.norm(interface_a_np - point, axis=1)
-                        distances = np.maximum(distances, 0.5)
-                        phi_a_at_interface[i] = np.sum(charges_a / distances) * 332.0637 / 0.593
-                    
-                    ec_ppi = ec_calc.calculate_ec_local(phi_b_at_interface, phi_a_at_interface)
-                    ec_score_ppi = ec_calc.calculate_ec_score(ec_ppi)
-                    ec_stats_ppi = ec_calc.calculate_ec_statistics(ec_ppi)
-                    
-                    results['interfaces']['A_B_ppi'] = {
-                        'ec_score': ec_score_ppi,
-                        'ec_statistics': ec_stats_ppi,
-                        'ec_values': ec_ppi,
-                        'surface_points': ppi_points_a
-                    }
-                    
-                    print(f"EC(A-B PPI) Score: {ec_score_ppi:.4f}")
-                    
-                    # Write PPI EC map
-                    ec_pdb_ppi = os.path.join(ppi_dir, 'ec_map_ppi.pdb')
-                    ECMapWriter.write_pseudo_pdb(ec_pdb_ppi, ppi_points_a, ec_ppi)
                 else:
-                    print("[analyze_ternary_ec] Skipping PPI EC: Protein B potential grid not available")
+                    # Coulomb 近似回退：使用 Protein B 的 PQR 电荷计算 PPI 界面电势
+                    print("[analyze_ternary_ec] ⚠️ PPI: Using Coulomb approximation for Protein B potential...")
+                    charge_calc_ppi_b = GasteigerChargeCalculator()
+                    phi_b_at_interface = charge_calc_ppi_b.calculate_potential_from_pqr(protein_b_pqr, ppi_points_a)
+                
+                # Calculate "potential" from interface A atoms (simplified)
+                # 修复: 预计算 charges 和坐标数组，避免循环内重复创建
+                charges_a = np.array([_get_element_charge(e) for e in interface_a_elements])
+                interface_a_np = np.array(interface_a_coords)
+                phi_a_at_interface = np.zeros(len(ppi_points_a))
+                for i, point in enumerate(ppi_points_a):
+                    distances = np.linalg.norm(interface_a_np - point, axis=1)
+                    distances = np.maximum(distances, 0.5)
+                    phi_a_at_interface[i] = np.sum(charges_a / distances) * 332.0637 / 0.593
+                
+                ec_ppi = ec_calc.calculate_ec_local(phi_b_at_interface, phi_a_at_interface)
+                ec_score_ppi = ec_calc.calculate_ec_score(ec_ppi)
+                ec_stats_ppi = ec_calc.calculate_ec_statistics(ec_ppi)
+                
+                results['interfaces']['A_B_ppi'] = {
+                    'ec_score': ec_score_ppi,
+                    'ec_statistics': ec_stats_ppi,
+                    'ec_values': ec_ppi,
+                    'surface_points': ppi_points_a
+                }
+                
+                print(f"EC(A-B PPI) Score: {ec_score_ppi:.4f}")
+                
+                # Write PPI EC map
+                ec_pdb_ppi = os.path.join(ppi_dir, 'ec_map_ppi.pdb')
+                ECMapWriter.write_pseudo_pdb(ec_pdb_ppi, ppi_points_a, ec_ppi)
         except Exception as e:
             # PPI 界面分析异常处理（修复：补全缺失的 except 子句）
             print(f"[analyze_ternary_ec] PPI interface analysis failed: {e}")
@@ -2517,7 +2553,12 @@ def _fix_pqr_format(pqr_file: str) -> bool:
     导致 APBS 无法解析并报错：
       "Valist_readPQR: Error parsing atom! ...no concatenated fields."
     
-    本函数将 PQR 文件重写为空格分隔格式，确保每个字段之间至少有一个空格。
+    本函数依次尝试三种解析策略：
+      1. PDB 固定列解析（标准 PDB 列位置）
+      2. 空格分隔解析（适用于已经是空格分隔的行）
+      3. 正则表达式兜底解析（从行中提取所有浮点数）
+    
+    修复完成后会验证第一条 ATOM 行的字段数是否符合 APBS 要求。
     
     Args:
         pqr_file: PQR 文件路径
@@ -2525,6 +2566,8 @@ def _fix_pqr_format(pqr_file: str) -> bool:
     Returns:
         True 表示修复成功，False 表示修复失败（原文件不受影响）
     """
+    import re
+    
     try:
         with open(pqr_file, 'r') as f:
             lines = f.readlines()
@@ -2536,47 +2579,47 @@ def _fix_pqr_format(pqr_file: str) -> bool:
         
         fixed_lines = []
         first_fixed_logged = False
+        parse_fail_count = 0
+        total_atom_count = 0
+        
         for line in lines:
             # 仅处理 ATOM/HETATM 记录行
             if not line.startswith(('ATOM', 'HETATM')):
                 fixed_lines.append(line)
                 continue
             
-            # 尝试方法一：按 PDB 固定列位置解析
+            total_atom_count += 1
+            
+            # 依次尝试三种解析方法
+            # 方法一：按 PDB 固定列位置解析
             parsed = _parse_pqr_fixed_columns(line)
             
-            # 如果固定列解析失败，尝试方法二：按空格分割
+            # 方法二：按空格分割解析
             if parsed is None:
                 parsed = _parse_pqr_whitespace(line)
             
+            # 方法三：正则表达式兜底（从拼接的行中提取浮点数）
             if parsed is None:
-                # 两种方式都失败，保留原行（不破坏数据）
-                print(f"[_fix_pqr_format] ⚠️ 无法解析行，保留原样: {line.rstrip()}")
+                parsed = _parse_pqr_regex(line)
+            
+            if parsed is None:
+                # 三种方式全部失败，记录并保留原行
+                parse_fail_count += 1
+                print(f"[_fix_pqr_format] ⚠️ 无法解析行 (三种方法均失败)，保留原样: {line.rstrip()}")
                 fixed_lines.append(line)
                 continue
             
             record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius = parsed
             
-            # 格式化原子名称（保持 PDB 对齐规则）
-            if len(atom_name) < 4:
-                atom_name_fmt = f" {atom_name:<3s}"
-            else:
-                atom_name_fmt = f"{atom_name:<4s}"
-            
-            # 使用纯空格分隔格式，APBS 解析更可靠
-            # 注意: x/y/z 之间必须有空格，否则当值为负数（如 -104.24）时字段会拼接
+            # APBS PQR 格式：纯空格分隔，每个字段间至少一个空格
+            # 格式: RECORD serial atom_name resname chain resseq x y z charge radius
+            # 注意：APBS 对 chain 字段不敏感，但空格分隔必须正确
+            chain_str = chain.strip() if chain.strip() else "A"
             fixed_line = (
-                f"{record_type:<6s}"     # ATOM or HETATM
-                f"{serial:>5d} "         # 原子序号 + 空格
-                f"{atom_name_fmt} "      # 原子名 + 空格
-                f"{resname:<4s}"         # 残基名(4字符)
-                f"{chain:1s}"            # 链ID
-                f"{resseq:>4s}    "      # 残基序号 + 4空格
-                f"{x:8.3f} "            # x坐标 + 空格
-                f"{y:8.3f} "            # y坐标 + 空格
-                f"{z:8.3f} "            # z坐标 + 空格
-                f"{charge:7.4f} "        # 电荷 + 空格
-                f"{radius:6.4f}\n"       # 半径
+                f"{record_type:<6s} {serial:>5d} {atom_name:<4s} {resname:<3s} "
+                f"{chain_str:>1s} {resseq:>4s} "
+                f"{x:>8.3f} {y:>8.3f} {z:>8.3f} "
+                f"{charge:>7.4f} {radius:>6.4f}\n"
             )
             fixed_lines.append(fixed_line)
             
@@ -2585,65 +2628,166 @@ def _fix_pqr_format(pqr_file: str) -> bool:
                 print(f"[_fix_pqr_format] 修复后第一行: {fixed_line.rstrip()}")
                 first_fixed_logged = True
         
+        # === 验证步骤：检查修复后第一条 ATOM 行是否可被正确解析 ===
+        first_fixed_atom = next(
+            (l for l in fixed_lines if l.startswith(('ATOM', 'HETATM'))), None
+        )
+        if first_fixed_atom:
+            parts = first_fixed_atom.split()
+            # APBS 期望空格分隔后至少有 10-11 个字段
+            if len(parts) < 10:
+                print(f"[_fix_pqr_format] ❌ 验证失败: 修复后第一行仅有 {len(parts)} 个字段 "
+                      f"(期望 ≥10): {first_fixed_atom.rstrip()}")
+                # 不写回文件，返回失败
+                return False
+            
+            # 验证坐标和电荷/半径字段是否为有效浮点数
+            try:
+                # 尝试从末尾解析 5 个浮点数 (x, y, z, charge, radius)
+                for idx in range(-5, 0):
+                    float(parts[idx])
+            except (ValueError, IndexError):
+                print(f"[_fix_pqr_format] ❌ 验证失败: 修复后行的数值字段无法解析: "
+                      f"{first_fixed_atom.rstrip()}")
+                return False
+            
+            print(f"[_fix_pqr_format] ✅ 验证通过: 修复后第一行有 {len(parts)} 个字段，数值字段正常")
+        
+        if parse_fail_count > 0:
+            print(f"[_fix_pqr_format] ⚠️ 有 {parse_fail_count}/{total_atom_count} 行解析失败")
+        
         # 写回文件
         with open(pqr_file, 'w') as f:
             f.writelines(fixed_lines)
         
-        print(f"[_fix_pqr_format] ✅ PQR 格式已修复: {pqr_file}")
+        print(f"[_fix_pqr_format] ✅ PQR 格式已修复: {pqr_file} ({total_atom_count} 个原子)")
         return True
         
     except Exception as e:
         print(f"[_fix_pqr_format] ❌ 修复失败: {e}")
+        import traceback
+        traceback.print_exc()
         return False
 
 
 def _parse_pqr_fixed_columns(line: str):
     """按 PDB 固定列位置解析 PQR 行。
     
-    PDB/PQR 固定列定义：
+    PDB/PQR 固定列定义（标准 PDB 格式）：
       record_type: [0:6], serial: [6:11], atom_name: [12:16],
       resname: [17:20], chain: [21:22], resseq: [22:26],
       x: [30:38], y: [38:46], z: [46:54],
-      charge: [54:62], radius: [62:69] (PQR 扩展字段)
+      charge: [54:62], radius: [62:70] (PQR 扩展字段)
+    
+    增强处理：
+      - 当坐标值较大（如 -104.240）导致字段拼接时，尝试智能拆分
+      - 支持负坐标导致的列宽溢出（如 -1004.240 溢出 8 字符列宽）
+      - 支持 PDB2PQR Python API 输出的微小列偏移
     
     Returns:
         解析成功返回元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
         解析失败返回 None
     """
+    import re
+    
     try:
         # 行长度不够则无法按固定列解析
         if len(line) < 54:
             return None
         
         record_type = line[0:6].strip()
-        serial = int(line[6:11].strip())
+        if record_type not in ('ATOM', 'HETATM'):
+            return None
+        
+        serial_str = line[6:11].strip()
+        if not serial_str:
+            return None
+        serial = int(serial_str)
+        
         atom_name = line[12:16].strip()
         resname = line[17:20].strip()
-        chain = line[21:22].strip() if line[21:22].strip() else ' '
-        resseq = line[22:26].strip()
-        x = float(line[30:38])
-        y = float(line[38:46])
-        z = float(line[46:54])
+        # 有时 resname 会延伸到第 21 列（如 4 字符残基名），包容处理
+        if not resname:
+            resname = line[16:21].strip()
         
-        # 电荷和半径为 PQR 扩展字段，可能不存在或位置不同
+        chain = line[21:22].strip() if len(line) > 21 and line[21:22].strip() else ' '
+        resseq = line[22:26].strip()
+        
+        # ── 坐标解析（增强版：处理负坐标导致的列溢出和字段拼接） ──
+        # 先尝试标准 PDB 列位置 [30:38], [38:46], [46:54]
+        coords_parsed = False
+        try:
+            x = float(line[30:38])
+            y = float(line[38:46])
+            z = float(line[46:54])
+            coords_parsed = True
+        except ValueError:
+            pass
+        
+        if not coords_parsed:
+            # 标准列位置解析失败，使用增强正则从坐标区域提取
+            # 正则匹配：限制小数位数为 1-4 位，防止贪婪匹配吃掉相邻字段
+            # 例如 "27.340-104.240" 正确拆分为 ["27.340", "-104.240"]
+            enhanced_float = re.compile(r'[+-]?(?:\d+\.\d{1,4}|\.\d{1,4}|\d+(?:[eE][+-]?\d+))')
+            
+            # 从第 26 列开始搜索（覆盖可能的列偏移），范围扩大到第 60 列
+            coord_region = line[26:60] if len(line) >= 60 else line[26:]
+            coord_matches = enhanced_float.findall(coord_region)
+            
+            # 过滤掉可能混入的残基编号（通常是纯整数且位于区域开头）
+            # 坐标值通常含小数点，残基编号通常不含
+            if len(coord_matches) > 3:
+                # 优先选择含小数点的匹配项
+                decimal_matches = [m for m in coord_matches if '.' in m]
+                if len(decimal_matches) >= 3:
+                    coord_matches = decimal_matches[:3]
+                else:
+                    # 取最后 3 个（跳过前面可能的残基编号）
+                    # 但需确保取出的是坐标而非 charge/radius
+                    coord_matches = coord_matches[:3]
+            
+            if len(coord_matches) < 3:
+                return None
+            
+            x = float(coord_matches[0])
+            y = float(coord_matches[1])
+            z = float(coord_matches[2])
+        
+        # ── 电荷和半径解析（增强版：处理列偏移） ──
         charge = 0.0
         radius = 0.0
-        if len(line) >= 62:
-            charge_str = line[54:62].strip()
-            if charge_str:
-                charge = float(charge_str)
-        if len(line) >= 69:
-            radius_str = line[62:69].strip()
-            if radius_str:
-                radius = float(radius_str)
-        elif len(line) > 62:
-            # 行尾可能有半径但列宽不足 69
-            radius_str = line[62:].strip()
-            if radius_str:
-                try:
-                    radius = float(radius_str)
-                except ValueError:
-                    pass
+        
+        # 尝试多个起始位置提取 charge/radius（应对坐标列溢出导致的偏移）
+        # 优先从标准位置 [54:] 开始，如果失败则向后偏移 1-2 列
+        tail_candidates = []
+        for start_col in [54, 55, 56, 52, 53]:
+            if len(line) > start_col:
+                tail_candidates.append(line[start_col:].strip())
+        
+        # 匹配含小数点的浮点数（charge/radius 一定有小数点，限制 1-4 位小数防止贪婪溢出）
+        tail_float = re.compile(r'[+-]?(?:\d+\.\d{1,4}|\.\d{1,4})')
+        
+        for tail in tail_candidates:
+            if not tail:
+                continue
+            tail_matches = tail_float.findall(tail)
+            if len(tail_matches) >= 2:
+                c_val = float(tail_matches[0])
+                r_val = float(tail_matches[1])
+                # 合理性检查：charge 通常在 [-3, 3]，radius 通常在 [0, 5]
+                if abs(c_val) <= 10 and 0 <= r_val <= 10:
+                    charge = c_val
+                    radius = r_val
+                    break
+            elif len(tail_matches) == 1:
+                charge = float(tail_matches[0])
+                break
+        
+        # 基本合理性检查：坐标不应超过 ±9999，半径应为正数或零
+        if abs(x) > 9999 or abs(y) > 9999 or abs(z) > 9999:
+            return None
+        if radius < 0:
+            return None
         
         return (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
         
@@ -2652,7 +2796,7 @@ def _parse_pqr_fixed_columns(line: str):
 
 
 def _parse_pqr_whitespace(line: str):
-    """按空格分割解析 PQR 行（兜底方案）。
+    """按空格分割解析 PQR 行。
     
     PQR 空格分隔格式通常为：
       ATOM serial atom_name resname [chain] resseq x y z charge radius
@@ -2705,6 +2849,88 @@ def _parse_pqr_whitespace(line: str):
             z = float(parts[-3])
             y = float(parts[-4])
             x = float(parts[-5])
+        
+        return (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
+        
+    except (ValueError, IndexError):
+        return None
+
+
+def _parse_pqr_regex(line: str):
+    """正则表达式兜底方案：从 PQR 行中提取所有浮点数。
+    
+    当固定列和空格分隔方法都失败时（通常因为大坐标值导致字段拼接），
+    使用正则表达式从行中提取所有浮点数值，然后根据数量推断各字段含义。
+    
+    PQR 行应包含 5 个浮点数：x, y, z, charge, radius
+    
+    Returns:
+        解析成功返回元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
+        解析失败返回 None
+    """
+    import re
+    
+    try:
+        # 确认是 ATOM/HETATM 行
+        if not line.startswith(('ATOM', 'HETATM')):
+            return None
+        
+        record_type = line[0:6].strip()
+        
+        # 从行中提取所有浮点数（含可选的正负号和小数点）
+        # 限制小数位数为 1-4 位，防止贪婪匹配吃掉相邻拼接字段的数字
+        # 例如 "0.14501.8240" → ["0.1450", "1.8240"] 而非 ["0.14501"]
+        float_pattern = re.compile(r'[+-]?\d+\.\d{1,4}')
+        all_floats = float_pattern.findall(line)
+        
+        if len(all_floats) < 5:
+            # 浮点数不足 5 个，无法确定 x,y,z,charge,radius
+            return None
+        
+        # 最后 5 个浮点数应该是 x, y, z, charge, radius
+        # （前面可能有混入的数值如残基编号等，但残基编号通常是整数）
+        x = float(all_floats[-5])
+        y = float(all_floats[-4])
+        z = float(all_floats[-3])
+        charge = float(all_floats[-2])
+        radius = float(all_floats[-1])
+        
+        # 从行首提取序号、原子名、残基名等文本字段
+        # 使用另一个正则提取 record_type 后面的整数和文本
+        # 典型格式: "ATOM     1  N   MET A   1   ..."
+        header_match = re.match(
+            r'(ATOM|HETATM)\s+(\d+)\s+(\S+)\s+(\S+)\s*(\S?)\s*(\d+)',
+            line
+        )
+        
+        if header_match:
+            serial = int(header_match.group(2))
+            atom_name = header_match.group(3)
+            resname = header_match.group(4)
+            chain = header_match.group(5) if header_match.group(5) else ' '
+            resseq = header_match.group(6)
+        else:
+            # 如果连 header 都无法解析，尝试从固定列提取（宽容模式）
+            try:
+                serial = int(re.search(r'(\d+)', line[6:12]).group(1))
+            except (AttributeError, ValueError):
+                serial = 1
+            atom_name = line[12:16].strip() if len(line) > 16 else 'X'
+            resname = line[17:21].strip() if len(line) > 20 else 'UNK'
+            chain = line[21:22].strip() if len(line) > 21 and line[21:22].strip() else ' '
+            try:
+                resseq = re.search(r'(\d+)', line[22:27]).group(1) if len(line) > 26 else '1'
+            except (AttributeError, ValueError):
+                resseq = '1'
+        
+        # 合理性校验
+        if abs(x) > 9999 or abs(y) > 9999 or abs(z) > 9999:
+            return None
+        if radius < 0:
+            return None
+        
+        print(f"[_parse_pqr_regex] 🔧 正则兜底解析成功: {record_type} {serial} {atom_name} "
+              f"x={x:.3f} y={y:.3f} z={z:.3f} q={charge:.4f} r={radius:.4f}")
         
         return (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
         

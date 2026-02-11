@@ -17,7 +17,7 @@ if [ -f ../glint/_version.py ]; then
     VERSION=$(grep "__version__" ../glint/_version.py | cut -d'"' -f2 || true)
 fi
 if [ -z "$VERSION" ]; then
-    VERSION="0.2.2"
+    VERSION="0.2.3"
 fi
 VERSION_CLEAN="${VERSION#v}"
 

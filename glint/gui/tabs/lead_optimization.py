@@ -9,11 +9,103 @@ from typing import Optional
 from ..qt_adapter import (
     Qt, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QCheckBox, QComboBox, QGroupBox, QGridLayout, QScrollArea, QFrame,
-    QFileDialog, QMessageBox
+    QFileDialog, QMessageBox, QThread, Signal as pyqtSignal
 )
 
 from ..utils import t, show_message_box, show_question_box
 from .common import CommonTab
+
+
+class _Diagram2DWorker(QThread):
+    """后台线程：生成 2D 相互作用图，避免阻塞 Qt 主线程。
+
+    注意：PyMOL cmd 不是线程安全的，因此所有 PyMOL 操作必须在主线程中完成。
+    本 Worker 通过 pdb_file（主线程预先导出的临时 PDB 文件）获取配体数据，
+    避免在后台线程中调用 PyMOL，防止 Qt 事件循环死锁。
+
+    超时保护：总超时 90 秒，防止 RDKit/matplotlib 在复杂分子上无限期运行。
+
+    Signals:
+        finished(str): 生成成功时发射，携带输出文件路径
+        error(str): 生成失败时发射，携带错误信息
+    """
+    finished = pyqtSignal(str)
+    error = pyqtSignal(str)
+
+    # 总超时时间（秒）
+    TOTAL_TIMEOUT = 90
+
+    def __init__(self, csv_path: str, ligand_resname: str,
+                 pdb_file: str, output_path: str, min_confidence: float):
+        super().__init__()
+        self.csv_path = csv_path
+        self.ligand_resname = ligand_resname
+        self.pdb_file = pdb_file          # 主线程预导出的配体 PDB 文件路径
+        self.output_path = output_path
+        self.min_confidence = min_confidence
+        self._timed_out = False
+
+    def run(self) -> None:
+        """在后台线程中执行 generate_2d_interaction_diagram，带总超时保护。"""
+        import threading
+
+        result_holder = {'path': None, 'error': None}
+
+        def _generate():
+            """实际的图表生成逻辑，在子线程中运行。"""
+            try:
+                # 确保 matplotlib 使用非交互式后端
+                import matplotlib
+                matplotlib.use('Agg')
+
+                try:
+                    from ...interaction_2d_plot import generate_2d_interaction_diagram
+                except ImportError:
+                    from interaction_2d_plot import generate_2d_interaction_diagram
+
+                # 使用 pdb_file 而非 obj_name，确保后台线程不调用 PyMOL
+                final_path = generate_2d_interaction_diagram(
+                    csv_path=self.csv_path,
+                    ligand_resname=self.ligand_resname,
+                    pdb_file=self.pdb_file,
+                    output_path=self.output_path,
+                    min_confidence=self.min_confidence
+                )
+                result_holder['path'] = final_path
+
+            except Exception as e:
+                import traceback
+                traceback.print_exc()
+                result_holder['error'] = str(e)
+
+        # 在独立线程中运行图表生成，带超时保护
+        gen_thread = threading.Thread(target=_generate, daemon=True)
+        gen_thread.start()
+        gen_thread.join(timeout=self.TOTAL_TIMEOUT)
+
+        if gen_thread.is_alive():
+            # 超时：线程仍在运行
+            self._timed_out = True
+            print(f"[2D Diagram] ⚠️ 图表生成超时 ({self.TOTAL_TIMEOUT}s)，强制中止")
+            self.error.emit(
+                f"图表生成超时 ({self.TOTAL_TIMEOUT}s)。\n"
+                "可能原因：配体结构过于复杂或 Open Babel 未响应。\n"
+                "请尝试简化配体或确认 Open Babel 已正确安装。"
+            )
+        elif result_holder['error']:
+            self.error.emit(result_holder['error'])
+        elif result_holder['path'] and os.path.exists(result_holder['path']):
+            self.finished.emit(result_holder['path'])
+        else:
+            self.error.emit("Failed to generate diagram. See log for details.")
+
+        # 清理主线程预导出的临时 PDB 文件
+        try:
+            if self.pdb_file and os.path.exists(self.pdb_file):
+                os.remove(self.pdb_file)
+        except OSError:
+            pass
+
 
 class LeadOptimizationTab(CommonTab):
     def __init__(self, parent):
@@ -570,7 +662,7 @@ class LeadOptimizationTab(CommonTab):
 
 
     def run_pl_2d_diagram(self):
-        """Generate 2D Interaction Diagram"""
+        """Generate 2D Interaction Diagram（后台线程执行，避免 GUI 卡死）"""
         try:
             # Check for RDKit
             try:
@@ -645,24 +737,49 @@ class LeadOptimizationTab(CommonTab):
 
             self.log(f"Generating 2D diagram for {ligand_name}...")
 
-            try: from ...interaction_2d_plot import generate_2d_interaction_diagram
-            except ImportError: from interaction_2d_plot import generate_2d_interaction_diagram
+            # ── 在主线程中提取配体 PDB（PyMOL cmd 不线程安全） ──
+            import tempfile
+            from pymol import cmd as pymol_cmd
+            temp_pdb = tempfile.mktemp(suffix=".pdb")
 
-            final_path = generate_2d_interaction_diagram(
+            # 获取配体选择（尝试精确选择第一个配体分子）
+            sel = f"{obj_name} and resn {ligand_name}"
+            space = {'c': [], 'r': []}
+            pymol_cmd.iterate(
+                f"first ({sel})",
+                "c.append(chain); r.append(resi)",
+                space=space
+            )
+            if space['c']:
+                sel = (f"{obj_name} and resn {ligand_name} "
+                       f"and chain {space['c'][0]} and resi {space['r'][0]}")
+
+            pymol_cmd.save(temp_pdb, sel)
+            self.log(f"Extracted ligand PDB: {temp_pdb}")
+
+            # 禁用按钮并显示生成中状态，防止重复点击
+            btn = self.parent_window.pl_2d_btn
+            btn_original_text = btn.text()
+            btn.setEnabled(False)
+            btn.setText("Generating...")
+
+            # 在后台线程中执行耗时的图表生成（传入 pdb_file，不再传 obj_name）
+            self._diagram_worker = _Diagram2DWorker(
                 csv_path=csv_path,
                 ligand_resname=ligand_name,
-                obj_name=obj_name,
+                pdb_file=temp_pdb,
                 output_path=out_path,
                 min_confidence=min_confidence
             )
 
-            if final_path and os.path.exists(final_path):
+            # 成功回调：恢复按钮、显示结果、打开文件
+            def _on_finished(final_path: str):
+                btn.setText(btn_original_text)
+                btn.setEnabled(True)
                 self.log(f"2D Diagram saved: {final_path}")
-
                 show_message_box(self, "Success",
                     f"2D Diagram saved successfully!\n\nFile location:\n{final_path}")
-
-                 # Try to open the file (Mac/Linux/Windows)
+                # Try to open the file (Mac/Linux/Windows)
                 try:
                     import subprocess, platform
                     if platform.system() == 'Darwin':       # macOS
@@ -673,10 +790,18 @@ class LeadOptimizationTab(CommonTab):
                         subprocess.call(('xdg-open', final_path))
                 except OSError:  # 文件打开/子进程调用可能失败
                     pass
-            else:
-                self.log("Failed to generate 2D diagram.")
-                show_message_box(self, "Error", "Failed to generate diagram. See log for details.", "warning")
-    #
+
+            # 失败回调：恢复按钮、显示错误
+            def _on_error(err_msg: str):
+                btn.setText(btn_original_text)
+                btn.setEnabled(True)
+                self.log(f"Failed to generate 2D diagram: {err_msg}")
+                show_message_box(self, "Error", f"Failed to generate diagram:\n{err_msg}", "warning")
+
+            self._diagram_worker.finished.connect(_on_finished)
+            self._diagram_worker.error.connect(_on_error)
+            self._diagram_worker.start()
+
         except Exception as e:
             self.on_error(f"2D Diagram Error: {str(e)}")
             import traceback; traceback.print_exc()
@@ -892,6 +1017,12 @@ class LeadOptimizationTab(CommonTab):
                     ec_score = result.get('ec_score', 0)
                     ec_stats = result.get('ec_statistics', {})
 
+                    # Coulomb 回退警告：检查后端是否因 APBS 不可用而使用了近似计算
+                    if result.get('coulomb_fallback'):
+                        fallback_reason = result.get('coulomb_fallback_reason', 'APBS 不可用')
+                        self.log(f"⚠️ 注意：{fallback_reason}")
+                        self.log(f"⚠️ 结果精度可能较低，建议安装 APBS 以获得更准确的结果。")
+
                     self.log(f"EC Analysis Complete:")
                     self.log(f"  EC Score: {ec_score:.4f}")
                     self.log(f"  EC Mean: {ec_stats.get('ec_mean', 0):.4f}")
@@ -907,12 +1038,24 @@ class LeadOptimizationTab(CommonTab):
 
                     self.log(f"  Interpretation: {interpretation}")
 
-                    show_message_box(self, "EC Analysis Complete",
+                    # EC 颜色含义说明：帮助用户理解可视化中的颜色含义
+                    self.log("EC Color Interpretation:")
+                    self.log("  🟢 Green (EC > 0): Complementary - Favorable binding")
+                    self.log("  ⚪ White (EC ≈ 0): Neutral")
+                    self.log("  🔴 Red (EC < 0): Clash - Unfavorable")
+
+                    # 构建弹窗文本，包含 Coulomb 回退警告（如有）
+                    msg_text = (
                         f"EC Score: {ec_score:.4f}\n"
                         f"EC Mean: {ec_stats.get('ec_mean', 0):.4f}\n"
                         f"Positive EC: {ec_stats.get('ec_positive_fraction', 0)*100:.1f}%\n\n"
                         f"{interpretation}\n\n"
-                        f"Output: {result.get('output_dir', 'N/A')}")
+                        f"Output: {result.get('output_dir', 'N/A')}"
+                    )
+                    if result.get('coulomb_fallback'):
+                        msg_text += f"\n\n⚠️ {result.get('coulomb_fallback_reason', 'APBS 不可用，已使用 Coulomb 近似')}"
+
+                    show_message_box(self, "EC Analysis Complete", msg_text)
                 else:
                     self.log("EC analysis failed")
                     show_message_box(self, "Error", "EC analysis failed. Check the log for details.", "warning")
@@ -958,7 +1101,13 @@ class LeadOptimizationTab(CommonTab):
                     pos_frac_b = overlap_data.get('pos_frac_b', 0)
                     pos_frac_combined = overlap_data.get('pos_frac_combined', 0)
                     n_overlap = overlap_data.get('n_points', 0)
-                    
+
+                    # Coulomb 回退警告：检查后端是否因 APBS 不可用而使用了近似计算
+                    if result.get('coulomb_fallback'):
+                        fallback_reason = result.get('coulomb_fallback_reason', 'APBS 不可用')
+                        self.log(f"⚠️ 注意：{fallback_reason}")
+                        self.log(f"⚠️ 结果精度可能较低，建议安装 APBS 以获得更准确的结果。")
+
                     self.log(f"Ternary EC Analysis Complete:")
                     self.log(f"  Bridging Zone ({n_overlap} points):")
                     self.log(f"    Positive EC (A-Glue): {pos_frac_a*100:.1f}%")
@@ -975,13 +1124,25 @@ class LeadOptimizationTab(CommonTab):
                     
                     self.log(f"  Interpretation: {interpretation}")
 
-                    show_message_box(self, "Ternary EC Analysis Complete",
+                    # EC 颜色含义说明
+                    self.log("EC Color Interpretation:")
+                    self.log("  🟢 Green (EC > 0): Complementary - Favorable binding")
+                    self.log("  ⚪ White (EC ≈ 0): Neutral")
+                    self.log("  🔴 Red (EC < 0): Clash - Unfavorable")
+
+                    # 构建弹窗文本，包含 Coulomb 回退警告（如有）
+                    msg_text = (
                         f"Bridging Zone Analysis ({n_overlap} points):\n\n"
                         f"Positive EC (A-Glue): {pos_frac_a*100:.1f}%\n"
                         f"Positive EC (B-Glue): {pos_frac_b*100:.1f}%\n"
                         f"Combined: {pos_frac_combined*100:.1f}%\n\n"
                         f"{interpretation}\n\n"
-                        f"Output: {result.get('output_dir', 'N/A')}")
+                        f"Output: {result.get('output_dir', 'N/A')}"
+                    )
+                    if result.get('coulomb_fallback'):
+                        msg_text += f"\n\n⚠️ {result.get('coulomb_fallback_reason', 'APBS 不可用，已使用 Coulomb 近似')}"
+
+                    show_message_box(self, "Ternary EC Analysis Complete", msg_text)
                 else:
                     self.log("Ternary EC analysis failed or incomplete")
                     show_message_box(self, "Error", "Ternary EC analysis failed. Check the log for details.", "warning")

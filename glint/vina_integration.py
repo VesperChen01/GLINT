@@ -31,7 +31,24 @@ def find_vina_executable():
         if os.path.exists(conda_vina):
             return conda_vina
     
+
+    # 3. 遍历常见 conda 安装路径回退（与 find_obabel_executable 保持一致）
     home = os.path.expanduser('~')
+    for env_name in ["glint", "base"]:
+        for base in [
+            f"{home}/miniconda3",
+            f"{home}/anaconda3",
+            f"{home}/opt/miniconda3",
+            "/opt/miniconda3",
+            "/opt/anaconda3",
+            "/opt/homebrew/Caskroom/miniconda/base",
+            "/usr/local/Caskroom/miniconda/base",
+        ]:
+            vina_path = f"{base}/envs/{env_name}/bin/vina"
+            if os.path.exists(vina_path):
+                return vina_path
+
+    # 4. 其他常见路径
     user_paths = [
         os.path.join(home, 'bin', 'vina'),
         os.path.join(home, '.local', 'bin', 'vina'),

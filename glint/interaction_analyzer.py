@@ -140,6 +140,28 @@ SCHRODINGER_PARAMS = {
     "hydrophobic": {"other_max": 3.6}
 }
 
+# ========== 盐桥/离子相互作用：残基电荷常量 ==========
+# 基于生理 pH (~7.4) 下的 pKa 值确定残基离子化状态。
+# 盐桥要求双方都带电（离子化），Henderson-Hasselbalch 方程决定
+# 在给定 pH 下各残基的质子化比例。
+#
+# 始终带正电的残基（pKa >> 7.4，>99% 质子化）
+ALWAYS_POSITIVE_RESIDUES = {"ARG", "LYS"}
+# 条件性带正电的残基（HIS pKa ~6.0，pH 7.4 下仅 ~4% 质子化 → 默认中性）
+CONDITIONALLY_POSITIVE_RESIDUES = {"HIS"}
+# PDB 中明确标注为双质子化的组氨酸（带正电）
+#   HIP = AMBER 力场命名，HSP = CHARMM 力场命名
+PROTONATED_HIS = {"HIP", "HSP"}
+# 始终带负电的残基（pKa << 7.4，>99% 去质子化）
+ALWAYS_NEGATIVE_RESIDUES = {"ASP", "GLU"}
+# 生理 pH 下所有带正电的残基（= 始终正电 + 双质子化 HIS）
+ALL_POSITIVE_RESIDUES = ALWAYS_POSITIVE_RESIDUES | PROTONATED_HIS
+# 核酸磷酸基团所在残基（始终带负电）
+NUCLEIC_RESIDUES = {"DA", "DT", "DG", "DC", "A", "T", "G", "C", "U", "PS"}
+
+# HIS 盐桥跳过警告标志（确保全局只输出一次，避免日志刷屏）
+_his_saltbridge_warning_shown = False
+
 def parse_pdb_structure(obj_name=None):
     """
     从PyMOL对象解析原子信息
@@ -342,26 +364,37 @@ def is_saltbridge_atom(res1, atom1_name, res2, atom2_name, d):
     """
     判断原子对是否形成盐桥（精确原子级检测）
     
+    盐桥要求双方都带电（离子化）。在生理 pH (~7.4) 下：
+    - ARG (pKa ~12.5): 几乎100%质子化 → 始终带正电 ✅
+    - LYS (pKa ~10.5): 几乎100%质子化 → 始终带正电 ✅
+    - HIS (pKa ~6.0):  ~96%去质子化 → 中性 ❌ (仅 HIP/HSP 才带正电)
+    - ASP (pKa ~3.7):  几乎100%去质子化 → 始终带负电 ✅
+    - GLU (pKa ~4.1):  几乎100%去质子化 → 始终带负电 ✅
+    
     参数:
         res1, res2: 残基名称
         atom1_name, atom2_name: 原子名称
         d: 距离
     """
+    global _his_saltbridge_warning_shown
+    
     max_dist = INTERACTION_PARAMS["ionic"]["max_dist"]
     if d > max_dist:
         return False
 
-    positive = {"ARG", "LYS", "HIS"}
-    negative = {"ASP", "GLU"}
-    # 核酸磷酸基团
-    nucleic = {"DA", "DT", "DG", "DC", "A", "T", "G", "C", "U", "PS"} 
+    # 使用模块级常量（定义于文件顶部）
+    positive = ALWAYS_POSITIVE_RESIDUES
+    protonated_his = PROTONATED_HIS
+    negative = ALWAYS_NEGATIVE_RESIDUES
+    nucleic = NUCLEIC_RESIDUES
     
-    # 定义带电原子集合
-    # 注意：这里假设 PDB 命名规范
+    # 带电原子集合（PDB 命名规范）
     pos_atoms = {
-        "ARG": {"NH1", "NH2", "NE", "NZ"}, # 包括 NE 为了兼容性，虽然主要是 NH1/NH2
-        "LYS": {"NZ"},
-        "HIS": {"ND1", "NE2"},
+        "ARG": {"NH1", "NH2", "NE", "NZ"},  # 胍基：NH1/NH2 是主要带电原子
+        "LYS": {"NZ"},                       # 赖氨酸 ε-氨基
+        # HIP/HSP：双质子化组氨酸的咪唑环 N 原子
+        "HIP": {"ND1", "NE2"},
+        "HSP": {"ND1", "NE2"},
     }
     neg_atoms = {
         "ASP": {"OD1", "OD2"},
@@ -379,32 +412,95 @@ def is_saltbridge_atom(res1, atom1_name, res2, atom2_name, d):
             return atom in nucleic_neg_atoms
         return False
 
-    # 检查是否为一正一负
+    # ========== HIS 跳过检查 ==========
+    # 普通 HIS 在 pH 7.4 下为中性，不应参与盐桥检测。
+    # 仅当 PDB 中明确标注为 HIP/HSP 时才视为正电残基。
+    if res1 in CONDITIONALLY_POSITIVE_RESIDUES or res2 in CONDITIONALLY_POSITIVE_RESIDUES:
+        if not _his_saltbridge_warning_shown:
+            print("[GLINT] ℹ️  HIS (pKa ~6.0) 在 pH 7.4 下为中性，已跳过盐桥检测。"
+                  "如需检测 HIS 盐桥，请在 PDB 中将其标注为 HIP (AMBER) 或 HSP (CHARMM)。")
+            _his_saltbridge_warning_shown = True
+        return False
+
+    # 检查是否为一正一负（标准蛋白残基之间）
     is_pair1 = is_pos_atom(res1, atom1_name) and is_neg_atom(res2, atom2_name)
     is_pair2 = is_pos_atom(res2, atom2_name) and is_neg_atom(res1, atom1_name)
     
-    return is_pair1 or is_pair2
+    if is_pair1 or is_pair2:
+        return True
+
+    # ========== 配体盐桥检测 ==========
+    # 当一方为已知带电残基、另一方为配体（非标准残基）时，
+    # 需要判断配体原子是否带电。
+    #
+    # 策略：
+    #   - 有 RDKit 时：使用元素启发式（N→正电, O→负电）作为预筛，
+    #     后续分析流程可通过 formal charge 进一步验证
+    #   - 无 RDKit 时：跳过配体盐桥检测，避免假阳性
+    if not RDKIT_AVAILABLE:
+        return False
+    
+    # 所有已知残基类型（包括 HIS），避免将标准氨基酸误判为配体
+    standard_known = positive | protonated_his | negative | nucleic | CONDITIONALLY_POSITIVE_RESIDUES
+    
+    def get_element_from_name(atom_name):
+        """从原子名称提取元素符号"""
+        name = atom_name.strip()
+        if not name:
+            return ""
+        # PDB 命名规范：首字符通常为元素（单字母元素）或前两位（双字母元素）
+        if len(name) >= 2 and name[:2].upper() in {"CL", "BR", "FE", "ZN", "MG", "CA", "CU", "MN"}:
+            return name[:2].upper()
+        return name[0].upper()
+
+    # 情况1：res1 是已知带电残基，res2 是配体
+    if res1 in standard_known and res2 not in standard_known:
+        ligand_elem = get_element_from_name(atom2_name)
+        if is_pos_atom(res1, atom1_name) and ligand_elem == "O":
+            # 蛋白正电原子 ↔ 配体 O 原子（可能带负电，如羧基/磷酸基/磺酸基）
+            return True
+        if is_neg_atom(res1, atom1_name) and ligand_elem == "N":
+            # 蛋白负电原子 ↔ 配体 N 原子（可能带正电，如氨基/铵基/胍基）
+            return True
+
+    # 情况2：res2 是已知带电残基，res1 是配体
+    if res2 in standard_known and res1 not in standard_known:
+        ligand_elem = get_element_from_name(atom1_name)
+        if is_pos_atom(res2, atom2_name) and ligand_elem == "O":
+            return True
+        if is_neg_atom(res2, atom2_name) and ligand_elem == "N":
+            return True
+
+    return False
 
 def is_saltbridge(res1, res2, d):
     """
     判断是否为盐桥（旧接口兼容，仅基于残基距离）
-    注意：这可能导致过多假阳性，建议使用 is_saltbridge_atom
+    
+    注意：这可能导致过多假阳性，建议使用 is_saltbridge_atom。
+    HIS 在 pH 7.4 下为中性（pKa ~6.0），不参与盐桥。
+    仅 HIP/HSP（双质子化组氨酸）才作为正电残基。
     """
-    positive = {"ARG", "LYS", "HIS"}
-    negative = {"ASP", "GLU"}
-    nucleic = {"DA", "DT", "DG", "DC", "A", "T", "G", "C", "U"}
+    # 使用模块级常量（定义于文件顶部）
+    all_positive = ALL_POSITIVE_RESIDUES
+    negative = ALWAYS_NEGATIVE_RESIDUES
+    nucleic = NUCLEIC_RESIDUES
     
     max_dist = INTERACTION_PARAMS["ionic"]["max_dist"]
     
     if d > max_dist:
         return False
     
-    return ((res1 in positive and (res2 in negative or res2 in nucleic))
-            or (res2 in positive and (res1 in negative or res1 in nucleic)))
+    # 普通 HIS 被排除在 ALL_POSITIVE_RESIDUES 之外
+    return ((res1 in all_positive and (res2 in negative or res2 in nucleic))
+            or (res2 in all_positive and (res1 in negative or res1 in nucleic)))
 
 def is_ionic_precise(res1, atoms1, res2, atoms2, hbond_exists=False):
     """
     精确的离子/盐桥判定
+    
+    HIS 在 pH 7.4 下为中性（pKa ~6.0），不参与盐桥。
+    仅 HIP/HSP（双质子化组氨酸）才作为正电残基。
     
     参数:
         res1, atoms1: 残基1名称和原子列表
@@ -417,20 +513,31 @@ def is_ionic_precise(res1, atoms1, res2, atoms2, hbond_exists=False):
     if INTERACTION_PARAMS["ionic"]["exclude_if_hbond"] and hbond_exists:
         return False, None
     
-    positive = {"ARG", "LYS", "HIS"}
-    negative = {"ASP", "GLU"}
+    # 使用模块级常量（定义于文件顶部）
+    positive = ALWAYS_POSITIVE_RESIDUES
+    protonated_his = PROTONATED_HIS
+    all_positive = ALL_POSITIVE_RESIDUES
+    negative = ALWAYS_NEGATIVE_RESIDUES
     
-    # 检查是否为正负电荷对
-    if not ((res1 in positive and res2 in negative) or (res2 in positive and res1 in negative)):
+    # 检查是否为正负电荷对（普通 HIS 已被排除）
+    if not ((res1 in all_positive and res2 in negative) or (res2 in all_positive and res1 in negative)):
         return False, None
     
     # 查找带电原子
     charged_atoms1 = []
     charged_atoms2 = []
     
+    # 正电残基的带电原子
+    pos_atom_names_arg_lys = ["NZ", "NH1", "NH2", "NE"]  # ARG, LYS
+    pos_atom_names_his = ["ND1", "NE2"]  # HIP/HSP 的咪唑环 N 原子
+    
     if res1 in positive:
         for atom in atoms1:
-            if atom[3] in ["NZ", "NH1", "NH2", "NE", "ND1", "NE2"]:
+            if atom[3] in pos_atom_names_arg_lys:
+                charged_atoms1.append(atom[4])
+    elif res1 in protonated_his:
+        for atom in atoms1:
+            if atom[3] in pos_atom_names_his:
                 charged_atoms1.append(atom[4])
     elif res1 in negative:
         for atom in atoms1:
@@ -439,7 +546,11 @@ def is_ionic_precise(res1, atoms1, res2, atoms2, hbond_exists=False):
     
     if res2 in positive:
         for atom in atoms2:
-            if atom[3] in ["NZ", "NH1", "NH2", "NE", "ND1", "NE2"]:
+            if atom[3] in pos_atom_names_arg_lys:
+                charged_atoms2.append(atom[4])
+    elif res2 in protonated_his:
+        for atom in atoms2:
+            if atom[3] in pos_atom_names_his:
                 charged_atoms2.append(atom[4])
     elif res2 in negative:
         for atom in atoms2:
@@ -1017,8 +1128,8 @@ def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
     """
     score = 1.0
     
-    if interaction_type == "氢键":
-        # 距离衰减: 2.8A -> 1.0, max_dist -> 0.5
+    if interaction_type == "Hydrogen Bond":
+        # Distance decay: 2.8A -> 1.0, max_dist -> 0.5
         optimal_dist = 2.8
         max_dist = INTERACTION_PARAMS["hbond"]["max_DA_dist"]
         if distance_val <= optimal_dist:
@@ -1037,7 +1148,7 @@ def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
             
         score = dist_score * 0.7 + angle_score * 0.3
         
-    elif interaction_type == "盐桥":
+    elif interaction_type == "Salt Bridge":
         optimal_dist = 3.5
         max_dist = INTERACTION_PARAMS["ionic"]["max_dist"]
         if distance_val <= optimal_dist:
@@ -1045,7 +1156,7 @@ def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
         else:
             score = max(0.1, 1.0 - 0.5 * (distance_val - optimal_dist) / (max_dist - optimal_dist))
             
-    elif interaction_type == "疏水相互作用":
+    elif interaction_type == "Hydrophobic":
         optimal_dist = 3.8
         max_dist = INTERACTION_PARAMS["hydrophobic"]["other_max"]
         if distance_val <= optimal_dist:
@@ -1253,7 +1364,7 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
                      is_hb, hb_dist, hb_angle = is_hbond_precise(at2, at1, grouped)
                  
                  if is_hb:
-                    conf = calculate_confidence_score("氢键", hb_dist, hb_angle)
+                    conf = calculate_confidence_score("Hydrogen Bond", hb_dist, hb_angle)
                     interactions.append({
                         "Chain1": c1,
                         "Residue1": f"{r1} {id1}",
@@ -1262,13 +1373,13 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
                         "Residue2": f"{r2} {id2}",
                         "Atom2": at2[3],
                         "Distance": round(hb_dist, 2),
-                        "Interaction": "氢键",
+                        "Interaction": "Hydrogen Bond",
                         "Confidence": conf
                     })
                     found_hbond = True
             
             if not found_saltbridge and is_saltbridge_atom(r1, at1[3], r2, at2[3], d):
-                conf = calculate_confidence_score("盐桥", d)
+                conf = calculate_confidence_score("Salt Bridge", d)
                 interactions.append({
                     "Chain1": c1,
                     "Residue1": f"{r1} {id1}",
@@ -1277,13 +1388,13 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
                     "Residue2": f"{r2} {id2}",
                     "Atom2": at2[3],
                     "Distance": round(d, 2),
-                    "Interaction": "盐桥",
+                    "Interaction": "Salt Bridge",
                     "Confidence": conf
                 })
                 found_saltbridge = True
             
             if not found_hydrophobic and is_hydrophobic(r1, r2, at1, at2, d):
-                conf = calculate_confidence_score("疏水相互作用", d)
+                conf = calculate_confidence_score("Hydrophobic", d)
                 interactions.append({
                     "Chain1": c1,
                     "Residue1": f"{r1} {id1}",
@@ -1292,7 +1403,7 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
                     "Residue2": f"{r2} {id2}",
                     "Atom2": at2[3],
                     "Distance": round(d, 2),
-                    "Interaction": "疏水相互作用",
+                    "Interaction": "Hydrophobic",
                     "Confidence": conf
                 })
                 found_hydrophobic = True
@@ -1300,7 +1411,7 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
             if not found_halogen:
                 is_halogen, hal_dist, hal_angle = is_halogen_bond(at1, at2, d)
                 if is_halogen:
-                    conf = calculate_confidence_score("卤素键", hal_dist, hal_angle)
+                    conf = calculate_confidence_score("Halogen Bond", hal_dist, hal_angle)
                     interactions.append({
                         "Chain1": c1,
                         "Residue1": f"{r1} {id1}",
@@ -1309,7 +1420,7 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
                         "Residue2": f"{r2} {id2}",
                         "Atom2": at2[3],
                         "Distance": round(hal_dist, 2),
-                        "Interaction": "卤素键",
+                        "Interaction": "Halogen Bond",
                         "Confidence": conf
                     })
                     found_halogen = True
@@ -1324,7 +1435,7 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
             "Residue2": f"{r2} {id2}",
             "Atom2": "Ring",
             "Distance": "-",
-            "Interaction": "π–π 堆积",
+            "Interaction": "Pi-Pi Stacking",
             "Confidence": 0.9 # 默认高置信度
         })
 
@@ -1337,7 +1448,7 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
             "Residue2": f"{r2} {id2}",
             "Atom2": "Ring",
             "Distance": "-",
-            "Interaction": "π–阳离子相互作用",
+            "Interaction": "Pi-Cation",
             "Confidence": 0.9
         })
 
@@ -1838,9 +1949,9 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     
                     # ① 最高优先级：盐桥
                     if is_saltbridge_atom(lig_name, lig_atom[3], prot_name, prot_atom[3], d):
-                        interaction_type = "盐桥"
+                        interaction_type = "Salt Bridge"
                     else:
-                        # ② 次优先级：氢键
+                        # ② Next priority: hydrogen bonds
                         # DEBUG: 检查氢键检测
                         lig_elem = get_element_from_atom_name(lig_atom[3])
                         prot_elem = get_element_from_atom_name(prot_atom[3])
@@ -1852,20 +1963,20 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                                 is_hb, hb_dist, hb_angle = is_hbond_precise(prot_atom, lig_atom, all_atoms_by_residue)
 
                             if is_hb:
-                                interaction_type = "氢键"
-                                print(f"[DEBUG] ✓ 氢键: {lig_name} {lig_atom[3]} ({lig_elem}) <-> {prot_name} {prot_atom[3]} ({prot_elem}), d={d:.2f}Å, angle={hb_angle:.1f}°")
+                                interaction_type = "Hydrogen Bond"
+                                print(f"[DEBUG] ✓ H-Bond: {lig_name} {lig_atom[3]} ({lig_elem}) <-> {prot_name} {prot_atom[3]} ({prot_elem}), d={d:.2f}Å, angle={hb_angle:.1f}°")
                             elif d <= 3.5 and checked_pairs < 10:  # 只打印前几个失败的案例
-                                print(f"[DEBUG] ✗ 氢键失败: {lig_name} {lig_atom[3]} ({lig_elem}) <-> {prot_name} {prot_atom[3]} ({prot_elem}), d={d:.2f}Å")
+                                print(f"[DEBUG] ✗ H-Bond failed: {lig_name} {lig_atom[3]} ({lig_elem}) <-> {prot_name} {prot_atom[3]} ({prot_elem}), d={d:.2f}Å")
 
-                        # ③ 最低优先级：疏水
+                        # ③ Lowest priority: hydrophobic
                         if not interaction_type and not key_interactions_only and is_hydrophobic(lig_name, prot_name, lig_atom, prot_atom, d):
-                            interaction_type = "疏水相互作用"
+                            interaction_type = "Hydrophobic"
 
                     # 严格模式：只检测关键相互作用
                     # key_interactions_only=False时才启用宽松规则（不推荐）
 
                     if interaction_type:
-                        conf = calculate_confidence_score(interaction_type, d, hb_angle if interaction_type == "氢键" else None)
+                        conf = calculate_confidence_score(interaction_type, d, hb_angle if interaction_type == "Hydrogen Bond" else None)
                         # 添加配体原子3D坐标，用于2D绘图时的精确映射
                         lig_coords = lig_atom[4]  # (x, y, z) tuple
                         interactions.append({
@@ -1886,7 +1997,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     # 检查卤素键
                     is_hal, hal_dist, hal_angle = is_halogen_bond(lig_atom, prot_atom, d)
                     if is_hal:
-                        conf = calculate_confidence_score("卤素键", hal_dist, hal_angle)
+                        conf = calculate_confidence_score("Halogen Bond", hal_dist, hal_angle)
                         lig_coords = lig_atom[4]
                         interactions.append({
                             "Ligand_Chain": lig_chain,
@@ -1899,7 +2010,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                             "Protein_Residue": f"{prot_name} {prot_id}",
                             "Protein_Atom": prot_atom[3],
                             "Distance": round(hal_dist, 2),
-                            "Interaction": "卤素键",
+                            "Interaction": "Halogen Bond",
                             "Confidence": conf
                         })
 
@@ -1922,7 +2033,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     "Protein_Residue": f"{prot_name} {prot_id}",
                     "Protein_Atom": "ring",
                     "Distance": "-",
-                    "Interaction": "π–π 堆积",
+                    "Interaction": "Pi-Pi Stacking",
                     "Confidence": 0.9
                 })
 
@@ -1954,7 +2065,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     "Protein_Residue": f"{prot_name} {prot_id}",
                     "Protein_Atom": fmt_cationpi(prot_part),
                     "Distance": "-",
-                    "Interaction": "π–阳离子相互作用",
+                    "Interaction": "Pi-Cation",
                     "Confidence": 0.9
                 })
 
@@ -1999,16 +2110,21 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     for pa in prot_atoms:
                         is_wb, d_lw, d_wp, angle = is_water_bridge(closest_lig_atom, pa, water)
                         if is_wb:
-                            conf = calculate_confidence_score("水桥", max(d_lw, d_wp), angle)
+                            conf = calculate_confidence_score("Water Bridge", max(d_lw, d_wp), angle)
+                            # 添加配体原子3D坐标，与其他交互类型保持一致，用于2D绘图精确匹配
+                            lig_wb_coords = closest_lig_atom[4]
                             interactions.append({
                                 "Ligand_Chain": lig_chain,
                                 "Ligand_Residue": f"{lig_name} {lig_id}",
                                 "Ligand_Atom": closest_lig_atom[3],
+                                "Ligand_Atom_X": round(lig_wb_coords[0], 3),
+                                "Ligand_Atom_Y": round(lig_wb_coords[1], 3),
+                                "Ligand_Atom_Z": round(lig_wb_coords[2], 3),
                                 "Protein_Chain": prot_chain,
                                 "Protein_Residue": f"{prot_name} {prot_id}",
                                 "Protein_Atom": pa[3],
                                 "Distance": f"{d_lw:.2f}/{d_wp:.2f}",
-                                "Interaction": "水桥",
+                                "Interaction": "Water Bridge",
                                 "Confidence": conf
                             })
 
@@ -2492,55 +2608,55 @@ def _classify_atom_interaction(atom1_name, atom2_name, res1, res2, dist):
     elem1 = atom1_name.strip()[0].upper()
     elem2 = atom2_name.strip()[0].upper()
 
-    # N-O 或 O-N (氢键供体-受体)
+    # N-O or O-N (hydrogen bond donor-acceptor)
     if (elem1 in ['N', 'O'] and elem2 in ['N', 'O']) and dist <= 3.5:
         if elem1 == 'N' and elem2 == 'O':
-            return "氢键 (N-H···O)"
+            return "Hydrogen Bond (N-H···O)"
         elif elem1 == 'O' and elem2 == 'N':
-            return "氢键 (O-H···N)"
+            return "Hydrogen Bond (O-H···N)"
         else:
-            return "氢键"
+            return "Hydrogen Bond"
 
-    # S-S 二硫键
+    # S-S disulfide bond
     if elem1 == 'S' and elem2 == 'S' and dist <= 2.5:
-        return "二硫键 (S-S)"
+        return "Disulfide Bond (S-S)"
 
-    # 盐桥 (带电原子)
+    # Salt bridge (charged atoms)
     if dist <= 4.0:
         positive_atoms = ['NZ', 'NH1', 'NH2', 'NE']  # LYS, ARG
         negative_atoms = ['OD1', 'OD2', 'OE1', 'OE2']  # ASP, GLU
 
         if (atom1_name in positive_atoms and atom2_name in negative_atoms) or \
            (atom2_name in positive_atoms and atom1_name in negative_atoms):
-            return "盐桥"
+            return "Salt Bridge"
 
-    # 卤素键
+    # Halogen bond
     if elem1 in ['F', 'CL', 'BR', 'I'] and elem2 in ['O', 'N']:
         if dist <= 3.5:
-            return f"卤素键 ({elem1}···{elem2})"
+            return f"Halogen Bond ({elem1}···{elem2})"
 
-    # π相互作用（如果原子在芳香环上）
+    # Pi interaction (if atoms on aromatic ring)
     aromatic_res = {'PHE', 'TYR', 'TRP', 'HIS'}
     if res1 in aromatic_res and res2 in aromatic_res:
-        return "π相互作用"
+        return "Pi-Pi Stacking"
 
-    # 疏水相互作用
+    # Hydrophobic interaction
     if elem1 == 'C' and elem2 == 'C' and dist <= 4.5:
         hydrophobic_res = {'ALA', 'VAL', 'LEU', 'ILE', 'MET', 'PHE', 'PRO', 'TRP'}
         if res1 in hydrophobic_res and res2 in hydrophobic_res:
-            return "疏水相互作用"
+            return "Hydrophobic"
 
-    # 金属配位
+    # Metal coordination
     if elem1 in ['ZN', 'MG', 'CA', 'FE', 'CU', 'MN'] or \
        elem2 in ['ZN', 'MG', 'CA', 'FE', 'CU', 'MN']:
         if dist <= 3.0:
-            return "金属配位"
+            return "Metal Coordination"
 
-    # 默认：范德华相互作用
+    # Default: van der Waals interaction
     if dist <= 4.0:
-        return "范德华"
+        return "van der Waals"
 
-    return "弱相互作用"
+    return "Weak Interaction"
 
 def _calculate_interaction_geometry(atom1, atom2, all_atoms):
     """计算相互作用的几何信息（角度等）"""
@@ -2598,16 +2714,17 @@ def visualize_atom_pairs(obj_name, interactions_result=None, csv_path=None):
     cmd.delete("atom_pairs_*")
 
     # 颜色映射
+    # 统一使用 PYMOL_COLOR_NAMES 配色方案（与 PPI / 配体-配体模块一致）
     color_map = {
-        "氢键": "blue",
-        "盐桥": "red",
-        "二硫键": "yellow",
-        "疏水相互作用": "green",
-        "π相互作用": "purple",
-        "卤素键": "orange",
-        "金属配位": "magenta",
-        "范德华": "gray",
-        "弱相互作用": "lightgray"
+        "Hydrogen Bond": PYMOL_COLOR_NAMES.get('hbond', 'blue'),
+        "Salt Bridge": PYMOL_COLOR_NAMES.get('salt', 'red'),
+        "Disulfide Bond": "yellow",
+        "Hydrophobic": PYMOL_COLOR_NAMES.get('hydrophobic', 'green'),
+        "Pi-Pi Stacking": PYMOL_COLOR_NAMES.get('pipi', 'purple'),
+        "Halogen Bond": PYMOL_COLOR_NAMES.get('halogen', 'orange'),
+        "Metal Coordination": PYMOL_COLOR_NAMES.get('metal', 'magenta'),
+        "van der Waals": PYMOL_COLOR_NAMES.get('other', 'gray'),
+        "Weak Interaction": "lightgray"
     }
 
     for i, inter in enumerate(interactions_result[:20], 1):  # 最多显示20个
@@ -2929,42 +3046,43 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     
     # 相互作用类型到颜色的映射（已更新为统一配色）
     color_map = {
-        "氢键": "glue_hbond",
+        "Hydrogen Bond": "glue_hbond",
         "Hbond": "glue_hbond",
-        "盐桥": "glue_salt",
+        "Salt Bridge": "glue_salt",
         "SaltBridge": "glue_salt",
-        "疏水相互作用": "glue_hydrophobic",
         "Hydrophobic": "glue_hydrophobic",
-        "π–π 堆积": "glue_pipi",
+        "Pi-Pi Stacking": "glue_pipi",
         "PiPi": "glue_pipi",
-        "π–阳离子相互作用": "glue_pication",
+        "Pi-Cation": "glue_pication",
         "PiCation": "glue_pication",
-        "金属配位": "glue_metal",
+        "Metal Coordination": "glue_metal",
         "MetalCoord": "glue_metal",
-        "卤素键": "glue_halogen",
+        "Halogen Bond": "glue_halogen",
         "Halogen": "glue_halogen",
-        "水桥": "glue_water",
+        "Water Bridge": "glue_water",
         "WaterBridge": "glue_water"
     }
     
-    # 相互作用类型到英文名称的映射（用于生成合法的PyMOL对象名）
+    # Interaction type to English name map (for legal PyMOL object names)
     type_name_map = {
-        "氢键": "Hbond",
-        "盐桥": "SaltBridge",
-        "疏水相互作用": "Hydrophobic",
-        "π–π 堆积": "PiPi",
-        "π–阳离子相互作用": "PiCation",
-        "金属配位": "MetalCoord",
+        "Hydrogen Bond": "Hbond",
+        "Salt Bridge": "SaltBridge",
+        "Hydrophobic": "Hydrophobic",
+        "Pi-Pi Stacking": "PiPi",
+        "Pi-Cation": "PiCation",
+        "Metal Coordination": "MetalCoord",
+        "Halogen Bond": "Halogen",
+        "Water Bridge": "WaterBridge",
     }
     
-    # 药物设计重要性优先级
+    # Drug design importance priority
     interaction_priority = {
-        "氢键": 1,
-        "盐桥": 2, 
-        "金属配位": 3,
-        "π–π 堆积": 4,
-        "π–阳离子相互作用": 5,
-        "疏水相互作用": 6  # 最低优先级
+        "Hydrogen Bond": 1,
+        "Salt Bridge": 2, 
+        "Metal Coordination": 3,
+        "Pi-Pi Stacking": 4,
+        "Pi-Cation": 5,
+        "Hydrophobic": 6  # Lowest priority
     }
     
     # 按类型分组并按距离排序
@@ -2990,12 +3108,12 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     # 设置每种相互作用类型的默认显示数量（专业筛选策略）
     if max_interactions_per_type is None:
         max_interactions_per_type = {
-            "氢键": 10,         # 氢键全部显示（重要）
-            "盐桥": 5,          # 盐桥全部显示（重要）
-            "金属配位": 3,      # 金属配位全部显示
-            "π–π 堆积": 3,      # π相互作用选择性显示
-            "π–阳离子相互作用": 3,
-            "疏水相互作用": 0 if not show_hydrophobic else 5  # 默认不显示疏水（除非指定）
+            "Hydrogen Bond": 10,         # Show all H-bonds (important)
+            "Salt Bridge": 5,          # Show all salt bridges (important)
+            "Metal Coordination": 3,      # Show all metal coordination
+            "Pi-Pi Stacking": 3,      # Pi interactions selectively shown
+            "Pi-Cation": 3,
+            "Hydrophobic": 0 if not show_hydrophobic else 5  # Hidden by default unless specified
         }
     
     sorted_types = sorted(interactions_by_type.keys(), 
@@ -3352,15 +3470,15 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
 
                     # Determine cutoff based on interaction type
                     cutoff = 5.0  # Default
-                    if "氢键" in interaction_type or "Hbond" in interaction_type:
+                    if "Hydrogen Bond" in interaction_type or "Hbond" in interaction_type:
                         cutoff = 3.8
-                    elif "盐桥" in interaction_type or "Salt" in interaction_type:
+                    elif "Salt Bridge" in interaction_type or "Salt" in interaction_type:
                         cutoff = 5.0
-                    elif "疏水" in interaction_type or "Hydrophobic" in interaction_type:
+                    elif "Hydrophobic" in interaction_type:
                         cutoff = 5.5
                     elif "Pi" in interaction_type or "π" in interaction_type:
-                        cutoff = 7.0  # π 相互作用距离更大
-                    elif "金属" in interaction_type or "Metal" in interaction_type:
+                        cutoff = 7.0  # π interactions have larger distance
+                    elif "Metal" in interaction_type:
                         cutoff = 4.0
 
                     # 创建距离对象
@@ -3393,8 +3511,8 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 interaction_count[interaction_type] = interaction_count.get(interaction_type, 0) + 1
                 total_shown += 1
                 
-                # 统计氢键
-                if "氢键" in interaction_type or "Hbond" in interaction_type:
+                # Count H-bonds
+                if "Hydrogen Bond" in interaction_type or "Hbond" in interaction_type:
                     hbonds_drawn_from_csv += 1
 
             except Exception as e:
@@ -3468,14 +3586,14 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     print(f"\n[visualize_protein_ligand_3d] ✅ 3D 可视化完成!")
     print(f"   📊 相互作用统计 (来自分析结果):")
     
-    # 统计氢键
-    total_hbonds = interaction_count.get("氢键", 0) + interaction_count.get("Hbond", 0)
+    # Count H-bonds
+    total_hbonds = interaction_count.get("Hydrogen Bond", 0) + interaction_count.get("Hbond", 0)
     if total_hbonds > 0:
-        print(f"      • 氢键: {total_hbonds}")
+        print(f"      • Hydrogen Bonds: {total_hbonds}")
     
-    # 统计其他相互作用
+    # Count other interactions
     for itype, count in sorted(interaction_count.items(), key=lambda x: x[1], reverse=True):
-        if count > 0 and itype not in ["氢键", "Hbond"]:
+        if count > 0 and itype not in ["Hydrogen Bond", "Hbond"]:
             print(f"      • {itype}: {count}")
     
     if protein_residues:
@@ -3577,7 +3695,7 @@ def diagnose_csv_visualization(obj_name, csv_path, max_rows=5):
         # Print results
         status = "✅" if (count1 > 0 and count2 > 0) else "❌"
         conf_val = f", conf={confidence}" if confidence else ""
-        hydro_note = " [hidden by default]" if "疏水" in interaction_type or "Hydrophobic" in interaction_type else ""
+        hydro_note = " [hidden by default]" if "Hydrophobic" in interaction_type else ""
         
         print(f"   Row {i}: {status} {interaction_type}{conf_val}{hydro_note}")
         print(f"          Ligand: {lig_res[0]} {lig_resid}/{lig_atom} → {count1} atoms")
@@ -4201,16 +4319,16 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
     ax.set_ylim(-10, 10)
     ax.axis('off')
 
-    # 颜色映射
+    # Color mapping
     color_map = {
-        "氢键": "#2196F3",
-        "盐桥": "#FF5722",
-        "疏水相互作用": "#4CAF50",
-        "π–π 堆积": "#9C27B0",
-        "π–阳离子相互作用": "#E91E63",
-        "二硫键": "#FFC107",
-        "卤素键": "#FF9800",
-        "金属配位": "#673AB7",
+        "Hydrogen Bond": "#2196F3",
+        "Salt Bridge": "#FF5722",
+        "Hydrophobic": "#4CAF50",
+        "Pi-Pi Stacking": "#9C27B0",
+        "Pi-Cation": "#E91E63",
+        "Disulfide Bond": "#FFC107",
+        "Halogen Bond": "#FF9800",
+        "Metal Coordination": "#673AB7",
     }
 
     # 分析节点
@@ -4315,17 +4433,17 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
         except Exception as e:
             continue
 
-    # 添加图例 (Translate Chinese to English for plot labels to avoid font issues)
+    # Legend labels (type names are already English, this map handles short display forms)
     translation_map = {
-        "氢键": "H-Bond",
-        "盐桥": "Salt Bridge",
-        "疏水相互作用": "Hydrophobic",
-        "π–π 堆积": "Pi-Pi Stacking",
-        "π–阳离子相互作用": "Pi-Cation",
-        "二硫键": "Disulfide",
-        "卤素键": "Halogen Bond",
-        "金属配位": "Metal Coord",
-        "范德华力": "vdW"
+        "Hydrogen Bond": "H-Bond",
+        "Salt Bridge": "Salt Bridge",
+        "Hydrophobic": "Hydrophobic",
+        "Pi-Pi Stacking": "Pi-Pi Stacking",
+        "Pi-Cation": "Pi-Cation",
+        "Disulfide Bond": "Disulfide",
+        "Halogen Bond": "Halogen Bond",
+        "Metal Coordination": "Metal Coord",
+        "van der Waals": "vdW"
     }
 
     legend_elements = []
@@ -4441,14 +4559,14 @@ def generate_interaction_heatmap(interactions_result, output_path=None, show_plo
         row_label = "Partner 1"
         col_label = "Partner 2"
 
-    # 优先级映射 (用于颜色强度)
+    # Priority mapping (for color intensity)
     type_score = {
-        "盐桥": 4, "Salt Bridge": 4,
-        "氢键": 3, "Hydrogen Bond": 3, "H-Bond": 3,
-        "π–π 堆积": 2, "Pi-Pi Stacking": 2,
-        "π–阳离子": 2, "Pi-Cation": 2,
-        "疏水相互作用": 1, "疏水接触": 1, "Hydrophobic": 1, "Hydrophobic Interaction": 1,
-        "范德华力": 0.5, "vdW": 0.5
+        "Salt Bridge": 4,
+        "Hydrogen Bond": 3, "H-Bond": 3,
+        "Pi-Pi Stacking": 2,
+        "Pi-Cation": 2,
+        "Hydrophobic": 1,
+        "van der Waals": 0.5, "vdW": 0.5
     }
 
     # 收集所有唯一的残基
@@ -4692,13 +4810,13 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
                         is_hb, hb_dist, hb_angle = is_hbond_precise(prot_atom, nuc_atom, all_atoms_by_residue)
                     
                     if is_hb:
-                        interaction_type = "氢键"
+                        interaction_type = "Hydrogen Bond"
                     elif is_saltbridge_atom(nuc_name, nuc_atom[3], prot_name, prot_atom[3], d):
-                        interaction_type = "盐桥"
+                        interaction_type = "Salt Bridge"
                     elif is_hydrophobic(nuc_name, prot_name, nuc_atom, prot_atom, d):
-                        # 过滤掉核酸糖环原子 (带 ')，只允许碱基参与疏水相互作用
+                        # Filter out nucleic acid sugar ring atoms (with '), only allow base atoms for hydrophobic
                         if "'" not in nuc_atom[3]:
-                            interaction_type = "疏水相互作用"
+                            interaction_type = "Hydrophobic"
                     
                     if interaction_type:
                         interactions.append({
@@ -4722,7 +4840,7 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
                     "Protein_Residue": f"{prot_name} {prot_id}",
                     "Protein_Atom": "ring",
                     "Distance": "-",
-                    "Interaction": "π–π 堆积"
+                    "Interaction": "Pi-Pi Stacking"
                 })
             
             if is_cationpi(prot_name, prot_atoms, nuc_name, nuc_atoms):
@@ -4734,7 +4852,7 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
                     "Protein_Residue": f"{prot_name} {prot_id}",
                     "Protein_Atom": "cation",
                     "Distance": "-",
-                    "Interaction": "π–阳离子相互作用"
+                    "Interaction": "Pi-Cation"
                 })
     
     # 输出到CSV 并处理自动高亮

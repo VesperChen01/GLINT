@@ -287,19 +287,27 @@ class MolecularFeatureExtractor:
         """
         提取带电基团
         
+        基于生理 pH (~7.4) 下的 pKa 值判断残基离子化状态：
+        - ARG (pKa ~12.5), LYS (pKa ~10.5): 始终带正电
+        - HIP/HSP（双质子化 HIS）: 带正电
+        - HIS (pKa ~6.0): 中性，不计入正电基团
+        - ASP (pKa ~3.7), GLU (pKa ~4.1): 始终带负电
+        
         返回格式：
-        [{
-            'residue': (chain, resn, resi),
-            'charge': '+' or '-',
-            'center': (x,y,z),
-            'atoms': [(x,y,z), ...]
-        }, ...]
+        [{'residue': (chain, resn, resi), 'charge': '+' or '-',
+          'center': (x,y,z), 'atoms': [(x,y,z), ...]}, ...]
         """
-        positive_residues = {'ARG', 'LYS', 'HIS'}
+        # 与 interaction_analyzer.py 中的常量定义保持一致
+        positive_residues = {'ARG', 'LYS'}
+        # 双质子化组氨酸（HIP=AMBER, HSP=CHARMM）在 PDB 中明确带正电
+        protonated_his_residues = {'HIP', 'HSP'}
+        # 合并所有正电残基
+        all_positive = positive_residues | protonated_his_residues
         negative_residues = {'ASP', 'GLU'}
         
-        # 带电原子定义
-        positive_atoms = {'NZ', 'NH1', 'NH2', 'NE', 'ND1', 'NE2'}
+        # 带电原子定义（PDB 命名规范）
+        positive_atoms_arg_lys = {'NZ', 'NH1', 'NH2', 'NE'}
+        positive_atoms_his = {'ND1', 'NE2'}  # HIP/HSP 咪唑环 N 原子
         negative_atoms = {'OD1', 'OD2', 'OE1', 'OE2'}
         
         charged = []
@@ -307,11 +315,17 @@ class MolecularFeatureExtractor:
         for res_key, res_atoms in self.residues.items():
             resn = res_key[1]
             
-            if resn in positive_residues:
+            if resn in all_positive:
                 # 正电荷中心
+                # 根据残基类型选择正确的带电原子集合
+                if resn in protonated_his_residues:
+                    target_atoms = positive_atoms_his
+                else:
+                    target_atoms = positive_atoms_arg_lys
+                
                 charge_coords = []
                 for atom in res_atoms:
-                    if atom[3].strip().upper() in positive_atoms:
+                    if atom[3].strip().upper() in target_atoms:
                         charge_coords.append(atom[4])
                 
                 if charge_coords:

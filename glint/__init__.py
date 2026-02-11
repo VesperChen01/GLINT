@@ -595,8 +595,10 @@ def __init_plugin__(app=None):
         pass  # 静默处理
 
     # 欢迎信息（延迟检查）
+    # 防止版本号出现双 v（如 __version__ = "v0.2.3" → "vv0.2.3"）
+    _display_ver = __version__.lstrip('v')
     if _check_deps_safe():
-        print(f"\n🧬 GLINT - Molecular Glue Analyzer v{__version__}")
+        print(f"\n🧬 GLINT - Molecular Glue Analyzer v{_display_ver}")
         print("┌" + "─" * 48 + "┐")
         print("│  Quick Start:                                   │")
         print("│    • glint_gui            - Launch GUI          │")
@@ -604,7 +606,7 @@ def __init_plugin__(app=None):
         print("│    • Plugins → GLINT       - Menu access       │")
         print("└" + "─" * 48 + "┘")
     else:
-        print(f"\n🧬 GLINT v{__version__} - ⚠️  Some dependencies may be missing")
+        print(f"\n🧬 GLINT v{_display_ver} - ⚠️  Some dependencies may be missing")
         print("💡 Most features are available. Use 'glint_gui' to launch GUI.\n")
 
 # Auto-register if running within PyMOL environment (e.g. via 'run' command or import)

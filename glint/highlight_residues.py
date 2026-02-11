@@ -203,12 +203,12 @@ def _interaction_to_abbr(interaction_text):
     PyMOL标签不支持中文，需要转换为ASCII字符
     """
     abbr_map = {
-        "氢键": "HB",           # Hydrogen Bond
-        "盐桥": "SB",           # Salt Bridge
-        "疏水相互作用": "HP",   # Hydrophobic
-        "π–π 堆积": "Pi-Pi",   # Pi-Pi stacking
-        "π–阳离子相互作用": "Pi-Cat",  # Pi-Cation
-        "范德华力": "VDW",      # van der Waals
+        "Hydrogen Bond": "HB",
+        "Salt Bridge": "SB",
+        "Hydrophobic": "HP",
+        "Pi-Pi Stacking": "Pi-Pi",
+        "Pi-Cation": "Pi-Cat",
+        "van der Waals": "VDW",
     }
 
     # 尝试匹配已知的相互作用类型
@@ -285,7 +285,7 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
         obj: PyMOL对象名称
         chain1, resid1, atom1: 第一个原子的链、残基号、原子名
         chain2, resid2, atom2: 第二个原子的链、残基号、原子名
-        interaction_type: 相互作用类型(氢键、盐桥等)
+        interaction_type: Interaction type (Hydrogen Bond, Salt Bridge, etc.)
         idx: 索引编号,用于生成唯一的距离对象名称
     
     返回:
@@ -294,14 +294,14 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     # 使用统一配色方案
     # 将 hex 颜色转换为 PyMOL 颜色名称（或直接使用相近的 PyMOL 内置颜色）
     color_map = {
-        "氢键": "marine",           # 蓝色系 (#2196F3)
-        "盐桥": "tv_red",          # 橙红色 (#FF5722)
-        "疏水相互作用": "green",    # 绿色 (#4CAF50)
-        "π–π 堆积": "purple",      # 紫色 (#9C27B0)
-        "π–阳离子相互作用": "magenta",  # 粉色 (#E91E63)
-        "卤素键": "tv_orange",     # 橙色 (#FF9800)
-        "水桥": "cyan",            # 青色 (#00BCD4)
-        "金属配位": "violet",      # 深紫色 (#673AB7)
+        "Hydrogen Bond": "marine",           # Blue (#2196F3)
+        "Salt Bridge": "tv_red",          # Orange-red (#FF5722)
+        "Hydrophobic": "green",    # Green (#4CAF50)
+        "Pi-Pi Stacking": "purple",      # Purple (#9C27B0)
+        "Pi-Cation": "magenta",  # Pink (#E91E63)
+        "Halogen Bond": "tv_orange",     # Orange (#FF9800)
+        "Water Bridge": "cyan",            # Cyan (#00BCD4)
+        "Metal Coordination": "violet",      # Deep purple (#673AB7)
     }
     
     # 获取颜色,默认为灰色

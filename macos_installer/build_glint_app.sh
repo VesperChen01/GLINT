@@ -74,6 +74,10 @@ fi
 # Activate glint environment
 conda activate glint
 
+# Ensure conda env bin in PATH (vina, obabel, etc.)
+if [ -n "$CONDA_PREFIX" ]; then
+    export PATH="${CONDA_PREFIX}/bin:${PATH}"
+fi
 # Set environment variables
 export KMP_DUPLICATE_LIB_OK=TRUE
 export OMP_NUM_THREADS=1
@@ -109,7 +113,7 @@ cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>0.2.1</string>
+    <string>0.2.3</string>
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>

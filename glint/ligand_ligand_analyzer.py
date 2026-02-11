@@ -151,7 +151,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                 is_hb, hb_dist, hb_angle = is_hbond_precise(a2, a1, all_atoms_dict) # 反向
                 
             if is_hb:
-                conf = calculate_confidence_score("氢键", hb_dist, hb_angle)
+                conf = calculate_confidence_score("Hydrogen Bond", hb_dist, hb_angle)
                 interactions.append({
                     "Type": "Hydrogen Bond",
                     "Atom1": a1, "Atom2": a2, "Distance": hb_dist, "Confidence": conf,
@@ -162,7 +162,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
             # 3.2 卤素键
             is_hal, hal_dist, hal_angle = is_halogen_bond(a1, a2, d)
             if is_hal:
-                conf = calculate_confidence_score("卤素键", hal_dist, hal_angle)
+                conf = calculate_confidence_score("Halogen Bond", hal_dist, hal_angle)
                 interactions.append({
                     "Type": "Halogen Bond",
                     "Atom1": a1, "Atom2": a2, "Distance": hal_dist, "Confidence": conf,
@@ -188,7 +188,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                 polar_atoms = {'N', 'O', 'S', 'F', 'CL', 'BR', 'I'}
                 if e1 in polar_atoms and e2 in polar_atoms:
                     interactions.append({
-                        "Type": "Polar Contact",
+                        "Type": "Weak Polar Contact",
                         "Atom1": a1, "Atom2": a2, "Distance": d, "Confidence": 0.4,
                         "Details": "Dipole-Dipole"
                     })
@@ -210,7 +210,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                     elem2 = get_element_from_atom_name(a2[3])
                     if elem1 == 'C' and elem2 == 'C' and d <= 3.6:  # 收紧阈值 3.8 -> 3.6
                         interactions.append({
-                            "Type": "Hydrophobic (Generic)",
+                            "Type": "Hydrophobic",
                             "Atom1": a1, "Atom2": a2, "Distance": d, "Confidence": 0.5,
                             "Details": "C-C contact"
                         })
@@ -232,12 +232,12 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                     n2 = r2['normal']
                     angle = angle_between(n1, n2)
                     
-                    # 面-面 (0-30 或 150-180) 或 边-面 (60-120)
+                    # Face-to-face (0-30 or 150-180) or edge-to-face (60-120), unified as "Pi-Pi Stacking"
                     itype = None
                     if angle <= 30 or angle >= 150:
-                        itype = "Pi-Pi Stacking (Face-to-Face)"
+                        itype = "Pi-Pi Stacking"  # Face-to-face
                     elif 60 <= angle <= 120:
-                        itype = "Pi-Pi Stacking (Edge-to-Face)"
+                        itype = "Pi-Pi Stacking"  # Edge-to-face
                         
                     if itype:
                         interactions.append({
@@ -277,10 +277,10 @@ def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False
         itype = inter['Type']
         interaction_counts[itype] = interaction_counts.get(itype, 0) + 1
     
-    # 显示相互作用统计（排除疏水，如果未启用）
+    # Show interaction summary (hide hydrophobic if not enabled)
     print(f"[GLINT] Ligand-Ligand Interaction Summary:")
     for itype, count in sorted(interaction_counts.items()):
-        if not show_hydrophobic and ("Hydrophobic" in itype or "疏水" in itype):
+        if not show_hydrophobic and "Hydrophobic" in itype:
             print(f"   {itype}: {count} (hidden - use show_hydrophobic=True to display)")
         else:
             print(f"   {itype}: {count}")
@@ -289,13 +289,36 @@ def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False
     register_pymol_colors(cmd)
     
     for i, inter in enumerate(interactions):
-        # 跳过疏水相互作用（如果未启用显示）
-        if not show_hydrophobic and ("Hydrophobic" in inter['Type'] or "疏水" in inter['Type']):
+        # Skip hydrophobic interactions if not enabled
+        if not show_hydrophobic and "Hydrophobic" in inter['Type']:
             continue
         name = f"{obj_name}_LL_inter_{i+1}"
         
+        # Unified color logic: match type name to color
+        itype = inter['Type']
+        color_name = "gray50"  # Default color
+        
+        if "Hydrogen Bond" in itype:
+            color_name = PYMOL_COLOR_NAMES['hbond']
+        elif "Halogen Bond" in itype or "Halogen" in itype:
+            color_name = PYMOL_COLOR_NAMES['halogen']
+        elif "Metal Coordination" in itype or "Metal" in itype:
+            color_name = PYMOL_COLOR_NAMES['metal']
+        elif "Polar" in itype:
+            color_name = PYMOL_COLOR_NAMES['other']
+        elif "Hydrophobic" in itype:
+            color_name = PYMOL_COLOR_NAMES['hydrophobic']
+        elif "Pi-Pi" in itype:
+            color_name = PYMOL_COLOR_NAMES['pipi']
+        elif "Pi-Cation" in itype:
+            color_name = PYMOL_COLOR_NAMES['pication']
+        elif "Salt Bridge" in itype:
+            color_name = PYMOL_COLOR_NAMES['salt']
+        elif "Water Bridge" in itype:
+            color_name = PYMOL_COLOR_NAMES['water']
+        
         if inter.get("IsGroup"):
-            # 绘制环中心连线
+            # 绘制环中心连线（π–π 堆积等基于基团的相互作用）
             p1 = inter['Group1']['centroid']
             p2 = inter['Group2']['centroid']
             # 创建伪原子
@@ -304,7 +327,11 @@ def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False
             cmd.distance(name, "p1", "p2")
             cmd.delete("p1")
             cmd.delete("p2")
-            cmd.color("magenta", name)
+            # 使用统一配色（不再硬编码 magenta）
+            try:
+                cmd.color(color_name, name)
+            except Exception:
+                cmd.color("gray50", name)
         else:
             # 原子连线
             a1 = inter['Atom1']
@@ -316,29 +343,9 @@ def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False
             
             cmd.distance(name, sel1, sel2)
             
-            # 使用统一配色方案
-            itype = inter['Type']
-            color_name = "gray50" # default
-            
-            if "Hydrogen Bond" in itype or "氢键" in itype:
-                color_name = PYMOL_COLOR_NAMES['hbond']
-            elif "Halogen Bond" in itype or "卤素键" in itype:
-                color_name = PYMOL_COLOR_NAMES['halogen']
-            elif "Metal" in itype or "金属" in itype:
-                color_name = PYMOL_COLOR_NAMES['metal']
-            elif "Polar" in itype or "极性" in itype:
-                color_name = PYMOL_COLOR_NAMES['other'] # Polar contacts often gray or light blue
-            elif "Hydrophobic" in itype or "疏水" in itype:
-                color_name = PYMOL_COLOR_NAMES['hydrophobic']
-            elif "Pi-Pi" in itype:
-                color_name = PYMOL_COLOR_NAMES['pipi']
-            elif "Pi-Cation" in itype:
-                color_name = PYMOL_COLOR_NAMES['pication']
-                
             try:
                 cmd.color(color_name, name)
             except Exception:  # PyMOL 颜色设置可能失败
-                # Fallback if color name not found (though register_pymol_colors should fix this)
                 cmd.color("gray50", name)
             
     print(f"[GLINT] Visualized {len(interactions)} interactions.")

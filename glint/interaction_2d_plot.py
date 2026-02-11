@@ -107,10 +107,22 @@ UNIFIED_INTERACTION_COLORS = INTERACTION_COLORS_HEX
 INTERACTION_LINE_STYLE = INTERACTION_LINE_STYLES
 
 # ============================================================================
-# 相互作用类型映射 (中英文统一，与 3D 视图一致)
+# Interaction type mapping (unified English names, compatible with 3D view)
 # ============================================================================
 INTERACTION_TYPE_MAP = {
-    # 中文 -> 内部类型
+    # Primary English names -> internal type
+    'Hydrogen Bond': 'hbond',
+    'Salt Bridge': 'salt',
+    'Pi-Pi Stacking': 'pipi',
+    'Pi-Cation': 'pication',
+    'Hydrophobic': 'hydrophobic',
+    'Halogen Bond': 'halogen',
+    'Metal Coordination': 'metal',
+    'Water Bridge': 'water',
+    'Weak Polar Contact': 'other',
+    'Disulfide Bond': 'other',
+    'van der Waals': 'other',
+    # Legacy Chinese mappings (backward compatibility)
     '氢键': 'hbond',
     '盐桥': 'salt',
     'π–π 堆积': 'pipi',
@@ -119,7 +131,12 @@ INTERACTION_TYPE_MAP = {
     '卤素键': 'halogen',
     '金属配位': 'metal',
     '水桥': 'water',
-    # 英文 -> 内部类型
+    '疏水接触': 'hydrophobic',
+    'π-π堆积': 'pipi',
+    '阳离子-π': 'pication',
+    '弱极性接触': 'other',
+    'polar contact': 'other',
+    # Lowercase English -> internal type
     'hydrogen bond': 'hbond',
     'hbond': 'hbond',
     'h-bond': 'hbond',
@@ -177,30 +194,30 @@ def normalize_interaction_type(itype):
     if itype_lower in INTERACTION_TYPE_MAP:
         return INTERACTION_TYPE_MAP[itype_lower]
     
-    # 然后尝试部分匹配 (按优先级顺序)
-    # 氢键
-    if '氢键' in itype or 'hbond' in itype_lower or 'hydrogen' in itype_lower or 'h-bond' in itype_lower:
+    # Then try partial matching (by priority order)
+    # Hydrogen bond
+    if 'hydrogen' in itype_lower or 'hbond' in itype_lower or 'h-bond' in itype_lower or '氢键' in itype:
         return 'hbond'
-    # 盐桥
-    if '盐桥' in itype or 'salt' in itype_lower:
+    # Salt bridge
+    if 'salt' in itype_lower or '盐桥' in itype:
         return 'salt'
-    # π-π 堆积
-    if 'π–π' in itype or 'π-π' in itype or 'pi-pi' in itype_lower or 'pipi' in itype_lower or 'stacking' in itype_lower:
+    # Pi-Pi stacking
+    if 'pi-pi' in itype_lower or 'pipi' in itype_lower or 'stacking' in itype_lower or 'π–π' in itype or 'π-π' in itype:
         return 'pipi'
-    # π-阳离子
-    if 'π–阳离子' in itype or 'π-阳离子' in itype or 'pi-cation' in itype_lower or 'pication' in itype_lower or 'cation-pi' in itype_lower:
+    # Pi-Cation
+    if 'pi-cation' in itype_lower or 'pication' in itype_lower or 'cation-pi' in itype_lower or 'π–阳离子' in itype or 'π-阳离子' in itype:
         return 'pication'
-    # 金属配位
-    if '金属' in itype or 'metal' in itype_lower:
+    # Metal coordination
+    if 'metal' in itype_lower or '金属' in itype:
         return 'metal'
-    # 水桥
-    if '水桥' in itype or 'water' in itype_lower:
+    # Water bridge
+    if 'water' in itype_lower or '水桥' in itype:
         return 'water'
-    # 卤素键
-    if '卤素' in itype or 'halogen' in itype_lower:
+    # Halogen bond
+    if 'halogen' in itype_lower or '卤素' in itype:
         return 'halogen'
-    # 疏水相互作用 (最后检查，因为很多类型名称可能包含相关词)
-    if '疏水' in itype or 'hydrophobic' in itype_lower or 'alkyl' in itype_lower:
+    # Hydrophobic (check last, as many type names may contain related words)
+    if 'hydrophobic' in itype_lower or 'alkyl' in itype_lower or '疏水' in itype:
         return 'hydrophobic'
     
     return 'other'
@@ -374,6 +391,142 @@ def try_load_mol_from_smiles(pdb_file, ligand_resname):
     return None
 
 
+def _parse_element_from_atom_name(atom_name):
+    """
+    从 PDB 原子名解析元素类型。
+    
+    PDB 原子名规则：
+    - 常见单字母元素 + 数字：N1 → N, O2 → O, C3 → C, S1 → S
+    - 双字母元素 + 数字：CL1 → Cl, BR1 → Br, FE1 → Fe, ZN → Zn
+    - 纯元素名：N → N, O → O
+    
+    Returns:
+        元素符号（首字母大写），如果解析失败返回 None
+    """
+    if not atom_name:
+        return None
+    
+    name = atom_name.strip()
+    
+    # 已知的双字母元素（PDB 中常见）
+    two_letter_elements = {
+        'CL', 'BR', 'FE', 'ZN', 'MG', 'MN', 'CO', 'CU', 'NI', 
+        'SE', 'SI', 'NA', 'CA',
+    }
+    
+    # 先尝试匹配双字母元素（大写形式）
+    prefix2 = name[:2].upper()
+    if prefix2 in two_letter_elements:
+        return prefix2[0] + prefix2[1].lower()  # CL → Cl
+    
+    # 单字母元素 + 可选数字/后缀
+    first_char = name[0].upper()
+    if first_char in ('C', 'N', 'O', 'S', 'P', 'F', 'H', 'I', 'B', 'K'):
+        # 确认第二个字符不是小写字母（否则可能是双字母元素）
+        if len(name) == 1 or not name[1].isalpha() or name[1].isupper():
+            return first_char
+    
+    # 最后尝试：用正则提取前导字母部分
+    match = re.match(r'^([A-Za-z]{1,2})', name)
+    if match:
+        letters = match.group(1)
+        if len(letters) == 2 and letters.upper() in two_letter_elements:
+            return letters[0].upper() + letters[1].lower()
+        return letters[0].upper()
+    
+    return None
+
+
+def _transfer_pdb_info(mol_src, mol_dst):
+    """
+    尝试将原始分子的 PDB 原子名和坐标信息传递到 SMILES 重建的分子。
+    
+    策略：
+    1. 如果原子数一致，按元素类型顺序逐一映射 PDBResidueInfo
+    2. 如果原子数不匹配，至少在分子上挂载一个 _pdb_atom_map 属性
+       供后续元素回退匹配使用
+    """
+    if mol_src is None or mol_dst is None:
+        return
+    
+    # 收集原始分子的 PDB 原子名 → 元素映射
+    pdb_atom_map = {}  # {atom_name: element_symbol}
+    src_pdb_atoms = []  # [(idx, atom_name, element, x, y, z)]
+    
+    src_has_conf = mol_src.GetNumConformers() > 0
+    src_conf = mol_src.GetConformer() if src_has_conf else None
+    
+    for atom in mol_src.GetAtoms():
+        pdb_info = atom.GetPDBResidueInfo()
+        elem = atom.GetSymbol()
+        aname = ""
+        if pdb_info:
+            aname = pdb_info.GetName().strip()
+            pdb_atom_map[aname] = elem
+        
+        pos = (0, 0, 0)
+        if src_conf:
+            p = src_conf.GetAtomPosition(atom.GetIdx())
+            pos = (p.x, p.y, p.z)
+        
+        src_pdb_atoms.append((atom.GetIdx(), aname, elem, pos[0], pos[1], pos[2]))
+    
+    # 在目标分子上挂载映射信息（用于第三层回退匹配）
+    mol_dst._pdb_atom_map = pdb_atom_map
+    mol_dst._src_pdb_atoms = src_pdb_atoms
+    
+    # 尝试按元素对应关系复制 PDBResidueInfo
+    n_src = mol_src.GetNumAtoms()
+    n_dst = mol_dst.GetNumAtoms()
+    
+    if n_src == n_dst:
+        # 原子数一致 → 按元素匹配尝试逐一复制
+        # 按元素分组建立映射
+        src_by_elem = {}
+        for atom in mol_src.GetAtoms():
+            elem = atom.GetSymbol()
+            src_by_elem.setdefault(elem, []).append(atom.GetIdx())
+        
+        dst_by_elem = {}
+        for atom in mol_dst.GetAtoms():
+            elem = atom.GetSymbol()
+            dst_by_elem.setdefault(elem, []).append(atom.GetIdx())
+        
+        # 检查每个元素的数量是否一致
+        elem_match = all(
+            len(src_by_elem.get(e, [])) == len(dst_by_elem.get(e, []))
+            for e in set(list(src_by_elem.keys()) + list(dst_by_elem.keys()))
+        )
+        
+        if elem_match:
+            # 按元素分组、按顺序对应复制 PDB 信息
+            copied = 0
+            for elem in src_by_elem:
+                src_indices = src_by_elem[elem]
+                dst_indices = dst_by_elem.get(elem, [])
+                for si, di in zip(src_indices, dst_indices):
+                    src_atom = mol_src.GetAtomWithIdx(si)
+                    dst_atom = mol_dst.GetAtomWithIdx(di)
+                    pdb_info = src_atom.GetPDBResidueInfo()
+                    if pdb_info:
+                        # 深拷贝 PDB 信息到目标原子
+                        new_info = Chem.AtomPDBResidueInfo()
+                        new_info.SetName(pdb_info.GetName())
+                        new_info.SetResidueName(pdb_info.GetResidueName())
+                        new_info.SetResidueNumber(pdb_info.GetResidueNumber())
+                        new_info.SetChainId(pdb_info.GetChainId())
+                        new_info.SetIsHeteroAtom(pdb_info.GetIsHeteroAtom())
+                        dst_atom.SetMonomerInfo(new_info)
+                        copied += 1
+            
+            if copied > 0:
+                print(f"[2D Diagram] ✅ 成功复制 {copied} 个原子的 PDB 信息到 SMILES 分子")
+        else:
+            print(f"[2D Diagram] ⚠️ 原子元素组成不匹配，无法复制 PDB 信息（src={n_src}, dst={n_dst}）")
+    else:
+        print(f"[2D Diagram] ⚠️ 原子数不匹配（src={n_src}, dst={n_dst}），跳过 PDB 信息复制，保留 _pdb_atom_map 供回退匹配")
+
+
 def determine_bond_orders_from_3d(mol, temp_pdb_path=None, ligand_resname=None):
     """
     使用多种策略从 3D 坐标推断键级（单键/双键/芳香键）
@@ -475,8 +628,13 @@ def determine_bond_orders_from_3d(mol, temp_pdb_path=None, ligand_resname=None):
                                 except Exception as e:
                                     print(f"[2D Diagram] AssignBondOrdersFromTemplate 失败: {e}")
                                     # 回退：直接使用 SMILES 分子（会丢失 3D 坐标，但键级正确）
+                                    # 🔧 修复：尝试将原始 mol 的 PDB 原子名和坐标映射到新分子
                                     try:
                                         AllChem.Compute2DCoords(mol_from_smiles)
+
+                                        # 尝试从原始分子复制 PDB 原子名到 SMILES 分子
+                                        # 这让后续的名称匹配策略仍然可用
+                                        _transfer_pdb_info(mol, mol_from_smiles)
 
                                         bond_types = {}
                                         for bond in mol_from_smiles.GetBonds():
@@ -996,6 +1154,9 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     # 3. 解析相互作用并匹配 (与 3D 视图一致的置信度过滤)
     interactions = []
     interaction_types_found = set()  # 记录找到的相互作用类型，用于动态图例
+    # 🔧 统计未匹配交互，用于最终报告
+    unmatched_interactions = []  # [(lig_atom_name, itype)]
+    total_csv_interactions = 0   # CSV 中满足置信度的总交互数
     try:
         with open(csv_path, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
@@ -1009,6 +1170,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 if conf < min_confidence:
                     continue
                 
+                total_csv_interactions += 1
                 lig_atom_name = row.get("Ligand_Atom", "").strip()
                 prot_res = row.get("Protein_Residue", "").strip()
                 lx, ly, lz = row.get("Ligand_Atom_X"), row.get("Ligand_Atom_Y"), row.get("Ligand_Atom_Z")
@@ -1087,6 +1249,76 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                             target_idx = matching_atoms[0]
                             target_type = "atom"
                 
+                # 🔧 方案3：元素+名称模糊匹配（第三层回退）
+                # 当 SMILES 重建导致分子丢失 PDB 信息和 3D 坐标时，
+                # 通过解析 CSV 原子名中的元素类型，在 mol_draw 中查找相同元素的原子
+                if target_idx is None and lig_atom_name:
+                    # 跳过 Ring/Cation 等特殊名称（已在方案2中处理过）
+                    if not (lig_atom_name.lower().startswith("ring") or 
+                            lig_atom_name.lower().startswith("cation")):
+                        parsed_elem = _parse_element_from_atom_name(lig_atom_name)
+                        if parsed_elem:
+                            # 在 mol_draw 中找所有相同元素的原子
+                            same_elem_atoms = []
+                            for aid in range(mol_draw.GetNumAtoms()):
+                                atom = mol_draw.GetAtomWithIdx(aid)
+                                if atom.GetSymbol().upper() == parsed_elem.upper():
+                                    same_elem_atoms.append(aid)
+                            
+                            if len(same_elem_atoms) == 1:
+                                # 唯一同元素原子 → 直接匹配
+                                target_idx = same_elem_atoms[0]
+                                target_type = "atom"
+                                print(f"[2D DEBUG] 元素回退匹配: {lig_atom_name} -> atom {target_idx} (element={parsed_elem}, unique)")
+                            elif len(same_elem_atoms) > 1:
+                                # 多个同元素原子 → 尝试用 3D 坐标选最近的
+                                matched_by_3d = False
+                                if lx is not None and ly is not None and lz is not None and atom_coords_3d:
+                                    # CSV 有坐标且分子有 3D 信息 → 选最近的同元素原子
+                                    best_aid, best_adist = None, float('inf')
+                                    for aid in same_elem_atoms:
+                                        ac = atom_coords_3d.get(aid)
+                                        if ac:
+                                            d = ((ac[0]-lx)**2 + (ac[1]-ly)**2 + (ac[2]-lz)**2)**0.5
+                                            if d < best_adist:
+                                                best_adist, best_aid = d, aid
+                                    if best_aid is not None:
+                                        target_idx = best_aid
+                                        target_type = "atom"
+                                        matched_by_3d = True
+                                        print(f"[2D DEBUG] 元素回退匹配: {lig_atom_name} -> atom {target_idx} (element={parsed_elem}, 3D nearest, dist={best_adist:.3f}Å)")
+                                
+                                # 尝试用 _pdb_atom_map（从原始分子传递的映射）辅助匹配
+                                if not matched_by_3d and hasattr(mol_draw, '_src_pdb_atoms'):
+                                    src_atoms = mol_draw._src_pdb_atoms
+                                    # 找到原始分子中与 lig_atom_name 同名的原子索引
+                                    for s_idx, s_name, s_elem, sx, sy, sz in src_atoms:
+                                        if s_name == lig_atom_name and s_idx < len(same_elem_atoms):
+                                            # 使用原始索引在同元素列表中找对应位置
+                                            # 按元素在 mol_draw 中的出现顺序映射
+                                            src_same_elem = [si for si, sn, se, *_ in src_atoms if se.upper() == parsed_elem.upper()]
+                                            if s_idx in src_same_elem:
+                                                pos_in_group = src_same_elem.index(s_idx)
+                                                if pos_in_group < len(same_elem_atoms):
+                                                    target_idx = same_elem_atoms[pos_in_group]
+                                                    target_type = "atom"
+                                                    matched_by_3d = True
+                                                    print(f"[2D DEBUG] 元素回退匹配: {lig_atom_name} -> atom {target_idx} (element={parsed_elem}, PDB映射)")
+                                            break
+                                
+                                if not matched_by_3d:
+                                    # 无法进一步区分 → 使用第一个同元素原子
+                                    target_idx = same_elem_atoms[0]
+                                    target_type = "atom"
+                                    print(f"[2D DEBUG] 元素回退匹配: {lig_atom_name} -> atom {target_idx} (element={parsed_elem}, first of {len(same_elem_atoms)})")
+                            else:
+                                print(f"[2D DEBUG] 元素回退匹配失败: {lig_atom_name} (element={parsed_elem}) - 分子中无此元素原子")
+                
+                # 🔧 未匹配交互的调试日志
+                if target_idx is None:
+                    print(f"[2D DEBUG] ⚠️ 未能匹配: {lig_atom_name} ({itype}) - 该相互作用将不会显示在2D图中")
+                    unmatched_interactions.append((lig_atom_name, itype))
+
                 if target_idx is not None:
                     # 标准化相互作用类型 (与 3D 视图一致)
                     normalized_itype = normalize_interaction_type(itype)
@@ -1139,22 +1371,51 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         import traceback
         traceback.print_exc()
 
-    # 4. 生成 2D 布局 (使用 RDKit CoordGen)
-    try:
-        # 确保使用 CoordGen，而不是基于当前 3D 构象的小幅调整
-        rdDepictor.SetPreferCoordGen(True)
-        # 🔧 使用 coordGen 时尝试更宽松的参数
+    # 🔧 输出未匹配交互的汇总统计
+    if unmatched_interactions:
+        # 按交互类型分组统计
+        unmatched_by_type = {}
+        for name, itype in unmatched_interactions:
+            norm_type = normalize_interaction_type(itype)
+            unmatched_by_type[norm_type] = unmatched_by_type.get(norm_type, 0) + 1
+        type_summary = ", ".join(f"{count}个{t}" for t, count in unmatched_by_type.items())
+        print(f"[2D Diagram] ⚠️ {len(unmatched_interactions)}/{total_csv_interactions} 个相互作用未能匹配到2D图（{type_summary}）")
+    else:
+        print(f"[2D Diagram] ✅ 全部 {total_csv_interactions} 个相互作用已成功匹配")
+
+    # 4. 生成 2D 布局 (使用 RDKit CoordGen，带超时保护)
+    import threading as _threading
+    
+    def _compute_2d_layout(mol, result_holder):
+        """在超时保护下计算 2D 布局坐标。"""
         try:
-            from rdkit.Chem import rdCoordGen
-            # 设置 CoordGen 参数以获得更好的布局
-            rdCoordGen.AddCoords(mol_draw)
-            print("[2D Diagram] Using rdCoordGen.AddCoords for layout")
-        except Exception:
-            rdDepictor.Compute2DCoords(mol_draw)
-    except Exception as e:
-        print(f"[2D Diagram] Layout error (CoordGen failed, falling back to RDKit 2D): {e}")
+            rdDepictor.SetPreferCoordGen(True)
+            try:
+                from rdkit.Chem import rdCoordGen
+                rdCoordGen.AddCoords(mol)
+                result_holder['ok'] = True
+                print("[2D Diagram] Using rdCoordGen.AddCoords for layout")
+            except Exception:
+                rdDepictor.Compute2DCoords(mol)
+                result_holder['ok'] = True
+        except Exception as e:
+            result_holder['error'] = str(e)
+    
+    layout_result = {'ok': False, 'error': None}
+    layout_thread = _threading.Thread(target=_compute_2d_layout, args=(mol_draw, layout_result), daemon=True)
+    layout_thread.start()
+    layout_thread.join(timeout=30)  # 2D 布局最多 30 秒
+    
+    if layout_thread.is_alive() or not layout_result['ok']:
+        if layout_thread.is_alive():
+            print("[2D Diagram] ⚠️ CoordGen 2D 布局超时 (30s)，尝试 fallback...")
+        elif layout_result['error']:
+            print(f"[2D Diagram] Layout error (CoordGen failed): {layout_result['error']}")
+        
+        # Fallback：使用更简单的 AllChem.Compute2DCoords
         try:
             AllChem.Compute2DCoords(mol_draw)
+            print("[2D Diagram] Fallback: AllChem.Compute2DCoords succeeded")
         except Exception as e2:
             print(f"[2D Diagram] Layout error (fallback failed): {e2}")
             return None
@@ -1264,249 +1525,358 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         if res not in res_map: res_map[res] = []
         res_map[res].append(inter)
     
-    # 智能布局算法 (基于相互作用点的局部扩展)
-    placed_badges = [] # list of {"x": x, "y": y, "r": radius, "res": res_name}
-    badge_radius = 22.0 # 再次缩小气泡半径（从 28 减小到 22）
-    padding = 12.0  # 减小气泡之间的间距（从 15 减小到 12）
-    used_residue_types = set()  # 用于构建 Discovery Studio 风格的残基图例
-    
+    # ========================================================================
+    # Discovery Studio layout algorithm v5
+    # Convex hull boundary (radial scan) + ray intersection placement
+    # + clamped angle redistribution + multi-layer radius + smart anchor
+    # v5 improvements (over v4):
+    #   1. Larger standoff: min_standoff = max_boundary_radius + badge_radius + 80
+    #   2. Larger badges (30px) and font (8pt) for better readability
+    #   3. Wider angle gap: 30° min (≤12 residues), 20° min (more)
+    #   4. Larger min_badge_dist (badge_radius*2 + 30) for clearer separation
+    #   5. Center crossing threshold 0.7 for better avoidance routing
+    #   6. MAX_ANGLE_DISPLACEMENT ±60° (was ±55°)
+    #   7. Multi-layer threshold: full min_angle_gap (was 0.6x), multiplier 1.4 (was 1.45)
+    #   8. Smart anchor threshold 0.6 (was 0.65) for more aggressive nearest-atom rerouting
+    # ========================================================================
+    placed_badges = []  # list of {"x": x, "y": y, "r": radius, "res": res_name}
+    badge_radius = 30.0  # v5: enlarged to 30px for better label readability
+    padding = 16.0  # extra padding between badges
+    used_residue_types = set()
+
     sorted_res = sorted(res_map.items())
 
+    # --- Step 1: Compute ligand convex-hull boundary (radial scan, no scipy) ---
+    # Scan 360 angles (1° each) to find the farthest atom/ring center, forming boundary profile
+    NUM_SCAN_ANGLES = 360
+    boundary_radii = [0.0] * NUM_SCAN_ANGLES
+
+    # Scan all atom pixel coordinates
+    for _aid, (ax_p, ay_p) in px_atoms.items():
+        dx_a = ax_p - c_x
+        dy_a = ay_p - c_y
+        r_a = math.hypot(dx_a, dy_a)
+        if r_a < 1.0:
+            continue
+        angle_deg = int(math.degrees(math.atan2(dy_a, dx_a))) % 360
+        # ±18° sector expansion (covers atom symbol display width, prevents gaps)
+        for delta in range(-18, 19):
+            idx = (angle_deg + delta) % NUM_SCAN_ANGLES
+            if r_a > boundary_radii[idx]:
+                boundary_radii[idx] = r_a
+
+    # Scan all ring centers (rings are part of the molecular skeleton)
+    for _rid, (rx_p, ry_p) in px_rings.items():
+        dx_r = rx_p - c_x
+        dy_r = ry_p - c_y
+        r_r = math.hypot(dx_r, dy_r)
+        if r_r < 1.0:
+            continue
+        angle_deg = int(math.degrees(math.atan2(dy_r, dx_r))) % 360
+        for delta in range(-18, 19):
+            idx = (angle_deg + delta) % NUM_SCAN_ANGLES
+            if r_r > boundary_radii[idx]:
+                boundary_radii[idx] = r_r
+
+    # Smooth boundary (moving average to remove jaggedness)
+    smoothed = list(boundary_radii)
+    SMOOTH_WINDOW = 12
+    for i in range(NUM_SCAN_ANGLES):
+        total = 0.0
+        for j in range(-SMOOTH_WINDOW, SMOOTH_WINDOW + 1):
+            total += boundary_radii[(i + j) % NUM_SCAN_ANGLES]
+        smoothed[i] = total / (2 * SMOOTH_WINDOW + 1)
+    boundary_radii = smoothed
+
+    # Global maximum boundary radius
+    max_boundary_radius = max(boundary_radii) if boundary_radii else 100.0
+    # v5: global minimum standoff = max_boundary_radius + badge_radius + 80
+    # Ensures all badges stay well outside the molecular structure
+    min_standoff_global = max_boundary_radius + badge_radius + 80
+
+    def get_boundary_at_angle(angle_rad):
+        """Get molecular boundary radius at specified angle (with floor value)."""
+        deg = int(math.degrees(angle_rad)) % NUM_SCAN_ANGLES
+        # Floor: 30% of max boundary radius, prevents zero boundary in sparse directions
+        return max(boundary_radii[deg], max_boundary_radius * 0.3)
+
+    def ray_boundary_distance(angle_rad):
+        """Ray-boundary intersection: returns badge center distance along given angle."""
+        bnd = get_boundary_at_angle(angle_rad)
+        # v5: badge center = boundary radius + badge radius + safety margin (55px)
+        local_standoff = bnd + badge_radius + 55
+        # Must not be below global minimum standoff
+        return max(local_standoff, min_standoff_global)
+
+    print(f"\n[2D Layout] Boundary scan complete: max_boundary_radius={max_boundary_radius:.1f}px, "
+          f"min_standoff_global={min_standoff_global:.1f}px")
+
+    # --- Step 2: Pre-compute target angle and interaction points for each residue ---
+    residue_layout_data = []  # [{res, inters, target_x, target_y, angle_rad}]
+
     for i, (res, inters) in enumerate(sorted_res):
-        # 1. 计算该残基所有相互作用点的平均位置 (目标中心)
-        tx_sum, ty_sum = 0, 0
+        # Compute weighted average position of all interaction points for this residue
+        tx_sum, ty_sum = 0.0, 0.0
         count = 0
-        interaction_points = []  # 调试用
         for inter in inters:
             tid, ttype = inter["idx"], inter["type"]
             if ttype == "ring" and tid in px_rings:
                 tx, ty = px_rings[tid]
-                interaction_points.append((tid, ttype, tx, ty))
             elif tid in px_atoms:
                 tx, ty = px_atoms[tid]
-                interaction_points.append((tid, ttype, tx, ty))
             else:
-                # 🔧 修复：如果找不到原子索引，尝试跳过而不是忽略整个残基
-                print(f"  ⚠️ 警告：残基 {res} 的相互作用 {ttype} 索引 {tid} 未找到对应原子")
                 continue
             tx_sum += tx
             ty_sum += ty
             count += 1
 
         if count == 0:
-            print(f"  ⚠️ 警告：残基 {res} 没有有效的相互作用点，跳过")
+            print(f"[2D Layout] WARNING: residue {res} has no valid interaction points, skipping")
             continue
 
         target_x, target_y = tx_sum / count, ty_sum / count
 
-        # 调试输出：显示相互作用点
-        print(f"\n残基 {res} 的相互作用点:")
-        for tid, ttype, tx, ty in interaction_points:
-            print(f"  - {ttype} {tid}: ({tx:.1f}, {ty:.1f})")
-        print(f"  配体中心: ({c_x:.1f}, {c_y:.1f}), 目标点: ({target_x:.1f}, {target_y:.1f})")
-
-        # 2. 计算从配体中心指向目标中心的向量
+        # Angle from molecular center to target point
         vx, vy = target_x - c_x, target_y - c_y
-        dist = math.hypot(vx, vy)
-
-        # 计算配体的边界框（用于后续的方向判断）
-        min_y_mol = min(p[1] for p in px_atoms.values())
-        max_y_mol = max(p[1] for p in px_atoms.values())
-        min_x_mol = min(p[0] for p in px_atoms.values())
-        max_x_mol = max(p[0] for p in px_atoms.values())
-        mol_width = max(max_x_mol - min_x_mol, 100)
-        mol_height = max(max_y_mol - min_y_mol, 100)
-
-        # 计算配体的最大半径（从中心到最远原子）
-        max_radius = 0
-        for atom_idx, (atom_x, atom_y) in px_atoms.items():
-            r = math.hypot(atom_x - c_x, atom_y - c_y)
-            if r > max_radius:
-                max_radius = r
-
-        # 🔧 新策略：气泡放在目标原子的「外侧」（远离分子中心的方向）
-        # 这样连线就会从分子边缘延伸出去，而不是穿过分子
-
-        # 打印调试信息
-        mol_center_y = (min_y_mol + max_y_mol) / 2
-        print(f"  分子边界: y=[{min_y_mol:.1f}, {max_y_mol:.1f}], x=[{min_x_mol:.1f}, {max_x_mol:.1f}]")
-        print(f"  目标位置: ({target_x:.1f}, {target_y:.1f}), 分子中心: ({c_x:.1f}, {c_y:.1f})")
-
-        # 增加边距，让气泡远离分子边界
-        margin = 50  # 50 像素边距
-
-        # 🔧 核心改变：总是沿着「目标原子相对于分子中心」的方向放置气泡
-        # 这样气泡就会在目标原子的外侧，连线不会穿过分子
-        if dist < 1.0:
-            # 距离太近，选择默认方向
-            default_angles = [270, 180, 0, 90, 225, 315, 45, 135]
-            angle_idx = len(placed_badges) % len(default_angles)
-            angle_deg = default_angles[angle_idx]
-            angle_rad = math.radians(angle_deg)
-            ux, uy = math.cos(angle_rad), math.sin(angle_rad)
-            print(f"  方向：默认角度 {angle_deg}° (距离太近)")
+        if math.hypot(vx, vy) < 1.0:
+            # Target nearly at center, use evenly-distributed default angle
+            angle_rad = math.radians(i * (360.0 / max(len(sorted_res), 1)))
         else:
-            # 气泡方向 = 从分子中心指向目标原子的方向（向外延伸）
-            ux, uy = vx / dist, vy / dist
-            print(f"  方向：外侧延伸 ({ux:.2f}, {uy:.2f})")
+            angle_rad = math.atan2(vy, vx)
 
-        # 不使用边界固定位置，使用 standoff 方式
-        use_boundary_placement = False
-        bx_start, by_start = 0, 0  # 占位符
+        residue_layout_data.append({
+            "res": res,
+            "inters": inters,
+            "target_x": target_x,
+            "target_y": target_y,
+            "angle_rad": angle_rad,
+            "natural_angle": angle_rad,  # v4: remember original angle for displacement limit
+        })
 
-        # 🔧 关键修改：缩短 standoff 距离，让气泡更靠近目标原子
-        # 这样连线就不会太长，不容易穿过分子
-        # standoff = 从目标原子位置 + 一点点距离（而不是从分子中心 + 最大半径）
+    # --- Step 3: Angle redistribution with displacement limit (v4) ---
+    # Sort by original angle
+    residue_layout_data.sort(key=lambda d: d["angle_rad"])
+    n_residues = len(residue_layout_data)
 
-        # 计算目标点到分子中心的距离
-        target_dist_from_center = math.hypot(target_x - c_x, target_y - c_y)
+    # v4: Maximum angle displacement from natural position (radians)
+    MAX_ANGLE_DISPLACEMENT = math.radians(60.0)  # ±60° max displacement
 
-        # 气泡位置 = 目标点位置 + 向外延伸一小段距离
-        # 这样连线从气泡到目标原子只有很短的距离
-        extra_offset = badge_radius + 40  # 气泡半径 + 40 像素间距
-        standoff = target_dist_from_center + extra_offset
-
-        # ⚠️ 关键改进：扇形分布
-        # 如果多个残基与同一个原子相互作用，需要在角度上分散它们
-        # 检查已放置的气泡中，有多少个与相同的目标点相互作用
-        angle_offset = 0.0
-        similar_count = 0
-
-        for placed in placed_badges:
-            # 计算已放置气泡的目标点（反推）
-            placed_vx = placed["x"] - c_x
-            placed_vy = placed["y"] - c_y
-            placed_dist = math.hypot(placed_vx, placed_vy)
-
-            if placed_dist > 1.0:
-                placed_ux = placed_vx / placed_dist
-                placed_uy = placed_vy / placed_dist
-
-                # 计算方向相似度（点积）
-                dot = ux * placed_ux + uy * placed_uy
-
-                # 如果方向非常接近（cos > 0.85，即角度 < 32°）
-                # 说明它们可能与同一个原子或非常接近的原子相互作用
-                if dot > 0.85:
-                    similar_count += 1
-
-        # 根据相似气泡的数量，计算角度偏移
-        if similar_count > 0:
-            # 每个相似气泡增加 45° 的偏移（从 30° 增加到 45°）
-            angle_offset = similar_count * (math.pi / 4.0)  # 45° = π/4
-
-            # 应用角度偏移（旋转方向向量）
-            cos_offset = math.cos(angle_offset)
-            sin_offset = math.sin(angle_offset)
-            ux_new = ux * cos_offset - uy * sin_offset
-            uy_new = ux * sin_offset + uy * cos_offset
-            ux, uy = ux_new, uy_new
-
-            print(f"  ⚠️ 检测到 {similar_count} 个相似方向的气泡，应用 {math.degrees(angle_offset):.1f}° 角度偏移")
-
-        # 计算气泡位置
-        if use_boundary_placement:
-            # 使用边界计算的位置
-            bx = bx_start
-            by = by_start
+    if n_residues > 0:
+        # v5: dynamic minimum angle gap — at least 30°, degrades no lower than 20°
+        if n_residues <= 12:
+            min_angle_gap_deg = 30.0  # 12 or fewer: at least 30°
         else:
-            # 使用 standoff 计算位置
-            bx = c_x + ux * standoff
-            by = c_y + uy * standoff
+            ideal_gap = 360.0 / n_residues
+            min_angle_gap_deg = max(20.0, ideal_gap * 0.85)
+        min_angle_gap = math.radians(min_angle_gap_deg)
 
-        # 调试输出
-        print(f"  配体中心: ({c_x:.1f}, {c_y:.1f})")
-        print(f"  目标点平均: ({target_x:.1f}, {target_y:.1f})")
-        print(f"  方向向量: ({ux:.2f}, {uy:.2f})")
-        print(f"  max_radius={max_radius:.1f}, standoff={standoff:.1f}")
-        print(f"  初始气泡位置: ({bx:.1f}, {by:.1f})")
-        print(f"  气泡到中心距离: {math.hypot(bx - c_x, by - c_y):.1f}")
-        
-        # 4. 碰撞检测与解决 (增强的迭代推挤)
-        # 增加迭代次数，确保充分分离
-        for iteration in range(50):  # 从 30 增加到 50
-            moved = False
-            # 5. 增强的碰撞检测：同时避开其他气泡和配体原子
-            # 检查与已放置气泡的重叠
-            for badge in placed_badges:
-                dx = bx - badge["x"]
-                dy = by - badge["y"]
-                d = math.hypot(dx, dy)
-                min_dist = badge_radius * 2 + padding + 10  # 额外增加 10 像素间距
+        print(f"[2D Layout] n_residues={n_residues}, min_angle_gap={min_angle_gap_deg:.1f}°, "
+              f"max_displacement={math.degrees(MAX_ANGLE_DISPLACEMENT):.0f}°")
 
-                if d < min_dist:
-                    # 发生重叠，推开 (气泡之间互斥)
-                    if d < 1.0: dx, dy, d = 1.0, 0.0, 1.0
-                    overlap = min_dist - d
-                    # 增加推挤力度，确保充分分离
-                    push_factor = 1.5 if iteration < 15 else 1.0  # 前期强力推挤，后期微调
-                    push_x = (dx / d) * overlap * push_factor
-                    push_y = (dy / d) * overlap * push_factor
-                    bx += push_x
-                    by += push_y
-                    moved = True
+        # Iterative angle redistribution with displacement clamp
+        for _pass in range(30):
+            adjusted = False
+            for j in range(n_residues):
+                next_j = (j + 1) % n_residues
+                a1 = residue_layout_data[j]["angle_rad"]
+                a2 = residue_layout_data[next_j]["angle_rad"]
 
-            # 检查与配体原子的重叠 (关键修复！)
-            # 遍历所有配体原子，确保气泡不覆盖它们
-            # 为了效率，可以只检查凸包或者采样点，但原子数不多，直接遍历即可
-            min_atom_dist = badge_radius + 40  # 气泡半径 + 安全边距（从 20 增加到 40）
-            
-            
-            for aid, (atom_x, atom_y) in px_atoms.items():
-                dx = bx - atom_x
-                dy = by - atom_y
-                d = math.hypot(dx, dy)
-                
-                if d < min_atom_dist:
-                    # 严重重叠！必须强力推开
-                    # 推开方向：从配体中心向气泡方向 (ux, uy)
-                    # 或者从原子向气泡方向
-                    if d < 1.0: 
-                        # 如果正好重合，沿径向推
-                        push_dir_x, push_dir_y = ux, uy
-                    else:
-                        push_dir_x, push_dir_y = dx/d, dy/d
-                    
-                    overlap = min_atom_dist - d
-                    bx += push_dir_x * overlap * 1.5 # 推挤系数从 1.2 增加到 1.5
-                    by += push_dir_y * overlap * 1.5
-                    moved = True
-            
-            # 额外的几何约束：确保气泡不"陷入"配体内部 concave 区域并遮挡内部原子
-            # 检查气泡中心到配体中心的距离，不能小于某个阈值(动态)
-            # 或者简单地：气泡必须比它所作用的原子更靠外
-            
-            # 投影检查 (气泡必须位于目标原子沿径向的外侧)
-            vec_c_target = (target_x - c_x, target_y - c_y) # 中心->目标原子
-            vec_c_badge = (bx - c_x, by - c_y) # 中心->气泡
-            
-            # 计算气泡在 (中心->目标) 方向上的投影长度
-            # 如果气泡跑到了目标原子的内侧 (投影长度 < 目标投影长度)，这是不合理的
-            proj_len = (vec_c_badge[0]*ux + vec_c_badge[1]*uy)
-            target_len = (vec_c_target[0]*ux + vec_c_target[1]*uy)
-            
-            min_proj = target_len + badge_radius * 0.8 # 至少要在目标原子外侧
-            if proj_len < min_proj:
-                diff = min_proj - proj_len
-                bx += ux * diff
-                by += uy * diff
-                moved = True
+                # Angle difference (considering 2π wrap)
+                delta = (a2 - a1) % (2 * math.pi)
+                if delta < 0:
+                    delta += 2 * math.pi
 
-            if not moved:
+                if 0 < delta < min_angle_gap:
+                    push = (min_angle_gap - delta) / 2.0 * 0.7
+
+                    # v4: Clamp displacement from natural angle
+                    new_a1 = residue_layout_data[j]["angle_rad"] - push
+                    nat1 = residue_layout_data[j]["natural_angle"]
+                    disp1 = (new_a1 - nat1 + math.pi) % (2 * math.pi) - math.pi
+                    if abs(disp1) > MAX_ANGLE_DISPLACEMENT:
+                        new_a1 = nat1 + MAX_ANGLE_DISPLACEMENT * (1 if disp1 > 0 else -1)
+
+                    new_a2 = residue_layout_data[next_j]["angle_rad"] + push
+                    nat2 = residue_layout_data[next_j]["natural_angle"]
+                    disp2 = (new_a2 - nat2 + math.pi) % (2 * math.pi) - math.pi
+                    if abs(disp2) > MAX_ANGLE_DISPLACEMENT:
+                        new_a2 = nat2 + MAX_ANGLE_DISPLACEMENT * (1 if disp2 > 0 else -1)
+
+                    residue_layout_data[j]["angle_rad"] = new_a1
+                    residue_layout_data[next_j]["angle_rad"] = new_a2
+                    adjusted = True
+
+            if not adjusted:
                 break
-        
-        placed_badges.append({"x": bx, "y": by, "r": badge_radius, "res": res})
 
-        # 绘制
+        # v4: Mark residues that are still too close (need second radius layer)
+        for j in range(n_residues):
+            next_j = (j + 1) % n_residues
+            a1 = residue_layout_data[j]["angle_rad"]
+            a2 = residue_layout_data[next_j]["angle_rad"]
+            delta = (a2 - a1) % (2 * math.pi)
+            if delta < 0:
+                delta += 2 * math.pi
+            # If still too close after clamped redistribution, mark one for outer layer
+            if 0 < delta < min_angle_gap:
+                # Push the one with larger displacement to outer layer
+                disp_j = abs((residue_layout_data[j]["angle_rad"] - residue_layout_data[j]["natural_angle"] + math.pi) % (2 * math.pi) - math.pi)
+                disp_next = abs((residue_layout_data[next_j]["angle_rad"] - residue_layout_data[next_j]["natural_angle"] + math.pi) % (2 * math.pi) - math.pi)
+                if disp_j > disp_next:
+                    residue_layout_data[j]["outer_layer"] = True
+                else:
+                    residue_layout_data[next_j]["outer_layer"] = True
+
+    # --- Step 4: Ray-boundary intersection placement (v4: multi-layer support) ---
+    for data in residue_layout_data:
+        angle = data["angle_rad"]
+        ux = math.cos(angle)
+        uy = math.sin(angle)
+
+        # Ray-boundary intersection: get standoff distance for this direction
+        standoff = ray_boundary_distance(angle)
+        # v4: If marked for outer layer, push further out
+        if data.get("outer_layer", False):
+            standoff *= 1.4
+            print(f"[2D Layout] {data['res']}: pushed to outer layer (standoff x1.40)")
+
+        bx = c_x + ux * standoff
+        by = c_y + uy * standoff
+
+        data["bx"] = bx
+        data["by"] = by
+        data["ux"] = ux
+        data["uy"] = uy
+
+    # --- Step 5: Force-directed refinement (constraint: badges cannot enter convex hull, tangential or outward only) ---
+    min_badge_dist = badge_radius * 2 + 30  # v5: minimum distance between badges, prevents label overlap
+    min_atom_clearance = badge_radius + 50  # v5: minimum distance between badge and atom
+
+    for iteration in range(100):
+        any_moved = False
+
+        for j, data in enumerate(residue_layout_data):
+            bx, by = data["bx"], data["by"]
+            # Accumulated force
+            force_x, force_y = 0.0, 0.0
+
+            # (a) Badge-badge repulsion
+            for k, other in enumerate(residue_layout_data):
+                if j == k:
+                    continue
+                obx, oby = other["bx"], other["by"]
+                dx = bx - obx
+                dy = by - oby
+                d = math.hypot(dx, dy)
+
+                if d < min_badge_dist:
+                    if d < 1.0:
+                        # Nearly coincident: use index to create a slight directional offset
+                        dx = math.cos(j * 0.7 + k * 0.3)
+                        dy = math.sin(j * 0.7 + k * 0.3)
+                        d = 1.0
+                    overlap = min_badge_dist - d
+                    force_x += (dx / d) * overlap * 0.5
+                    force_y += (dy / d) * overlap * 0.5
+
+            # (b) Badge-atom repulsion
+            for _aid, (ax_p, ay_p) in px_atoms.items():
+                dx = bx - ax_p
+                dy = by - ay_p
+                d = math.hypot(dx, dy)
+
+                if d < min_atom_clearance:
+                    if d < 1.0:
+                        # Coincident: push outward along radial direction
+                        dx = bx - c_x
+                        dy = by - c_y
+                        d = math.hypot(dx, dy)
+                        if d < 1.0:
+                            dx, dy, d = 1.0, 0.0, 1.0
+                    overlap = min_atom_clearance - d
+                    force_x += (dx / d) * overlap * 1.0
+                    force_y += (dy / d) * overlap * 1.0
+
+            # Decompose accumulated force into radial and tangential components
+            if abs(force_x) > 0.1 or abs(force_y) > 0.1:
+                # Radial direction: from molecular center toward current badge
+                rx = bx - c_x
+                ry = by - c_y
+                r_dist = math.hypot(rx, ry)
+                if r_dist < 1.0:
+                    r_dist = 1.0
+                    rx, ry = 1.0, 0.0
+                rad_ux, rad_uy = rx / r_dist, ry / r_dist
+
+                # Tangential direction: perpendicular to radial
+                tan_ux, tan_uy = -rad_uy, rad_ux
+
+                # Radial component (outward only, inward push forbidden)
+                radial_force = force_x * rad_ux + force_y * rad_uy
+                if radial_force < 0:
+                    radial_force = 0.0  # Forbid inward push
+
+                # Tangential component (fully preserved, allows circumferential sliding)
+                tangential_force = force_x * tan_ux + force_y * tan_uy
+
+                bx += rad_ux * radial_force + tan_ux * tangential_force
+                by += rad_uy * radial_force + tan_uy * tangential_force
+                any_moved = True
+
+            # (c) Hard constraint: badge center must not enter convex hull
+            # v5: distance from center must not be less than max(boundary + badge_radius + 30, global min standoff)
+            dist_from_center = math.hypot(bx - c_x, by - c_y)
+            cur_angle = math.atan2(by - c_y, bx - c_x)
+            min_dist = max(
+                get_boundary_at_angle(cur_angle) + badge_radius + 30,
+                min_standoff_global
+            )
+            if dist_from_center < min_dist:
+                if dist_from_center < 1.0:
+                    dist_from_center = 1.0
+                scale = min_dist / dist_from_center
+                bx = c_x + (bx - c_x) * scale
+                by = c_y + (by - c_y) * scale
+                any_moved = True
+
+            data["bx"] = bx
+            data["by"] = by
+
+        if not any_moved:
+            print(f"[2D Layout] Force-directed converged after {iteration + 1} iterations")
+            break
+    else:
+        print(f"[2D Layout] Force-directed reached max iterations (100)")
+
+    # --- Step 6: Build placed_badges and log results ---
+    res_to_layout = {}
+    for data in residue_layout_data:
+        bx, by = data["bx"], data["by"]
+        res = data["res"]
+        placed_badges.append({"x": bx, "y": by, "r": badge_radius, "res": res})
+        res_to_layout[res] = data
+
+        print(f"[2D Layout] {res}: angle={math.degrees(data['angle_rad']):.1f}deg, "
+              f"pos=({bx:.1f}, {by:.1f}), dist_from_center={math.hypot(bx-c_x, by-c_y):.1f}px")
+
+    # Draw all residue badges and interaction lines
+    for data in residue_layout_data:
+        res = data["res"]
+        inters = data["inters"]
+        bx, by = data["bx"], data["by"]
+
+        # Draw badge
         style, res_type = get_residue_style(res)
         used_residue_types.add(res_type)
-        ax.add_patch(Circle((bx, by), badge_radius, facecolor=style['facecolor'], edgecolor=style['edgecolor'], lw=1.2, zorder=10))
+        ax.add_patch(Circle((bx, by), badge_radius, facecolor=style['facecolor'], edgecolor=style['edgecolor'], lw=1.5, zorder=10))
         r_name, r_num = parse_residue_label(res)
-        # 字体再小一点以适应更小的气泡
-        ax.text(bx, by, f"{r_name}\n{r_num}", ha='center', va='center', fontweight='bold', fontsize=6.5, color=style['textcolor'], zorder=11)
+        # v5: font 8pt, matching 30px badge
+        ax.text(bx, by, f"{r_name}\n{r_num}", ha='center', va='center', fontweight='bold', fontsize=8, color=style['textcolor'], zorder=11)
 
-        # 绘制相互作用连线（每个相互作用都画一条线）
-        # 关键改进：连线绕开其他气泡（使用贝塞尔曲线或折线）
+        # Draw interaction lines (one per interaction)
+        # v4: Smart anchor point selection - connect to nearest atom when target is too far
+        mol_diameter = 2 * max_boundary_radius if max_boundary_radius > 0 else 400.0
+
         for inter in inters:
             tid, ttype = inter["idx"], inter["type"]
             if ttype == "ring" and tid in px_rings:
@@ -1519,70 +1889,89 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
             normalized_itype = inter.get("normalized_itype", normalize_interaction_type(inter["itype"]))
 
             if normalized_itype == 'hydrophobic':
-                # 疏水相互作用不画连线
+                # Hydrophobic interactions: no line drawn (Discovery Studio convention)
+                # Badge color already indicates hydrophobic residue type
                 continue
+
+            # v4: Smart anchor - if target atom is too far from badge, connect to nearest atom instead
+            badge_to_target = math.hypot(tx - bx, ty - by)
+            far_threshold = mol_diameter * 0.6  # threshold for "too far"
+
+            if badge_to_target > far_threshold and normalized_itype not in ['pipi', 'pication']:
+                # Find the nearest ligand atom to the badge
+                best_aid = None
+                best_dist = float('inf')
+                for aid, (ax_p, ay_p) in px_atoms.items():
+                    d = math.hypot(ax_p - bx, ay_p - by)
+                    if d < best_dist:
+                        best_dist = d
+                        best_aid = aid
+                        tx, ty = ax_p, ay_p
+                if best_aid is not None:
+                    print(f"[2D Layout] {res}: rerouted line from atom {tid} to nearest atom {best_aid} "
+                          f"(dist {badge_to_target:.0f} > {far_threshold:.0f})")
 
             ls = INTERACTION_LINE_STYLE.get(normalized_itype, INTERACTION_LINE_STYLE['other'])
             interaction_types_found.add(normalized_itype)
 
-            # 计算截断点：从气泡边缘发出
+            # Compute clipped start point: line originates from badge edge
             angle_to_target = math.atan2(ty - by, tx - bx)
             sx = bx + badge_radius * math.cos(angle_to_target)
             sy = by + badge_radius * math.sin(angle_to_target)
 
-            # 🔧 关键修复：连线终点从目标原子 (tx,ty) 往线起点 (sx,sy) 方向缩进
-            # 不是从气泡中心方向，而是从实际连线起点方向
-            atom_margin = 18  # 原子符号的大约半径（像素）
+            # Key fix: line endpoint is retracted from target atom (tx,ty) toward line start (sx,sy)
+            # Not from badge center direction, but from actual line start direction
+            atom_margin = 18  # approximate atom symbol radius (pixels)
 
-            # 计算从起点到目标的实际距离和方向
+            # Compute actual distance and direction from start to target
             line_dx = tx - sx
             line_dy = ty - sy
             line_dist = math.hypot(line_dx, line_dy)
 
             if line_dist > atom_margin + 5:
-                # 从目标点往起点方向缩进 atom_margin 距离
-                # 单位向量：从目标指向起点
+                # Retract from target toward start by atom_margin distance
+                # Unit vector: from target pointing toward start
                 ux = -line_dx / line_dist
                 uy = -line_dy / line_dist
-                # 终点 = 目标点 + 单位向量 * margin
+                # Endpoint = target + unit_vector * margin
                 tx_end = tx + ux * atom_margin
                 ty_end = ty + uy * atom_margin
             else:
                 tx_end, ty_end = tx, ty
 
-            # 检查连线是否会穿过其他气泡或原子，如果是则添加中间控制点绕开
+            # Check if the line would pass through other badges or atoms; if so, route around
             blocking_obstacles = []
 
-            # 🔧 检查是否穿过其他气泡
+            # Check if line passes through other badges
             for other_badge in placed_badges:
                 if other_badge["res"] == res:
-                    continue  # 跳过自己
+                    continue  # Skip self
                 obx, oby, obr = other_badge["x"], other_badge["y"], other_badge["r"]
 
-                # 线段 (sx, sy) -> (tx_end, ty_end)
+                # Line segment (sx, sy) -> (tx_end, ty_end)
                 line_len = math.hypot(tx_end - sx, ty_end - sy)
                 if line_len < 1.0:
                     continue
 
-                # 计算点到线段的最短距离
+                # Compute shortest distance from point to line segment
                 t_param = max(0, min(1, ((obx - sx) * (tx_end - sx) + (oby - sy) * (ty_end - sy)) / (line_len * line_len)))
                 closest_x = sx + t_param * (tx_end - sx)
                 closest_y = sy + t_param * (ty_end - sy)
                 dist_to_line = math.hypot(obx - closest_x, oby - closest_y)
 
-                # 检查是否穿过气泡（包含一定边距）
+                # Check if line passes through badge (with margin)
                 if dist_to_line < obr + 15:
                     blocking_obstacles.append({
                         "x": obx, "y": oby, "r": obr,
-                        "t": t_param,  # 在线段上的位置
+                        "t": t_param,  # position on line segment
                         "dist": dist_to_line,
                         "type": "badge"
                     })
 
-            # 🔧 新增：检查是否穿过分子中的其他原子
-            atom_display_radius = 20  # 原子符号的显示半径（像素）
+            # Check if line passes through other atoms in the molecule
+            atom_display_radius = 20  # atom symbol display radius (pixels)
             for atom_idx, (ax_pos, ay_pos) in px_atoms.items():
-                # 跳过目标原子本身
+                # Skip the target atom itself
                 if atom_idx == tid:
                     continue
 
@@ -1590,10 +1979,10 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 if line_len < 1.0:
                     continue
 
-                # 计算原子到线段的最短距离
+                # Compute shortest distance from atom to line segment
                 t_param = max(0, min(1, ((ax_pos - sx) * (tx_end - sx) + (ay_pos - sy) * (ty_end - sy)) / (line_len * line_len)))
 
-                # 只检查线段中间部分（避免起点和终点附近的误判）
+                # Only check middle portion of line (avoid false positives near endpoints)
                 if t_param < 0.1 or t_param > 0.9:
                     continue
 
@@ -1601,7 +1990,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 closest_y = sy + t_param * (ty_end - sy)
                 dist_to_line = math.hypot(ax_pos - closest_x, ay_pos - closest_y)
 
-                # 检查是否穿过原子符号
+                # Check if line passes through atom symbol
                 if dist_to_line < atom_display_radius:
                     blocking_obstacles.append({
                         "x": ax_pos, "y": ay_pos, "r": atom_display_radius,
@@ -1610,66 +1999,96 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                         "type": "atom"
                     })
 
+            # v3: Check if line crosses through molecular center region
+            # If midpoint of line is too close to center, the line crosses the molecule
+            mid_line_x = (sx + tx_end) / 2
+            mid_line_y = (sy + ty_end) / 2
+            mid_to_center = math.hypot(mid_line_x - c_x, mid_line_y - c_y)
+            center_threshold = max_boundary_radius * 0.7  # v5: molecular center region threshold
+            if mid_to_center < center_threshold and not blocking_obstacles:
+                # Line crosses molecular center, add virtual obstacle to force routing
+                blocking_obstacles.append({
+                    "x": c_x, "y": c_y, "r": max_boundary_radius * 0.5,
+                    "t": 0.5,
+                    "dist": mid_to_center,
+                    "type": "center"
+                })
+
             if blocking_obstacles:
-                # 需要绕开障碍物
-                # 策略：使用二次贝塞尔曲线，控制点在障碍物外侧
-                # 找出最靠近线段中点的障碍物
+                # Need to route around obstacles
+                # Strategy: use quadratic Bezier curve with control point on the outside of the obstacle
+                # Find the obstacle closest to the line midpoint
                 blocking_obstacles.sort(key=lambda b: abs(b["t"] - 0.5))
                 main_blocker = blocking_obstacles[0]
 
-                # 计算绕开方向：垂直于线段方向
+                # Compute routing direction: perpendicular to line direction
                 line_dx, line_dy = tx_end - sx, ty_end - sy
                 line_len = math.hypot(line_dx, line_dy)
                 perp_x, perp_y = -line_dy / line_len, line_dx / line_len
 
-                # 确定绕开方向（选择远离其他障碍物的方向）
-                # 简单策略：使用气泡中心到线段最近点的方向的反方向
+                # Determine routing side (prefer direction away from molecular center)
+                # v3: prioritize perpendicular direction farther from molecular center
                 blocker_to_closest_x = main_blocker["x"] - (sx + main_blocker["t"] * (tx_end - sx))
                 blocker_to_closest_y = main_blocker["y"] - (sy + main_blocker["t"] * (ty_end - sy))
 
-                # 选择垂直方向中远离障碍物的那个
-                if blocker_to_closest_x * perp_x + blocker_to_closest_y * perp_y > 0:
-                    perp_x, perp_y = -perp_x, -perp_y
-
-                # 控制点：在线段中点沿垂直方向偏移
+                # Determine which perpendicular direction is farther from molecular center
                 mid_x = (sx + tx_end) / 2
                 mid_y = (sy + ty_end) / 2
-                offset_dist = main_blocker["r"] + 40  # 绕开距离
+                # Direction 1: (perp_x, perp_y)
+                test1_x = mid_x + perp_x * 10
+                test1_y = mid_y + perp_y * 10
+                dist1_to_center = math.hypot(test1_x - c_x, test1_y - c_y)
+                # Direction 2: (-perp_x, -perp_y)
+                test2_x = mid_x - perp_x * 10
+                test2_y = mid_y - perp_y * 10
+                dist2_to_center = math.hypot(test2_x - c_x, test2_y - c_y)
+
+                # Choose the direction farther from molecular center
+                if dist1_to_center < dist2_to_center:
+                    perp_x, perp_y = -perp_x, -perp_y
+
+                # Control point: offset from line midpoint along perpendicular direction
+                mid_x = (sx + tx_end) / 2
+                mid_y = (sy + ty_end) / 2
+                offset_dist = main_blocker["r"] + 50  # v5: routing offset distance
                 ctrl_x = mid_x + perp_x * offset_dist
                 ctrl_y = mid_y + perp_y * offset_dist
 
-                # 使用二次贝塞尔曲线绘制
-                # matplotlib 可以用 Path 和 PathPatch，但为简化，用多段折线近似
+                # Draw quadratic Bezier curve
+                # matplotlib supports Path/PathPatch, but for simplicity we approximate with polyline
 
-                # 生成曲线点
+                # Generate curve points
                 curve_points = []
                 for t in [i / 20.0 for i in range(21)]:
-                    # 二次贝塞尔曲线公式
+                    # Quadratic Bezier curve formula
                     px = (1 - t) ** 2 * sx + 2 * (1 - t) * t * ctrl_x + t ** 2 * tx_end
                     py = (1 - t) ** 2 * sy + 2 * (1 - t) * t * ctrl_y + t ** 2 * ty_end
                     curve_points.append((px, py))
 
-                # 绘制曲线
+                # Draw curve
                 xs, ys = zip(*curve_points)
                 ax.plot(xs, ys, color=ls['color'], lw=ls['linewidth'] + 0.5,
                        ls=ls['linestyle'], zorder=2, alpha=0.9)
             else:
-                # 无障碍物，直接画直线（使用缩进后的终点）
+                # No obstacles, draw straight line (using retracted endpoint)
                 ax.plot([sx, tx_end], [sy, ty_end], color=ls['color'], lw=ls['linewidth'] + 0.5,
                        ls=ls['linestyle'], zorder=2, alpha=0.9)
 
-    # 图例：Discovery Studio 风格
-    # 1) 相互作用类型连线 (氢键、Pi-Pi、Pi-阳离子等)
-    # 2) 各类残基类型气泡 (Hydrophobic / Nonpolar / Polar / Negative / Positive)
+    # Legend: Discovery Studio style
+    # 1) Interaction type lines (Hydrogen Bond, Pi-Pi, Pi-Cation, etc.)
+    # 2) Residue type badges (Hydrophobic / Nonpolar / Polar / Negative / Positive)
     legend_handles = []
     
-    # 相互作用类型图例（按优先级顺序）
-    interaction_legend_order = ['hbond', 'pipi', 'pication', 'salt']
+    # Interaction type legend (in priority order, all 7 interaction types)
+    interaction_legend_order = ['hbond', 'salt', 'pipi', 'pication', 'halogen', 'metal', 'water']
     interaction_labels = {
         'hbond': 'Hydrogen Bond',
+        'salt': 'Salt Bridge',
         'pipi': 'Pi-Pi Stacking',
         'pication': 'Pi-Cation',
-        'salt': 'Salt Bridge',
+        'halogen': 'Halogen Bond',
+        'metal': 'Metal Coordination',
+        'water': 'Water Bridge',
     }
     
     for itype in interaction_legend_order:
@@ -1679,7 +2098,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 Line2D([0], [0], color=s['color'], lw=2, ls=s.get('linestyle', '-'), label=interaction_labels.get(itype, itype))
             )
     
-    # 残基类型图例
+    # Residue type legend
     residue_labels = {
         'hydrophobic': 'Hydrophobic',
         'nonpolar': 'Nonpolar',
@@ -1687,7 +2106,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         'negative': 'Negative',
         'positive': 'Positive',
     }
-    # 按固定顺序展示，使图例稳定
+    # Fixed display order for consistent legend
     residue_order = ['hydrophobic', 'nonpolar', 'polar', 'negative', 'positive']
     for r_type in residue_order:
         if r_type in used_residue_types:
