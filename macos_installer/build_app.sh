@@ -45,68 +45,22 @@ fi
 cp "GLINT_Installer.py" "$RESOURCES_DIR/"
 echo "Copied installer script"
 
-# 创建启动器脚本
-cat > "$MACOS_DIR/launcher" << 'EOF'
-#!/bin/bash
-# GLINT Installer Launcher
-
-# Finder launches apps with a very limited PATH.
-# Normalize PATH first, then choose a Python with tkinter support.
-export PATH="/Library/Frameworks/Python.framework/Versions/Current/bin:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-
-LOG_DIR="$HOME/Library/Logs"
-LOG_FILE="$LOG_DIR/GLINT_Installer.log"
-mkdir -p "$LOG_DIR"
-
-PYTHON=""
-CANDIDATES=(
-  "/Library/Frameworks/Python.framework/Versions/Current/bin/python3"
-  "/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
-  "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"
-  "$(command -v python3 || true)"
-  "/usr/local/bin/python3"
-  "/opt/homebrew/bin/python3"
-  "/usr/bin/python3"
-)
-
-for p in "${CANDIDATES[@]}"; do
-  if [ -n "$p" ] && [ -x "$p" ]; then
-    if "$p" -c "import tkinter" >/dev/null 2>&1; then
-      PYTHON="$p"
-      break
-    fi
-  fi
-done
-
-if [ -z "$PYTHON" ]; then
-  osascript -e 'display alert "Tkinter Not Available" message "GLINT Installer requires Python with tkinter GUI support.\n\nPlease install Python from python.org (3.12/3.13 recommended), then relaunch installer.\n\nDetails in ~/Library/Logs/GLINT_Installer.log"'
-  {
-    echo "[$(date)] tkinter not available in detected python interpreters."
-    printf 'Checked candidates:\n'; printf '  %s\n' "${CANDIDATES[@]}"
-  } >>"$LOG_FILE"
-  exit 1
+# 编译 C launcher（Mach-O binary，避免 macOS 用 Terminal 打开 bash 脚本）
+echo "Compiling native launcher..."
+LAUNCHER_SRC="$SCRIPT_DIR/launcher.c"
+if [ ! -f "$LAUNCHER_SRC" ]; then
+    echo "❌ Error: launcher.c not found at $LAUNCHER_SRC"
+    exit 1
 fi
 
-DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-RESOURCES_DIR="$(dirname "$DIR")/Resources"
-INSTALLER_SCRIPT="${RESOURCES_DIR}/GLINT_Installer.py"
-
-{
-  echo "[$(date)] Launching installer"
-  echo "Python: $PYTHON"
-  "$PYTHON" -c 'import sys, tkinter as tk; print("Python:", sys.version); print("Tk:", tk.TkVersion, "Tcl:", tk.TclVersion)' 2>&1
-} >>"$LOG_FILE"
-
-"$PYTHON" "$INSTALLER_SCRIPT" >>"$LOG_FILE" 2>&1
-EXIT_CODE=$?
-if [ $EXIT_CODE -ne 0 ]; then
-  osascript -e 'display alert "GLINT Installer Error" message "Failed to launch installer UI. See ~/Library/Logs/GLINT_Installer.log for details."'
-  exit $EXIT_CODE
-fi
-EOF
+clang -O2 -arch x86_64 -arch arm64 \
+    -framework Cocoa \
+    -framework ApplicationServices \
+    -o "$MACOS_DIR/launcher" \
+    "$LAUNCHER_SRC"
 
 chmod +x "$MACOS_DIR/launcher"
-echo "Created launcher script"
+echo "Compiled native launcher (universal binary)"
 
 # 创建 Info.plist
 cat > "$CONTENTS_DIR/Info.plist" << 'EOF'
