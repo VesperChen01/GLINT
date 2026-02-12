@@ -91,7 +91,6 @@ class TernaryComplexFeatures:
     ligand: LigandFeatures = field(default_factory=LigandFeatures)
     geometry: GeometryFeatures = field(default_factory=GeometryFeatures)
     cooperativity_energy: Optional[float] = None
-    hook_risk_score: Optional[float] = None
     duality_index: Optional[float] = None
 
 # ==================== BSA计算器（使用PyMOL） ====================
@@ -114,7 +113,7 @@ class BSACalculator:
         """
         计算两条蛋白链之间的埋藏表面积 (Buried Surface Area)
         
-        BSA = (SA_chain1 + SA_chain2 - SA_complex) / 2
+        BSA = SA_chain1 + SA_chain2 - SA_complex
         
         参数:
             chain1: 第一条链ID
@@ -134,6 +133,14 @@ class BSACalculator:
         obj_complex = f"temp_complex_{suffix}"
         
         try:
+            # 保存当前设置
+            old_dot_solvent = self.cmd.get("dot_solvent")
+            old_dot_density = self.cmd.get("dot_density")
+            
+            # 设置SASA计算参数
+            self.cmd.set("dot_solvent", 1)
+            self.cmd.set("dot_density", 3)
+            
             solvent_sel = "resn HOH+WAT+NA+CL+MG+CA+ZN"
             # 排除配体残基，只计算蛋白质部分
             ligand_exclude = f" and not resn {self.ligand_resn}" if self.ligand_resn else ""
@@ -148,11 +155,16 @@ class BSACalculator:
             self.cmd.create(obj_complex, f"{sel_base} and (chain {chain1} or chain {chain2})")
             area_complex = self.cmd.get_area(obj_complex)
             
-            bsa = (area_chain1 + area_chain2 - area_complex) / 2.0
+            # BSA = SA_isolated_chain1 + SA_isolated_chain2 - SA_complex
+            bsa = area_chain1 + area_chain2 - area_complex
             
             self.cmd.delete(obj_c1)
             self.cmd.delete(obj_c2)
             self.cmd.delete(obj_complex)
+            
+            # 恢复设置
+            self.cmd.set("dot_solvent", old_dot_solvent)
+            self.cmd.set("dot_density", old_dot_density)
             
             return max(0.0, bsa)
         
@@ -163,6 +175,11 @@ class BSACalculator:
                 self.cmd.delete(obj_c2)
                 self.cmd.delete(obj_complex)
             except Exception:  # PyMOL 对象删除可能失败
+                pass
+            try:
+                self.cmd.set("dot_solvent", old_dot_solvent)
+                self.cmd.set("dot_density", old_dot_density)
+            except Exception:
                 pass
             return 0.0
     
@@ -712,7 +729,6 @@ class TernaryComplexEvaluator:
         
         # 5. 计算协同性指标
         features.cooperativity_energy = self._estimate_cooperativity(features)
-        features.hook_risk_score = self._estimate_hook_risk(features)
         features.duality_index = self._calculate_duality(features)
         
         return features
@@ -851,17 +867,6 @@ class TernaryComplexEvaluator:
         geom_score = -0.1 * (1.0 / (1.0 + features.geometry.cog_shift))
         return bsa_score + geom_score
 
-    def _estimate_hook_risk(self, features: TernaryComplexFeatures) -> float:
-        """估算Hook效应风险"""
-        # Hook_risk = max(BSA_E3, BSA_POI) / BSA_total
-        bsa_e3 = features.interface.bsa_mg_e3
-        bsa_poi = features.interface.bsa_mg_poi
-        bsa_total = features.interface.bsa_total
-        
-        if bsa_total > 0:
-            return max(bsa_e3, bsa_poi) / bsa_total
-        return 0.0
-
     def _calculate_duality(self, features: TernaryComplexFeatures) -> float:
         """计算双面性指数"""
         bsa_e3 = features.interface.bsa_mg_e3
@@ -924,7 +929,6 @@ class TernaryComplexEvaluator:
             
             # Derived
             'cooperativity_energy': features.cooperativity_energy,
-            'hook_risk_score': features.hook_risk_score,
             'duality_index': features.duality_index,
         }
 
@@ -998,7 +1002,6 @@ if __name__ == "__main__":
     
     print("\n【协同性指标】")
     print(f"  协同能: {features['cooperativity_energy']:.2f} kcal/mol")
-    print(f"  Hook风险: {features['hook_risk_score']:.2f}")
     print(f"  双面性指数: {features['duality_index']:.2f}")
     
     if smiles:

@@ -1022,8 +1022,11 @@ def calculate_interface_bsa(obj_name, chain1, chain2):
     """
     计算两个链之间的埋藏表面积 (Buried Surface Area)
     
-    使用PyMOL内置的get_area()函数
-    BSA = (SA_chain1 + SA_chain2 - SA_complex) / 2
+    使用PyMOL内置的get_area()函数，通过创建独立对象来正确计算SASA。
+    BSA = SA_chain1 + SA_chain2 - SA_complex
+    
+    注意: PyMOL的get_area()在整个对象上下文中评估可及性，
+    因此必须为每个组分创建独立的临时对象来获得正确的孤立SASA。
     
     参数:
         obj_name: PyMOL对象名称
@@ -1031,7 +1034,7 @@ def calculate_interface_bsa(obj_name, chain1, chain2):
         chain2: 第二条链ID
     
     返回:
-        float: 埋藏表面积 (Ų)
+        float: 埋藏表面积 (Å²)
     """
     try:
         objs = cmd.get_names("objects")
@@ -1041,21 +1044,63 @@ def calculate_interface_bsa(obj_name, chain1, chain2):
     if obj_name not in objs:
         raise ValueError(f"Object '{obj_name}' not found in PyMOL")
     
+    import uuid
+    suffix = str(uuid.uuid4())[:8]
+    obj_c1 = f"temp_bsa_c1_{suffix}"
+    obj_c2 = f"temp_bsa_c2_{suffix}"
+    obj_complex = f"temp_bsa_cx_{suffix}"
+    
+    old_dot_solvent = None
+    old_dot_density = None
+    
     try:
-        # 计算单独链的表面积
-        area_chain1 = cmd.get_area(f"{obj_name} and chain {chain1}")
-        area_chain2 = cmd.get_area(f"{obj_name} and chain {chain2}")
+        # 保存当前设置
+        old_dot_solvent = cmd.get("dot_solvent")
+        old_dot_density = cmd.get("dot_density")
         
-        # 计算复合物表面积
-        area_complex = cmd.get_area(f"{obj_name} and (chain {chain1} or chain {chain2})")
+        # 设置SASA计算参数（dot_solvent=1 使用溶剂可及表面积）
+        cmd.set("dot_solvent", 1)
+        cmd.set("dot_density", 3)
         
-        # BSA = (SA1 + SA2 - SA_complex) / 2
-        bsa = (area_chain1 + area_chain2 - area_complex) / 2.0
+        # 创建独立的临时对象（必须隔离，否则get_area会在原对象上下文中计算）
+        cmd.create(obj_c1, f"{obj_name} and chain {chain1}")
+        cmd.create(obj_c2, f"{obj_name} and chain {chain2}")
+        cmd.create(obj_complex, f"{obj_name} and (chain {chain1} or chain {chain2})")
         
-        return bsa
+        # 分别计算各对象的SASA
+        area_chain1 = cmd.get_area(obj_c1)
+        area_chain2 = cmd.get_area(obj_c2)
+        area_complex = cmd.get_area(obj_complex)
+        
+        # 清理临时对象
+        cmd.delete(obj_c1)
+        cmd.delete(obj_c2)
+        cmd.delete(obj_complex)
+        
+        # 恢复设置
+        cmd.set("dot_solvent", old_dot_solvent)
+        cmd.set("dot_density", old_dot_density)
+        
+        # BSA = SA_isolated_chain1 + SA_isolated_chain2 - SA_complex
+        bsa = area_chain1 + area_chain2 - area_complex
+        
+        return max(0.0, bsa)
     
     except Exception as e:
         print(f"[calculate_interface_bsa] Error: {e}")
+        # 清理可能残留的临时对象
+        for obj in [obj_c1, obj_c2, obj_complex]:
+            try:
+                cmd.delete(obj)
+            except Exception:
+                pass
+        # 恢复设置
+        if old_dot_solvent is not None:
+            try:
+                cmd.set("dot_solvent", old_dot_solvent)
+                cmd.set("dot_density", old_dot_density)
+            except Exception:
+                pass
         return None
 
 

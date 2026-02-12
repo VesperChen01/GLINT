@@ -389,7 +389,7 @@ class TernaryEvaluationTab(CommonTab):
             ("COG", "Å", "COG Shift"), ("Angle", "°", "Angle"),
             ("E3-POI", "Å", "E3-POI Dist"), ("E3-MG", "Å", "E3-MG Dist"),
             ("POI-MG", "Å", "POI-MG Dist"), ("Coop", "kcal", "Cooperativity"),
-            ("Hook", "", "Hook Risk"), ("Dual", "", "Duality")
+            ("Dual", "", "Duality")
         ]
 
         grid = QGridLayout()
@@ -611,7 +611,6 @@ class TernaryEvaluationTab(CommonTab):
             "E3-MG Dist": "dist_e3_mg",
             "POI-MG Dist": "dist_poi_mg",
             "Cooperativity": "cooperativity_energy",
-            "Hook Risk": "hook_risk_score",
             "Duality": "duality_index"
         }
         for name, key in geom_map.items():
@@ -648,7 +647,6 @@ class TernaryEvaluationTab(CommonTab):
         cog_shift = self._safe_get(result, 'geom_cog_shift')
         angle = self._safe_get(result, 'geom_angle_deg')
         coop = self._safe_get(result, 'cooperativity_energy')
-        hook = self._safe_get(result, 'hook_risk_score')
         duality = self._safe_get(result, 'duality_index')
         
         # 计算 BSA_MG_total
@@ -721,12 +719,6 @@ class TernaryEvaluationTab(CommonTab):
             "  Cooperativity Energy (estimated):",
             f"    ΔG_coop:        {coop:>8.2f} kcal/mol",
             "    (Negative = favorable ternary complex formation)",
-            "",
-            "  Hook Effect Risk:",
-            "  ┌─────────────────────────────────────────────────────────┐",
-            "  │ Hook_Risk = max(BSA_E3, BSA_POI) / BSA_total           │",
-            "  └─────────────────────────────────────────────────────────┘",
-            f"    Hook Risk:      {hook:>8.2f}     (0-1, higher = more risk)",
             "",
             "  Duality Index:",
             "  ┌─────────────────────────────────────────────────────────┐",

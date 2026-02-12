@@ -58,7 +58,7 @@ def analyze_pockets_in_ppi_interface(obj_name, chain_a, chain_b,
     # 获取界面残基
     try:
         from .ppi_analyzer import analyze_protein_protein_interface
-        ppi_result = analyze_protein_protein_interface(obj_name, [chain_a], [chain_b], cutoff=5.0)
+        ppi_result = analyze_protein_protein_interface(obj_name, [chain_a], [chain_b], interface_distance=5.0, visualize=False)
         
         interface_residues = set()
         for res in ppi_result.get('interface_residues', []):
