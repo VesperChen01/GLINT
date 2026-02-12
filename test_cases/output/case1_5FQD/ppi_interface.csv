@@ -1,0 +1,10 @@
+﻿=== 蛋白-蛋白界面分析 (PPI Analysis) ===
+
+界面接触对数,0
+界面强度评分,0.0
+
+=== 界面残基对 ===
+Chain1,Residue1,Chain2,Residue2,Distance(Å)
+
+=== 界面相互作用 ===
+Type,Atom1,Atom2,Distance(Å)

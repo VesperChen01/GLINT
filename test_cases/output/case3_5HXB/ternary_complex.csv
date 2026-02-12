@@ -1,0 +1,134 @@
+﻿=== Ternary Complex Analysis ===
+
+Ligand Info
+Ligand Count,2
+Ligand,85C 502 (chain Z)
+Ligand,85C 502 (chain C)
+
+=== Protein 1 (chains C) - Ligand Interactions ===
+Ligand_Chain,Ligand_Residue,Ligand_Atom,Protein_Chain,Protein_Residue,Protein_Atom,Distance,Interaction
+C,85C 502,C22,C,PHE 150,CG,4.43,Hydrophobic
+C,85C 502,C22,C,PHE 150,CD1,4.18,Hydrophobic
+C,85C 502,C22,C,PHE 150,CE1,4.43,Hydrophobic
+C,85C 502,O1,C,ASN 351,ND2,3.08,Hydrogen Bond
+C,85C 502,C4,C,ASN 351,CB,4.3,Hydrophobic
+C,85C 502,C4,C,ASN 351,CG,4.07,Hydrophobic
+C,85C 502,C5,C,ASN 351,CB,3.93,Hydrophobic
+C,85C 502,C5,C,ASN 351,CG,4.2,Hydrophobic
+C,85C 502,C8,C,ASN 351,CB,3.35,Hydrophobic
+C,85C 502,C8,C,ASN 351,CG,3.98,Hydrophobic
+C,85C 502,C9,C,ASN 351,CB,4.46,Hydrophobic
+C,85C 502,C13,C,ASN 351,CB,4.14,Hydrophobic
+C,85C 502,CL1,C,PRO 352,CB,4.36,Hydrophobic
+C,85C 502,C3,C,PRO 352,CG,4.17,Hydrophobic
+C,85C 502,C3,C,PRO 352,CD,4.35,Hydrophobic
+C,85C 502,C4,C,PRO 352,CD,4.19,Hydrophobic
+C,85C 502,C5,C,PRO 352,CG,4.39,Hydrophobic
+C,85C 502,C5,C,PRO 352,CD,3.74,Hydrophobic
+C,85C 502,C6,C,PRO 352,CG,4.06,Hydrophobic
+C,85C 502,C6,C,PRO 352,CD,3.83,Hydrophobic
+C,85C 502,C7,C,PRO 352,CG,4.39,Hydrophobic
+C,85C 502,C7,C,PRO 352,CD,4.09,Hydrophobic
+C,85C 502,C8,C,PRO 352,CD,3.91,Hydrophobic
+C,85C 502,C17,C,PRO 352,CB,3.94,Hydrophobic
+C,85C 502,C1,C,HIS 353,CD2,3.94,Hydrophobic
+C,85C 502,C2,C,HIS 353,CD2,4.32,Hydrophobic
+C,85C 502,O4,C,HIS 353,NE2,2.25,Hydrogen Bond
+C,85C 502,C14,C,HIS 353,CD2,4.34,Hydrophobic
+C,85C 502,C15,C,HIS 353,CD2,4.08,Hydrophobic
+C,85C 502,C17,C,HIS 353,CD2,4.44,Hydrophobic
+C,85C 502,C17,C,HIS 353,CE1,4.3,Hydrophobic
+C,85C 502,C3,C,GLU 377,CD,3.9,Hydrophobic
+C,85C 502,N3,C,GLU 377,OE1,3.59,Salt Bridge
+C,85C 502,N3,C,GLU 377,OE2,2.9,Salt Bridge
+C,85C 502,N4,C,GLU 377,OE1,4.19,Salt Bridge
+C,85C 502,N4,C,GLU 377,OE2,2.6,Salt Bridge
+C,85C 502,C15,C,GLU 377,CD,4.13,Hydrophobic
+C,85C 502,N2,C,HIS 378,O,2.84,Hydrogen Bond
+C,85C 502,O2,C,HIS 378,ND1,3.07,Hydrogen Bond
+C,85C 502,O3,C,SER 379,OG,3.16,Hydrogen Bond
+C,85C 502,C12,C,SER 379,CB,4.35,Hydrophobic
+C,85C 502,O2,C,TRP 380,NE1,3.39,Hydrogen Bond
+C,85C 502,O3,C,TRP 380,N,2.42,Hydrogen Bond
+C,85C 502,C9,C,TRP 380,CE2,4.28,Hydrophobic
+C,85C 502,C9,C,TRP 380,CZ2,4.1,Hydrophobic
+C,85C 502,C9,C,TRP 380,CH2,4.42,Hydrophobic
+C,85C 502,C11,C,TRP 380,CD2,4.25,Hydrophobic
+C,85C 502,C11,C,TRP 380,CE3,4.25,Hydrophobic
+C,85C 502,C12,C,TRP 380,CB,4.08,Hydrophobic
+C,85C 502,C12,C,TRP 380,CG,3.47,Hydrophobic
+C,85C 502,C12,C,TRP 380,CD1,3.84,Hydrophobic
+C,85C 502,C12,C,TRP 380,CD2,3.38,Hydrophobic
+C,85C 502,C12,C,TRP 380,CE2,3.68,Hydrophobic
+C,85C 502,C12,C,TRP 380,CE3,3.82,Hydrophobic
+C,85C 502,C12,C,TRP 380,CZ2,4.36,Hydrophobic
+C,85C 502,C12,C,TRP 380,CZ3,4.44,Hydrophobic
+C,85C 502,C13,C,TRP 380,CG,4.39,Hydrophobic
+C,85C 502,C13,C,TRP 380,CD1,4.1,Hydrophobic
+C,85C 502,C13,C,TRP 380,CD2,4.01,Hydrophobic
+C,85C 502,C13,C,TRP 380,CE2,3.38,Hydrophobic
+C,85C 502,C13,C,TRP 380,CZ2,3.57,Hydrophobic
+C,85C 502,C13,C,TRP 380,CH2,4.3,Hydrophobic
+C,85C 502,C3,C,TRP 386,CZ2,3.91,Hydrophobic
+C,85C 502,C3,C,TRP 386,CH2,4.13,Hydrophobic
+C,85C 502,C6,C,TRP 386,CE2,4.49,Hydrophobic
+C,85C 502,C6,C,TRP 386,CZ2,3.76,Hydrophobic
+C,85C 502,C6,C,TRP 386,CH2,4.1,Hydrophobic
+C,85C 502,C7,C,TRP 386,CD2,4.39,Hydrophobic
+C,85C 502,C7,C,TRP 386,CE2,3.5,Hydrophobic
+C,85C 502,C7,C,TRP 386,CZ2,3.22,Hydrophobic
+C,85C 502,C7,C,TRP 386,CH2,3.92,Hydrophobic
+C,85C 502,C9,C,TRP 386,CE2,4.38,Hydrophobic
+C,85C 502,C10,C,TRP 386,CB,3.95,Hydrophobic
+C,85C 502,C10,C,TRP 386,CG,3.26,Hydrophobic
+C,85C 502,C10,C,TRP 386,CD1,3.17,Hydrophobic
+C,85C 502,C10,C,TRP 386,CD2,3.35,Hydrophobic
+C,85C 502,C10,C,TRP 386,CE2,3.33,Hydrophobic
+C,85C 502,C10,C,TRP 386,CE3,4.1,Hydrophobic
+C,85C 502,C10,C,TRP 386,CZ2,4.11,Hydrophobic
+C,85C 502,C11,C,TRP 386,CB,3.63,Hydrophobic
+C,85C 502,C11,C,TRP 386,CG,3.41,Hydrophobic
+C,85C 502,C11,C,TRP 386,CD1,3.26,Hydrophobic
+C,85C 502,C11,C,TRP 386,CD2,4.06,Hydrophobic
+C,85C 502,C11,C,TRP 386,CE2,4.28,Hydrophobic
+C,85C 502,C12,C,TRP 386,CG,4.34,Hydrophobic
+C,85C 502,C12,C,TRP 386,CD1,3.74,Hydrophobic
+C,85C 502,"Ring(C1,C2,C3,C6,C5,C4)",C,TRP 386,ring,-,Pi-Pi Stacking
+C,85C 502,C8,C,TRP 400,CZ2,4.45,Hydrophobic
+C,85C 502,C9,C,TRP 400,CE2,4.3,Hydrophobic
+C,85C 502,C9,C,TRP 400,CZ2,4.32,Hydrophobic
+C,85C 502,C10,C,TRP 400,CD1,4.26,Hydrophobic
+C,85C 502,C10,C,TRP 400,CE2,4.26,Hydrophobic
+C,85C 502,C11,C,PHE 402,CE2,4.35,Hydrophobic
+C,85C 502,C11,C,PHE 402,CZ,4.27,Hydrophobic
+
+=== Protein 2 (chains A) - Ligand Interactions ===
+Ligand_Chain,Ligand_Residue,Ligand_Atom,Protein_Chain,Protein_Residue,Protein_Atom,Distance,Interaction
+C,85C 502,C15,A,GLN 534,CD,4.3,Hydrophobic
+C,85C 502,C21,A,GLN 534,CD,4.44,Hydrophobic
+C,85C 502,C18,A,VAL 536,CG1,4.2,Hydrophobic
+C,85C 502,C19,A,VAL 536,CG1,4.02,Hydrophobic
+C,85C 502,C20,A,VAL 536,CG1,4.35,Hydrophobic
+C,85C 502,C22,A,VAL 536,CG1,4.24,Hydrophobic
+C,85C 502,C2,A,VAL 570,CG2,4.42,Hydrophobic
+C,85C 502,C14,A,VAL 570,CG2,3.54,Hydrophobic
+C,85C 502,O1,A,LYS 573,O,3.2,Hydrogen Bond
+C,85C 502,N1,A,SER 574,O,3.24,Hydrogen Bond
+C,85C 502,O1,A,SER 574,O,2.78,Hydrogen Bond
+C,85C 502,C22,A,ILE 626,CD1,4.18,Hydrophobic
+C,85C 502,C16,A,LYS 628,CD,4.29,Hydrophobic
+C,85C 502,C16,A,LYS 628,CE,4.5,Hydrophobic
+C,85C 502,C19,A,LYS 628,CD,4.12,Hydrophobic
+C,85C 502,C20,A,LYS 628,CG,3.65,Hydrophobic
+C,85C 502,C20,A,LYS 628,CD,3.15,Hydrophobic
+C,85C 502,C20,A,LYS 628,CE,4.06,Hydrophobic
+C,85C 502,C21,A,LYS 628,CG,4.13,Hydrophobic
+C,85C 502,C21,A,LYS 628,CD,3.26,Hydrophobic
+C,85C 502,C21,A,LYS 628,CE,3.63,Hydrophobic
+
+=== Bridging Analysis Summary ===
+Protein 1 contacting residues,11
+Protein 2 contacting residues,7
+Protein 1 interactions,94
+Protein 2 interactions,21
+Total interactions,115

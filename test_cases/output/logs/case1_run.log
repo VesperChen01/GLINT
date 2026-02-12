@@ -1,0 +1,27 @@
+PyMOL>import sys
+PyMOL>import os
+PyMOL>sys.path.insert(0, "/Users/vesper/Desktop/git/GlueTK")
+PyMOL>sys.path.insert(0, os.path.expanduser("~/.pymol/startup"))
+PyMOL>print("✅ GLINT dev path loaded")
+✅ GLINT dev path loaded
+PyMOL>import glint
+
+🧬 GLINT v0.2.3 - ⚠️  Some dependencies may be missing
+💡 Most features are available. Use 'glint_gui' to launch GUI.
+
+PyMOL>print(f"✅ GLINT v{glint.__version__} loaded - type 'glint_gui' to launch GUI")
+✅ GLINT v0.2.3 loaded - type 'glint_gui' to launch GUI
+Traceback (most recent call last):
+  File "/Applications/PyMOL.app/Contents/lib/python3.10/site-packages/pymol/parsing.py", line 470, in run
+    run_(path, ns_pymol, ns_pymol)
+  File "/Applications/PyMOL.app/Contents/lib/python3.10/site-packages/pymol/parsing.py", line 519, in run_file
+    execfile(file,global_ns,local_ns)
+  File "/Applications/PyMOL.app/Contents/lib/python3.10/site-packages/pymol/parsing.py", line 514, in execfile
+    exec(co, global_ns, local_ns)
+  File "/Users/vesper/Desktop/git/GLINT/test_cases/run_case1_5FQD.py", line 29, in <module>
+    os.makedirs(OUTPUT_DIR, exist_ok=True)
+  File "/Applications/PyMOL.app/Contents/lib/python3.10/os.py", line 215, in makedirs
+    makedirs(head, exist_ok=exist_ok)
+  File "/Applications/PyMOL.app/Contents/lib/python3.10/os.py", line 225, in makedirs
+    mkdir(name, mode)
+PermissionError: [Errno 1] Operation not permitted: '/Applications/PyMOL.app/Contents/lib/python3.10/site-packages/pymol/output'

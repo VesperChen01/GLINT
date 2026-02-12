@@ -1,0 +1,842 @@
+=== GLINT Batch Run ===
+Started: 2026年 2月12日 星期四 01时25分44秒 CST
+
+=== Running test_cases/run_case1_5FQD.py ===
+PyMOL>import sys
+PyMOL>import os
+PyMOL>sys.path.insert(0, "/Users/vesper/Desktop/git/GlueTK")
+PyMOL>sys.path.insert(0, os.path.expanduser("~/.pymol/startup"))
+PyMOL>print("✅ GLINT dev path loaded")
+✅ GLINT dev path loaded
+PyMOL>import glint
+
+🧬 GLINT v0.2.3 - ⚠️  Some dependencies may be missing
+💡 Most features are available. Use 'glint_gui' to launch GUI.
+
+PyMOL>print(f"✅ GLINT v{glint.__version__} loaded - type 'glint_gui' to launch GUI")
+✅ GLINT v0.2.3 loaded - type 'glint_gui' to launch GUI
+============================================================
+  GLINT Test Case 1: 5FQD (CRBN-Lenalidomide-CK1α)
+============================================================
+
+[Step 0] Fetching 5FQD...
+  ✅ Structure loaded: 5FQD
+
+[Step 1] PPI Interface Analysis (CRBN A ↔ CK1α C)...
+
+============================================================
+⚠️  GLINT - Missing Dependencies
+============================================================
+
+❌ Missing: Pandas, Seaborn
+
+💡 Install missing packages:
+   conda activate glint
+   conda install -c conda-forge pandas seaborn -y
+============================================================
+
+[GLINT] ✅ RDKit loaded
+[GLINT] ✅ Using refactored interaction detection (performance boost)
+[PPI] Analyzing interface between chains ['A'] and ['C']...
+[PPI] Protein 1: 789 residues
+[PPI] Protein 2: 294 residues
+[PPI] ✅ Found 0 interface residue pairs
+[PPI] Results saved to: /Users/vesper/Desktop/git/GLINT/test_cases/output/case1_5FQD/ppi_interface.csv
+
+============================================================
+蛋白-蛋白界面分析结果 (PPI Analysis)
+============================================================
+界面接触对数: 0
+界面强度评分: 0.00 / 10
+界面类型: ⚠️ 弱界面 (Weak Interface)
+
+相互作用类型统计:
+============================================================
+[visualize_ppi_interface] No interface interactions to visualize
+  ✅ PPI analysis done: 0 interface contacts
+     CSV → /Users/vesper/Desktop/git/GLINT/test_cases/output/case1_5FQD/ppi_interface.csv
+
+[Step 2] PPI Interface Visualization...
+[visualize_ppi_interface] Invalid PPI result
+  ✅ 3D visualization saved → /Users/vesper/Desktop/git/GLINT/test_cases/output/case1_5FQD/ppi_interface_3d.png
+
+[Step 3] CRBN G-Motif (G-loop) Detection...
+  ⚠️ G-motif detection error: find_crbn_g_motif() got an unexpected keyword argument 'output_csv'
+
+[Step 4] Neo-Epitope Identification...
+[Neo-Epitope] Analyzing: E3=['A'], Substrate=['C'], Glue=LEN
+[Neo-Epitope] ⚠️ Glue molecule 'LEN' not found
+
+[Step 5] Protein-Ligand Interaction Analysis...
+
+============================================================
+[analyze_protein_ligand_interactions] ❌ No ligand found
+   Ligand specified: 'A'
+
+Possible reasons:
+   1) Ligand name mismatch
+   2) Ligand is on a separate chain not included in the object
+   3) Ligand is a standard residue (or DNA/RNA) but not specified
+
+Detected potential ligands (incl. nucleic acids):
+   - LVY: chainB:1438(ligand), chainE:1438(ligand)...
+
+How to fix:
+   • Enter one of the names above into 'Ligand Resname'
+   • Ensure the ligand chain is included in the object
+============================================================
+
+
+[Step 6] Pocket Detection...
+检测口袋：23239 个原子
+初步检测到 64 个口袋
+过滤后保留 2 个口袋
+已保存到 /Users/vesper/Desktop/git/GLINT/test_cases/output/case1_5FQD/pockets.csv
+
+检测到 2 个口袋：
+  Pocket 36: V=58.0ų, SA=97.2ų, Depth=12.4Å, Hydro=0.20, Drug=0.48
+  Pocket 55: V=76.5ų, SA=150.2ų, Depth=8.9Å, Hydro=0.33, Drug=0.49
+  ✅ Detected 2 pocket(s)
+     CSV → /Users/vesper/Desktop/git/GLINT/test_cases/output/case1_5FQD/pockets.csv
+  ⚠️ Pocket detection error: string indices must be integers
+
+[Step 7] Pocket-PPI Interface Integration...
+
+分析 5FQD 中链 A 和 C 的界面口袋...
+检测口袋：23239 个原子
+初步检测到 64 个口袋
+过滤后保留 2 个口袋
+
+检测到 2 个口袋：
+  Pocket 36: V=58.0ų, SA=97.2ų, Depth=12.4Å, Hydro=0.20, Drug=0.48
+  Pocket 55: V=76.5ų, SA=150.2ų, Depth=8.9Å, Hydro=0.33, Drug=0.49
+警告：无法获取界面残基：analyze_protein_protein_interface() got an unexpected keyword argument 'cutoff'
+没有口袋可显示
+
+在界面上发现 0 个口袋（共 2 个）
+
+[Step 8] Binding Heatmap...
+  ⚠️ Binding heatmap error: No module named 'pandas'
+
+[Step 9] Comprehensive Glue Design Analysis...
+  ⚠️ Glue design analysis error: comprehensive_glue_design_analysis() got an unexpected keyword argument 'output_csv'
+
+============================================================
+  Case 1 Complete!
+  Output directory: /Users/vesper/Desktop/git/GLINT/test_cases/output/case1_5FQD
+  Generated files:
+    📄 pocket_ppi_interface.csv  (111 bytes)
+    📄 pockets.csv  (476 bytes)
+    📄 ppi_interface.csv  (235 bytes)
+    📄 ppi_interface_3d.png  (755,256 bytes)
+============================================================
+=== test_cases/run_case1_5FQD.py done (exit=0) ===
+
+=== Running test_cases/run_case2_6UAN.py ===
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+PyMOL>import sys
+PyMOL>import os
+PyMOL>sys.path.insert(0, "/Users/vesper/Desktop/git/GlueTK")
+PyMOL>sys.path.insert(0, os.path.expanduser("~/.pymol/startup"))
+PyMOL>print("✅ GLINT dev path loaded")
+✅ GLINT dev path loaded
+PyMOL>import glint
+
+🧬 GLINT v0.2.3 - ⚠️  Some dependencies may be missing
+💡 Most features are available. Use 'glint_gui' to launch GUI.
+
+PyMOL>print(f"✅ GLINT v{glint.__version__} loaded - type 'glint_gui' to launch GUI")
+✅ GLINT v0.2.3 loaded - type 'glint_gui' to launch GUI
+============================================================
+  GLINT Test Case 2: 6UAN (DDB1-DCAF15-Indisulam-RBM39)
+  ★ Non-CRBN molecular glue system
+============================================================
+
+[Step 0] Fetching 6UAN...
+  ✅ Structure loaded: 6UAN
+
+[Step 1] PPI Interface Analysis (DCAF15-B ↔ RBM39-C)...
+
+============================================================
+⚠️  GLINT - Missing Dependencies
+============================================================
+
+❌ Missing: Pandas, Seaborn
+
+💡 Install missing packages:
+   conda activate glint
+   conda install -c conda-forge pandas seaborn -y
+============================================================
+
+[GLINT] ✅ RDKit loaded
+[GLINT] ✅ Using refactored interaction detection (performance boost)
+[PPI] Analyzing interface between chains ['B'] and ['C']...
+[PPI] Protein 1: 261 residues
+[PPI] Protein 2: 285 residues
+[PPI] ✅ Found 91 interface residue pairs
+[PPI] Results saved to: /Users/vesper/Desktop/git/GLINT/test_cases/output/case2_6UAN/ppi_interface.csv
+
+============================================================
+蛋白-蛋白界面分析结果 (PPI Analysis)
+============================================================
+界面接触对数: 91
+界面强度评分: 8.80 / 10
+埋藏表面积(BSA): 3696.1 Ų
+界面类型: ✨ 强界面 (Strong Interface)
+
+相互作用类型统计:
+  Hydrophobic: 41
+  Salt Bridge: 1
+  Hydrogen Bond: 22
+============================================================
+[visualize_ppi_interface] Visualizing 64 interactions...
+[visualize_ppi_interface] Display mode: cartoon_surface_interaction
+[visualize_ppi_interface] 背景颜色: white
+[visualize_ppi_interface] 显示模式: 卡通 + 表面 + 相互作用
+[DEBUG] Creating distance: ppi_saltbridge_2
+[DEBUG]   Type: Salt Bridge -> saltbridge
+[DEBUG]   atoms: NZ-OE1
+[DEBUG]   Stored distance: 4.43 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 475 and name NZ
+[DEBUG]   Sel2: 6UAN and chain C and resi 715 and name OE1
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_4
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: O-NE2
+[DEBUG]   Stored distance: 3.17 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 477 and name O
+[DEBUG]   Sel2: 6UAN and chain C and resi 510 and name NE2
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_6
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: O-NE2
+[DEBUG]   Stored distance: 2.76 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 477 and name O
+[DEBUG]   Sel2: 6UAN and chain C and resi 562 and name NE2
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_8
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NE2-OD2
+[DEBUG]   Stored distance: 3.32 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 477 and name NE2
+[DEBUG]   Sel2: 6UAN and chain C and resi 565 and name OD2
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_11
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: N-NE2
+[DEBUG]   Stored distance: 3.31 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 478 and name N
+[DEBUG]   Sel2: 6UAN and chain C and resi 562 and name NE2
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_12
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NZ-N
+[DEBUG]   Stored distance: 3.03 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 507 and name NZ
+[DEBUG]   Sel2: 6UAN and chain C and resi 449 and name N
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_13
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: O-NE1
+[DEBUG]   Stored distance: 2.47 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 507 and name O
+[DEBUG]   Sel2: 6UAN and chain C and resi 450 and name NE1
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_15
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: O-NH2
+[DEBUG]   Stored distance: 3.41 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 508 and name O
+[DEBUG]   Sel2: 6UAN and chain C and resi 509 and name NH2
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_17
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NH2-O
+[DEBUG]   Stored distance: 2.95 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 509 and name NH2
+[DEBUG]   Sel2: 6UAN and chain C and resi 505 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_18
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NH2-O
+[DEBUG]   Stored distance: 3.47 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 509 and name NH2
+[DEBUG]   Sel2: 6UAN and chain C and resi 508 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_21
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NH1-O
+[DEBUG]   Stored distance: 2.34 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 509 and name NH1
+[DEBUG]   Sel2: 6UAN and chain C and resi 516 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_23
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NE2-O
+[DEBUG]   Stored distance: 2.81 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 510 and name NE2
+[DEBUG]   Sel2: 6UAN and chain C and resi 477 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_27
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: O-NE
+[DEBUG]   Stored distance: 2.46 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 516 and name O
+[DEBUG]   Sel2: 6UAN and chain C and resi 509 and name NE
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_29
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: SD-O
+[DEBUG]   Stored distance: 3.27 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 517 and name SD
+[DEBUG]   Sel2: 6UAN and chain C and resi 509 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_34
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NE2-N
+[DEBUG]   Stored distance: 2.99 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 562 and name NE2
+[DEBUG]   Sel2: 6UAN and chain C and resi 478 and name N
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_36
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: OD2-NE2
+[DEBUG]   Stored distance: 2.36 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 565 and name OD2
+[DEBUG]   Sel2: 6UAN and chain C and resi 477 and name NE2
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_47
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: O-ND2
+[DEBUG]   Stored distance: 3.35 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 744 and name O
+[DEBUG]   Sel2: 6UAN and chain C and resi 581 and name ND2
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_51
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: O-N
+[DEBUG]   Stored distance: 3.21 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 745 and name O
+[DEBUG]   Sel2: 6UAN and chain C and resi 594 and name N
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_56
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: OH-O
+[DEBUG]   Stored distance: 3.4 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 746 and name OH
+[DEBUG]   Sel2: 6UAN and chain C and resi 530 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_58
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: OH-N
+[DEBUG]   Stored distance: 3.14 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 746 and name OH
+[DEBUG]   Sel2: 6UAN and chain C and resi 532 and name N
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_60
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: O-OD1
+[DEBUG]   Stored distance: 3.43 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 747 and name O
+[DEBUG]   Sel2: 6UAN and chain C and resi 594 and name OD1
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_62
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: N-NZ
+[DEBUG]   Stored distance: 3.13 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 749 and name N
+[DEBUG]   Sel2: 6UAN and chain C and resi 578 and name NZ
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_63
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: O-N
+[DEBUG]   Stored distance: 3.35 Å
+[DEBUG]   Sel1: 6UAN and chain B and resi 750 and name O
+[DEBUG]   Sel2: 6UAN and chain C and resi 615 and name N
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+
+============================================================
+Interaction Visualization Statistics:
+============================================================
+  Hydrogen Bonds: 22 (Color: Blue)
+  Salt Bridges: 1 (Color: Orange-Red)
+============================================================
+
+[visualize_ppi_interface] ✅ 可视化完成:
+  - 参与相互作用的残基: 66
+  - 总相互作用数: 64
+  - 显示模式: cartoon_surface_interaction
+  - 蛋白1 (B): cyan
+  - 蛋白2 (C): magenta
+  ✅ PPI analysis done: 0 interface contacts
+     CSV → /Users/vesper/Desktop/git/GLINT/test_cases/output/case2_6UAN/ppi_interface.csv
+  ⚠️ PPI analysis error: 'float' object has no attribute 'get'
+
+[Step 2] PPI Interface Visualization...
+[visualize_ppi_interface] Invalid PPI result
+  ✅ 3D visualization saved → /Users/vesper/Desktop/git/GLINT/test_cases/output/case2_6UAN/ppi_interface_3d.png
+
+[Step 3] Protein-Ligand Interaction Analysis...
+
+============================================================
+[analyze_protein_ligand_interactions] ❌ No ligand found
+   Ligand specified: 'B'
+
+Possible reasons:
+   1) Ligand name mismatch
+   2) Ligand is on a separate chain not included in the object
+   3) Ligand is a standard residue (or DNA/RNA) but not specified
+
+Detected potential ligands (incl. nucleic acids):
+   - SEP: chainB:729(ligand), chainC:729(ligand)...
+
+How to fix:
+   • Enter one of the names above into 'Ligand Resname'
+   • Ensure the ligand chain is included in the object
+============================================================
+
+
+[Step 4] Pocket Detection...
+检测口袋：7685 个原子
+初步检测到 29 个口袋
+过滤后保留 0 个口袋
+未检测到符合条件的口袋
+
+[Step 5] Pocket-PPI Interface Integration...
+
+分析 6UAN 中链 B 和 C 的界面口袋...
+检测口袋：7685 个原子
+初步检测到 29 个口袋
+过滤后保留 0 个口袋
+未检测到符合条件的口袋
+警告：无法获取界面残基：analyze_protein_protein_interface() got an unexpected keyword argument 'cutoff'
+没有口袋可显示
+
+在界面上发现 0 个口袋（共 0 个）
+
+[Step 6] Binding Heatmap...
+  ⚠️ Binding heatmap error: No module named 'pandas'
+
+[Step 7] Interaction Network Plot...
+  ⚠️ Interaction network error: generate_interaction_network_plot() got an unexpected keyword argument 'output'
+
+============================================================
+  Case 2 Complete!
+  Output directory: /Users/vesper/Desktop/git/GLINT/test_cases/output/case2_6UAN
+  Generated files:
+    📄 pocket_ppi_interface.csv  (111 bytes)
+    📄 ppi_interface.csv  (5,505 bytes)
+    📄 ppi_interface_3d.png  (1,837,391 bytes)
+============================================================
+=== test_cases/run_case2_6UAN.py done (exit=0) ===
+
+=== Running test_cases/run_case3_5HXB.py ===
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+ Setting-Warning: 'label_size' is a object-state-level setting
+PyMOL>import sys
+PyMOL>import os
+PyMOL>sys.path.insert(0, "/Users/vesper/Desktop/git/GlueTK")
+PyMOL>sys.path.insert(0, os.path.expanduser("~/.pymol/startup"))
+PyMOL>print("✅ GLINT dev path loaded")
+✅ GLINT dev path loaded
+PyMOL>import glint
+
+🧬 GLINT v0.2.3 - ⚠️  Some dependencies may be missing
+💡 Most features are available. Use 'glint_gui' to launch GUI.
+
+PyMOL>print(f"✅ GLINT v{glint.__version__} loaded - type 'glint_gui' to launch GUI")
+✅ GLINT v0.2.3 loaded - type 'glint_gui' to launch GUI
+============================================================
+  GLINT Test Case 3: 5HXB (CRBN-Pomalidomide-GSPT1)
+  ★ 2D Diagram + G-motif + Ternary Analysis
+============================================================
+
+[Step 0] Fetching 5HXB...
+  ✅ Structure loaded: 5HXB
+
+[Step 1] PPI Interface Analysis (CRBN-C ↔ GSPT1-A)...
+
+============================================================
+⚠️  GLINT - Missing Dependencies
+============================================================
+
+❌ Missing: Pandas, Seaborn
+
+💡 Install missing packages:
+   conda activate glint
+   conda install -c conda-forge pandas seaborn -y
+============================================================
+
+[GLINT] ✅ RDKit loaded
+[GLINT] ✅ Using refactored interaction detection (performance boost)
+[PPI] Analyzing interface between chains ['C'] and ['A']...
+[PPI] Protein 1: 372 residues
+[PPI] Protein 2: 196 residues
+[PPI] ✅ Found 25 interface residue pairs
+[PPI] Results saved to: /Users/vesper/Desktop/git/GLINT/test_cases/output/case3_5HXB/ppi_interface.csv
+
+============================================================
+蛋白-蛋白界面分析结果 (PPI Analysis)
+============================================================
+界面接触对数: 25
+界面强度评分: 9.60 / 10
+埋藏表面积(BSA): 1193.9 Ų
+界面类型: ✨ 强界面 (Strong Interface)
+
+相互作用类型统计:
+  Salt Bridge: 2
+  Hydrophobic: 10
+  Hydrogen Bond: 5
+  Pi-Cation: 1
+============================================================
+[visualize_ppi_interface] Visualizing 18 interactions...
+[visualize_ppi_interface] Display mode: cartoon_surface_interaction
+[visualize_ppi_interface] 背景颜色: white
+[visualize_ppi_interface] 显示模式: 卡通 + 表面 + 相互作用
+[DEBUG] Creating distance: ppi_saltbridge_0
+[DEBUG]   Type: Salt Bridge -> saltbridge
+[DEBUG]   atoms: OD2-NH1
+[DEBUG]   Stored distance: 3.64 Å
+[DEBUG]   Sel1: 5HXB and chain C and resi 149 and name OD2
+[DEBUG]   Sel2: 5HXB and chain A and resi 614 and name NH1
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_3
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: ND2-O
+[DEBUG]   Stored distance: 2.5 Å
+[DEBUG]   Sel1: 5HXB and chain C and resi 351 and name ND2
+[DEBUG]   Sel2: 5HXB and chain A and resi 572 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_4
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: ND2-O
+[DEBUG]   Stored distance: 3.3 Å
+[DEBUG]   Sel1: 5HXB and chain C and resi 351 and name ND2
+[DEBUG]   Sel2: 5HXB and chain A and resi 573 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Calculating ring centers for HIS-LYS
+[DEBUG]   Looking for ring atoms in HIS C:353
+[DEBUG]     Found CG: [-3.6679999828338623, 15.63599967956543, 152.07200622558594]
+[DEBUG]     Found ND1: [-4.310999870300293, 16.027000427246094, 153.2209930419922]
+[DEBUG]     Found CD2: [-3.0460000038146973, 16.73900032043457, 151.60299682617188]
+[DEBUG]     Found CE1: [-4.289999961853027, 17.344999313354492, 153.29299926757812]
+[DEBUG]     Found NE2: [-3.5329999923706055, 17.804000854492188, 152.31199645996094]
+[DEBUG]   Total ring atoms found: 5
+[DEBUG]   Ring center: (-3.769599962234497, 16.710200119018555, 152.5001983642578)
+[DEBUG]   LYS not in ring_atoms_map
+[DEBUG]   Calculated cation center for LYS: (-7.693999767303467, 15.5, 154.3300018310547)
+[DEBUG] Creating distance: ppi_cationpi_6
+[DEBUG]   Type: Pi-Cation -> cationpi
+[DEBUG]   atoms: RING_CENTER-RING_CENTER (HIS-LYS)
+[DEBUG]   Stored distance: 3.02 Å
+[DEBUG]   Sel1: ppi_centroid_cationpi_6_1
+[DEBUG]   Sel2: ppi_centroid_cationpi_6_2
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_10
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NE2-O
+[DEBUG]   Stored distance: 2.87 Å
+[DEBUG]   Sel1: 5HXB and chain C and resi 357 and name NE2
+[DEBUG]   Sel2: 5HXB and chain A and resi 573 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_saltbridge_12
+[DEBUG]   Type: Salt Bridge -> saltbridge
+[DEBUG]   atoms: OE2-NZ
+[DEBUG]   Stored distance: 3.58 Å
+[DEBUG]   Sel1: 5HXB and chain C and resi 377 and name OE2
+[DEBUG]   Sel2: 5HXB and chain A and resi 628 and name NZ
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_15
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NE2-OE2
+[DEBUG]   Stored distance: 3.33 Å
+[DEBUG]   Sel1: 5HXB and chain C and resi 390 and name NE2
+[DEBUG]   Sel2: 5HXB and chain A and resi 576 and name OE2
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+[DEBUG] Creating distance: ppi_hbond_17
+[DEBUG]   Type: Hydrogen Bond -> hbond
+[DEBUG]   atoms: NE1-O
+[DEBUG]   Stored distance: 3.04 Å
+[DEBUG]   Sel1: 5HXB and chain C and resi 400 and name NE1
+[DEBUG]   Sel2: 5HXB and chain A and resi 574 and name O
+[DEBUG]   ✓ Distance created successfully - VERIFIED in object list
+[DEBUG]   ⚠ Cannot get distance value
+
+============================================================
+Interaction Visualization Statistics:
+============================================================
+  Hydrogen Bonds: 5 (Color: Blue)
+  Salt Bridges: 2 (Color: Orange-Red)
+  Cation-Pi: 1 (Color: Pink)
+============================================================
+
+[visualize_ppi_interface] ✅ 可视化完成:
+  - 参与相互作用的残基: 21
+  - 总相互作用数: 18
+  - 显示模式: cartoon_surface_interaction
+  - 蛋白1 (C): cyan
+  - 蛋白2 (A): magenta
+  ✅ PPI: 0 contacts → /Users/vesper/Desktop/git/GLINT/test_cases/output/case3_5HXB/ppi_interface.csv
+  ⚠️ PPI error: 'float' object has no attribute 'get'
+
+[Step 2] G-Motif Detection (GSPT1 template)...
+  ⚠️ G-motif error: find_crbn_g_motif() got an unexpected keyword argument 'output_csv'
+
+[Step 3] CRBN H-bond Validation...
+  ⚠️ H-bond validation error: validate_crbn_hbonds() got an unexpected keyword argument 'output_csv'
+
+[Step 4] 2D Interaction Diagram...
+  ⚠️ 2D diagram error: generate_2d_interaction_diagram() got an unexpected keyword argument 'output'
+
+[Step 5] Protein-Ligand Interactions...
+
+============================================================
+[analyze_protein_ligand_interactions] ❌ No ligand found
+   Ligand specified: 'C'
+
+Possible reasons:
+   1) Ligand name mismatch
+   2) Ligand is on a separate chain not included in the object
+   3) Ligand is a standard residue (or DNA/RNA) but not specified
+
+Detected potential ligands (incl. nucleic acids):
+   - 85C: chainZ:502(ligand), chainC:502(ligand)...
+
+How to fix:
+   • Enter one of the names above into 'Ligand Resname'
+   • Ensure the ligand chain is included in the object
+============================================================
+
+  ⚠️ Protein-ligand error: 'str' object has no attribute 'get'
+
+[Step 6] Ternary Complex Analysis...
+[analyze_ternary_complex] ⚠️ No ligand found
+
+[Step 7] Neo-Epitope Identification...
+[Neo-Epitope] Analyzing: E3=['C'], Substrate=['A'], Glue=LEN
+[Neo-Epitope] ⚠️ Glue molecule 'LEN' not found
+[visualize_neo_epitope] Invalid neo-epitope result
+  ✅ Neo-epitope visualization → /Users/vesper/Desktop/git/GLINT/test_cases/output/case3_5HXB/neo_epitope_3d.png
+
+============================================================
+  Case 3 Complete!
+  Output directory: /Users/vesper/Desktop/git/GLINT/test_cases/output/case3_5HXB
+  Generated files:
+    📄 neo_epitope_3d.png  (1,466,575 bytes)
+    📄 ppi_interface.csv  (1,703 bytes)
+============================================================
+=== test_cases/run_case3_5HXB.py done (exit=0) ===
+
+=== Running test_cases/run_case4_6BOY.py ===
+PyMOL>import sys
+PyMOL>import os
+PyMOL>sys.path.insert(0, "/Users/vesper/Desktop/git/GlueTK")
+PyMOL>sys.path.insert(0, os.path.expanduser("~/.pymol/startup"))
+PyMOL>print("✅ GLINT dev path loaded")
+✅ GLINT dev path loaded
+PyMOL>import glint
+
+🧬 GLINT v0.2.3 - ⚠️  Some dependencies may be missing
+💡 Most features are available. Use 'glint_gui' to launch GUI.
+
+PyMOL>print(f"✅ GLINT v{glint.__version__} loaded - type 'glint_gui' to launch GUI")
+✅ GLINT v0.2.3 loaded - type 'glint_gui' to launch GUI
+============================================================
+  GLINT Test Case 4: 6BOY (CRBN-CC-885-GSPT1)
+  ★ Mutation Scanning + Surface Analysis
+============================================================
+
+[Step 0] Fetching 6BOY...
+  ✅ Structure loaded: 6BOY
+
+[Step 1] PPI Interface Analysis (CRBN-B ↔ GSPT1-D)...
+
+============================================================
+⚠️  GLINT - Missing Dependencies
+============================================================
+
+❌ Missing: Pandas, Seaborn
+
+💡 Install missing packages:
+   conda activate glint
+   conda install -c conda-forge pandas seaborn -y
+============================================================
+
+[GLINT] ✅ RDKit loaded
+[GLINT] ✅ Using refactored interaction detection (performance boost)
+[PPI] Analyzing interface between chains ['B'] and ['D']...
+[PPI] ⚠️ No protein residues found in specified chains
+
+[Step 2] Mutation Analysis (G-loop key residues)...
+
+============================================================
+🧬 开始突变分析: 6BOY
+============================================================
+
+步骤 1/3: 执行突变...
+❌ 未找到残基: chain D resi 571
+❌ 未找到残基: chain D resi 574
+❌ 所有突变均失败
+
+[Step 3] Protein Surface Rendering...
+Rendering full surface for 6BOY...
+  Color by: potential
+  ⚠️ APBS not available, falling back to residue-based method
+  Using residue-based approximation
+  Charge range: [-1.00, 1.00]
+✅ Electrostatic surface rendered as '6BOY_ESP'
+   Method: Residue-based approximation (APBS not available)
+   Color scheme: Red (negative) → White (neutral) → Blue (positive)
+  ✅ Surface rendering saved → /Users/vesper/Desktop/git/GLINT/test_cases/output/case4_6BOY/protein_surface_3d.png
+
+[Step 4] Protein-Ligand Interaction Analysis...
+
+============================================================
+[analyze_protein_ligand_interactions] ❌ No ligand found
+   Ligand specified: '6GY'
+
+Possible reasons:
+   1) Ligand name mismatch
+   2) Ligand is on a separate chain not included in the object
+   3) Ligand is a standard residue (or DNA/RNA) but not specified
+
+Detected potential ligands (incl. nucleic acids):
+   - RN6: chainB:502(ligand)...
+
+How to fix:
+   • Enter one of the names above into 'Ligand Resname'
+   • Ensure the ligand chain is included in the object
+============================================================
+
+
+[Step 5] CRBN G-Motif (G-loop) Detection...
+  ⚠️ G-motif detection error: find_crbn_g_motif() got an unexpected keyword argument 'output_csv'
+
+[Step 6] Binding Heatmap...
+  ⚠️ Binding heatmap error: No module named 'pandas'
+
+[Step 7] Comprehensive Glue Design Analysis...
+  ⚠️ Glue design analysis error: comprehensive_glue_design_analysis() got an unexpected keyword argument 'output_csv'
+
+============================================================
+  Case 4 Complete!
+  Output directory: /Users/vesper/Desktop/git/GLINT/test_cases/output/case4_6BOY
+  Generated files:
+    📄 protein_surface_3d.png  (430,912 bytes)
+============================================================
+=== test_cases/run_case4_6BOY.py done (exit=0) ===
+ALL_DONE 2026年 2月12日 星期四 01时43分21秒 CST
