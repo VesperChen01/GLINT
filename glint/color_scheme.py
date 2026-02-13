@@ -21,20 +21,20 @@ from typing import Dict, Optional
 
 @dataclass
 class VisualizationSettings:
-    """统一的3D可视化配置对象（用于 PPI / 蛋白-配体 渲染）。"""
-    # 通用渲染参数
+    """Unified 3D visualization settings (for PPI / protein-ligand rendering)."""
+    # General rendering parameters
     background: str = 'white'
     label_size: int = 16
     label_font_id: int = 5
 
-    # 交互显示参数
+    # Interaction display parameters
     display_mode: str = 'cartoon_surface_interaction'
     show_labels: bool = True
     show_hydrophobic: bool = False
     min_confidence: float = 0.8
     max_interactions_per_type: Optional[Dict[str, int]] = None
 
-    # PPI 相关参数
+    # PPI-related parameters
     protein1_color: str = 'cyan'
     protein2_color: str = 'magenta'
     clear_old: bool = True
@@ -275,24 +275,24 @@ def get_interaction_style(interaction_type):
 
 
 def apply_publication_pymol_style(cmd, background='white', label_size=16, label_font_id=5):
-    """统一应用出版级 PyMOL 渲染参数（3D 图通用）。"""
-    # 背景与光照：白底、较柔和光照，减少阴影干扰，适合论文插图
+    """Apply unified publication-quality PyMOL rendering parameters (common for 3D figures)."""
+    # Background & lighting: white background, soft lighting, reduced shadow interference, suitable for publication figures
     cmd.bg_color(background)
     cmd.set('ray_opaque_background', 1)
     cmd.set('ray_shadow', 0)
-    # 方案B：保持纯白底，同时降低整体光照强度，避免画面过亮
+    # Plan B: keep pure white background while reducing overall light intensity to avoid overexposure
     cmd.set('ambient', 0.22)
     cmd.set('direct', 0.48)
     cmd.set('spec_reflect', 0.20)
     cmd.set('spec_power', 80)
 
-    # 抗锯齿与景深：保证边缘清晰、避免景深导致细节发灰
+    # Anti-aliasing & depth of field: ensure sharp edges, avoid depth cue causing grayish details
     cmd.set('antialias', 2)
     cmd.set('depth_cue', 0)
     cmd.set('ray_trace_mode', 1)
     cmd.set('orthoscopic', 1)
 
-    # 标签字体统一：Times-like（font_id=5）+ 黑色，便于出版阅读
+    # Unified label font: Times-like (font_id=5) + black, suitable for publication readability
     cmd.set('label_size', label_size)
     cmd.set('label_font_id', label_font_id)
     cmd.set('label_color', 'black')
@@ -302,7 +302,7 @@ def apply_interaction_dash_style(cmd, obj_name, color_name=None,
                                  dash_width=2.0, dash_gap=0.3,
                                  dash_length=0.25, dash_radius=0.08,
                                  hide_labels=True):
-    """统一应用相互作用虚线样式，避免不同模块风格不一致。"""
+    """Apply unified interaction dash style to avoid inconsistent styles across modules."""
     cmd.show('dashes', obj_name)
     cmd.set('dash_width', dash_width, obj_name)
     cmd.set('dash_gap', dash_gap, obj_name)

@@ -2,14 +2,14 @@
 """
 GLINT Batch Analyzer
 =====================
-批量 PDB 分析模块 - 一次性分析多个结构
+Batch PDB analysis module - analyze multiple structures at once
 
-功能：
-1. 批量 G-motif 检测
-2. 批量 PPI 界面分析
-3. 批量口袋检测
-4. 批量相互作用分析
-5. 结果汇总与导出
+Features:
+1. Batch G-motif detection
+2. Batch PPI interface analysis
+3. Batch pocket detection
+4. Batch interaction analysis
+5. Result aggregation and export
 
 Author: Roufen Chen
 Date: 2025-12
@@ -33,15 +33,15 @@ except ImportError:
 
 
 class BatchAnalyzer:
-    """批量分析器"""
+    """Batch Analyzer"""
     
     def __init__(self, output_dir: Optional[str] = None, max_workers: int = 4):
         """
-        初始化批量分析器
+        Initialize batch analyzer
         
-        参数:
-            output_dir: 输出目录（默认当前目录下的 batch_results）
-            max_workers: 最大并行工作线程数
+        Args:
+            output_dir: Output directory (default: batch_results in current directory)
+            max_workers: Maximum number of parallel worker threads
         """
         self.output_dir = Path(output_dir) if output_dir else Path("batch_results")
         self.output_dir.mkdir(parents=True, exist_ok=True)
@@ -50,15 +50,15 @@ class BatchAnalyzer:
         self.errors = []
         
     def _load_pdb(self, pdb_path: str, obj_name: Optional[str] = None) -> Optional[str]:
-        """加载 PDB 文件到 PyMOL"""
+        """Load PDB file into PyMOL"""
         if not cmd:
-            print("❌ PyMOL 不可用")
+            print("❌ PyMOL not available")
             return None
             
         if obj_name is None:
             obj_name = Path(pdb_path).stem
             
-        # 确保对象名唯一
+        # Ensure unique object name
         base_name = obj_name
         counter = 1
         while obj_name in cmd.get_names("objects"):
@@ -69,13 +69,13 @@ class BatchAnalyzer:
             cmd.load(pdb_path, obj_name)
             return obj_name
         except Exception as e:
-            print(f"❌ 加载失败 {pdb_path}: {e}")
+            print(f"❌ Load failed {pdb_path}: {e}")
             return None
     
     def _fetch_pdb(self, pdb_id: str) -> Optional[str]:
-        """从 PDB 数据库获取结构"""
+        """Fetch structure from PDB database"""
         if not cmd:
-            print("❌ PyMOL 不可用")
+            print("❌ PyMOL not available")
             return None
             
         obj_name = pdb_id.lower()
@@ -83,7 +83,7 @@ class BatchAnalyzer:
             cmd.fetch(pdb_id, obj_name)
             return obj_name
         except Exception as e:
-            print(f"❌ 获取失败 {pdb_id}: {e}")
+            print(f"❌ Fetch failed {pdb_id}: {e}")
             return None
     
     def batch_gmotif_detection(self, 
@@ -93,23 +93,23 @@ class BatchAnalyzer:
                                template: str = "GSPT1",
                                output_csv: Optional[str] = None) -> Dict[str, Any]:
         """
-        批量 G-motif 检测
+        Batch G-motif detection
         
-        参数:
-            pdb_sources: PDB 文件路径或 PDB ID 列表
-            rmsd_cutoff: RMSD 阈值
-            require_gly: 是否要求中心 Gly
-            template: 模板名称 (GSPT1, CK1α, VAV1)
-            output_csv: 输出 CSV 路径
+        Args:
+            pdb_sources: List of PDB file paths or PDB IDs
+            rmsd_cutoff: RMSD threshold
+            require_gly: Whether to require central Gly
+            template: Template name (GSPT1, CK1α, VAV1)
+            output_csv: Output CSV path
             
-        返回:
-            汇总结果字典
+        Returns:
+            Summary result dictionary
         """
         print(f"\n{'='*60}")
-        print(f"🔬 批量 G-motif 检测")
+        print(f"🔬 Batch G-motif Detection")
         print(f"{'='*60}")
-        print(f"输入: {len(pdb_sources)} 个结构")
-        print(f"参数: RMSD≤{rmsd_cutoff}Å, 模板={template}")
+        print(f"Input: {len(pdb_sources)} structures")
+        print(f"Parameters: RMSD≤{rmsd_cutoff}Å, template={template}")
         print(f"{'='*60}\n")
         
         try:
@@ -118,27 +118,20 @@ class BatchAnalyzer:
             try:
                 from g_motif_analyzer import find_crbn_g_motif
             except ImportError:
-                print("❌ G-motif 分析模块不可用")
+                print("❌ G-motif analysis module not available")
                 return {"success": False, "error": "Module not available"}
         
         results = []
         total_hits = 0
         
         for i, source in enumerate(pdb_sources, 1):
-            print(f"[{i}/{len(pdb_sources)}] 分析: {source}")
-            
-            # 判断是文件路径还是 PDB ID
+            print(f"[{i}/{len(pdb_sources)}] Analyzing: {source}")
             if os.path.exists(source):
                 obj_name = self._load_pdb(source)
             elif len(source) == 4 and source.isalnum():
                 obj_name = self._fetch_pdb(source)
             else:
-                print(f"  ⚠️ 无效输入: {source}")
-                results.append({
-                    "source": source,
-                    "success": False,
-                    "error": "Invalid input",
-                    "hits": []
+                print(f"  ⚠️ Invalid input: {source}")
                 })
                 continue
             
@@ -152,7 +145,7 @@ class BatchAnalyzer:
                 continue
             
             try:
-                # 运行 G-motif 检测
+                # Run G-motif detection
                 hits = find_crbn_g_motif(
                     obj_name=obj_name,
                     rmsd_cutoff=rmsd_cutoff,
@@ -171,10 +164,10 @@ class BatchAnalyzer:
                     "hits": hits or []
                 })
                 
-                print(f"  ✅ 发现 {hit_count} 个 G-motif")
+                print(f"  ✅ Found {hit_count} G-motif(s)")
                 
             except Exception as e:
-                print(f"  ❌ 分析失败: {e}")
+                print(f"  ❌ Analysis failed: {e}")
                 results.append({
                     "source": source,
                     "obj_name": obj_name,
@@ -183,10 +176,10 @@ class BatchAnalyzer:
                     "hits": []
                 })
             
-            # 清理对象（可选）
+            # Clean up object (optional)
             # cmd.delete(obj_name)
         
-        # 汇总
+        # Summary
         summary = {
             "analysis_type": "G-motif Detection",
             "timestamp": datetime.now().isoformat(),

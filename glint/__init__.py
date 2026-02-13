@@ -12,20 +12,20 @@ import locale
 import os
 import sys
 
-# 修复相对导入问题：当通过 `run` 命令执行时，需要确保包路径正确
+# Fix relative import: ensure package path is correct when executed via `run` command
 _this_dir = os.path.dirname(os.path.abspath(__file__))
 _parent_dir = os.path.dirname(_this_dir)
 if _parent_dir not in sys.path:
     sys.path.insert(0, _parent_dir)
 
-# 从 _version.py 导入版本（支持两种加载方式）
+# Import version from _version.py (supports two loading methods)
 try:
     from ._version import __version__
 except ImportError:
     try:
         from glint._version import __version__
     except ImportError:
-        # 最后尝试直接读取版本文件
+        # Last resort: read version file directly
         _version_file = os.path.join(_this_dir, "_version.py")
         if os.path.exists(_version_file):
             __version__ = "unknown"
@@ -39,16 +39,16 @@ except ImportError:
 
 __author__ = "Roufen Chen"
 
-# ---- 环境依赖检查 ----
-# 延迟依赖检查，避免在导入时触发 PyQt 崩溃
+# ---- Dependency check ----
+# Deferred dependency check to avoid triggering PyQt crash on import
 _DEPS_OK = False
 _DEPS_CHECKED = False
 
 def _check_deps_safe():
     """
-    安全地检查依赖（延迟到实际需要时）
+    Safely check dependencies (deferred until actually needed).
     
-    带有详细的错误日志，便于调试导入问题。
+    Includes detailed error logging to help debug import issues.
     """
     global _DEPS_OK, _DEPS_CHECKED
     if _DEPS_CHECKED:
@@ -56,34 +56,34 @@ def _check_deps_safe():
     
     try:
         from .env_checker import ensure_dependencies
-        _DEPS_OK = ensure_dependencies(silent=True)  # 静默检查
+        _DEPS_OK = ensure_dependencies(silent=True)  # Silent check
         _DEPS_CHECKED = True
     except ImportError as e:
-        # 详细记录导入错误
+        # Detailed import error logging
         import traceback
-        print(f"[GLINT] ⚠️ 依赖检查模块导入失败: {e}")
-        print(f"[GLINT] 详细错误信息:")
+        print(f"[GLINT] ⚠️ Failed to import dependency checker: {e}")
+        print(f"[GLINT] Detailed error:")
         traceback.print_exc()
         _DEPS_OK = False
         _DEPS_CHECKED = True
     except Exception as e:
-        # 其他错误
+        # Other errors
         import traceback
-        print(f"[GLINT] ⚠️ 依赖检查时发生错误: {e}")
-        print(f"[GLINT] 详细错误信息:")
+        print(f"[GLINT] ⚠️ Error during dependency check: {e}")
+        print(f"[GLINT] Detailed error:")
         traceback.print_exc()
         _DEPS_OK = False
         _DEPS_CHECKED = True
     
     return _DEPS_OK
 
-# ---- 语言工具 ----
+# ---- Language utility ----
 def _zh():
-    """检测当前环境是否为中文"""
+    """Detect whether the current environment is Chinese"""
     try:
         import os as _os
-        # locale.getdefaultlocale() 在 Python 3.11+ 已废弃
-        # 优先检查环境变量，再回退到 locale.getlocale()
+        # locale.getdefaultlocale() is deprecated in Python 3.11+
+        # Check environment variables first, then fall back to locale.getlocale()
         for env_var in ('LANG', 'LANGUAGE', 'LC_ALL', 'LC_MESSAGES'):
             val = _os.environ.get(env_var, '')
             if val.lower().startswith('zh'):
@@ -102,21 +102,21 @@ def _info(cn, en):
 # Global flag for Vina availability
 _vina_available = False
 
-# ---- 命令注册（与 GUI 解耦）----
+# ---- Command registration (decoupled from GUI) ----
 def _register_commands():
     """
-    注册所有 PyMOL 命令。
+    Register all PyMOL commands.
     
-    带有详细的导入错误日志，便于调试模块加载问题。
+    Includes detailed import error logging to help debug module loading issues.
     """
     global _vina_available
     import traceback
     
-    # 用于记录导入失败的模块
+    # Track modules that failed to import
     _import_errors = []
     
     def _safe_import(module_name, items=None):
-        """安全导入模块，记录错误但不中断"""
+        """Safely import a module, logging errors without interrupting"""
         try:
             if items:
                 module = __import__(module_name, globals(), locals(), items, 1)
@@ -125,13 +125,13 @@ def _register_commands():
                 return __import__(module_name, globals(), locals(), [], 1)
         except ImportError as e:
             _import_errors.append((module_name, str(e)))
-            print(f"[GLINT] ⚠️ 模块导入失败: {module_name}")
-            print(f"[GLINT]   错误: {e}")
+            print(f"[GLINT] ⚠️ Module import failed: {module_name}")
+            print(f"[GLINT]   Error: {e}")
             return None if not items else tuple([None] * len(items))
         except Exception as e:
             _import_errors.append((module_name, str(e)))
-            print(f"[GLINT] ❌ 模块导入异常: {module_name}")
-            print(f"[GLINT]   错误: {e}")
+            print(f"[GLINT] ❌ Module import exception: {module_name}")
+            print(f"[GLINT]   Error: {e}")
             traceback.print_exc()
             return None if not items else tuple([None] * len(items))
     
@@ -154,10 +154,10 @@ def _register_commands():
         try:
             from .ligand_ligand_analyzer import analyze_ligand_ligand_interactions
         except ImportError as e:
-            print(f"[GLINT] ℹ️ ligand_ligand_analyzer 不可用: {e}")
+            print(f"[GLINT] ℹ️ ligand_ligand_analyzer not available: {e}")
             analyze_ligand_ligand_interactions = None
         
-        # 新增: 分子胶特异功能 (PPI 分析 & Neo-表位)
+        # Molecular glue specific features (PPI analysis & Neo-epitope)
         from .ppi_analyzer import (
             analyze_protein_protein_interface,
             identify_neo_epitope,
@@ -177,7 +177,7 @@ def _register_commands():
         
 
         
-        # 批量分析模块
+        # Batch analysis module
         try:
             from .batch_analyzer import (
                 batch_gmotif,
@@ -191,7 +191,7 @@ def _register_commands():
             print(f"⚠️ Batch analyzer not available: {e}")
             _batch_available = False
         
-        # 分子胶设计分析（Ternary complex 建模）
+        # Molecular glue design analysis (Ternary complex modeling)
         from .glue_design_analyzer import (
             align_gloop_for_modeling,
             detect_clashes_at_interface,
@@ -200,7 +200,7 @@ def _register_commands():
             comprehensive_glue_design_analysis
         )
         
-        # 配体电性互补性分析 (Electrostatic Complementarity)
+        # Ligand electrostatic complementarity analysis (Electrostatic Complementarity)
         try:
             from .ligand_ec_calculator import (
                 calculate_ligand_ec,
@@ -219,7 +219,7 @@ def _register_commands():
             print(f"⚠️ EC Calculator not available: {e}")
             _ec_available = False
         
-        # 口袋检测与分析
+        # Pocket detection and analysis
         from .pocket_detector import detect_pockets, compare_pockets
         from .pocket_visualizer import (
             visualize_pockets,
@@ -237,7 +237,7 @@ def _register_commands():
             comprehensive_gmotif_pocket_analysis
         )
         
-        # 突变分析模块
+        # Mutation analysis module
         from .mutation_analyzer import (
             perform_mutation,
             minimize_energy,
@@ -246,7 +246,7 @@ def _register_commands():
             ddg_heatmap
         )
         
-        # 表面相似性与互补性分析模块
+        # Surface similarity and complementarity analysis module
         try:
             from .surface_similarity import (
                 analyze_surface_similarity,
@@ -258,7 +258,7 @@ def _register_commands():
             print(f"⚠️ Surface similarity analysis not available: {e}")
             _surface_similarity_available = False
         
-        # Vina集成(可选,需要安装Vina)
+        # Vina integration (optional, requires Vina installation)
         try:
             from .vina_integration import (
                 vina_score_complex,
@@ -270,7 +270,7 @@ def _register_commands():
             _vina_available = False
     except Exception as e:
         _info(
-            f"⚠️ 插件加载失败：{e}",
+            f"⚠️ Plugin load failed: {e}",
             f"⚠️ Plugin load failed: {e}"
         )
         return
@@ -291,7 +291,7 @@ def _register_commands():
         if analyze_ligand_ligand_interactions:
             cmd.extend("analyze_ligand_ligand_interactions", analyze_ligand_ligand_interactions)
         
-        # 分子胶特异命令
+        # Molecular glue specific commands
         cmd.extend("ppi_analyze", ppi_analyze)
         cmd.extend("neo_epitope_find", neo_epitope_find)
         cmd.extend("analyze_protein_protein_interface", analyze_protein_protein_interface)
@@ -307,14 +307,14 @@ def _register_commands():
         
 
         
-        # 分子胶设计分析命令
+        # Molecular glue design analysis commands
         cmd.extend("align_gloop_for_modeling", align_gloop_for_modeling)
         cmd.extend("detect_clashes_at_interface", detect_clashes_at_interface)
         cmd.extend("identify_exit_vectors", identify_exit_vectors)
         cmd.extend("analyze_electrostatic_environment", analyze_electrostatic_environment)
         cmd.extend("comprehensive_glue_design_analysis", comprehensive_glue_design_analysis)
         
-        # 口袋检测命令
+        # Pocket detection commands
         cmd.extend("detect_pockets", detect_pockets)
         cmd.extend("compare_pockets", compare_pockets)
         cmd.extend("visualize_pockets", visualize_pockets)
@@ -323,7 +323,7 @@ def _register_commands():
         cmd.extend("overlay_pocket_electrostatics", overlay_pocket_electrostatics)
         cmd.extend("visualize_pockets_with_interactions", visualize_pockets_with_interactions)
         
-        # 口袋-分子胶联动命令
+        # Pocket-glue integration commands
         cmd.extend("analyze_pockets_in_ppi_interface", analyze_pockets_in_ppi_interface)
         cmd.extend("analyze_pockets_with_glue", analyze_pockets_with_glue)
         cmd.extend("correlate_pockets_with_interactions", correlate_pockets_with_interactions)
@@ -331,32 +331,32 @@ def _register_commands():
         cmd.extend("comprehensive_glue_pocket_analysis", comprehensive_glue_pocket_analysis)
         cmd.extend("comprehensive_gmotif_pocket_analysis", comprehensive_gmotif_pocket_analysis)
         
-        # 突变分析命令
+        # Mutation analysis commands
         cmd.extend("perform_mutation", perform_mutation)
         cmd.extend("minimize_energy", minimize_energy)
         cmd.extend("calculate_mutation_ddg", calculate_mutation_ddg)
         cmd.extend("analyze_mutation_effects", analyze_mutation_effects)
         cmd.extend("ddg_heatmap", ddg_heatmap)
 
-        # Vina集成命令(可选)
+        # Vina integration commands (optional)
         if _vina_available:
             cmd.extend("vina_score_complex", vina_score_complex)
             cmd.extend("compare_scoring_methods", compare_scoring_methods)
             cmd.extend("pocket_based_docking", pocket_based_docking)
         
-        # 批量分析命令
+        # Batch analysis commands
         if _batch_available:
             cmd.extend("batch_gmotif", batch_gmotif)
             cmd.extend("batch_ppi", batch_ppi)
             cmd.extend("batch_pockets", batch_pockets)
             cmd.extend("batch_interactions", batch_interactions)
         
-        # 表面相似性与互补性分析命令
+        # Surface similarity and complementarity analysis commands
         if _surface_similarity_available:
             cmd.extend("analyze_surface_similarity", analyze_surface_similarity)
             cmd.extend("analyze_surface_complementarity", analyze_surface_complementarity)
 
-        # 配体电性互补性分析命令
+        # Ligand electrostatic complementarity analysis commands
         if _ec_available:
             cmd.extend("calculate_ligand_ec", calculate_ligand_ec)
             cmd.extend("analyze_ternary_ec", analyze_ternary_ec)
@@ -365,24 +365,24 @@ def _register_commands():
             cmd.extend("calculate_ec_hotspots", calculate_ec_hotspots)
             cmd.extend("analyze_substituent_ec_effect", analyze_substituent_ec_effect)
         
-        # 静默注册,避免终端输出过多
-        # _info("✅ 已注册命令", "✅ Commands registered")
+        # Silent registration, avoid excessive terminal output
+        # _info("✅ Commands registered", "✅ Commands registered")
     except Exception as e:
-        _info(f"⚠️ 无法注册到 PyMOL 命令空间：{e}",
+        _info(f"⚠️ Failed to register commands to PyMOL: {e}",
               f"⚠️ Failed to register commands to PyMOL: {e}")
 
-# ---- GUI 启动（非模态，防卡死）----
+# ---- GUI launch (non-modal, prevent freezing) ----
 _dlg = None
 
 def _import_gui_dialog():
-    """尝试导入 GLINTDialog (优先使用新的模块化 GUI)
+    """Try to import GLINTDialog (prefer the new modular GUI)
 
-    兼容两种加载方式:
-    1) PyMOL 插件机制从 ~/.pymol/startup/glint 导入包
-    2) 用户/Launcher 直接 `pymol glint/__init__.py` 作为脚本运行
+    Compatible with two loading methods:
+    1) PyMOL plugin mechanism importing from ~/.pymol/startup/glint
+    2) User/Launcher directly running `pymol glint/__init__.py` as a script
 
-    在某些情况下，__file__ 可能被解析到 PyMOL 自己的目录 (site-packages/pymol)，
-    因此这里增加多重路径修正逻辑，尽量找到真正的 glint 根目录
+    In some cases, __file__ may resolve to PyMOL's own directory (site-packages/pymol),
+    so multiple path correction logic is added here to find the real glint root directory.
     """
     import sys
     import os
@@ -395,11 +395,11 @@ def _import_gui_dialog():
             and os.path.exists(os.path.join(path, "env_checker.py"))
         )
     
-    # 1) 首选: 基于当前 __file__ 推断
+    # 1) Preferred: infer from current __file__
     plugin_dir = os.path.dirname(os.path.abspath(__file__))
     if not _looks_like_plugin_root(plugin_dir):
         print(f"[GLINT Debug] __file__ path suspicious: {plugin_dir}")
-        # 2) 退而求其次: 使用 inspect 获取真实源文件路径
+        # 2) Fallback: use inspect to get the real source file path
         try:
             import inspect
             frame = inspect.currentframe()
@@ -412,14 +412,14 @@ def _import_gui_dialog():
         except Exception as e:
             print(f"[GLINT Debug] Inspect failed: {e}")
     
-    # 3) 仍然不对: 搜索常见安装路径
+    # 3) Still incorrect: search common installation paths
     if not _looks_like_plugin_root(plugin_dir):
         home = os.path.expanduser("~")
         candidates = [
             os.path.join(home, ".pymol", "startup", "glint"),
             os.path.join(home, "pymol", "startup", "glint"),
         ]
-        # 开发者环境: 当前工作目录下的 glint 目录
+        # Developer environment: glint directory under current working directory
         cwd = os.getcwd()
         candidates.append(os.path.join(cwd, "glint"))
         
@@ -431,7 +431,7 @@ def _import_gui_dialog():
     
     parent_dir = os.path.dirname(plugin_dir)
     
-    # Debug: 打印路径信息
+    # Debug: print path information
     print(f"[GLINT Debug] plugin_dir = {plugin_dir}")
     print(f"[GLINT Debug] parent_dir = {parent_dir}")
     print(f"[GLINT Debug] parent_dir in sys.path? {parent_dir in sys.path}")
@@ -440,7 +440,7 @@ def _import_gui_dialog():
         sys.path.insert(0, parent_dir)
         print(f"[GLINT Debug] Added {parent_dir} to sys.path")
     
-    # 使用绝对导入 glint.gui.main_window
+    # Use absolute import glint.gui.main_window
     try:
         import glint.gui.main_window as gui_module
         return gui_module.GLINTDialog
@@ -452,20 +452,20 @@ def _import_gui_dialog():
         return None
 
 def _check_qt_safe():
-    """安全地检查 Qt 是否可用（使用子进程避免崩溃）"""
+    """Safely check if Qt is available (using subprocess to avoid crashes)"""
     import subprocess
     import sys
     import os
     
-    # [macOS Fix] 设置环境变量以避免某些 Qt 绘图引起的崩溃
+    # [macOS Fix] Set environment variables to avoid Qt rendering crashes
     if sys.platform == "darwin":
         os.environ["QT_MAC_WANTS_LAYER"] = "1"
-        # 兼容性修复：避免 macOS 上的 OpenMP 冲突和多线程驱动问题
+        # Compatibility fix: avoid OpenMP conflicts and multi-threaded driver issues on macOS
         os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
         if "OMP_NUM_THREADS" not in os.environ:
             os.environ["OMP_NUM_THREADS"] = "1"
 
-    # 使用子进程测试常见的 Qt 绑定
+    # Use subprocess to test common Qt bindings
     for binding in ["PyQt6", "PySide6", "PyQt5", "PySide2"]:
         test_code = f"import {binding}; print('OK')"
         try:
@@ -477,21 +477,21 @@ def _check_qt_safe():
             )
             if result.returncode == 0 and "OK" in result.stdout:
                 return True
-        except (OSError, subprocess.SubprocessError):  # 子进程调用可能失败
+        except (OSError, subprocess.SubprocessError):  # Subprocess call may fail
             pass
     
     return False
 
 def _get_qapp():
-    """获取或创建 QApplication 实例 (针对 macOS/PyMOL 优化)"""
+    """Get or create QApplication instance (optimized for macOS/PyMOL)"""
     try:
         from .gui.qt_adapter import QtWidgets
         if QtWidgets is None:
             return None
         app = QtWidgets.QApplication.instance()
         if app is None:
-            # 如果 PyMOL 还没初始化 Qt 循环，我们也不强制创建，除非真的需要
-            # 在某些 macOS 环境下，直接创建 QApplication 会导致 Segfault
+            # If PyMOL hasn't initialized the Qt event loop, don't force creation unless needed
+            # On some macOS environments, directly creating QApplication causes Segfault
             app = QtWidgets.QApplication([])
         return app
     except Exception as e:
@@ -499,14 +499,13 @@ def _get_qapp():
         return None
 
 def glint_gui():
-    """启动 GLINT 统一 GUI 窗口（非模态，不阻塞事件循环）"""
+    """Launch GLINT unified GUI window (non-modal, non-blocking event loop)"""
     global _dlg
     
-    # 安全地检查 PyQt 是否可用（避免在主进程中导入导致崩溃）
+    # Safely check if PyQt is available (avoid crash from importing in main process)
     print("[GLINT] Checking Qt availability...")
     if not _check_qt_safe():
         _info(
-            "Qt 绑定 (PyQt5/6/PySide2/6) 未安装或无法使用，无法启动 GUI",
             "Qt binding (PyQt5/6/PySide2/6) not installed or unavailable, cannot start GUI"
         )
         print("\n💡 Install PyQt5 or PyQt6 to use the GUI:")
@@ -519,7 +518,7 @@ def glint_gui():
     print("[GLINT] Qt is available, loading GUI...")
     GLINTDialog = _import_gui_dialog()
     if GLINTDialog is None:
-        _info("GUI 导入失败", "Failed to import GUI module")
+        _info("Failed to import GUI module", "Failed to import GUI module")
         import sys, os
         pkg_dir = os.path.dirname(os.path.realpath(__file__))
         print(f"  Package dir: {pkg_dir}")
@@ -529,10 +528,10 @@ def glint_gui():
         return
 
     try:
-        # [macOS Fix] 确保获取现有的 QApplication 实例，避免重复初始化导致的 Segfault
+        # [macOS Fix] Ensure we get the existing QApplication instance to avoid Segfault from re-initialization
         app = _get_qapp()
         
-        # 已有窗口则激活
+        # If window already exists, activate it
         if _dlg is not None:
             try:
                 _dlg.show(); _dlg.raise_(); _dlg.activateWindow()
@@ -540,14 +539,14 @@ def glint_gui():
             except Exception:
                 _dlg = None
         
-        # 新建并非模态展示
+        # Create new dialog and show non-modally
         _dlg = GLINTDialog()
         _dlg.setModal(False)
         _dlg.show()
         _dlg.raise_()
         _dlg.activateWindow()
     except Exception as e:
-        _info(f"GUI 启动失败: {e}", f"GUI start failed: {e}")
+        _info(f"GUI start failed: {e}", f"GUI start failed: {e}")
         import traceback; traceback.print_exc()
         print("\n💡 If you see a segmentation fault:")
         print("   1. Make sure PyQt5 is properly installed in your conda environment")
@@ -561,41 +560,41 @@ def molstruct_gui():
     return glint_gui()
 
 def _print_cli_fallback():
-    _info("请使用命令行：", "Use CLI instead:")
+    _info("Use CLI instead:", "Use CLI instead:")
     print("  highlight_csv_residues csv_path='file.csv', obj='object'")
     print("  analyze_pdb_interactions obj_name='object', output_csv='output.csv'")
 
-# ---- 插件入口 ----
+# ---- Plugin entry point ----
 def __init_plugin__(app=None):
     """
-    PyMOL 插件入口函数
+    PyMOL plugin entry point function
     
-    工作流程:
-    1. 检查依赖 (已在模块加载时完成)
-    2. 如果依赖正常，注册所有命令
-    3. 总是注册 GUI 命令（用于显示错误信息）
+    Workflow:
+    1. Check dependencies (already done at module load time)
+    2. If dependencies are OK, register all commands
+    3. Always register GUI command (for displaying error messages)
     """
-    # 只有依赖检查通过时才注册全部命令
+    # Only register all commands if dependency check passes
     if _check_deps_safe():
         _register_commands()
     
-    # 总是注册 GUI 命令
+    # Always register GUI commands
     try:
         from pymol import cmd
         cmd.extend("glint_gui", glint_gui)
-        cmd.extend("molstruct_gui", molstruct_gui)  # 兼容别名
+        cmd.extend("molstruct_gui", molstruct_gui)  # Backward compatibility alias
     except Exception as e:
         print(f"Warning: Failed to register GUI command: {e}")
     
-    # 添加菜单项
+    # Add menu item
     try:
         from pymol.plugins import addmenuitemqt
         addmenuitemqt('GLINT - Molecular Glue Analyzer', glint_gui)
     except Exception as e:
-        pass  # 静默处理
+        pass  # Silently handle
 
-    # 欢迎信息（延迟检查）
-    # 防止版本号出现双 v（如 __version__ = "v0.2.3" → "vv0.2.3"）
+    # Welcome message (deferred check)
+    # Prevent double 'v' in version (e.g. __version__ = "v0.2.3" → "vv0.2.3")
     _display_ver = __version__.lstrip('v')
     if _check_deps_safe():
         print(f"\n🧬 GLINT - Molecular Glue Analyzer v{_display_ver}")

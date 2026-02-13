@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-GLINT 环境检测和配置模块
-支持 Windows/macOS/Linux 环境检测、Conda 安装、依赖安装、GUI 功能测试
+GLINT Environment Detection and Configuration Module
+Supports Windows/macOS/Linux environment detection, Conda installation, dependency installation, GUI functionality testing
 """
 
 import os
@@ -11,15 +11,15 @@ import subprocess
 import tempfile
 from typing import Dict, List, Tuple, Optional
 
-# 环境配置
+# Environment configuration
 ENV_NAME = "glint"
 PYTHON_VERSION = "3.9"
 
-# 第一次运行标记文件
+# First-run marker file
 _FIRST_RUN_MARKER = os.path.join(os.path.expanduser("~"), ".glint_initialized")
 
-# 必需的 Python 包 (import_name, display_name, pip_name)
-# 安装时会全部安装，启动时检查
+# Required Python packages (import_name, display_name, pip_name)
+# All installed during setup, checked at startup
 REQUIRED_PACKAGES = [
     ("rdkit", "RDKit", "rdkit"),
     ("scipy", "SciPy", "scipy"),
@@ -31,31 +31,31 @@ REQUIRED_PACKAGES = [
     ("PyQt5", "PyQt5", "pyqt5"),
 ]
 
-# 可选的高级功能包 - 不在启动时检查，使用时按需提示
+# Optional advanced feature packages - not checked at startup, prompted on demand
 # (import_name, display_name, pip_name, description)
 OPTIONAL_PACKAGES = [
-    ("open3d", "Open3D", "open3d", "表面分析"),
-    ("skimage", "scikit-image", "scikit-image", "Marching Cubes 算法"),
-    ("pyhmmer", "pyhmmer", "pyhmmer", "C2H2 锌指 HMM 检测"),
+    ("open3d", "Open3D", "open3d", "Surface analysis"),
+    ("skimage", "scikit-image", "scikit-image", "Marching Cubes algorithm"),
+    ("pyhmmer", "pyhmmer", "pyhmmer", "C2H2 zinc finger HMM detection"),
     ("haddock", "HADDOCK3", "haddock3", "Protein-Protein Docking"),
-    ("trimesh", "trimesh", "trimesh", "网格处理"),
+    ("trimesh", "trimesh", "trimesh", "Mesh processing"),
 ]
 
-# EC 分析必需的 Python 包 (import_name, display_name, pip_name, description)
+# EC analysis required Python packages (import_name, display_name, pip_name, description)
 EC_REQUIRED_PACKAGES = [
-    ("pdb2pqr", "PDB2PQR", "pdb2pqr", "蛋白结构准备（EC分析必需）"),
-    ("apbs", "APBS Python", "apbs", "泊松-玻尔兹曼求解器 Python API"),
+    ("pdb2pqr", "PDB2PQR", "pdb2pqr", "Protein structure preparation (required for EC analysis)"),
+    ("apbs", "APBS Python", "apbs", "Poisson-Boltzmann solver Python API"),
 ]
 
-# 外部工具配置 (cmd_name, display_name, description, install_info)
+# External tool configuration (cmd_name, display_name, description, install_info)
 EXTERNAL_TOOLS = {
     "msms": {
         "display_name": "MSMS",
-        "description": "分子表面生成工具（最精确）",
+        "description": "Molecular surface generation tool (most accurate)",
         "install_info": {
-            "macOS": "brew install brewsci/bio/msms 或从 https://ccsb.scripps.edu/msms/ 下载",
-            "Linux": "从 https://ccsb.scripps.edu/msms/ 下载并添加到 PATH",
-            "Windows": "从 https://ccsb.scripps.edu/msms/ 下载 Windows 版本",
+            "macOS": "brew install brewsci/bio/msms or download from https://ccsb.scripps.edu/msms/",
+            "Linux": "Download from https://ccsb.scripps.edu/msms/ and add to PATH",
+            "Windows": "Download Windows version from https://ccsb.scripps.edu/msms/",
         },
         "search_paths": {
             "macOS": ["/usr/local/bin/msms", "/opt/homebrew/bin/msms", "~/bin/msms"],
@@ -65,7 +65,7 @@ EXTERNAL_TOOLS = {
     },
     "apbs": {
         "display_name": "APBS",
-        "description": "自适应泊松-玻尔兹曼求解器（精确静电势，EC分析必需）",
+        "description": "Adaptive Poisson-Boltzmann solver (accurate electrostatic potential, required for EC analysis)",
         "install_info": {
             "macOS": "pip install apbs 或 brew install brewsci/bio/apbs",
             "Linux": "pip install apbs 或 apt install apbs",
@@ -76,11 +76,11 @@ EXTERNAL_TOOLS = {
             "Linux": ["/usr/bin/apbs", "/usr/local/bin/apbs", "~/bin/apbs"],
             "Windows": [r"C:\Program Files\APBS\apbs.exe", r"C:\APBS\apbs.exe"],
         },
-        "python_module": "apbs",  # 也可以通过 Python API 使用
+        "python_module": "apbs",  # Can also be used via Python API
     },
     "pdb2pqr": {
         "display_name": "PDB2PQR",
-        "description": "PDB 到 PQR 格式转换（EC分析必需）",
+        "description": "PDB to PQR format conversion (required for EC analysis)",
         "install_info": {
             "macOS": "pip install pdb2pqr",
             "Linux": "pip install pdb2pqr",
@@ -91,11 +91,11 @@ EXTERNAL_TOOLS = {
             "Linux": ["/usr/bin/pdb2pqr", "/usr/local/bin/pdb2pqr"],
             "Windows": [],
         },
-        "python_module": "pdb2pqr",  # 推荐通过 Python API 使用
+        "python_module": "pdb2pqr",  # Recommended to use via Python API
     },
 }
 
-# Pfam HMM 文件配置
+# Pfam HMM file configuration
 HMM_FILES = {
     "zf-C2H2": {
         "pfam_id": "PF00096",
@@ -105,25 +105,25 @@ HMM_FILES = {
     },
 }
 
-# 核心必需的命令行工具（目前为空，核心功能不依赖外部命令）
+# Core required command-line tools (currently empty, core features don't depend on external commands)
 REQUIRED_COMMANDS = []
 
-# 可选的命令行工具 - 特定功能需要时才检查
+# Optional command-line tools - only checked when specific features are needed
 # (cmd_name, display_name, description)
 OPTIONAL_COMMANDS = [
-    ("vina", "AutoDock Vina", "分子对接功能"),
-    ("obabel", "Open Babel", "分子格式转换"),
+    ("vina", "AutoDock Vina", "Molecular docking"),
+    ("obabel", "Open Babel", "Molecular format conversion"),
 ]
 
 
 class EnvironmentChecker:
-    """环境检测和配置类"""
+    """Environment detection and configuration class"""
     
     def __init__(self, log_callback=None, auto_install=False):
         """
         Args:
-            log_callback: 日志回调函数，用于输出消息到 GUI
-            auto_install: 是否自动安装缺失的依赖
+            log_callback: Log callback function for outputting messages to GUI
+            auto_install: Whether to automatically install missing dependencies
         """
         self.log_callback = log_callback or print
         self.auto_install = auto_install
@@ -132,18 +132,18 @@ class EnvironmentChecker:
         self.conda_path = None
         
     def log(self, msg: str):
-        """输出日志"""
+        """Output log message"""
         if self.log_callback:
             self.log_callback(msg)
     
-    # ========== 系统检测 ==========
+    # ========== System Detection ==========
     
     def detect_os(self) -> Tuple[str, str]:
         """
-        检测操作系统和架构
+        Detect operating system and architecture
         
         Returns:
-            (os_type, arch): 例如 ("macOS", "arm64")
+            (os_type, arch): e.g. ("macOS", "arm64")
         """
         system = platform.system()
         machine = platform.machine()
@@ -159,17 +159,17 @@ class EnvironmentChecker:
         
         self.os_arch = machine
         
-        self.log(f"✓ 系统: {self.os_type} ({self.os_arch})")
+        self.log(f"✓ System: {self.os_type} ({self.os_arch})")
         return self.os_type, self.os_arch
     
-    # ========== Conda 检测 ==========
+    # ========== Conda Detection ==========
     
     def check_conda(self) -> bool:
         """
-        检查 conda 是否已安装
+        Check if conda is installed
         
         Returns:
-            bool: True 如果 conda 可用
+            bool: True if conda is available
         """
         try:
             result = subprocess.run(
@@ -190,18 +190,18 @@ class EnvironmentChecker:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
         
-        self.log("✗ Conda: 未检测到")
+        self.log("✗ Conda: not detected")
         return False
     
     def check_conda_env(self, env_name: str = ENV_NAME) -> bool:
         """
-        检查指定的 conda 环境是否存在
+        Check if the specified conda environment exists
         
         Args:
-            env_name: 环境名称
+            env_name: Environment name
             
         Returns:
-            bool: True 如果环境存在
+            bool: True if the environment exists
         """
         if not self.check_conda():
             return False
@@ -216,26 +216,26 @@ class EnvironmentChecker:
             if result.returncode == 0:
                 for line in result.stdout.split('\n'):
                     if line.strip().startswith(env_name + " ") or line.strip().startswith(env_name + "\t"):
-                        self.log(f"✓ 环境 '{env_name}' 已存在")
+                        self.log(f"✓ Environment '{env_name}' exists")
                         return True
         except subprocess.TimeoutExpired:
             pass
         
-        self.log(f"✗ 环境 '{env_name}' 不存在")
+        self.log(f"✗ Environment '{env_name}' does not exist")
         return False
     
-    # ========== 依赖检测 ==========
+    # ========== Dependency Detection ==========
     
     def check_package(self, import_name: str, display_name: str) -> bool:
         """
-        检查 Python 包是否已安装
+        Check if a Python package is installed
         
         Args:
-            import_name: 导入名称
-            display_name: 显示名称
+            import_name: Import name
+            display_name: Display name
             
         Returns:
-            bool: True 如果包已安装
+            bool: True if the package is installed
         """
         try:
             __import__(import_name)
@@ -294,16 +294,16 @@ class EnvironmentChecker:
     
     def check_command(self, cmd: str, name: str) -> bool:
         """
-        检查命令行工具是否可用
+        Check if a command-line tool is available
         
         Args:
-            cmd: 命令名称
-            name: 显示名称
+            cmd: Command name
+            name: Display name
             
         Returns:
-            bool: True 如果命令可用
+            bool: True if the command is available
         """
-        # 使用增强的路径查找
+        # Use enhanced path lookup
         cmd_path = self._find_command_path(cmd)
         if not cmd_path:
             self.log(f"  ✗ {name} (未找到)")

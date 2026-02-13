@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 feature_extractor.py
-分子特征提取器
+Molecular Feature Extractor
 
 基于 PLIP 设计理念，一次遍历提取所有特征并缓存
 减少重复计算，提升性能

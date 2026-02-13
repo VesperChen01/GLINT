@@ -1,3 +1,0 @@
-Pocket_ID,Volume_A3,Surface_Area_A2,Depth_A,Mouth_Size_A,Sphericity,Solvent_Access,Center_X,Center_Y,Center_Z,Hydrophobicity,Polarity,Net_Charge,Aromaticity,HBond_Donors,HBond_Acceptors,Druggability_Score,Residues
-36,58.00,97.25,12.36,0.00,0.654,0.000,22.61,69.98,1.05,0.200,0.400,0,0.000,15,16,0.477,D:ASN:16D;D:ILE:120D;D:CYS:313D;E:GLU:200E;E:LYS:204E
-55,76.50,150.25,8.87,0.00,0.289,0.000,42.54,93.58,-40.78,0.333,0.333,-1,0.000,9,9,0.493,A:THR:20A;A:ALA:62A;A:GLU:65A

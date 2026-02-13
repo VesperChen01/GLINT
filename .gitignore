@@ -16,6 +16,11 @@ dist/
 build/
 *.spec
 
+## Installer 目录
+macos_installer/
+windows_installer/
+linux_installer/
+
 ## 下载的结构文件（根目录）
 /*.cif
 /*.pdb

@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-分子胶设计分析模块 (Molecular Glue Design Analyzer)
+Molecular Glue Design Analyzer
 
-功能：
-1. Ternary complex 建模：G-loop 替换与对齐
-2. 碰撞检测与界面互补性分析
-3. Exit vector 识别（PROTAC linker 连接点）
-4. 静电环境与化学修饰建议
+Features:
+1. Ternary complex modeling: G-loop replacement and alignment
+2. Clash detection and interface complementarity analysis
+3. Exit vector identification (PROTAC linker attachment points)
+4. Electrostatic environment and chemical modification suggestions
 
-基于已有功能：
-- G-motif 验证（validate_g_motif_geometry, validate_crbn_hbonds）
-- 口袋检测（pocket_detector, pocket_visualizer）
-- 静电分析（APBS 或 Quick 模式）
-- PPI 界面分析（ppi_analyzer）
+Built upon existing modules:
+- G-motif validation (validate_g_motif_geometry, validate_crbn_hbonds)
+- Pocket detection (pocket_detector, pocket_visualizer)
+- Electrostatic analysis (APBS or Quick mode)
+- PPI interface analysis (ppi_analyzer)
 
 Author: GLINT Team
 Date: 2025-11-11
@@ -25,25 +25,25 @@ from pymol import cmd
 import numpy as np
 
 
-# ====== 1) G-loop 对齐与替换 ======
+# ====== 1) G-loop Alignment and Replacement ======
 def align_gloop_for_modeling(template_obj, template_chain, template_gloop_range,
                                target_obj, target_chain, target_gloop_range,
                                output_obj=None):
     """
-    将目标蛋白的 G-loop 对齐到模板 ternary complex 的 G-loop
+    Align the target protein's G-loop to the template ternary complex's G-loop
     
-    用途：建模新的 CRBN-ligand-neosubstrate 复合物
+    Purpose: Modeling new CRBN-ligand-neosubstrate complexes
     
-    参数:
-        template_obj: 模板结构（如 CRBN-IMiD-GSPT1 的 6H0G）
-        template_chain: 模板 G-loop 链
-        template_gloop_range: 模板 G-loop 残基范围 "60-67"
-        target_obj: 目标蛋白（新底物）
-        target_chain: 目标 G-loop 链
-        target_gloop_range: 目标 G-loop 残基范围
-        output_obj: 输出对象名（默认 target_obj + "_aligned"）
+    Args:
+        template_obj: Template structure (e.g. CRBN-IMiD-GSPT1 6H0G)
+        template_chain: Template G-loop chain
+        template_gloop_range: Template G-loop residue range "60-67"
+        target_obj: Target protein (new substrate)
+        target_chain: Target G-loop chain
+        target_gloop_range: Target G-loop residue range
+        output_obj: Output object name (default: target_obj + "_aligned")
     
-    返回:
+    Returns:
         dict: {
             'rmsd': float,
             'aligned_obj': str,
@@ -54,26 +54,26 @@ def align_gloop_for_modeling(template_obj, template_chain, template_gloop_range,
     if output_obj is None:
         output_obj = f"{target_obj}_aligned"
     
-    # 构建选择
+    # Build selections
     template_sel = f"{template_obj} and chain {template_chain} and resi {template_gloop_range} and name CA"
     target_sel = f"{target_obj} and chain {target_chain} and resi {target_gloop_range} and name CA"
     
-    # 检查原子数
+    # Check atom counts
     template_count = cmd.count_atoms(template_sel)
     target_count = cmd.count_atoms(target_sel)
     
     if template_count != target_count or template_count != 8:
-        print(f"⚠️ 警告: G-loop 长度不匹配")
-        print(f"   模板: {template_count} Cα, 目标: {target_count} Cα (预期 8)")
+        print(f"⚠️ Warning: G-loop length mismatch")
+        print(f"   Template: {template_count} Cα, Target: {target_count} Cα (expected 8)")
     
-    # 复制目标结构
+    # Copy target structure
     cmd.create(output_obj, target_obj)
     
-    # 对齐（仅使用 G-loop backbone）
+    # Align (using G-loop backbone only)
     result = cmd.align(
         f"{output_obj} and chain {target_chain} and resi {target_gloop_range}",
         template_sel,
-        cycles=0  # 不进行迭代优化，保持初始对齐
+        cycles=0  # No iterative refinement, keep initial alignment
     )
     
     rmsd = result[0]

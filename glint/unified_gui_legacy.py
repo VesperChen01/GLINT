@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """
-GLINT 统一 GUI - PyMOL Plugin for Molecular Glue Analysis
+GLINT Unified GUI - PyMOL Plugin for Molecular Glue Analysis
 - Molecular Glue vs PROTAC Classification
 - PPI Interface & Neo-Epitope Detection
 - G-Motif Recognition & CRBN Analysis
@@ -19,7 +19,7 @@ from __future__ import annotations
 import os, sys, csv, importlib.util
 from typing import List, Dict, Any, Tuple, Optional
 
-# Open Targets API 模块 (集成)
+# Open Targets API module (integrated)
 try:
     from .open_targets_api import (
         search_disease,
@@ -42,7 +42,7 @@ except ImportError:
         DEFAULT_OUTPUT_DIR = "./disease_data"
         E3_LIGASES = ["CRBN", "VHL", "MDM2", "XIAP"]
 
-# -------- Qt 兼容（优先 PyQt5）--------
+# -------- Qt compatibility (prefer PyQt5) --------
 QT_LIB = None
 try:
     from PyQt5.QtCore import Qt, QThread, pyqtSignal, QLocale, QTimer
@@ -68,7 +68,7 @@ except Exception:
         from PyQt6.QtGui import QIcon, QPixmap
         QT_LIB = "PyQt6"
     except Exception as e:
-        raise RuntimeError("需要安装 PyQt5 或 PyQt6") from e
+        raise RuntimeError("PyQt5 or PyQt6 is required") from e
 
 # -------- Logo path --------
 def _get_logo_path() -> Optional[str]:
@@ -79,7 +79,7 @@ def _get_logo_path() -> Optional[str]:
         return logo_path
     return None
 
-# -------- 模块导入助手（相对→绝对→动态）--------
+# -------- Module import helper (relative → absolute → dynamic) --------
 def _dynamic_load_by_filenames(names: List[str], symbol: str):
     here = os.path.dirname(os.path.abspath(__file__))
     for nm in names:
@@ -94,8 +94,8 @@ def _dynamic_load_by_filenames(names: List[str], symbol: str):
     return None
 
 def _import_helpers():
-    """返回：highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions"""
-    # 包内尝试
+    """Returns: highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions"""
+    # Try package-relative import
     try:
         from .highlight_residues import highlight_csv_residues, highlight_gmotif_loops  # type: ignore
         from .interaction_analyzer import (  # type: ignore
@@ -124,7 +124,7 @@ def _import_helpers():
         return highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions
     except Exception:
         pass
-    # 同目录绝对
+    # Absolute import from same directory
     here = os.path.dirname(os.path.abspath(__file__))
     if here and here not in sys.path:
         sys.path.insert(0, here)
@@ -160,11 +160,11 @@ def _import_helpers():
 
 highlight_csv_residues, highlight_gmotif_loops, analyze_pdb_interactions, find_crbn_g_motif, render_interactions_beautifully, generate_2d_interaction_diagram, analyze_protein_ligand_interactions, visualize_protein_ligand_3d, generate_interaction_network_plot, analyze_ternary_complex, analyze_atom_pair_interactions, visualize_atom_pairs, analyze_ligand_ligand_interactions, analyze_protein_nucleic_interactions = _import_helpers()
 
-# -------- 依赖检查 --------
+# -------- Dependency check --------
 def _check_and_install_deps():
-    """检查并安装依赖，GUI启动时调用"""
+    """Check and install dependencies, called at GUI startup"""
     try:
-        # 尝试导入env_checker模块
+        # Try to import env_checker module
         here = os.path.dirname(os.path.abspath(__file__))
         sys.path.insert(0, here)
         try:
@@ -253,7 +253,7 @@ def t(key: str) -> str:
         return d.get(lang, list(d.values())[0])
     return str(d)
 
-# -------- 工作线程 --------
+# -------- Worker threads --------
 class AnalysisWorker(QThread):
     progress = pyqtSignal(str)
     finished = pyqtSignal(list)
@@ -269,9 +269,9 @@ class AnalysisWorker(QThread):
             interactions = analyze_pdb_interactions(
                 obj_name=self.obj_name,
                 pdb_file=self.pdb_file,
-                only_between_chains=True,  # 默认启用链间分析
+                only_between_chains=True,  # Enable inter-chain analysis by default
                 output_csv=self.output_csv,
-                auto_highlight=True,  # 启用自动高亮
+                auto_highlight=True,  # Enable auto-highlight
             )
             self.progress.emit(t("log_done").format(n=len(interactions)))
             self.finished.emit(interactions)
@@ -339,7 +339,7 @@ class GMotifWorker(QThread):
                 template_builtin=self.template_builtin,
                 rmsd_cutoff=float(self.rmsd),
                 out_csv=out_csv_path,
-                auto_highlight=1,  # 启用自动高亮
+                auto_highlight=1,  # Enable auto-highlight
                 require_gly_pos6=bool(self.require_gly),
                 exclude_proline=bool(self.exclude_proline),
                 check_surface_exposure=bool(self.check_surface_exposure),
@@ -350,23 +350,23 @@ class GMotifWorker(QThread):
         except Exception as e:
             self.error.emit(str(e))
 
-# -------- 主对话框 --------
+# -------- Main dialog --------
 class GLINTDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle(t("title"))
         
-        # 设置窗口图标
+        # Set window icon
         logo_path = _get_logo_path()
         if logo_path:
             self.setWindowIcon(QIcon(logo_path))
         
-        # 设置窗口最小尺寸（允许用户调整大小）
+        # Set minimum window size (allow user resizing)
         min_w, min_h = 1280, 720
-        self.setMinimumSize(min_w, min_h)  # 允许调整大小
-        self.resize(min_w, min_h)  # 初始大小
+        self.setMinimumSize(min_w, min_h)  # Allow resizing
+        self.resize(min_w, min_h)  # Initial size
         
-        # 居中显示
+        # Center on screen
         try:
             from PyQt5.QtGui import QGuiApplication as _QGA  # type: ignore
         except Exception:
@@ -389,11 +389,11 @@ class GLINTDialog(QDialog):
         self._gmotif_hits: List[Tuple] = []
         self._last_gmotif_csv: Optional[str] = None
         self.settings = QSettings("GLINT", "GLINT_App")
-        self._dark_mode: bool = False  # 默认浅色主题
-        self._ui_scale: float = 1.0   # 自动缩放比例
+        self._dark_mode: bool = False  # Default light theme
+        self._ui_scale: float = 1.0   # Auto-scaling ratio
 
-        # 预先创建log_edit和progress_bar（在build_ui之前）
-        # Log面板已移除，但保留不可见的控件以兼容日志API
+        # Pre-create log_edit and progress_bar (before build_ui)
+        # Log panel removed, but keep invisible controls for log API compatibility
         # Create invisible log_edit to prevent errors
         self.log_edit = QTextEdit()
         self.log_edit.setVisible(False)
@@ -401,24 +401,24 @@ class GLINTDialog(QDialog):
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
 
-        # 检查并安装依赖
+        # Check and install dependencies
         _check_and_install_deps()
         
         self.build_ui()
         self.setup_style()
-        # 初始化主题图标 - 使用 Unicode 符号
+        # Initialize theme icon - using Unicode symbols
         # self.theme_toggle_btn.setText("☾" if self._dark_mode else "☀")
-        # 禁用自动缩放以保持固定高度
+        # Disable auto-scaling to maintain fixed height
         # self.apply_auto_scaling()
 
-        # ❗关键修复：延后首次 PyMOL 调用，避免构造期阻塞
+        # ❗Key fix: defer first PyMOL call to avoid blocking during construction
         QTimer.singleShot(0, self.refresh_objects)
 
         self.update_enablement()
         self.update_modules_button_style()  # Initialize Modules button color
         self.log(t("log_ready"))
 
-    # 统一调整所有布局的间距与边距，减少拥挤、提升一致性
+    # Uniformly adjust spacing and margins for all layouts, reducing clutter and improving consistency
     def _tune_layouts(self, widget: QWidget):
         def _tune_layout_obj(lay):
             if lay is None:
@@ -454,7 +454,7 @@ class GLINTDialog(QDialog):
         if layout:
             _tune_layout_obj(layout)
 
-            # 遍历子项，递归调优（对子布局直接设置，对子控件深入其内部布局）
+            # Iterate child items, recursively tune (set sub-layouts directly, dive into child widget layouts)
             for i in range(layout.count()):
                 item = layout.itemAt(i)
                 if not item:
@@ -473,19 +473,19 @@ class GLINTDialog(QDialog):
                                 self._tune_layouts(sub_item.widget())
                     except Exception:
                         pass
-                # 子控件（可能内部还有布局）
+                # Child widgets (may have internal layouts)
                 w = item.widget()
                 if w is not None:
                     self._tune_layouts(w)
 
     # --- UI 结构 ---
     def build_ui(self):
-        # ========== 主布局 ==========
+        # ========== Main layout ==========
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(15, 15, 15, 15)  # 恢复到舒适的外边距
-        main_layout.setSpacing(12)  # 恢复到舒适的间距
+        main_layout.setContentsMargins(15, 15, 15, 15)  # Comfortable outer margins
+        main_layout.setSpacing(12)  # Comfortable spacing
 
-        # 水平分割：导航 | 内容（全屏）
+        # Horizontal split: navigation | content (fullscreen)
         content_row = QHBoxLayout()
         content_row.setSpacing(10)
 
