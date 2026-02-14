@@ -18,6 +18,76 @@ _parent_dir = os.path.dirname(_this_dir)
 if _parent_dir not in sys.path:
     sys.path.insert(0, _parent_dir)
 
+# Inject conda environment site-packages into sys.path
+# When launched via GLINT.app, conda is activated (CONDA_PREFIX is set),
+# but PyMOL's embedded Python doesn't inherit conda's site-packages.
+def _inject_conda_site_packages():
+    import glob as _glob
+    
+    _debug = os.environ.get('GLINT_DEBUG', '')
+    def _log(msg):
+        if _debug:
+            print(f"[GLINT Debug] {msg}")
+    
+    # 0. Check if PYTHONPATH already provides site-packages (e.g. set by launcher)
+    _pythonpath = os.environ.get('PYTHONPATH', '')
+    for _pp in _pythonpath.split(os.pathsep):
+        if _pp.endswith('site-packages') and os.path.isdir(_pp) and _pp not in sys.path:
+            sys.path.insert(0, _pp)
+            _log(f"Injected from PYTHONPATH: {_pp}")
+    
+    # 1. Try CONDA_PREFIX (set by conda activate)
+    _prefix = os.environ.get('CONDA_PREFIX', '')
+    _log(f"CONDA_PREFIX={_prefix!r}")
+    
+    # 2. Fallback: infer from sys.prefix if it looks like a conda env
+    if not _prefix:
+        _sys_prefix = sys.prefix
+        if os.path.isfile(os.path.join(_sys_prefix, 'conda-meta', 'history')):
+            _prefix = _sys_prefix
+            _log(f"Inferred prefix from sys.prefix: {_prefix}")
+    
+    # 3. Fallback: find glint env directly from conda base
+    if not _prefix:
+        _conda_base = os.environ.get('CONDA_EXE', '')
+        if _conda_base:
+            _conda_base = os.path.dirname(os.path.dirname(_conda_base))
+        if not _conda_base:
+            # Common macOS conda locations
+            for _candidate in [
+                os.path.expanduser('~/miniconda3'),
+                os.path.expanduser('~/miniforge3'),
+                os.path.expanduser('~/anaconda3'),
+                '/opt/homebrew/Caskroom/miniconda/base',
+                os.path.expanduser('~/opt/miniconda3'),
+            ]:
+                if os.path.isdir(_candidate):
+                    _conda_base = _candidate
+                    _log(f"Found conda base: {_conda_base}")
+                    break
+        if _conda_base:
+            _env_path = os.path.join(_conda_base, 'envs', 'glint')
+            if os.path.isdir(_env_path):
+                _prefix = _env_path
+                _log(f"Found glint env: {_prefix}")
+    
+    if not _prefix:
+        _log("No conda prefix found, skipping injection")
+        return
+    
+    _patterns = [
+        os.path.join(_prefix, 'lib', 'python*', 'site-packages'),
+        os.path.join(_prefix, 'lib', 'site-packages'),
+    ]
+    for _pat in _patterns:
+        for _sp in _glob.glob(_pat):
+            if _sp not in sys.path:
+                sys.path.insert(0, _sp)
+                _log(f"Injected: {_sp}")
+
+_inject_conda_site_packages()
+
+
 # Import version from _version.py (supports two loading methods)
 try:
     from ._version import __version__

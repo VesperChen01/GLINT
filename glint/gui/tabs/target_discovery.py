@@ -32,7 +32,7 @@ class TargetDiscoveryTab(CommonTab):
         self._last_complementarity_result = None
         
         # Remove proxies for methods implemented here to avoid shadowing
-        for attr in ['start_gmotif', 'browse_gm_pdb', 'browse_gm_out_csv']:
+        for attr in ['start_gmotif', 'browse_gm_out_csv']:
             if attr in self.__dict__:
                 del self.__dict__[attr]
         
@@ -75,31 +75,27 @@ class TargetDiscoveryTab(CommonTab):
         gm_layout.addWidget(gm_title)
 
         gm_grid = QGridLayout()
-        gm_grid.setContentsMargins(12, 16, 12, 8)
+        gm_grid.setContentsMargins(12, 8, 12, 8)
         gm_grid.setColumnStretch(1, 1); gm_grid.setColumnStretch(3, 1)
-        gm_grid.setHorizontalSpacing(12); gm_grid.setVerticalSpacing(4)
-        
-        
-        # Row 0
+        gm_grid.setHorizontalSpacing(12); gm_grid.setVerticalSpacing(8)
+
+        # Row 0: Target Object | Template
         gm_grid.addWidget(QLabel("Target Object:"), 0, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.obj_combo_gm = QComboBox(); self.parent_window.obj_combo_gm.setMinimumHeight(32)
         self.parent_window.refresh_obj_gm = QPushButton(t("refresh")); self.parent_window.refresh_obj_gm.setMinimumHeight(32); self.parent_window.refresh_obj_gm.clicked.connect(self.refresh_objects)
         r0 = QHBoxLayout(); r0.addWidget(self.parent_window.obj_combo_gm, 1); r0.addWidget(self.parent_window.refresh_obj_gm)
         gm_grid.addLayout(r0, 0, 1)
-        
-        gm_grid.addWidget(QLabel("PDB File (opt):"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.gm_pdb = QLineEdit(); self.parent_window.gm_pdb.setMinimumHeight(32)
-        self.parent_window.gm_pdb_browse = QPushButton(t("browse")); self.parent_window.gm_pdb_browse.setMinimumHeight(32)
-        self.parent_window.gm_pdb_browse.clicked.connect(self.browse_gm_pdb)
-        r0b = QHBoxLayout(); r0b.addWidget(self.parent_window.gm_pdb, 1); r0b.addWidget(self.parent_window.gm_pdb_browse)
-        gm_grid.addLayout(r0b, 0, 3)
-        
-        # Row 1
+
+        gm_grid.addWidget(QLabel("Template:"), 0, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.gm_template_mode = QComboBox(); self.parent_window.gm_template_mode.setMinimumHeight(32)
+        self.parent_window.gm_template_mode.addItems(["GSPT1 (5HXB)", "CK1α (5FQD)", "From Selection"])
+        gm_grid.addWidget(self.parent_window.gm_template_mode, 0, 3)
+
+        # Row 1: RMSD cutoff | Require Gly
         gm_grid.addWidget(QLabel("RMSD cutoff (Å):"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.gm_rmsd = QLineEdit("3.5"); self.parent_window.gm_rmsd.setMinimumHeight(32)
         gm_grid.addWidget(self.parent_window.gm_rmsd, 1, 1)
-        
-        # Glycine position requirement dropdown
+
         gm_grid.addWidget(QLabel("Require Gly:"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.gm_require_gly_pos = QComboBox()
         self.parent_window.gm_require_gly_pos.addItems([
@@ -111,57 +107,37 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.gm_require_gly_pos.setToolTip("Require glycine at specific position(s) in the 8-residue window")
         self.parent_window.gm_require_gly_pos.setMinimumHeight(32)
         gm_grid.addWidget(self.parent_window.gm_require_gly_pos, 1, 3)
-        
-        # Row 2: Template selection (only real templates, removed idealized templates)
-        gm_grid.addWidget(QLabel("Template:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.gm_template_mode = QComboBox(); self.parent_window.gm_template_mode.setMinimumHeight(32)
-        # Template options: GSPT1 (default), CK1α, VAV1, custom selection
-        self.parent_window.gm_template_mode.addItems(["GSPT1 (5HXB)", "CK1α (5FQD)", "From Selection"])
-        gm_grid.addWidget(self.parent_window.gm_template_mode, 2, 1)
-        
-        gm_grid.addWidget(QLabel("Selection:"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.gm_template_sel = QLineEdit(); self.parent_window.gm_template_sel.setMinimumHeight(32)
-        self.parent_window.gm_template_pick = QPushButton("Pick (sele)"); self.parent_window.gm_template_pick.setMinimumHeight(32); self.parent_window.gm_template_pick.clicked.connect(lambda: self.parent_window.gm_template_sel.setText("sele"))
-        r2b = QHBoxLayout(); r2b.addWidget(self.parent_window.gm_template_sel, 1); r2b.addWidget(self.parent_window.gm_template_pick)
-        gm_grid.addLayout(r2b, 2, 3)
-        
-        def _toggle_template_inputs(idx):
-            # idx=2 is "From Selection"
-            use_sel = (idx == 2)
-            self.parent_window.gm_template_sel.setEnabled(use_sel); self.parent_window.gm_template_pick.setEnabled(use_sel)
-        self.parent_window.gm_template_mode.currentIndexChanged.connect(_toggle_template_inputs)
-        _toggle_template_inputs(0)  # Default: select GSPT1
-        
-        # Row 3
-        gm_grid.addWidget(QLabel("Output CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+        # Row 2: Output CSV (full width)
+        gm_grid.addWidget(QLabel("Output CSV:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.gm_out_csv = QLineEdit(); self.parent_window.gm_out_csv.setMinimumHeight(32)
         self.parent_window.gm_out_browse = QPushButton(t("browse")); self.parent_window.gm_out_browse.setMinimumHeight(32); self.parent_window.gm_out_browse.clicked.connect(self.browse_gm_out_csv)
-        r3 = QHBoxLayout(); r3.addWidget(self.parent_window.gm_out_csv, 1); r3.addWidget(self.parent_window.gm_out_browse)
-        gm_grid.addLayout(r3, 3, 1, 1, 3)
-        
-        # Row 4: New options for surface highlight and coordinate export
+        r2 = QHBoxLayout(); r2.addWidget(self.parent_window.gm_out_csv, 1); r2.addWidget(self.parent_window.gm_out_browse)
+        gm_grid.addLayout(r2, 2, 1, 1, 3)
+
+        # Row 3: Checkboxes | Max Patches
         self.parent_window.gm_highlight_surface = QCheckBox("Highlight Surface")
         self.parent_window.gm_highlight_surface.setChecked(True)
         self.parent_window.gm_highlight_surface.setToolTip("Highlight molecular surface of G-loop region")
-        gm_grid.addWidget(self.parent_window.gm_highlight_surface, 4, 1)
-        
+        gm_grid.addWidget(self.parent_window.gm_highlight_surface, 3, 1)
+
         self.parent_window.gm_export_coords = QCheckBox("Export Coordinates")
         self.parent_window.gm_export_coords.setChecked(False)
         self.parent_window.gm_export_coords.setToolTip("Export G-loop atom coordinates for downstream analysis")
-        gm_grid.addWidget(self.parent_window.gm_export_coords, 4, 3)
-        
-        # Row 5: Surface analysis options
-        gm_grid.addWidget(QLabel("Max Patches:"), 5, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        gm_grid.addWidget(self.parent_window.gm_export_coords, 3, 3)
+
+        # Row 4: Max Patches
+        gm_grid.addWidget(QLabel("Max Patches:"), 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.gm_max_patches = QComboBox()
         self.parent_window.gm_max_patches.addItems(["5", "10", "15", "20", "All"])
         self.parent_window.gm_max_patches.setCurrentIndex(1)  # Default: 10
         self.parent_window.gm_max_patches.setMinimumHeight(32)
         self.parent_window.gm_max_patches.setToolTip("Maximum number of surface patches to display in analysis")
-        gm_grid.addWidget(self.parent_window.gm_max_patches, 5, 1)
+        gm_grid.addWidget(self.parent_window.gm_max_patches, 4, 1)
 
         gm_layout.addLayout(gm_grid)
 
-        # Buttons - 使用 Ternary Evaluation 风格
+        # Buttons inside card
         gm_btn_row = QHBoxLayout()
         gm_btn_row.setSpacing(10)
 
@@ -177,9 +153,10 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.gm_btn_coords.clicked.connect(self.export_gloop_coords)
         gm_btn_row.addWidget(self.parent_window.gm_btn_coords)
         gm_btn_row.addStretch(1)
-        
+
+        gm_layout.addLayout(gm_btn_row)
+
         layout.addWidget(grp_gm)
-        layout.addLayout(gm_btn_row)
 
         # 4. Surface Analysis
         grp_surf = QFrame()
@@ -402,17 +379,13 @@ class TargetDiscoveryTab(CommonTab):
         layout.addStretch(1)
 
     # --- G-Motif Logic ---
-    def browse_gm_pdb(self):
-        fn, _ = QFileDialog.getOpenFileName(self, t("select_pdb"), "", "PDB (*.pdb *.cif);;All Files (*)")
-        if fn: self.parent_window.gm_pdb.setText(fn); self.parent_window.update_enablement()
-
     def browse_gm_out_csv(self):
         fn, _ = QFileDialog.getSaveFileName(self, t("select_outcsv"), "", "CSV (*.csv);;All Files (*)")
         if fn: self.parent_window.gm_out_csv.setText(fn); self.parent_window.update_enablement()
 
     def start_gmotif(self):
         obj = self.parent_window.obj_combo_gm.currentText().strip()
-        pdb = self.parent_window.gm_pdb.text().strip() or None
+        pdb = None
         outcsv = self.parent_window.gm_out_csv.text().strip() or None
         if not obj or obj == t("no_object"):
             show_message_box(self, t("title"), t("no_object"), "warning"); return
@@ -445,7 +418,7 @@ class TargetDiscoveryTab(CommonTab):
         else:
             # idx == 2: From Selection
             template_mode = "selection"
-            template_sel = self.parent_window.gm_template_sel.text().strip() or None
+            template_sel = None
             template_builtin = None
 
         self.parent_window.gm_btn.setEnabled(False)

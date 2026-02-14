@@ -123,12 +123,12 @@ chmod +x "${MACOS}/launcher"
 echo -e "${GREEN}   ✅ Launcher created${NC}"
 
 # Copy installer Python script
-if [ -f "GlueTK Installer.app/Contents/Resources/GlueTK_Installer.py" ]; then
-    # Use existing installer and update names
-    sed 's/gluetk/glint/g; s/GlueTK/GLINT/g' "GlueTK Installer.app/Contents/Resources/GlueTK_Installer.py" > "${RESOURCES}/GLINT_Installer.py"
-    echo -e "${GREEN}   ✅ Installer script copied and updated${NC}"
+if [ -f "macos_installer/GLINT_Installer.py" ]; then
+    cp "macos_installer/GLINT_Installer.py" "${RESOURCES}/GLINT_Installer.py"
+    echo -e "${GREEN}   ✅ Installer script copied${NC}"
 else
-    echo -e "${YELLOW}   ⚠️  Using install_glint.sh as reference${NC}"
+    echo -e "${RED}   ❌ macos_installer/GLINT_Installer.py not found!${NC}"
+    exit 1
 fi
 
 # Copy glint library

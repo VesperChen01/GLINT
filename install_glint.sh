@@ -138,7 +138,8 @@ CONDA_PACKAGES=(
     "openbabel"
     "requests"
     "vina"
-    "pdb2pqr" # 通过 conda 安装
+    "pdb2pqr"
+    "apbs"  # EC 静电互补性分析必需
 )
 
 # 临时禁用 InsecureRequestWarning
@@ -150,16 +151,6 @@ unset PYTHONWARNINGS # 安装完成后取消设置
 echo "   安装表面分析依赖 (Open3D, scikit-image)..."
 conda run -n "$ENV_NAME" python -m pip install open3d scikit-image --quiet --disable-pip-version-check || {
     echo -e "${YELLOW}⚠️  Open3D 安装失败，表面分析将使用内置回退方案${NC}"
-}
-unset PYTHONWARNINGS # 安装完成后取消设置
-
-# 安装 APBS（EC 静电互补性分析必需）
-echo "   安装 APBS 求解器..."
-conda run -n "$ENV_NAME" python -m pip install apbs-binary --quiet --disable-pip-version-check || {
-    echo -e "${YELLOW}⚠️  apbs-binary 安装失败，尝试通过 conda 安装...${NC}"
-    conda install -n "$ENV_NAME" -c conda-forge apbs -y || {
-        echo -e "${YELLOW}⚠️  APBS 安装失败，EC分析将无法运行${NC}"
-    }
 }
 
 echo -e "${GREEN}✅ 依赖包安装完成${NC}"
@@ -367,6 +358,25 @@ conda activate glint 2>/dev/null || {
 
 echo "Conda env activated, starting PyMOL..." >> "$LOG_FILE"
 
+# Inject conda env site-packages into PYTHONPATH
+# PyMOL's embedded Python may not inherit conda's site-packages
+if [ -n "$CONDA_PREFIX" ]; then
+    CONDA_SP=$(python -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)
+    if [ -n "$CONDA_SP" ] && [ -d "$CONDA_SP" ]; then
+        export PYTHONPATH="${CONDA_SP}:${PYTHONPATH}"
+        echo "Injected PYTHONPATH: $CONDA_SP" >> "$LOG_FILE"
+    else
+        for pyver in 3.12 3.11 3.10 3.9; do
+            SP="${CONDA_PREFIX}/lib/python${pyver}/site-packages"
+            if [ -d "$SP" ]; then
+                export PYTHONPATH="${SP}:${PYTHONPATH}"
+                echo "Injected PYTHONPATH (fallback): $SP" >> "$LOG_FILE"
+                break
+            fi
+        done
+    fi
+fi
+
 LAUNCHER_EOF
 
 # 根据 PyMOL 类型添加启动命令
@@ -374,21 +384,8 @@ if [ "$PYMOL_TYPE" = "app" ]; then
     # 使用系统 PyMOL.app（需要注入 conda 环境路径）
     cat >> "$MACOS/launcher" << 'LAUNCHER_EOF'
 # 启动系统 PyMOL.app 并加载 GLINT
-# 注意：需要将 conda 环境的 site-packages 添加到 PYTHONPATH
-CONDA_ENV_PYTHON="$ENV_PATH/lib/python3.10/site-packages"
-if [ -d "$CONDA_ENV_PYTHON" ]; then
-    export PYTHONPATH="$CONDA_ENV_PYTHON:$PYTHONPATH"
-    echo "Added conda env to PYTHONPATH: $CONDA_ENV_PYTHON" >> "$LOG_FILE"
-fi
-
 /Applications/PyMOL.app/Contents/MacOS/PyMOL -d "
 import sys, os
-# 添加 conda 环境路径（确保能找到依赖）
-conda_site_packages = os.path.expanduser('~/miniconda3/envs/glint/lib/python3.10/site-packages')
-if os.path.exists(conda_site_packages) and conda_site_packages not in sys.path:
-    sys.path.insert(0, conda_site_packages)
-    print(f'Added conda env to sys.path: {conda_site_packages}')
-
 # 添加 GLINT 启动路径
 startup_path = os.path.expanduser('~/.pymol/startup')
 if startup_path not in sys.path:
