@@ -146,12 +146,6 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.gm_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.gm_btn.clicked.connect(self.start_gmotif)
         gm_btn_row.addWidget(self.parent_window.gm_btn)
-
-        self.parent_window.gm_btn_coords = QPushButton("Export Coords")
-        self.parent_window.gm_btn_coords.setMinimumHeight(36)
-        self.parent_window.gm_btn_coords.setStyleSheet(self._get_secondary_btn_style())
-        self.parent_window.gm_btn_coords.clicked.connect(self.export_gloop_coords)
-        gm_btn_row.addWidget(self.parent_window.gm_btn_coords)
         gm_btn_row.addStretch(1)
 
         gm_layout.addLayout(gm_btn_row)
@@ -438,6 +432,13 @@ class TargetDiscoveryTab(CommonTab):
         self._last_gmotif_surface = surface_info
         
         self.log(f"✅ G-Motif detection complete: {len(hits)} hits found")
+        
+        # Print sequence for each hit
+        if hits:
+            for i, hit in enumerate(hits):
+                ch, resi_s, resi_e, seq8, rmsd = hit
+                self.log(f"   Hit {i+1}: Chain {ch}, Resi {resi_s}-{resi_e}, Seq: {seq8}, RMSD: {rmsd:.2f}Å")
+        
         if os.path.exists(out_csv_path):
             self.parent_window.gm_out_csv.setText(out_csv_path)
             self.log(f"   Saved to: {os.path.basename(out_csv_path)}")
@@ -496,52 +497,6 @@ class TargetDiscoveryTab(CommonTab):
                 
         except Exception as e:
             self.on_error(f"Surface highlight failed: {e}")
-
-
-    def export_gloop_coords(self):
-        """Manually export G-loop coordinates"""
-        if not self._gmotif_hits:
-            show_message_box(self, "Warning", "No G-loop hits found. Please run detection first.", "warning")
-            return
-
-        # Select save path
-        fn, _ = QFileDialog.getSaveFileName(self, "Save Coordinates CSV", "", "CSV (*.csv);;All Files (*)")
-        if not fn:
-            return
-
-        try:
-            try:
-                from ...highlight_residues import get_gloop_coordinates
-            except ImportError:
-                try:
-                    from highlight_residues import get_gloop_coordinates
-                except ImportError:
-                    show_message_box(self, "Error", "get_gloop_coordinates not available", "warning")
-                    return
-
-            obj = self.parent_window.obj_combo_gm.currentText().strip()
-
-            # Export coordinates for first hit (or all hits)
-            first_hit = self._gmotif_hits[0]
-            ch, resi_s, resi_e, seq8, rmsd = first_hit
-
-            result = get_gloop_coordinates(
-                obj=obj, chain=ch, start_resi=resi_s, end_resi=resi_e,
-                atom_types=["all"],
-                output_csv=fn
-            )
-
-            if result:
-                self._last_gmotif_coords = result
-                centroid = result.get('centroid', (0, 0, 0))
-                n_atoms = len(result.get('coordinates', []))
-                self.log(f"✅ Coordinates exported: {n_atoms} atoms")
-                self.log(f"   Centroid: ({centroid[0]:.2f}, {centroid[1]:.2f}, {centroid[2]:.2f})")
-                self.log(f"   Saved to: {fn}")
-                show_message_box(self, "Success", f"Coordinates saved to:\n{fn}")
-
-        except Exception as e:
-            self.on_error(f"Coordinate export failed: {e}")
 
     def analyze_gloop_surface(self):
         """Analyze protein surface properties around G-loop patches"""
@@ -709,8 +664,10 @@ class TargetDiscoveryTab(CommonTab):
                     cmd.color("yellow", gloop_sel)
                     cmd.set("stick_radius", 0.2, gloop_sel)
             
-            self.log(f"   Visualized {len(patches)} patches on {obj_name}")
-            self.log("   Colors: Red=positive, Blue=negative, Green=hydrophobic")
+            self.log(f"   Visualized {len(patches)} top patches on {obj_name}")
+            self.log("   Colors: Blue=positive, Red=negative, Green=hydrophobic")
+            for p in patches:
+                self.log(f"     • patch_{p.id}_{p.type[:4]}: score={p.score:.2f}")
             
         except Exception as e:
             self.log(f"   Visualization warning: {e}")

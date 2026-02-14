@@ -640,8 +640,11 @@ class GLINTDialog(QDialog):
             <ul>
                 <li><b>Detect POI</b> - Run G-motif detection</li>
                 <li><b>Show Surface</b> - Highlight G-loop surface</li>
-                <li><b>Export Coords</b> - Save coordinates to CSV</li>
                 <li><b>Surface Analysis</b> - Analyze electrostatic/hydrophobic patches</li>
+            </ul>
+            <p><b>Options:</b></p>
+            <ul>
+                <li><b>Export Coordinates</b> - Check to save G-loop coordinates to CSV during detection</li>
             </ul>
         </div>
         
