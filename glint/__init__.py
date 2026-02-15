@@ -316,6 +316,23 @@ def _register_commands():
             ddg_heatmap
         )
         
+        # PyMOL visualization styles
+        try:
+            from .pymol_styles import (
+                apply_professional_style,
+                setup_protein_cartoon,
+                setup_protein_surface,
+                setup_ligand_sticks,
+                setup_binding_site,
+                apply_publication_figure_style,
+                quick_protein_view,
+                quick_ligand_view
+            )
+            _pymol_styles_available = True
+        except ImportError as e:
+            print(f"⚠️ PyMOL styles not available: {e}")
+            _pymol_styles_available = False
+        
         # Surface similarity and complementarity analysis module
         try:
             from .surface_similarity import (

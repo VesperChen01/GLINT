@@ -2781,6 +2781,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                                    csv_path=None, show_hydrophobic=False,
                                    max_interactions_per_type=None,
                                    min_confidence=0.8,
+                                   show_distance_labels=False,
                                    viz_settings=None):
     """
     在PyMOL中3D可视化蛋白-配体相互作用（改进版，参考专业脚本）
@@ -2790,6 +2791,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         interactions_result: analyze_protein_ligand_interactions的返回结果
         ligand_resname: 配体残基名称(可选)
         csv_path: 或者提供CSV文件路径
+        show_distance_labels: 是否显示距离标签（默认False）
         viz_settings: 统一可视化配置对象，若提供则优先使用
     """
     # 统一配置入口：优先使用 VisualizationSettings，保持旧参数向后兼容
@@ -2797,6 +2799,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         show_hydrophobic=show_hydrophobic,
         min_confidence=min_confidence,
         max_interactions_per_type=max_interactions_per_type,
+        show_distance_labels=show_distance_labels,
         label_size=16,
     )
     show_hydrophobic = settings.show_hydrophobic
@@ -2961,31 +2964,115 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         label_font_id=settings.label_font_id
     )
 
-    # 蛋白整体：半透明cartoon
-    cmd.show("cartoon", obj_name)
-    cmd.set("cartoon_transparency", 0.3, obj_name)
+    # ========== 应用专业可视化样式 ==========
+    try:
+        from .pymol_styles import (
+            apply_professional_style,
+            setup_protein_cartoon,
+            setup_ligand_sticks,
+            PROTEIN_COLORS,
+            LIGAND_COLORS
+        )
+        
+        # 应用专业渲染设置
+        apply_professional_style(background=settings.background, ray_trace_mode=1)
+        
+        # 设置蛋白质 cartoon (Science cover style: deep blue/green)
+        prot_sel = f"{obj_name} and polymer.protein"
+        setup_protein_cartoon(prot_sel, color='auto', transparency=0.0, color_scheme='science')
+        
+        # 可选显示 surface
+        if settings.show_surface:
+            from .pymol_styles import setup_protein_surface
+            setup_protein_surface(prot_sel, color='auto', transparency=0.36, color_scheme='science')
+            cmd.set('surface_smooth_edges', 'on', prot_sel)
+            print(f"[visualize_protein_ligand_3d] 🎨 显示蛋白质表面")
+        
+        # 设置配体 sticks (classic CNO coloring: blue N, red O)
+        print(f"[visualize_protein_ligand_3d] 🔍 显示配体 sticks: {lig_sel}")
+        setup_ligand_sticks(lig_sel, show_polar_h=True, stick_radius=0.28, color_scheme='classic')
+        
+        print(f"[visualize_protein_ligand_3d] ✓ 已应用专业可视化样式")
+        
+    except ImportError:
+        # 回退到原有样式
+        print(f"[visualize_protein_ligand_3d] ⚠️ 使用默认样式（pymol_styles 模块未找到）")
+        
+        # 定义多链颜色（支持更多链）
+        chain_colors = [
+            ("chain_color_1", [0.45, 0.62, 0.78]),  # 深蓝
+            ("chain_color_2", [0.60, 0.76, 0.68]),  # 深湖绿
+            ("chain_color_3", [0.95, 0.76, 0.50]),  # 浅橙
+            ("chain_color_4", [0.85, 0.55, 0.76]),  # 浅紫
+            ("chain_color_5", [0.70, 0.85, 0.90]),  # 浅青
+            ("chain_color_6", [0.90, 0.70, 0.70]),  # 浅红
+        ]
+        
+        # 注册颜色
+        for color_name, rgb in chain_colors:
+            cmd.set_color(color_name, rgb)
+        
+        prot_sel = f"{obj_name} and polymer.protein"
+        
+        # 默认显示 cartoon
+        cmd.show("cartoon", prot_sel)
+        cmd.set("cartoon_fancy_helices", 1)
+        cmd.set("cartoon_smooth_loops", 1)
+        
+        # 可选显示 surface
+        if settings.show_surface:
+            cmd.show("surface", prot_sel)
+            cmd.set("transparency", 0.36, prot_sel)
+            cmd.set("surface_quality", 1, prot_sel)
+            cmd.set("surface_smooth_edges", "on", prot_sel)
+            print(f"[visualize_protein_ligand_3d] 🎨 显示蛋白质表面")
+        
+        cmd.set("two_sided_lighting", "on")
+        cmd.set("depth_cue", 0)
+        
+        # 按链自动着色（支持多条链）
+        try:
+            chains = cmd.get_chains(prot_sel)
+            for i, chain in enumerate(chains):
+                color_name = chain_colors[i % len(chain_colors)][0]
+                cmd.color(color_name, f"{prot_sel} and chain {chain}")
+            print(f"[visualize_protein_ligand_3d] 🎨 蛋白质着色: {len(chains)} 条链 (cartoon{' + surface' if settings.show_surface else ''})")
+        except Exception as e:
+            print(f"[visualize_protein_ligand_3d] ⚠️ 蛋白质着色失败: {e}")
+            cmd.color(chain_colors[0][0], prot_sel)
 
-    # 只显示配体为 sticks；口袋残基本身不单独高亮，后面只高亮真正有高置信度相互作用的残基
-    print(f"[visualize_protein_ligand_3d] 🔍 显示配体 sticks: {lig_sel}")
-    cmd.show("sticks", lig_sel)
+        # ========== 配体：STICKS + 橙色系CHNO着色 ==========
+        print(f"[visualize_protein_ligand_3d] 🔍 显示配体 sticks: {lig_sel}")
+        cmd.show("sticks", lig_sel)
+        cmd.set("stick_radius", 0.28, lig_sel)
+        
+        # 橙色系CHNO着色（封面安全配色）
+        cmd.color("deeporange", f"{lig_sel} and elem C")
+        cmd.color("wheat", f"{lig_sel} and elem H")
+        cmd.color("tan", f"{lig_sel} and elem N")
+        cmd.color("firebrick", f"{lig_sel} and elem O")
+        
+        # 只显示极性氢（NH, OH, SH）
+        cmd.hide("sticks", f"{lig_sel} and elem H")
+        cmd.show("sticks", f"{lig_sel} and elem H and (neighbor elem N+O+S)")
 
-    # 明确隐藏蛋白部分的 sticks/licorice（防止意外显示）
-    print(f"[visualize_protein_ligand_3d] 🔍 隐藏蛋白质 sticks/licorice")
-    cmd.hide("sticks", f"{obj_name} and polymer")
-    cmd.hide("licorice", f"{obj_name} and polymer")
+        # 明确隐藏蛋白部分的 sticks/licorice（防止意外显示）
+        print(f"[visualize_protein_ligand_3d] 🔍 隐藏蛋白质 sticks/licorice")
+        cmd.hide("sticks", f"{obj_name} and polymer")
+        cmd.hide("licorice", f"{obj_name} and polymer")
 
-    # Debug: 检查当前显示状态
-    print(f"[visualize_protein_ligand_3d] 🔍 此时应该只看到: cartoon + 配体sticks")
-    
-    # 隐藏连接到碳原子的氢（只保留极性氢：NH, OH, SH）
-    cmd.hide("(h. and (e. c extend 1))")
-    
-    # ========== 第七步：配体着色（参考脚本：配体碳原子黄色） ==========\
-    cmd.color("yellow", f"{lig_sel} and name C*")     # 配体碳原子：黄色
-    cmd.color("blue", f"{lig_sel} and elem N")
-    cmd.color("red", f"{lig_sel} and elem O")
-    cmd.color("yellow", f"{lig_sel} and elem S")
-    cmd.color("green", f"{lig_sel} and elem F+CL+BR+I")
+        # Debug: 检查当前显示状态
+        print(f"[visualize_protein_ligand_3d] 🔍 此时应该只看到: 蛋白 cartoon{' + surface' if settings.show_surface else ''} + 配体 sticks")
+        
+        # ========== 增强光照：深度 + 边缘光照效果 ==========
+        cmd.set("antialias", 2)
+        cmd.set("ambient", 0.52)
+        cmd.set("direct", 0.58)
+        cmd.set("specular", 0.10)
+        cmd.set("shininess", 18)
+        cmd.set("reflect", 0.00)
+        cmd.set("ray_shadows", "off")
+        cmd.rebuild()
     
     # ========== 第八步：验证数据存在 ==========
     # ⚠️ 关键：必须提供 interactions 数据，不再回退到 PyMOL 几何检测
@@ -3033,7 +3120,9 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         dash_gap=0.3,
         dash_length=0.25,
         dash_radius=0.08,
-        hide_labels=True,
+        hide_labels=not settings.show_distance_labels,
+        label_size=settings.label_size,
+        label_font_id=settings.label_font_id,
     )
     
     try:
@@ -3170,6 +3259,10 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             res_sel = f"{obj_name} and chain {chain} and resi {res_id}"
             print(f"[visualize_protein_ligand_3d] DEBUG: Showing licorice for {res_name}{res_id} (chain {chain})")
             cmd.show("licorice", res_sel)
+            
+            # 应用标准原子配色（按元素着色）
+            cmd.util.cnc(res_sel)  # Color by element: C=cyan, N=blue, O=red, etc.
+            
             # 隐藏这些残基上连接到碳的氢
             cmd.hide("everything", f"({res_sel}) and (elem H and neighbor elem C)")
             
@@ -3184,7 +3277,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                     cmd.pseudoatom(label_obj, pos=coords, label=label_text)
                     cmd.set("label_size", 16, label_obj)
                     cmd.set("label_color", "black", label_obj)
-                    cmd.set("label_font_id", 7, label_obj)  # Times-like font
+                    cmd.set("label_font_id", 5, label_obj)  # 统一使用 font_id=5 (Times-like)
                     cmd.hide("everything", label_obj)
                     cmd.show("label", label_obj)
             except Exception as e:
@@ -3424,11 +3517,31 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                         sel2 += f" and name {prot_atom}"
                 
                 # 设置颜色（在创建距离对象之前确定颜色）
-                interaction_color = None
+                interaction_color = "gray50"  # 默认颜色
                 for key, color in color_map.items():
                     if key in interaction_type or key == type_en:
                         interaction_color = color
                         break
+                
+                # 如果还是没匹配到，尝试更宽松的匹配
+                if interaction_color == "gray50":
+                    itype_lower = interaction_type.lower()
+                    if "hydrogen" in itype_lower or "hbond" in itype_lower:
+                        interaction_color = "glue_hbond"
+                    elif "salt" in itype_lower:
+                        interaction_color = "glue_salt"
+                    elif "hydrophobic" in itype_lower:
+                        interaction_color = "glue_hydrophobic"
+                    elif "pi" in itype_lower and "pi" in itype_lower:
+                        interaction_color = "glue_pipi"
+                    elif "pi" in itype_lower and "cation" in itype_lower:
+                        interaction_color = "glue_pication"
+                    elif "halogen" in itype_lower:
+                        interaction_color = "glue_halogen"
+                    elif "metal" in itype_lower:
+                        interaction_color = "glue_metal"
+                    elif "water" in itype_lower:
+                        interaction_color = "glue_water"
                 
                 # 尝试创建距离对象（参考 PPI 可视化代码）
                 try:
@@ -3500,7 +3613,9 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                         dash_gap=0.25,
                         dash_length=0.3,
                         dash_radius=0.08,
-                        hide_labels=True,
+                        hide_labels=not settings.show_distance_labels,
+                        label_size=settings.label_size,
+                        label_font_id=settings.label_font_id,
                     )
 
                 except Exception as e:
@@ -3524,9 +3639,21 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         print(f"[visualize_protein_ligand_3d] 💡 Note: hydrophobic interactions are hidden (professional mode)")
         print(f"                                  To show them, use: visualize_protein_ligand_3d('{obj_name}', show_hydrophobic=True)")
 
-    # 隐藏所有距离标签（但保留线条可见）
-    cmd.hide("labels", "interact_*")
-    cmd.hide("labels", "hbonds_*")
+    # 根据设置控制距离标签显示
+    if settings.show_distance_labels:
+        cmd.show("labels", "interact_*")
+        cmd.show("labels", "hbonds_*")
+        # 统一距离标签字体和大小
+        cmd.set("label_size", settings.label_size, "interact_*")
+        cmd.set("label_size", settings.label_size, "hbonds_*")
+        cmd.set("label_font_id", settings.label_font_id, "interact_*")
+        cmd.set("label_font_id", settings.label_font_id, "hbonds_*")
+        cmd.set("label_color", "black", "interact_*")
+        cmd.set("label_color", "black", "hbonds_*")
+    else:
+        # 隐藏所有距离标签（但保留线条可见）
+        cmd.hide("labels", "interact_*")
+        cmd.hide("labels", "hbonds_*")
 
     # 显式显示交互线条（有些主题/样式下需要）
     cmd.show("dashes", "interact_*")

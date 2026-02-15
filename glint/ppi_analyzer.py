@@ -93,7 +93,7 @@ def analyze_protein_protein_interface(obj_name=None,
                                       protein1_color="cyan",
                                       protein2_color="magenta",
                                       show_labels=True,
-                                      display_mode="cartoon_surface_interaction",
+                                      display_mode="surface_interaction",
                                       show_hydrophobic=False,
                                       viz_settings=None):
     """
@@ -113,7 +113,7 @@ def analyze_protein_protein_interface(obj_name=None,
         visualize: 是否在PyMOL中可视化界面（默认True）
         protein1_color: 蛋白质1的显示颜色（默认cyan）
         protein2_color: 蛋白质2的显示颜色（默认magenta）
-        display_mode: 显示模式 - "cartoon_surface_interaction" (卡通+表面+相互作用) 或 "cartoon_interaction" (卡通+相互作用)
+        display_mode: 显示模式 - "surface_interaction" (表面+相互作用) 或 "cartoon_interaction" (卡通+相互作用)
         show_labels: 是否显示距离标签 (默认True)
     
     返回:
@@ -572,7 +572,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
                             protein2_color="magenta",
                             show_labels=True,
                             clear_old=True,
-                            display_mode="cartoon_surface_interaction",
+                            display_mode="surface_interaction",
                             show_hydrophobic=False,
                             viz_settings=None):
     """
@@ -601,7 +601,8 @@ def visualize_ppi_interface(obj_name, ppi_result,
         clear_old=clear_old,
         display_mode=display_mode,
         show_hydrophobic=show_hydrophobic,
-        label_size=14,
+        label_size=16,  # 统一使用 16
+        label_font_id=5,  # 统一使用 font_id=5
     )
     protein1_color = settings.protein1_color
     protein2_color = settings.protein2_color
@@ -676,34 +677,158 @@ def visualize_ppi_interface(obj_name, ppi_result,
     print(f"[visualize_ppi_interface] 背景颜色: {settings.background}")
 
     # ========== 设置蛋白显示模式 ==========
-    if display_mode == "cartoon_surface_interaction":
-        # 模式1: 卡通 + 表面 + 相互作用 (白色背景, ChainA/ChainB不同颜色)
+    if display_mode == "surface_interaction":
+        # 模式1: 深色胶状表面 + 橙色配体 (Science Cover 风格)
         cmd.hide("everything", obj_name)
-        cmd.show("cartoon", obj_name)
-        cmd.show("surface", obj_name)
-        cmd.set("transparency", 0.4, obj_name)
-        cmd.set("cartoon_transparency", 0.0, obj_name)
-        print("[visualize_ppi_interface] 显示模式: 卡通 + 表面 + 相互作用")
+        
+        # 定义深色系（与 interaction_analyzer.py 完全一致）
+        cmd.set_color("chain_color_1", [0.45, 0.62, 0.78])  # 深蓝
+        cmd.set_color("chain_color_2", [0.60, 0.76, 0.68])  # 深湖绿
+        
+        # 蛋白质：仅显示表面（胶状效果）
+        protein_sel = f"{obj_name} and polymer.protein"
+        cmd.show("surface", protein_sel)
+        cmd.set("transparency", 0.36, protein_sel)
+        cmd.set("surface_quality", 1, protein_sel)
+        cmd.set("surface_smooth_edges", "on", protein_sel)
+        cmd.set("two_sided_lighting", "on", protein_sel)
+        cmd.set("depth_cue", 0, protein_sel)
+        
+        # 按链着色（深蓝 + 深湖绿）
+        if len(protein1_chains) >= 1:
+            cmd.color("chain_color_1", f"{obj_name} and chain {protein1_chains[0]}")
+        if len(protein2_chains) >= 1:
+            cmd.color("chain_color_2", f"{obj_name} and chain {protein2_chains[0]}")
+        
+        # 配体：按原子类型着色（CPK标准）
+        ligand_sel = f"{obj_name} and organic"
+        if cmd.count_atoms(ligand_sel) > 0:
+            cmd.show("sticks", ligand_sel)
+            cmd.set("stick_radius", 0.28, ligand_sel)
+            # 使用标准CPK原子着色
+            cmd.util.cbag(ligand_sel)  # C=cyan, N=blue, O=red, S=yellow, etc.
+            
+            # 只显示极性氢
+            cmd.hide("sticks", f"{ligand_sel} and elem H")
+            cmd.show("sticks", f"{ligand_sel} and elem H and (neighbor elem N+O+S)")
+        
+        # 深度光照 + 边缘光（与 interaction_analyzer.py 完全一致）
+        cmd.set("antialias", 2)
+        cmd.set("ambient", 0.52)
+        cmd.set("direct", 0.58)
+        cmd.set("specular", 0.10)
+        cmd.set("shininess", 18)
+        cmd.set("reflect", 0.00)
+        cmd.set("ray_shadows", "off")
+        
+        # 背景：透明白色
+        cmd.bg_color("white")
+        cmd.set("ray_opaque_background", "off")
+        
+        cmd.rebuild()
+        print("[visualize_ppi_interface] 显示模式: 深色胶状表面 + 橙色配体")
+            
     elif display_mode == "cartoon_interaction":
-        # 模式2: 卡通 + 相互作用 (白色背景, ChainA/ChainB不同颜色, 无表面)
+        # 模式2: 卡通 + 深色配色 + 橙色配体
         cmd.hide("everything", obj_name)
-        cmd.show("cartoon", obj_name)
-        cmd.set("cartoon_transparency", 0.0, obj_name)
-        print("[visualize_ppi_interface] 显示模式: 卡通 + 相互作用")
+        
+        # 定义深色系（与 interaction_analyzer.py 完全一致）
+        cmd.set_color("chain_color_1", [0.45, 0.62, 0.78])  # 深蓝
+        cmd.set_color("chain_color_2", [0.60, 0.76, 0.68])  # 深湖绿
+        
+        # 蛋白质：显示卡通
+        protein_sel = f"{obj_name} and polymer.protein"
+        cmd.show("cartoon", protein_sel)
+        cmd.set("cartoon_fancy_helices", 1)
+        cmd.set("cartoon_smooth_loops", 1)
+        cmd.set("cartoon_transparency", 0.0, protein_sel)
+        cmd.set("two_sided_lighting", "on")
+        cmd.set("depth_cue", 0)
+        
+        # 按链着色（深蓝 + 深湖绿）
+        if len(protein1_chains) >= 1:
+            cmd.color("chain_color_1", f"{obj_name} and chain {protein1_chains[0]}")
+        if len(protein2_chains) >= 1:
+            cmd.color("chain_color_2", f"{obj_name} and chain {protein2_chains[0]}")
+        
+        # 配体：按原子类型着色（CPK标准）
+        ligand_sel = f"{obj_name} and organic"
+        if cmd.count_atoms(ligand_sel) > 0:
+            cmd.show("sticks", ligand_sel)
+            cmd.set("stick_radius", 0.28, ligand_sel)
+            # 使用标准CPK原子着色
+            cmd.util.cbag(ligand_sel)  # C=cyan, N=blue, O=red, S=yellow, etc.
+            
+            # 只显示极性氢
+            cmd.hide("sticks", f"{ligand_sel} and elem H")
+            cmd.show("sticks", f"{ligand_sel} and elem H and (neighbor elem N+O+S)")
+        
+        # 深度光照（与 interaction_analyzer.py 完全一致）
+        cmd.set("antialias", 2)
+        cmd.set("ambient", 0.52)
+        cmd.set("direct", 0.58)
+        cmd.set("specular", 0.10)
+        cmd.set("shininess", 18)
+        cmd.set("reflect", 0.00)
+        cmd.set("ray_shadows", "off")
+        
+        # 背景：透明白色
+        cmd.bg_color("white")
+        cmd.set("ray_opaque_background", "off")
+        
+        cmd.rebuild()
+        print("[visualize_ppi_interface] 显示模式: 卡通 + 深色配色 + 橙色配体")
+            
     else:
-        # 默认模式: 与cartoon_surface_interaction相同
+        # 默认模式: 深色胶状表面 + 橙色配体
         cmd.hide("everything", obj_name)
-        cmd.show("cartoon", obj_name)
-        cmd.show("surface", obj_name)
-        cmd.set("transparency", 0.4, obj_name)
-        cmd.set("cartoon_transparency", 0.0, obj_name)
-        print(f"[visualize_ppi_interface] 未知模式 '{display_mode}', 使用默认: 卡通 + 表面 + 相互作用")
-    
-    # 为蛋白链着色
-    for chain in protein1_chains:
-        cmd.color(protein1_color, f"{obj_name} and chain {chain}")
-    for chain in protein2_chains:
-        cmd.color(protein2_color, f"{obj_name} and chain {chain}")
+        
+        # 定义深色系（与 interaction_analyzer.py 完全一致）
+        cmd.set_color("chain_color_1", [0.45, 0.62, 0.78])  # 深蓝
+        cmd.set_color("chain_color_2", [0.60, 0.76, 0.68])  # 深湖绿
+        
+        # 蛋白质：仅显示表面（胶状效果）
+        protein_sel = f"{obj_name} and polymer.protein"
+        cmd.show("surface", protein_sel)
+        cmd.set("transparency", 0.36, protein_sel)
+        cmd.set("surface_quality", 1, protein_sel)
+        cmd.set("surface_smooth_edges", "on", protein_sel)
+        cmd.set("two_sided_lighting", "on", protein_sel)
+        cmd.set("depth_cue", 0, protein_sel)
+        
+        # 按链着色（深蓝 + 深湖绿）
+        if len(protein1_chains) >= 1:
+            cmd.color("chain_color_1", f"{obj_name} and chain {protein1_chains[0]}")
+        if len(protein2_chains) >= 1:
+            cmd.color("chain_color_2", f"{obj_name} and chain {protein2_chains[0]}")
+        
+        # 配体：按原子类型着色（CPK标准）
+        ligand_sel = f"{obj_name} and organic"
+        if cmd.count_atoms(ligand_sel) > 0:
+            cmd.show("sticks", ligand_sel)
+            cmd.set("stick_radius", 0.28, ligand_sel)
+            # 使用标准CPK原子着色
+            cmd.util.cbag(ligand_sel)  # C=cyan, N=blue, O=red, S=yellow, etc.
+            
+            # 只显示极性氢
+            cmd.hide("sticks", f"{ligand_sel} and elem H")
+            cmd.show("sticks", f"{ligand_sel} and elem H and (neighbor elem N+O+S)")
+        
+        # 深度光照 + 边缘光（与 interaction_analyzer.py 完全一致）
+        cmd.set("antialias", 2)
+        cmd.set("ambient", 0.52)
+        cmd.set("direct", 0.58)
+        cmd.set("specular", 0.10)
+        cmd.set("shininess", 18)
+        cmd.set("reflect", 0.00)
+        cmd.set("ray_shadows", "off")
+        
+        # 背景：透明白色
+        cmd.bg_color("white")
+        cmd.set("ray_opaque_background", "off")
+        
+        cmd.rebuild()
+        print(f"[visualize_ppi_interface] 未知模式 '{display_mode}', 使用默认: 深色胶状表面 + 橙色配体")
     
     # ========== 收集参与相互作用的残基 ==========
     interacting_residues = {}  # {(chain, resid): [interaction_types]}
@@ -943,10 +1068,14 @@ def visualize_ppi_interface(obj_name, ppi_result,
                 dash_radius=0.1,
                 hide_labels=not show_labels,
             )
+            
+            # 显式显示虚线对象
+            cmd.show("dashes", distance_name)
+            print(f"[DEBUG]   ✓ Dashes shown for {distance_name}")
 
-            # 距离标签单独控制：仅在需要时显示并统一为黑色
+            # 距离标签单独控制：仅在需要时显示并统一为黑色，使用统一的标签大小
             if show_labels:
-                cmd.set("label_size", 12, distance_name)
+                cmd.set("label_size", settings.label_size, distance_name)
                 cmd.set("label_color", "black", distance_name)
                 cmd.show("labels", distance_name)
         except Exception as e:

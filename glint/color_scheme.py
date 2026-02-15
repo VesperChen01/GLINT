@@ -28,9 +28,11 @@ class VisualizationSettings:
     label_font_id: int = 5
 
     # Interaction display parameters
-    display_mode: str = 'cartoon_surface_interaction'
-    show_labels: bool = True
+    display_mode: str = 'surface_interaction'
+    show_labels: bool = True  # 是否显示残基标签（必须显示）
+    show_distance_labels: bool = False  # 是否显示距离标签（可选）
     show_hydrophobic: bool = False
+    show_surface: bool = False  # 是否显示蛋白质表面
     min_confidence: float = 0.8
     max_interactions_per_type: Optional[Dict[str, int]] = None
 
@@ -301,7 +303,7 @@ def apply_publication_pymol_style(cmd, background='white', label_size=16, label_
 def apply_interaction_dash_style(cmd, obj_name, color_name=None,
                                  dash_width=2.0, dash_gap=0.3,
                                  dash_length=0.25, dash_radius=0.08,
-                                 hide_labels=True):
+                                 hide_labels=True, label_size=16, label_font_id=5):
     """Apply unified interaction dash style to avoid inconsistent styles across modules."""
     cmd.show('dashes', obj_name)
     cmd.set('dash_width', dash_width, obj_name)
@@ -315,3 +317,9 @@ def apply_interaction_dash_style(cmd, obj_name, color_name=None,
 
     if hide_labels:
         cmd.hide('labels', obj_name)
+    else:
+        cmd.show('labels', obj_name)
+        # 统一距离标签字体和大小
+        cmd.set('label_size', label_size, obj_name)
+        cmd.set('label_font_id', label_font_id, obj_name)
+        cmd.set('label_color', 'black', obj_name)

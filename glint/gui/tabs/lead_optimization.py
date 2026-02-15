@@ -189,7 +189,7 @@ class LeadOptimizationTab(CommonTab):
         ppi_grid.addWidget(QLabel("Display Mode:"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.ppi_display_mode = QComboBox()
         self.parent_window.ppi_display_mode.setMinimumHeight(32)
-        self.parent_window.ppi_display_mode.addItems(["Cartoon + Surface + Interaction", "Cartoon + Interaction"])
+        self.parent_window.ppi_display_mode.addItems(["Surface + Interaction", "Cartoon + Interaction"])
         ppi_grid.addWidget(self.parent_window.ppi_display_mode, 3, 1)
         
         self.parent_window.ppi_show_labels = QCheckBox("Show Distance Labels")
@@ -284,15 +284,22 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.pl_show_hydrophobic.setChecked(False)
         pl_grid.addWidget(self.parent_window.pl_show_hydrophobic, 2, 3)
         
+        # Distance labels option
+        pl_grid.addWidget(QLabel("3D Display:"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.pl_show_distance_labels = QCheckBox("Show Distance Labels")
+        self.parent_window.pl_show_distance_labels.setChecked(False)
+        self.parent_window.pl_show_distance_labels.setToolTip("Display distance values on interaction lines in 3D view")
+        pl_grid.addWidget(self.parent_window.pl_show_distance_labels, 3, 1)
+        
         # Output CSV row
-        pl_grid.addWidget(QLabel("Output CSV:"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        pl_grid.addWidget(QLabel("Output CSV:"), 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         
         self.parent_window.pl_csv = QLineEdit(); self.parent_window.pl_csv.setPlaceholderText("Optional"); self.parent_window.pl_csv.setMinimumHeight(32)
         self.parent_window.pl_csv_btn = QPushButton(t("browse")); self.parent_window.pl_csv_btn.setMinimumHeight(32)
         self.parent_window.pl_csv_btn.clicked.connect(lambda: self._browse_save_file(self.parent_window.pl_csv, "CSV (*.csv)"))
         
         r2_pl = QHBoxLayout(); r2_pl.addWidget(self.parent_window.pl_csv, 1); r2_pl.addWidget(self.parent_window.pl_csv_btn)
-        pl_grid.addLayout(r2_pl, 3, 1, 1, 3)
+        pl_grid.addLayout(r2_pl, 4, 1, 1, 3)
 
         pl_layout.addLayout(pl_grid)
 
@@ -519,7 +526,10 @@ class LeadOptimizationTab(CommonTab):
 
             # 构建统一可视化配置（PPI）
             display_mode_idx = self.parent_window.ppi_display_mode.currentIndex()
-            display_mode = "cartoon_surface_interaction" if display_mode_idx == 0 else "cartoon_interaction"
+            if display_mode_idx == 0:
+                display_mode = "surface_interaction"
+            else:
+                display_mode = "cartoon_interaction"
             show_labels = self.parent_window.ppi_show_labels.isChecked()
             show_hydrophobic = self.parent_window.ppi_show_hydrophobic.isChecked()
             ppi_viz_settings = VisualizationSettings(
@@ -583,6 +593,7 @@ class LeadOptimizationTab(CommonTab):
 
             # Get 3D Visualization Options
             show_hydrophobic = self.parent_window.pl_show_hydrophobic.isChecked()
+            show_distance_labels = self.parent_window.pl_show_distance_labels.isChecked()
             min_conf_str = self.parent_window.pl_min_confidence.currentText().split()[0]
             try:
                 min_confidence = float(min_conf_str)
@@ -637,6 +648,7 @@ class LeadOptimizationTab(CommonTab):
                         # 构建统一可视化配置（蛋白-配体）
                         pl_viz_settings = VisualizationSettings(
                             show_hydrophobic=show_hydrophobic,
+                            show_distance_labels=show_distance_labels,
                             min_confidence=min_confidence,
                             label_size=16,
                         )
@@ -647,7 +659,7 @@ class LeadOptimizationTab(CommonTab):
                             actual_ligand,
                             viz_settings=pl_viz_settings
                         )
-                        self.log(f"  3D visualization generated (Conf>={min_confidence}, Hydrophobic={show_hydrophobic})")
+                        self.log(f"  3D visualization generated (Conf>={min_confidence}, Hydrophobic={show_hydrophobic}, Distance Labels={show_distance_labels})")
                     except Exception as viz_e:
                         self.log(f"  3D visualization failed: {viz_e}")
                         import traceback; traceback.print_exc()

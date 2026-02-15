@@ -132,6 +132,11 @@ class BatchAnalyzer:
                 obj_name = self._fetch_pdb(source)
             else:
                 print(f"  ⚠️ Invalid input: {source}")
+                results.append({
+                    "source": source,
+                    "success": False,
+                    "error": "Invalid input format",
+                    "hits": []
                 })
                 continue
             
