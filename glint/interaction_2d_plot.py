@@ -1424,7 +1424,9 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     conf_2d = mol_draw.GetConformer()
     pts = [conf_2d.GetAtomPosition(i) for i in range(mol_draw.GetNumAtoms())]
     phys_span = max([p.x for p in pts]) - min([p.x for p in pts]) if pts else 10.0
-    dw = int(max(1200, phys_span * 45.0 + 800))
+    # 🔧 增加画布大小，为外围的残基标签预留足够空间
+    # 原来：phys_span * 45.0 + 800，现在增加到 phys_span * 50.0 + 1000
+    dw = int(max(1400, phys_span * 50.0 + 1000))
     dh = int(dw * 0.75)
     
     # 限制画布最大像素，防止内存爆炸
@@ -1512,7 +1514,12 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         plt.close(fig)
         return None
     
-    ax.set_xlim(-50, dw + 50); ax.set_ylim(dh + 50, -50); ax.axis('off')
+    # 🔧 增加画布边距，确保边缘的残基标签不会被裁剪
+    # 根据 badge_radius 动态计算边距（badge_radius 在后面定义为 30）
+    canvas_margin = 100  # 预留足够的边距
+    ax.set_xlim(-canvas_margin, dw + canvas_margin)
+    ax.set_ylim(dh + canvas_margin, -canvas_margin)
+    ax.axis('off')
 
     # 计算配体中心
     c_x = sum(p[0] for p in px_atoms.values()) / len(px_atoms)
@@ -2123,19 +2130,25 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
             )
     
     if legend_handles:
+        # 🔧 优化图例位置，避免遮挡残基标签和分子结构
+        # 将图例放置在右上角外侧
         ax.legend(
             handles=legend_handles,
             loc='upper left',
+            bbox_to_anchor=(1.02, 1.0),  # 放置在画布右侧外部
             frameon=True,
             fontsize=8,
             fancybox=True,
-            framealpha=0.9,
+            framealpha=0.95,  # 提高不透明度，确保图例清晰可读
             edgecolor='gray',
         )
 
     if not output_path:
         output_path = os.path.join(os.path.expanduser("~"), "Desktop", f"{ligand_resname}_2d.png")
-    plt.savefig(output_path, dpi=dpi, bbox_inches='tight', pad_inches=0.1)
+    
+    # 🔧 修复：不使用 bbox_inches='tight'，避免裁剪边缘的残基标签
+    # 使用固定的 pad_inches 来保留足够的边距
+    plt.savefig(output_path, dpi=dpi, bbox_inches=None, pad_inches=0.2)
     plt.close()
     print(f"[2D Diagram] ✅ Saved to {output_path}")
     return output_path
