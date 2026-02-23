@@ -2,7 +2,6 @@
 
 <img src="glint/assets/logo.png" alt="GLINT Logo" width="180"/>
 
-# GLINT
 
 ### 🧬 PyMOL Plugin for Molecular Glue Discovery & Analysis
 
@@ -343,10 +342,10 @@ analyze_protein_ligand_interactions 6h0g, docked_pose
 If you use GLINT in your research, please cite:
 
 ```bibtex
-@software{glint2024,
-  title = {GLINT: A PyMOL Plugin for Molecular Glue Discovery and Analysis},
+@software{GLINT,
+  title = {GLINT: A PyMOL Toolkit for Molecular Glue Interface Analysis and Rational Design},
   author = {Chen, Roufen},
-  year = {2024},
+  year = {2026},
   url = {https://github.com/VesperChen01/GLINT}
 }
 ```
