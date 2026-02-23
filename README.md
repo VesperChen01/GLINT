@@ -48,11 +48,16 @@ Molecular glues are small molecules that induce or stabilize protein-protein int
 - **Vina Docking** - Integrated AutoDock Vina
 - **HADDOCK3 Integration** - Ternary complex modeling
 - **FoldX Mutation Analysis** - Mutational binding energy prediction
-- **Ternary Complex Evaluation** - BSA/contact analysis, molecular properties, and ternary complex metrics
 
 </td>
 </tr>
 <tr>
+<td width="50%">
+
+### 🧩 Ternary Complex Evaluation
+- **Ternary Complex Evaluation** - BSA/contact analysis, molecular properties, and ternary complex metrics
+
+</td>
 <td width="50%">
 
 ### ⚡ Lead Optimization
@@ -365,6 +370,24 @@ This project is licensed under the [MIT License](LICENSE).
 
 - [PyMOL](https://pymol.org) - Visualization framework
 - [RDKit](https://rdkit.org) - Cheminformatics tools
+
+---
+
+## 📚 Molecular Glue Resources
+
+### 分子胶专用数据库
+
+- [MolGlueDB](https://www.molgluedb.com/)
+- [MGTbind](https://mgtbind.pkumdl.cn)
+- [MGDB](http://mgdb.idruglab.cn/)
+- [TPDDB](https://tpddb.idrblab.net)
+
+### 结构数据集 / 基准
+
+- [MG-PDB & MGBench](https://zenodo.org/records/17130781)
+
+### Community
+
 - The molecular glue research community
 
 ---
