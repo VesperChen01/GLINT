@@ -375,14 +375,14 @@ This project is licensed under the [MIT License](LICENSE).
 
 ## 📚 Molecular Glue Resources
 
-### 分子胶专用数据库
+### Molecular Glue Databases
 
 - [MolGlueDB](https://www.molgluedb.com/)
 - [MGTbind](https://mgtbind.pkumdl.cn)
 - [MGDB](http://mgdb.idruglab.cn/)
 - [TPDDB](https://tpddb.idrblab.net)
 
-### 结构数据集 / 基准
+### Structural Datasets / Benchmarks
 
 - [MG-PDB & MGBench](https://zenodo.org/records/17130781)
 
