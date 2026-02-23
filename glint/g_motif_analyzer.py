@@ -1398,25 +1398,6 @@ def _seq_of_selection(sel):
     res_keys = [(r[0], r[1], r[2]) for r in residues]
     return seq, res_keys
 
-def _find_c2h2(seq):
-    # Very rough C2H2 motif: C-X(2-4)-C-...-H-X(3-5)-H, window 20-40
-    results = []
-    n = len(seq)
-    for i in range(n):
-        if seq[i] != 'C':
-            continue
-        for j in range(i+2, min(i+5, n)):
-            if seq[j] != 'C':
-                continue
-            for k in range(j+8, min(j+35, n)):
-                if seq[k] != 'H':
-                    continue
-                for l in range(k+3, min(k+6, n)):
-                    if seq[l] == 'H':
-                        results.append((i, l))
-                        break
-    return results
-
 def _find_beta_hairpins(seq):
     # Heuristic: short segments (6-10) with alternating hydrophobicity signal
     hyd = set("VILMFYW")
@@ -1432,7 +1413,7 @@ def _find_beta_hairpins(seq):
 def degron_annotate(POI_sel: str, csv_path: str = None, auto: bool = True, name: str = "degron"):
     """
     Annotate degron-like regions. If csv provided, expects columns: chain,start,end,label.
-    Auto mode marks simple C2H2-ZF-like motifs and β-hairpin heuristics.
+    Auto mode marks beta-hairpin-like regions using sequence heuristics.
     """
     poi = f"({POI_sel})"
     regions = []  # start,end,label (0-based indices)
@@ -1455,8 +1436,6 @@ def degron_annotate(POI_sel: str, csv_path: str = None, auto: bool = True, name:
 
     if auto:
         seq, res_keys = _seq_of_selection(poi)
-        for s, e in _find_c2h2(seq):
-            regions.append((s, e, 'C2H2_like'))
         for s, e in _find_beta_hairpins(seq):
             regions.append((s, e, 'beta_hairpin_like'))
 
@@ -1468,7 +1447,6 @@ def degron_annotate(POI_sel: str, csv_path: str = None, auto: bool = True, name:
     # Map sequence index to (chain,resi,icode)
     _, res_keys = _seq_of_selection(poi)
     colors = {
-        'C2H2_like': 'magenta',
         'beta_hairpin_like': 'tv_green',
         'degron': 'tv_red',
     }

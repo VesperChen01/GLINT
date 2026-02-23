@@ -19,19 +19,12 @@
 
 ## 📖 Overview
 
-**GLINT** is a comprehensive PyMOL plugin designed for molecular glue discovery and protein-ligand interaction analysis. It provides specialized tools for analyzing ternary complexes, detecting G-motifs, identifying neo-epitopes, and performing batch structure analysis.
+**GLINT** is a comprehensive PyMOL plugin designed for molecular glue discovery and protein-ligand interaction analysis. It provides specialized tools for analyzing ternary complexes, detecting G-motifs, identifying neo-epitopes, and structure-guided optimization workflows.
 
 <details>
 <summary><b>🔬 What are Molecular Glues?</b></summary>
 
-Molecular glues are small molecules that induce or stabilize protein-protein interactions, typically between an E3 ubiquitin ligase and a target protein (neo-substrate), leading to targeted protein degradation. Unlike PROTACs, molecular glues do not require a linker and work by creating new protein-protein interfaces.
-
-**Key Examples:**
-| Compound | E3 Ligase | Target |
-|----------|-----------|--------|
-| Thalidomide/Lenalidomide/Pomalidomide | CRBN | IKZF1/3, CK1α, GSPT1 |
-| Indisulam | DCAF15 | RBM39 |
-| CR8 | CDK12 | Cyclin K |
+Molecular glues are small molecules that induce or stabilize protein-protein interactions, typically between an E3 ubiquitin ligase and a target protein (neo-substrate), leading to targeted protein degradation.
 
 </details>
 
@@ -45,7 +38,6 @@ Molecular glues are small molecules that induce or stabilize protein-protein int
 
 ### 🎯 Target Discovery
 - **G-Motif Detection** - CRBN G-loop binding motifs via RMSD matching
-- **C2H2 Zinc Finger Detection** - Neo-substrate zinc finger domains
 - **Surface Analysis** - Electrostatic & hydrophobic patches
 - **Surface Similarity** - MaSIF-style binding site comparison
 
@@ -79,15 +71,6 @@ Molecular glues are small molecules that induce or stabilize protein-protein int
 </td>
 </tr>
 </table>
-
-### 📊 Batch Analysis
-
-| Analysis Type | Description |
-|--------------|-------------|
-| Batch G-Motif | Analyze multiple structures simultaneously |
-| Batch PPI | Compare interfaces across structure sets |
-| Batch Pocket | Screen proteins for druggable sites |
-| Export | JSON/CSV reports with summary statistics |
 
 ---
 
@@ -225,21 +208,21 @@ Detect CRBN G-loop binding motifs using RMSD-based template matching.
 </details>
 
 <details>
-<summary><b>C2H2 Zinc Finger Detection</b></summary>
+<summary><b>Pocket Detection & Interface Pockets</b></summary>
 
-Find C2H2 zinc finger domains (e.g., IKZF1/3 for lenalidomide targets).
+Detect druggable pockets and prioritize pockets located at protein-protein interfaces.
 
 | Parameter | Description | Default |
 |-----------|-------------|---------|
-| Turn RMSD | Local turn alignment threshold (Å) | 2.0 |
-| Global RMSD | Global fold check threshold (Å) | 3.5 |
-| Require Turn Gly | Require key Gly in turn region | ✗ |
-| Skip Low-Complexity | Skip polyQ regions | ✗ |
+| Detection Scope | Whole structure or selected region | Whole structure |
+| Druggability Filter | Minimum pocket score threshold | 0.0 |
+| Interface Distance | Contact cutoff for interface pockets (Å) | 5.0 |
+| Output | Export pocket summary CSV | Optional |
 
 **Buttons:**
-- **Find Zinc Fingers** - Detect C2H2 domains
-- **Render C2H2 + ESP** - Visualize with electrostatic surface
-- **Highlight Domains** - Color-code detected domains
+- **Detect Pockets** - Run global pocket detection
+- **Interface Pockets** - Focus on pockets at protein interfaces
+- **Visualize Pockets** - Color-code by score and show labels
 
 </details>
 
@@ -398,48 +381,6 @@ Predict mutation effects on binding.
 
 </details>
 
----
-
-### 📊 Batch Analysis Tab
-
-Analyze multiple structures simultaneously.
-
-<details>
-<summary><b>Input Methods</b></summary>
-
-| Method | Description |
-|--------|-------------|
-| PDB IDs | Enter comma-separated IDs (e.g., 6H0G,6H0F,5FQD) |
-| Browse Files | Select individual PDB/CIF files |
-| Browse Folder | Add all PDB files from a directory |
-
-</details>
-
-<details>
-<summary><b>Analysis Types</b></summary>
-
-| Type | Description | Key Parameters |
-|------|-------------|----------------|
-| G-motif Detection | Batch G-loop finding | RMSD cutoff, Template |
-| PPI Interface | Compare interfaces | Chain pairs, Distance |
-| Pocket Detection | Screen for druggable sites | Min volume, Min depth |
-| Protein-Ligand | Batch interaction analysis | Ligand names, Distance |
-| Comprehensive | Run all analyses | Combined parameters |
-
-</details>
-
-<details>
-<summary><b>Output</b></summary>
-
-- CSV files with detailed results
-- Summary statistics
-- Per-structure breakdown
-- JSON reports for comprehensive analysis
-
-</details>
-
----
-
 ### 🎨 Visualization Tab
 
 Generate publication-quality images.
@@ -526,48 +467,24 @@ Go to **Visualization** tab → Click **Render All**
 </details>
 
 <details>
-<summary><b>Tutorial 2: Batch Analysis</b></summary>
+<summary><b>Tutorial 3: Molecular Glue Case Comparison</b></summary>
 
-#### GUI Method
-1. Go to **Batch Analysis** tab
-2. Enter PDB IDs: `6H0G,6H0F,5FQD,4CI1,4CI2`
-3. Select analysis type: `G-motif Detection`
-4. Click **Run Batch Analysis**
-
-#### Command Line
-```python
-# Batch G-motif detection
-batch_gmotif "6H0G,6H0F,5FQD,4CI1,4CI2", output_csv="gmotif_results.csv"
-
-# Batch PPI analysis
-batch_ppi "6H0G,6H0F,5FQD", "A", "B", output_csv="ppi_results.csv"
-
-# Batch pocket detection
-batch_pockets "6H0G,6H0F,5FQD", output_csv="pocket_results.csv"
-```
-
-</details>
-
-<details>
-<summary><b>Tutorial 3: PROTAC vs Molecular Glue Comparison</b></summary>
-
-| Feature | Molecular Glue | PROTAC |
-|---------|---------------|--------|
-| Linker | ❌ No | ✅ Yes |
-| PPI Interface | Strong, direct | Weak or none |
-| Neo-epitope | Present | Absent |
-| Bridging atoms | Many | Few |
+| Metric | Case A (6H0G) | Case B (5T35) |
+|--------|---------------|---------------|
+| Interface contacts | Compare interaction counts | Compare interaction counts |
+| Neo-epitope pattern | Evaluate detected residues | Evaluate detected residues |
+| Pocket profile | Compare pocket size/score | Compare pocket size/score |
 
 ```python
-# Molecular glue analysis
+# Case A analysis
 fetch 6H0G
 ppi_analyze 6h0g, ['A'], ['B']
-# → Strong interface, many contacts
+# → Inspect interface contacts
 
-# PROTAC analysis
+# Case B analysis
 fetch 5T35
 ppi_analyze 5t35, ['A'], ['B']
-# → Weak interface, few contacts
+# → Compare with Case A
 ```
 
 </details>
@@ -622,7 +539,7 @@ analyze_protein_ligand_interactions 6h0g, docked_pose
 |---------|-------------|
 | `analyze_protein_ligand_interactions` | Protein-ligand interaction detection |
 | `analyze_pdb_interactions` | Generic PDB interaction analysis |
-| `analyze_ternary_complex` | PROTAC/ternary complex analysis |
+| `analyze_ternary_complex` | Ternary complex analysis |
 
 </details>
 
@@ -634,19 +551,7 @@ analyze_protein_ligand_interactions 6h0g, docked_pose
 | `find_crbn_g_motif` | G-motif detection |
 | `ppi_analyze` | PPI interface analysis |
 | `neo_epitope_find` | Neo-epitope detection |
-| `find_c2h2_domains` | C2H2 zinc finger detection |
-
-</details>
-
-<details>
-<summary><b>Batch Analysis Commands</b></summary>
-
-| Command | Description |
-|---------|-------------|
-| `batch_gmotif` | Batch G-motif detection |
-| `batch_ppi` | Batch PPI analysis |
-| `batch_pockets` | Batch pocket detection |
-| `batch_interactions` | Batch interaction analysis |
+| `detect_pockets` | Druggable pocket detection |
 
 </details>
 
@@ -670,13 +575,6 @@ analyze_protein_ligand_interactions 6h0g, docked_pose
 | `vina_score_complex` | Score existing complex |
 
 </details>
-
----
-
-## 📖 Documentation
-
-- 📄 [WARP.md](WARP.md) - Development documentation
-- 📚 [Resources](glint/resources/molecular_glue_resources.md) - Databases, tools, and literature
 
 ---
 

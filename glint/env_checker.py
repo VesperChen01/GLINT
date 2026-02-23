@@ -36,7 +36,6 @@ REQUIRED_PACKAGES = [
 OPTIONAL_PACKAGES = [
     ("open3d", "Open3D", "open3d", "Surface analysis"),
     ("skimage", "scikit-image", "scikit-image", "Marching Cubes algorithm"),
-    ("pyhmmer", "pyhmmer", "pyhmmer", "C2H2 zinc finger HMM detection"),
     ("haddock", "HADDOCK3", "haddock3", "Protein-Protein Docking"),
     ("trimesh", "trimesh", "trimesh", "Mesh processing"),
 ]
@@ -92,16 +91,6 @@ EXTERNAL_TOOLS = {
             "Windows": [],
         },
         "python_module": "pdb2pqr",  # Recommended to use via Python API
-    },
-}
-
-# Pfam HMM file configuration
-HMM_FILES = {
-    "zf-C2H2": {
-        "pfam_id": "PF00096",
-        "url": "https://www.ebi.ac.uk/interpro/wwwapi//entry/pfam/PF00096?annotation=hmm",
-        "local_name": "zf-C2H2.hmm",
-        "description": "C2H2 zinc finger domain HMM",
     },
 }
 
@@ -736,128 +725,6 @@ class EnvironmentChecker:
             # 返回临时目录路径，即使创建失败也让调用者处理
             return temp_data_dir
     
-    def check_hmm_files(self) -> Dict[str, bool]:
-        """
-        检查 HMM 文件是否存在
-        
-        Returns:
-            Dict[str, bool]: {HMM名称: 是否存在}
-        """
-        self.log("\n🔬 检查 HMM Profile 文件:")
-        data_dir = self.get_hmm_data_dir()
-        status = {}
-        
-        for name, info in HMM_FILES.items():
-            local_path = os.path.join(data_dir, info["local_name"])
-            if os.path.exists(local_path):
-                self.log(f"  ✓ {name} ({info['pfam_id']}) - {info['description']}")
-                status[name] = True
-            else:
-                self.log(f"  ✗ {name} ({info['pfam_id']}) - 未下载")
-                status[name] = False
-        
-        return status
-    
-    def download_hmm_file(self, hmm_name: str) -> bool:
-        """
-        下载单个 HMM 文件
-        
-        Args:
-            hmm_name: HMM 名称（如 "zf-C2H2"）
-            
-        Returns:
-            bool: 是否下载成功
-        """
-        if hmm_name not in HMM_FILES:
-            self.log(f"  ✗ 未知的 HMM: {hmm_name}")
-            return False
-        
-        info = HMM_FILES[hmm_name]
-        data_dir = self.get_hmm_data_dir()
-        local_path = os.path.join(data_dir, info["local_name"])
-        
-        if os.path.exists(local_path):
-            self.log(f"  ✓ {hmm_name} 已存在")
-            return True
-        
-        self.log(f"  下载 {hmm_name} ({info['pfam_id']})...")
-        
-        try:
-            import urllib.request
-            
-            # 下载 HMM 文件
-            urllib.request.urlretrieve(info["url"], local_path)
-            
-            # 验证文件
-            if os.path.exists(local_path) and os.path.getsize(local_path) > 100:
-                self.log(f"  ✅ {hmm_name} 下载成功: {local_path}")
-                return True
-            else:
-                self.log(f"  ✗ {hmm_name} 下载失败: 文件无效")
-                if os.path.exists(local_path):
-                    os.remove(local_path)
-                return False
-                
-        except Exception as e:
-            self.log(f"  ✗ {hmm_name} 下载失败: {e}")
-            return False
-    
-    def download_all_hmm_files(self) -> Dict[str, bool]:
-        """
-        下载所有 HMM 文件
-        
-        Returns:
-            Dict[str, bool]: {HMM名称: 是否下载成功}
-        """
-        self.log("\n🔬 下载 HMM Profile 文件...")
-        results = {}
-        
-        for name in HMM_FILES:
-            results[name] = self.download_hmm_file(name)
-        
-        return results
-    
-    def setup_c2h2_detection(self) -> bool:
-        """
-        一键设置 C2H2 锌指检测环境
-        
-        包括：
-        1. 安装 pyhmmer
-        2. 下载 zf-C2H2 HMM 文件
-        
-        Returns:
-            bool: 是否全部成功
-        """
-        self.log("\n" + "=" * 60)
-        self.log("🔧 设置 C2H2 锌指检测环境")
-        self.log("=" * 60)
-        
-        success = True
-        
-        # 1. 安装 pyhmmer
-        try:
-            import pyhmmer
-            self.log("  ✓ pyhmmer 已安装")
-        except ImportError:
-            self.log("  安装 pyhmmer...")
-            if self._install_pip_package("pyhmmer"):
-                self.log("  ✅ pyhmmer 安装成功")
-            else:
-                self.log("  ⚠️ pyhmmer 安装失败，将使用 regex 回退方案")
-                success = False
-        
-        # 2. 下载 HMM 文件
-        if not self.download_hmm_file("zf-C2H2"):
-            self.log("  ⚠️ HMM 文件下载失败，将使用 regex 回退方案")
-            success = False
-        
-        if success:
-            self.log("\n✅ C2H2 检测环境设置完成（HMM 模式）")
-        else:
-            self.log("\n⚠️ C2H2 检测可用（regex 模式），HMM 模式需要手动配置")
-        
-        return success
-    
     def setup_ec_analysis(self) -> bool:
         """
         一键设置电性互补性（EC）分析环境
@@ -1186,8 +1053,6 @@ conda install -c conda-forge rdkit scipy matplotlib pillow \\
 # 可选：在激活环境中安装 Vina + Meeko
 pip install vina meeko
 
-# 可选：C2H2 锌指检测 HMM 支持
-pip install pyhmmer
 """
         
         # 使用说明
@@ -1314,24 +1179,6 @@ def get_dependency_status() -> Dict[str, bool]:
     """
     checker = EnvironmentChecker(log_callback=None)
     return checker.check_all_dependencies()
-
-
-def setup_c2h2_detection(log_callback=None) -> bool:
-    """
-    一键设置 C2H2 锌指检测环境（便捷函数）
-    
-    包括：
-    1. 安装 pyhmmer
-    2. 下载 zf-C2H2 HMM 文件
-    
-    Args:
-        log_callback: 日志回调函数
-        
-    Returns:
-        bool: 是否全部成功
-    """
-    checker = EnvironmentChecker(log_callback=log_callback)
-    return checker.setup_c2h2_detection()
 
 
 def setup_surface_analysis(log_callback=None) -> bool:

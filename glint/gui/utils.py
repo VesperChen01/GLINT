@@ -407,8 +407,7 @@ def _import_helpers():
                 ["g_motif_analyzer.py", "g_motif.py", "g-motif.py"], "find_crbn_g_motif"
             )
     
-    # 修复：移除 find_c2h2_domains —— 该变量在 fallback 路径中未定义，
-    # 且与第一条返回路径（14 个值）和解包处不一致，会导致 NameError / ValueError
+    # Keep helper return tuple consistent across normal and fallback paths.
     return (highlight_csv_residues, highlight_gmotif_loops,
             analyze_pdb_interactions, find_crbn_g_motif,
             render_interactions_beautifully, generate_2d_interaction_diagram,
