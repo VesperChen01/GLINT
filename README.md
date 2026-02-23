@@ -108,7 +108,7 @@ conda activate glint
 # Install dependencies
 conda install -c conda-forge rdkit scipy matplotlib pillow numpy pandas seaborn pyqt -y
 
-# Optional: Install PyMOL
+# Install PyMOL
 conda install -c conda-forge pymol-open-source -y
 
 # Copy glint folder to PyMOL startup directory
@@ -323,12 +323,18 @@ analyze_protein_ligand_interactions 6h0g, docked_pose
 
 | Requirement | Version | Note |
 |-------------|---------|------|
+| Python | 3.10 | Required |
 | PyMOL | Open-Source or Incentive | Required |
-| Python | 3.8+ | Required |
-| PyQt | 5 or 6 | Required |
-| NumPy, SciPy, Pandas | Latest | Required |
-| RDKit | Latest | Optional (2D diagrams) |
-| AutoDock Vina | Latest | Optional (docking) |
+| PyQt | Conda `pyqt` (Qt5/Qt6 backend) | Required |
+| NumPy | 1.26.4 | Required |
+| SciPy, Pandas, Matplotlib, Pillow, Seaborn | Recent stable | Required |
+| RDKit | Conda-forge build | Required |
+| Open Babel (`obabel`) | Conda-forge build | Required |
+| AutoDock Vina (`vina`) | Conda-forge build | Required |
+| Requests | Recent stable | Required |
+| APBS + PDB2PQR | Conda-forge build | Required |
+| HADDOCK3 | Latest (`pip install -U haddock3`) | Required |
+| Open3D + scikit-image | Latest | Required |
 
 ---
 
@@ -386,15 +392,9 @@ This project is licensed under the [MIT License](LICENSE).
 
 - [MG-PDB & MGBench](https://zenodo.org/records/17130781)
 
-### Community
-
-- The molecular glue research community
-
----
 
 <div align="center">
 
-Made with ❤️ for structural biology and drug discovery research
 
 **⭐ Star this repo if you find it useful!**
 
