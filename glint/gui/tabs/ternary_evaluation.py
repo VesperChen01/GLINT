@@ -388,8 +388,7 @@ class TernaryEvaluationTab(CommonTab):
         features = [
             ("COG", "Å", "COG Shift"), ("Angle", "°", "Angle"),
             ("E3-POI", "Å", "E3-POI Dist"), ("E3-MG", "Å", "E3-MG Dist"),
-            ("POI-MG", "Å", "POI-MG Dist"), ("Coop", "kcal", "Cooperativity"),
-            ("Dual", "", "Duality")
+            ("POI-MG", "Å", "POI-MG Dist"), ("Dual", "", "Duality")
         ]
 
         grid = QGridLayout()
@@ -441,7 +440,6 @@ class TernaryEvaluationTab(CommonTab):
             ("MG-POI BSA", "Å²", "#10b981"),
             ("E3-POI BSA", "Å²", "#8b5cf6"),
             ("Contacts", "", "#f59e0b"),
-            ("Cooperativity", "kcal", "#ef4444"),
         ]
 
         grid = QHBoxLayout()
@@ -585,7 +583,6 @@ class TernaryEvaluationTab(CommonTab):
             "MG-POI BSA": ("bsa_mg_poi", "Å²"),
             "E3-POI BSA": ("bsa_e3_poi", "Å²"),
             "Contacts": ("contact_count_45", ""),
-            "Cooperativity": ("cooperativity_energy", "kcal"),
         }
         for name, (key, unit) in summary_map.items():
             if name in self.summary_labels:
@@ -610,7 +607,6 @@ class TernaryEvaluationTab(CommonTab):
             "E3-POI Dist": "dist_e3_poi",
             "E3-MG Dist": "dist_e3_mg",
             "POI-MG Dist": "dist_poi_mg",
-            "Cooperativity": "cooperativity_energy",
             "Duality": "duality_index"
         }
         for name, key in geom_map.items():
@@ -646,7 +642,6 @@ class TernaryEvaluationTab(CommonTab):
         
         cog_shift = self._safe_get(result, 'geom_cog_shift')
         angle = self._safe_get(result, 'geom_angle_deg')
-        coop = self._safe_get(result, 'cooperativity_energy')
         duality = self._safe_get(result, 'duality_index')
         
         # 计算 BSA_MG_total
@@ -713,12 +708,8 @@ class TernaryEvaluationTab(CommonTab):
             f"    Angle:          {angle:>8.1f} °   (E3-MG-POI angle)",
             "",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            "【3. Cooperativity Metrics】",
+            "【3. Quality Metrics】",
             "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━",
-            "",
-            "  Cooperativity Energy (estimated):",
-            f"    ΔG_coop:        {coop:>8.2f} kcal/mol",
-            "    (Negative = favorable ternary complex formation)",
             "",
             "  Duality Index:",
             "  ┌─────────────────────────────────────────────────────────┐",

@@ -73,25 +73,26 @@ class LigandFeatures:
     net_charge_ph74: float = 0.0
 
 @dataclass
+class DistanceFeatures:
+    """距离特征（最小原子距离）"""
+    dist_e3_poi: float = 0.0  # E3-POI 最小原子距离
+    dist_e3_mg: float = 0.0   # E3-MG 最小原子距离
+    dist_poi_mg: float = 0.0  # POI-MG 最小原子距离
+
+@dataclass
 class GeometryFeatures:
     """几何特征"""
-    cog_e3: np.ndarray = field(default_factory=lambda: np.zeros(3))
-    cog_poi: np.ndarray = field(default_factory=lambda: np.zeros(3))
-    cog_mg: np.ndarray = field(default_factory=lambda: np.zeros(3))
-    cog_shift: float = 0.0           # 重心偏移（最重要特征）
-    angle_deg: float = 0.0           # 关键向量夹角
-    dist_e3_poi: float = 0.0
-    dist_e3_mg: float = 0.0
-    dist_poi_mg: float = 0.0
+    cog_shift: float = 0.0    # COG 偏移（MG 到 E3-POI 连线的垂直距离）
+    angle_deg: float = 0.0    # E3-MG-POI 夹角（度）
 
 @dataclass
 class TernaryComplexFeatures:
     """三元复合物综合特征"""
     interface: InterfaceFeatures = field(default_factory=InterfaceFeatures)
     ligand: LigandFeatures = field(default_factory=LigandFeatures)
+    distances: DistanceFeatures = field(default_factory=DistanceFeatures)
     geometry: GeometryFeatures = field(default_factory=GeometryFeatures)
-    cooperativity_energy: Optional[float] = None
-    duality_index: Optional[float] = None
+    balance_index: Optional[float] = None  # Duality Index (双面性指数)
 
 # ==================== BSA计算器（使用PyMOL） ====================
 
@@ -724,12 +725,14 @@ class TernaryComplexEvaluator:
         if ligand_smiles:
             features.ligand = self.ligand_calc.calculate(smiles=ligand_smiles)
         
-        # 4. 计算几何特征
+        # 4. 计算距离特征
+        features.distances = self._calculate_distances(e3, poi, mg)
+        
+        # 5. 计算几何特征
         features.geometry = self._calculate_geometry(e3, poi, mg)
         
-        # 5. 计算协同性指标
-        features.cooperativity_energy = self._estimate_cooperativity(features)
-        features.duality_index = self._calculate_duality(features)
+        # 6. 计算平衡指数
+        features.balance_index = self._calculate_balance_index(features)
         
         return features
 
@@ -808,34 +811,16 @@ class TernaryComplexEvaluator:
         
         return interface, intermediate
 
-    def _calculate_geometry(self, e3: ChainInfo, poi: ChainInfo, mg: ChainInfo) -> GeometryFeatures:
-        """计算几何特征"""
-        geom = GeometryFeatures()
+    def _calculate_distances(self, e3: ChainInfo, poi: ChainInfo, mg: ChainInfo) -> DistanceFeatures:
+        """计算最小原子距离"""
+        dist = DistanceFeatures()
         
-        # 质心坐标
-        geom.cog_e3 = e3.center_of_mass
-        geom.cog_poi = poi.center_of_mass
-        geom.cog_mg = mg.center_of_mass
+        # 计算最小原子距离（实际的空间距离）
+        dist.dist_e3_poi = self._min_distance(e3.atoms, poi.atoms)
+        dist.dist_e3_mg = self._min_distance(e3.atoms, mg.atoms)
+        dist.dist_poi_mg = self._min_distance(poi.atoms, mg.atoms)
         
-        # 质心间距离
-        geom.dist_e3_poi = np.linalg.norm(geom.cog_e3 - geom.cog_poi)
-        geom.dist_e3_mg = np.linalg.norm(geom.cog_e3 - geom.cog_mg)
-        geom.dist_poi_mg = np.linalg.norm(geom.cog_poi - geom.cog_mg)
-        
-        # 重心偏移（MG到E3-POI连线的距离）
-        e3_poi_vec = geom.cog_poi - geom.cog_e3
-        e3_mg_vec = geom.cog_mg - geom.cog_e3
-        
-        if np.linalg.norm(e3_poi_vec) > 0:
-            proj = np.dot(e3_mg_vec, e3_poi_vec) / np.dot(e3_poi_vec, e3_poi_vec) * e3_poi_vec
-            geom.cog_shift = np.linalg.norm(e3_mg_vec - proj)
-        
-        # 向量夹角
-        if np.linalg.norm(e3_mg_vec) > 0 and np.linalg.norm(e3_poi_vec) > 0:
-            cos_angle = np.dot(e3_mg_vec, e3_poi_vec) / (np.linalg.norm(e3_mg_vec) * np.linalg.norm(e3_poi_vec))
-            geom.angle_deg = np.degrees(np.arccos(np.clip(cos_angle, -1, 1)))
-        
-        return geom
+        return dist
 
     def _count_contacts(self, atoms1: List[AtomInfo], atoms2: List[AtomInfo], cutoff: float) -> int:
         """统计接触数"""
@@ -859,16 +844,61 @@ class TernaryComplexEvaluator:
                     min_dist = d
         return min_dist
 
-    def _estimate_cooperativity(self, features: TernaryComplexFeatures) -> float:
-        """估算协同性能量"""
-        # 简化估算：基于BSA和几何特征
-        # 实际应用中应使用Rosetta或MM/GBSA
-        bsa_score = -0.01 * features.interface.bsa_total
-        geom_score = -0.1 * (1.0 / (1.0 + features.geometry.cog_shift))
-        return bsa_score + geom_score
+    def _calculate_geometry(self, e3: ChainInfo, poi: ChainInfo, mg: ChainInfo) -> GeometryFeatures:
+        """
+        计算三元复合物的几何特征
+        
+        1. COG Shift: MG 重心到 E3-POI 连线的垂直距离
+        2. Angle: E3-MG-POI 的夹角（度）
+        """
+        geom = GeometryFeatures()
+        
+        # 计算各组分的重心
+        e3_center = e3.center_of_mass
+        poi_center = poi.center_of_mass
+        mg_center = mg.center_of_mass
+        
+        # 计算 COG Shift（MG 到 E3-POI 连线的垂直距离）
+        # 使用点到直线距离公式
+        e3_poi_vec = poi_center - e3_center
+        e3_mg_vec = mg_center - e3_center
+        
+        # 投影长度
+        e3_poi_norm = np.linalg.norm(e3_poi_vec)
+        if e3_poi_norm > 0:
+            proj_length = np.dot(e3_mg_vec, e3_poi_vec) / e3_poi_norm
+            # 投影点
+            proj_point = e3_center + proj_length * e3_poi_vec / e3_poi_norm
+            # 垂直距离
+            geom.cog_shift = np.linalg.norm(mg_center - proj_point)
+        else:
+            geom.cog_shift = 0.0
+        
+        # 计算 E3-MG-POI 夹角
+        vec1 = e3_center - mg_center
+        vec2 = poi_center - mg_center
+        norm1 = np.linalg.norm(vec1)
+        norm2 = np.linalg.norm(vec2)
+        
+        if norm1 > 0 and norm2 > 0:
+            cos_angle = np.dot(vec1, vec2) / (norm1 * norm2)
+            cos_angle = np.clip(cos_angle, -1.0, 1.0)  # 防止数值误差
+            geom.angle_deg = np.degrees(np.arccos(cos_angle))
+        else:
+            geom.angle_deg = 0.0
+        
+        return geom
 
-    def _calculate_duality(self, features: TernaryComplexFeatures) -> float:
-        """计算双面性指数"""
+    def _calculate_balance_index(self, features: TernaryComplexFeatures) -> float:
+        """
+        计算平衡指数（Balance Index）
+        
+        反映分子胶是否平衡地结合 E3 和 POI：
+        - 值接近 1.0 = 平衡结合（理想的"双面胶"）
+        - 值接近 0.0 = 偏向一侧结合
+        
+        公式: min(BSA_MG-E3, BSA_MG-POI) / max(BSA_MG-E3, BSA_MG-POI)
+        """
         bsa_e3 = features.interface.bsa_mg_e3
         bsa_poi = features.interface.bsa_mg_poi
         
@@ -911,25 +941,18 @@ class TernaryComplexEvaluator:
             'ligand_fsp3': features.ligand.fsp3,
             'ligand_rings': features.ligand.num_rings,
             
+            # Distances (minimum atom distances)
+            'dist_e3_poi': features.distances.dist_e3_poi,
+            'dist_e3_mg': features.distances.dist_e3_mg,
+            'dist_poi_mg': features.distances.dist_poi_mg,
+            
             # Geometry
-            'cog_e3_x': features.geometry.cog_e3[0],
-            'cog_e3_y': features.geometry.cog_e3[1],
-            'cog_e3_z': features.geometry.cog_e3[2],
-            'cog_poi_x': features.geometry.cog_poi[0],
-            'cog_poi_y': features.geometry.cog_poi[1],
-            'cog_poi_z': features.geometry.cog_poi[2],
-            'cog_mg_x': features.geometry.cog_mg[0],
-            'cog_mg_y': features.geometry.cog_mg[1],
-            'cog_mg_z': features.geometry.cog_mg[2],
             'geom_cog_shift': features.geometry.cog_shift,
             'geom_angle_deg': features.geometry.angle_deg,
-            'dist_e3_poi': features.geometry.dist_e3_poi,
-            'dist_e3_mg': features.geometry.dist_e3_mg,
-            'dist_poi_mg': features.geometry.dist_poi_mg,
             
-            # Derived
-            'cooperativity_energy': features.cooperativity_energy,
-            'duality_index': features.duality_index,
+            # Quality Metrics
+            'balance_index': features.balance_index,
+            'duality_index': features.balance_index,  # 别名，用于向后兼容
         }
 
 
@@ -1000,8 +1023,7 @@ if __name__ == "__main__":
     print(f"  向量夹角: {features['geom_angle_deg']:.1f}°")
     print(f"  E3-POI距离: {features['dist_e3_poi']:.1f} Å")
     
-    print("\n【协同性指标】")
-    print(f"  协同能: {features['cooperativity_energy']:.2f} kcal/mol")
+    print("\n【质量指标】")
     print(f"  双面性指数: {features['duality_index']:.2f}")
     
     if smiles:
