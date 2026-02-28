@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 highlight_residues.py
-从CSV文件高亮显示残基相互作用的功能模块
+从CSVFile高亮Display残基相互作用的功能Module
 
 基于原始的highlight_csv_residues_chain_or_element_sticks.py改进
 """
@@ -107,7 +107,7 @@ def _split_residue_tag(tag):
     return "","", tag
 
 def _parse_residue_tag(tag):
-    """解析残基标签，支持多种格式"""
+    """解析残基Label，支持多种格式"""
     tag = tag.strip()
     # 尝试匹配 "CHAIN:RES NUM" 或 "RES NUM" 格式
     m = re.match(r'(?:(?P<chain>[A-Za-z0-9]):)?(?P<resn>[A-Za-z0-9\*]+)\s+(?P<resi>-?\d+)', tag)
@@ -121,7 +121,7 @@ def _parse_residue_tag(tag):
         d = m.groupdict()
         return d.get("chain") or "", d["resn"], d["resi"]
     
-    # 如果都不匹配，使用简单的分割方法
+    # 如果都不匹配，using简单的分割Method
     toks = re.split(r'[:\s]+', tag)
     chain = ""
     resn = toks[0] if len(toks) >= 1 else ""
@@ -129,7 +129,7 @@ def _parse_residue_tag(tag):
     return chain, resn, resi
 
 def _res_sel(obj, chain, resn, resi):
-    """构建残基选择表达式"""
+    """构建残基Select表达式"""
     parts = []
     if obj:   parts.append(f"model {obj}")
     if chain: parts.append(f"chain {chain}")
@@ -139,7 +139,7 @@ def _res_sel(obj, chain, resn, resi):
     return " and ".join(parts) if parts else "all"
 
 def _setup_view(obj, protein_chain, partner_chain, colorA, colorB):
-    """设置基本视图和链颜色"""
+    """Settings基本视图和链颜色"""
     cmd.hide("everything", obj)
     
     # 自动检测所有链
@@ -149,20 +149,20 @@ def _setup_view(obj, protein_chain, partner_chain, colorA, colorB):
         if atom.chain:
             all_chains.add(atom.chain.strip())
     
-    # 设置所有蛋白链的 cartoon 显示
+    # Settings所有蛋白链的 cartoon Display
     for chain in all_chains:
         cmd.show("cartoon", f"model {obj} and chain {chain} and polymer.protein")
         
-        # 根据链设置颜色
+        # 根据链Settings颜色
         if chain == protein_chain:
             cmd.color(colorA, f"model {obj} and chain {chain}")
         elif chain == partner_chain:
             cmd.color(colorB, f"model {obj} and chain {chain}")
         else:
-            # 其他链使用默认颜色
+            # 其他链using默认颜色
             cmd.color("gray70", f"model {obj} and chain {chain}")
     
-    # 配体显示为 sticks 并使用独特颜色
+    # 配体Display为 sticks 并using独特颜色
     ligand_sel = f"model {obj} and organic and not polymer"
     if cmd.count_atoms(ligand_sel) > 0:
         cmd.show("sticks", ligand_sel)
@@ -175,7 +175,7 @@ def _setup_view(obj, protein_chain, partner_chain, colorA, colorB):
     cmd.bg_color("white")
 
 def _label_for_residue(resn, resi):
-    """生成残基标签，使用一字母氨基酸代码 + 残基号，例如 "T100"""    
+    """生成残基Label，using一字母氨基酸代码 + 残基号，例如 "T100"""    
     resn = (resn or "").strip().upper()
     resi_str = str(resi).strip()
 
@@ -199,8 +199,8 @@ def _label_for_residue(resn, resi):
 
 def _interaction_to_abbr(interaction_text):
     """
-    将中文相互作用类型转换为英文缩写
-    PyMOL标签不支持中文，需要转换为ASCII字符
+    将中文相互作用Type转换为英文缩写
+    PyMOLLabel不支持中文，需要转换为ASCII字符
     """
     abbr_map = {
         "Hydrogen Bond": "HB",
@@ -211,18 +211,18 @@ def _interaction_to_abbr(interaction_text):
         "van der Waals": "VDW",
     }
 
-    # 尝试匹配已知的相互作用类型
+    # 尝试匹配已知的相互作用Type
     interaction_text = interaction_text.strip()
     for cn, en in abbr_map.items():
         if cn in interaction_text:
             return en
 
-    # 如果没有匹配到，返回前10个ASCII字符（避免中文乱码）
+    # 如果没有匹配到，Return前10个ASCII字符（避免中文乱码）
     return ''.join(c for c in interaction_text if ord(c) < 128)[:10] or "INT"
 
 def _place_label_pseudoatom(sel_name, label_text, idx):
-    """在残基位置放置标签（Times-like 字体，黑色）"""
-    # 尝试使用CA原子位置
+    """在残基位置放置Label（Times-like 字体，黑色）"""
+    # 尝试usingCA原子位置
     for name_sel in [f"({sel_name}) and name CA", f"({sel_name}) and name C1'", f"({sel_name}) and name P"]:
         try:
             coords = cmd.get_atom_coords(name_sel)
@@ -230,12 +230,12 @@ def _place_label_pseudoatom(sel_name, label_text, idx):
             cmd.pseudoatom(obj_name, pos=coords, label=label_text)
             cmd.set("label_size", 16, obj_name)
             cmd.set("label_color", "black", obj_name)
-            cmd.set("label_font_id", 5, obj_name)  # 使用接近 Times Roman 的矢量字体
+            cmd.set("label_font_id", 5, obj_name)  # using接近 Times Roman 的矢量字体
             return
         except Exception:
             pass
     
-    # 如果没有CA原子，使用质心
+    # 如果没有CA原子，using质心
     try:
         model = cmd.get_model(sel_name)
         if model.atom:
@@ -252,15 +252,15 @@ def _place_label_pseudoatom(sel_name, label_text, idx):
         pass
 
 def _color_sticks_by_element(selection_expr):
-    """按元素类型给棍状模型着色"""
+    """按元素Type给棍状模型着色"""
     cmd.color("grey70", f"({selection_expr}) and elem C")
     cmd.color("blue",   f"({selection_expr}) and elem N")
     cmd.color("red",    f"({selection_expr}) and elem O")
     cmd.color("yellow", f"({selection_expr}) and elem S")
 
 def _color_sticks_by_chain(selection_expr, chain, colorA, colorB):
-    """根据链设置碳原子颜色，其他元素保持标准颜色"""
-    # 根据链选择颜色
+    """根据链Settings碳原子颜色，其他元素保持标准颜色"""
+    # 根据链Select颜色
     if chain == "A":
         carbon_color = colorA
     elif chain == "B":
@@ -268,7 +268,7 @@ def _color_sticks_by_chain(selection_expr, chain, colorA, colorB):
     else:
         carbon_color = "grey70"
     
-    # 设置碳原子颜色继承链的颜色
+    # Settings碳原子颜色继承链的颜色
     cmd.color(carbon_color, f"({selection_expr}) and elem C")
     # 其他元素保持标准颜色
     cmd.color("blue",   f"({selection_expr}) and elem N")
@@ -281,18 +281,18 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     """
     在两个原子之间绘制相互作用连接线
     
-    参数:
-        obj: PyMOL对象名称
-        chain1, resid1, atom1: 第一个原子的链、残基号、原子名
+    Parameters:
+        obj: PyMOL对象Name
+        chain1, resid1, atom1: First原子的链、残基号、原子名
         chain2, resid2, atom2: 第二个原子的链、残基号、原子名
         interaction_type: Interaction type (Hydrogen Bond, Salt Bridge, etc.)
-        idx: 索引编号,用于生成唯一的距离对象名称
+        idx: 索引Number,用于生成唯一的距离对象Name
     
-    返回:
-        distance_obj_name: 创建的距离对象名称,如果失败则返回None
+    Return:
+        distance_obj_name: Create的距离对象Name,如果Failed则ReturnNone
     """
-    # 使用统一配色方案
-    # 将 hex 颜色转换为 PyMOL 颜色名称（或直接使用相近的 PyMOL 内置颜色）
+    # using统一配色方案
+    # 将 hex 颜色转换为 PyMOL 颜色Name（或直接using相近的 PyMOL 内置颜色）
     color_map = {
         "Hydrogen Bond": "marine",           # Blue (#2196F3)
         "Salt Bridge": "tv_red",          # Orange-red (#FF5722)
@@ -307,12 +307,12 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     # 获取颜色,默认为灰色
     color = color_map.get(interaction_type, "grey70")
     
-    # 构建原子选择表达式
-    # 处理原子名称中的特殊字符(如单引号)
+    # 构建原子Select表达式
+    # 处理原子Name中的特殊字符(如单引号)
     atom1_clean = atom1.replace("'", "\\'") if atom1 else "*"
     atom2_clean = atom2.replace("'", "\\'") if atom2 else "*"
     
-    # 构建选择表达式
+    # 构建Select表达式
     parts1 = [f"model {obj}"]
     if chain1:
         parts1.append(f"chain {chain1}")
@@ -331,12 +331,12 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
         parts2.append(f"name {atom2_clean}")
     sel2 = " and ".join(parts2)
     
-    # 对于π相互作用(ring/ring),使用残基质心
+    # 对于π相互作用(ring/ring),using残基质心
     if atom1 in ["ring", "ring/cation"] or atom2 in ["ring", "ring/cation"]:
-        # 使用残基的所有原子质心
+        # using残基的所有原子质心
         pass  # PyMOL的distance命令会自动处理
     
-    # 创建距离对象
+    # Create距离对象
     dist_name = f"dist_{idx}"
     
     # Determine cutoff based on interaction type
@@ -344,7 +344,7 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     # to ensure they are drawn in PyMOL regardless of minor coordinate discrepancies.
     cutoff = 10.0 
     
-    # if "氢键" in interaction_type or "Hydrogen" in interaction_type:
+    # if "氢Key" in interaction_type or "Hydrogen" in interaction_type:
     #     cutoff = 3.8
     # elif "盐桥" in interaction_type or "Salt" in interaction_type:
     #     cutoff = 5.0
@@ -356,23 +356,23 @@ def draw_atom_interaction_lines(obj, chain1, resid1, atom1,
     #     cutoff = 4.0
     
     try:
-        # 使用distance命令创建连接线
-        # 使用 cutoff 参数过滤掉距离过远的错误连接（例如 > 3.8A 的氢键）
+        # usingdistance命令Create连接线
+        # using cutoff ParametersFilter掉距离过远的Error连接（例如 > 3.8A 的氢Key）
         cmd.distance(dist_name, sel1, sel2, cutoff=cutoff)
         
-        # 设置距离对象的显示样式
-        cmd.hide("labels", dist_name)  # 隐藏距离标签
-        cmd.color(color, dist_name)     # 设置颜色
-        cmd.set("dash_width", 2.5, dist_name)  # 设置线条粗细
-        cmd.set("dash_gap", 0.3, dist_name)    # 设置虚线间隙(0.3 = 较密集的虚线)
-        cmd.set("dash_length", 0.2, dist_name) # 设置虚线长度
+        # Settings距离对象的Display样式
+        cmd.hide("labels", dist_name)  # Hide距离Label
+        cmd.color(color, dist_name)     # Settings颜色
+        cmd.set("dash_width", 2.5, dist_name)  # Settings线条粗细
+        cmd.set("dash_gap", 0.3, dist_name)    # Settings虚线间隙(0.3 = 较密集的虚线)
+        cmd.set("dash_length", 0.2, dist_name) # Settings虚线长degrees
         
         # 确保distance对象可见
         cmd.show("dashes", dist_name)
         
         return dist_name
     except Exception as e:
-        # 输出错误信息便于调试
+        # 输出ErrorInformation便于调试
         print(f"[draw_atom_interaction_lines] ⚠️  Failed to create distance '{dist_name}':")
         print(f"    Selection 1: {sel1}")
         print(f"    Selection 2: {sel2}")
@@ -386,24 +386,24 @@ def highlight_csv_residues(csv_path, obj=None,
                            show_interaction_type=0, show_atom_lines=True,
                            show_only_interactions=True):
     """
-    从CSV文件高亮显示残基相互作用
+    从CSVFile高亮Display残基相互作用
 
-    参数:
-        csv_path: CSV文件路径
-        obj: PyMOL对象名称，如果为None则使用第一个加载的对象
+    Parameters:
+        csv_path: CSVFilePath
+        obj: PyMOL对象Name，如果为None则usingFirstLoad的对象
         protein_chain: 蛋白质链ID (默认"A")
         partner_chain: 伙伴链ID (默认"B")
         colorA: 链A颜色 (默认"lightblue")
         colorB: 链B颜色 (默认"lightorange")
-        show_labels: 是否显示标签 (默认1)
-        clear_old: 是否清除旧的选择 (默认1)
+        show_labels: 是否DisplayLabel (默认1)
+        clear_old: 是否清除旧的Select (默认1)
         debug: 调试模式 (默认0)
         stick_by_element: 是否按元素着色棍状模型 (默认1)
-        show_interaction_type: 是否在标签中显示相互作用类型 (默认0，不显示)
-        show_atom_lines: 是否显示原子间相互作用连接线 (默认True)
+        show_interaction_type: 是否在Label中Display相互作用Type (默认0，不Display)
+        show_atom_lines: 是否Display原子间相互作用连接线 (默认True)
 
     CSV格式要求:
-        必须包含列: Chain1, Residue1, Chain2, Residue2
+        必须Package含列: Chain1, Residue1, Chain2, Residue2
         可选列: Interaction, Distance, Ligand_Atom, Protein_Atom (或其他原子列)
     """
     csv_path = os.path.abspath(csv_path)
@@ -435,26 +435,26 @@ def highlight_csv_residues(csv_path, obj=None,
         print(f"[highlight_csv_residues] Object '{obj}' not found. Available: {current_objs}")
         return
 
-    # 清除旧的选择和标签
+    # 清除旧的Select和Label
     if clear_old:
         for name in cmd.get_names("objects"):
             if name.startswith("intsel_") or name.startswith("rlab_") or name.startswith("dist_"):
                 cmd.delete(name)
 
-    # 设置基本视图（如果只显示相互作用，稍后设置）
+    # Settings基本视图（如果只Display相互作用，稍后Settings）
     if not show_only_interactions:
         _setup_view(obj, protein_chain, partner_chain, colorA, colorB)
     else:
-        # 简单的基础设置
+        # 简单的基础Settings
         cmd.hide("everything", obj)
         cmd.bg_color("white")
 
-    # 读取CSV文件
+    # 读取CSVFile
     rows = []
     try:
         with open(csv_path, "r", encoding="utf-8") as fh:
             reader = csv.DictReader(fh)
-            # 创建字段名映射（不区分大小写）
+            # Create字段名映射（不区分Size写）
             fmap = {k.strip().lower(): k for k in reader.fieldnames}
             
             def has(key): 
@@ -491,12 +491,12 @@ def highlight_csv_residues(csv_path, obj=None,
                     
                     interaction = get(r, "interaction") or get(r, "type") or ""
                     
-                    # 读取原子信息(如果存在) - 支持大小写
-                    # 注意: get 函数会将键转为小写，所以要用小写版本
+                    # 读取Atom information(如果存在) - 支持Size写
+                    # 注意: get Function会将Key转为小写，所以要用小写Version
                     atom1 = get(r, "ligand_atom") or get(r, "atom1") or get(r, "nucleic_atom") or ""
                     atom2 = get(r, "protein_atom") or get(r, "atom2") or ""
                     
-                    # 直接检查原始大写版本（如果上面没找到）
+                    # 直接检查原始大写Version（如果上面没找到）
                     if not atom1:
                         for key in r.keys():
                             if key in ['Atom1', 'Ligand_Atom']:
@@ -520,21 +520,21 @@ def highlight_csv_residues(csv_path, obj=None,
 
     # 处理每一行数据
     built = []
-    labeled_residues = set()  # 跟踪已标记的残基，避免重复标签
-    distance_objects = []  # 跟踪创建的距离对象
+    labeled_residues = set()  # 跟踪已标记的残基，避免重复Label
+    distance_objects = []  # 跟踪Create的距离对象
 
     for idx, (res1, res2, ch1_csv, ch2_csv, interaction, atom1, atom2) in enumerate(rows, start=1):
-        # 解析残基信息
+        # 解析残基Information
         c1, n1, i1 = _parse_residue_tag(res1)
         c2, n2, i2 = _parse_residue_tag(res2)
 
-        # 如果解析不到链信息，使用CSV中的链信息
+        # 如果解析不到Chain information，usingCSV中的Chain information
         if not c1 and ch1_csv:
             c1 = ch1_csv
         if not c2 and ch2_csv:
             c2 = ch2_csv
 
-        # 创建选择
+        # CreateSelect
         s1 = f"intsel_1_{idx}"
         s2 = f"intsel_2_{idx}"
         sel1 = _res_sel(obj, c1, n1, i1)
@@ -544,14 +544,14 @@ def highlight_csv_residues(csv_path, obj=None,
             print(f"[debug] Residue1 selection -> {sel1}")
             print(f"[debug] Residue2 selection -> {sel2}")
 
-        # 创建选择并显示为棍状模型
+        # CreateSelect并Display为棍状模型
         cmd.select(s1, sel1)
         cmd.select(s2, sel2)
         cmd.show("sticks", s1)
         cmd.show("sticks", s2)
         built.extend([s1, s2])
 
-        # 颜色设置：如果是配体则用配体颜色，否则继承链的颜色
+        # 颜色Settings：如果是配体则用配体颜色，否则继承链的颜色
         # 检测是否是配体（非标准残基）
         standard_residues = {
             'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE',
@@ -561,7 +561,7 @@ def highlight_csv_residues(csv_path, obj=None,
         is_ligand1 = n1 not in standard_residues
         is_ligand2 = n2 not in standard_residues
         
-        # 设置颜色
+        # Settings颜色
         if stick_by_element:
             # 配体残基：橙色碳原子
             if is_ligand1:
@@ -582,10 +582,10 @@ def highlight_csv_residues(csv_path, obj=None,
                 # 蛋白残基：继承链的颜色的碳原子
                 _color_sticks_by_chain(sel2, c2, colorA, colorB)
 
-        # 绘制原子级相互作用连接线（如果启用且有原子信息）
+        # 绘制原子级相互作用连接线（如果Enable且有Atom information）
         if show_atom_lines:
             if atom1 and atom2:
-                # 从残基标签中提取残基号
+                # 从残基Label中提取残基号
                 # res1/res2格式: "LIG 1" 或 "ARG 123"
                 resid1 = i1  # 已经从_parse_residue_tag解析出来
                 resid2 = i2
@@ -605,21 +605,21 @@ def highlight_csv_residues(csv_path, obj=None,
             elif debug and idx <= 5:
                 print(f"[debug] No atom info for row {idx}: atom1='{atom1}', atom2='{atom2}'")
 
-        # 添加标签（如果启用）- 只为每个唯一残基创建一次标签
+        # AddLabel（如果Enable）- 只为每个唯一残基Create一次Label
         if show_labels:
-            # 为残基1创建唯一标识符
+            # 为残基1Create唯一ID符
             res1_key = (c1, n1, i1)
             if res1_key not in labeled_residues:
-                # 生成标签文本
+                # 生成Label文本
                 label1 = _label_for_residue(n1, i1)
-                # 如果需要显示相互作用类型
+                # 如果需要Display相互作用Type
                 if show_interaction_type and interaction:
                     abbr = _interaction_to_abbr(interaction)
                     label1 = f"{label1}({abbr})"
                 _place_label_pseudoatom(s1, label1, len(labeled_residues) + 1)
                 labeled_residues.add(res1_key)
 
-            # 为残基2创建唯一标识符
+            # 为残基2Create唯一ID符
             res2_key = (c2, n2, i2)
             if res2_key not in labeled_residues:
                 label2 = _label_for_residue(n2, i2)
@@ -629,28 +629,28 @@ def highlight_csv_residues(csv_path, obj=None,
                 _place_label_pseudoatom(s2, label2, len(labeled_residues) + 1)
                 labeled_residues.add(res2_key)
 
-    # 如果启用了只显示相互作用，现在设置蛋白背景
+    # 如果Enable了只Display相互作用，现在Settings蛋白背景
     if show_only_interactions and built:
-        # 显示蛋白链为半透明 cartoon 背景
+        # Display蛋白链为半透明 cartoon 背景
         cmd.show("cartoon", f"{obj} and polymer.protein")
         cmd.set("cartoon_transparency", 0.6, obj)
         cmd.color("gray80", f"{obj} and polymer.protein")
         
-        # 强调显示相互作用的残基
+        # 强调Display相互作用的残基
         for sel in built:
-            # 相互作用残基显示为不透明
+            # 相互作用残基Display为不透明
             cmd.set("stick_transparency", 0.0, sel)
     
-    # 缩放到显示的残基
+    # 缩放到Display的残基
     if built:
         cmd.zoom(" or ".join(built), buffer=5.0, complete=1)
 
     # 确保所有distance对象可见
     if show_atom_lines and distance_objects:
-        cmd.show("dashes")  # 全局显示所有虚线对象
+        cmd.show("dashes")  # 全局Display所有虚线对象
         print(f"[highlight_csv_residues] 💡 Tip: If you don't see dashes, run: show dashes")
 
-    # 强制刷新PyMOL视图
+    # 强制RefreshPyMOL视图
     cmd.refresh()
     cmd.rebuild()
 
@@ -659,7 +659,7 @@ def highlight_csv_residues(csv_path, obj=None,
     else:
         print(f"[highlight_csv_residues] Highlighted {len(rows)} interaction residue pairs, {len(labeled_residues)} unique residues")
 
-    # 返回统计信息，供GUI使用
+    # Return统计Information，供GUIusing
     return {
         "pairs": len(rows),
         "unique_residues": len(labeled_residues),
@@ -763,11 +763,11 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
     """
     专门用于高亮 G-Motif G-loop 区域
 
-    参数:
-        csv_path: G-Motif CSV文件路径
-        obj: PyMOL对象名称
+    Parameters:
+        csv_path: G-Motif CSVFilePath
+        obj: PyMOL对象Name
         color: G-loop 高亮颜色 (默认"yellow")
-        show_labels: 是否显示标签
+        show_labels: 是否DisplayLabel
         clear_old: 是否清除旧的高亮
     """
     csv_path = os.path.abspath(csv_path)
@@ -804,7 +804,7 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
             if name.startswith("gloop_") or name.startswith("glab_"):
                 cmd.delete(name)
 
-    # 读取 G-Motif CSV 文件
+    # 读取 G-Motif CSV File
     loops = []
     try:
         with open(csv_path, "r", encoding="utf-8") as f:
@@ -840,15 +840,15 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
     for idx, (chain, seq, start, end, rmsd) in enumerate(loops, start=1):
         sel_name = f"gloop_{idx}"
         
-        # 处理残基范围选择 - 支持带插入码的残基（如 100A）
-        # PyMOL 的 resi 选择器对于范围可能不支持插入码，所以我们需要特殊处理
+        # 处理残基范围Select - 支持带插入码的残基（如 100A）
+        # PyMOL 的 resi Select器对于范围可能不支持插入码，所以我们需要特殊处理
         try:
             start_int = int(start)
             end_int = int(end)
-            # 如果 start 和 end 都是纯数字，使用范围选择
+            # 如果 start 和 end 都是纯数字，using范围Select
             sel_expr = f"model {obj} and chain {chain} and resi {start_int}-{end_int}"
         except ValueError:
-            # 如果包含插入码，使用逐个残基选择
+            # 如果Package含插入码，using逐个残基Select
             # 尝试解析残基号和插入码
             import re
             start_match = re.match(r'(-?\d+)([A-Za-z]?)', str(start))
@@ -857,7 +857,7 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
             if start_match and end_match:
                 start_num = int(start_match.group(1))
                 end_num = int(end_match.group(1))
-                # 生成残基列表（简化处理：只使用数字范围）
+                # 生成残基列表（简化处理：只using数字范围）
                 resi_list = '+'.join(str(i) for i in range(start_num, end_num + 1))
                 sel_expr = f"model {obj} and chain {chain} and resi {resi_list}"
             else:
@@ -869,10 +869,10 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
             print(f"[highlight_gmotif_loops] Warning: No atoms selected for G-loop {idx} ({chain}:{start}-{end})")
             continue
 
-        # 创建新对象
+        # Create新对象
         cmd.create(sel_name, sel_expr)
         
-        # 设置显示
+        # SettingsDisplay
         cmd.hide("everything", sel_name)
         cmd.show("sticks", sel_name)
         cmd.show("cartoon", sel_name)
@@ -881,14 +881,14 @@ def highlight_gmotif_loops(csv_path, obj=None, color="yellow", show_labels=True,
         # 按元素着色棍状模型 (对新对象)
         _color_sticks_by_element(sel_name)
 
-        # 高亮 cartoon (使用指定颜色)
+        # 高亮 cartoon (using指定颜色)
         cmd.color(color, f"{sel_name} and backbone")
 
-        # 添加标签
+        # AddLabel
         if show_labels:
             try:
-                # 使用 G-loop 中间残基的 CA 原子位置
-                # 首先尝试从选择中获取 CA 原子
+                # using G-loop 中间残基的 CA 原子位置
+                # 首先尝试从Select中获取 CA 原子
                 ca_sel = f"{sel_name} and name CA"
                 ca_count = cmd.count_atoms(ca_sel)
                 
@@ -929,21 +929,21 @@ def highlight_gloop_surface(obj=None, chain=None, start_resi=None, end_resi=None
     """
     高亮 G-loop 区域的分子表面
     
-    参数:
-        obj: PyMOL 对象名称
+    Parameters:
+        obj: PyMOL 对象Name
         chain: 链 ID
-        start_resi: 起始残基编号
-        end_resi: 结束残基编号
+        start_resi: 起始残基Number
+        end_resi: 结束残基Number
         surface_color: 表面颜色 (默认 "yellow")
-        surface_transparency: 表面透明度 (默认 0.3)
-        show_cartoon: 是否同时显示 cartoon (默认 True)
+        surface_transparency: 表面透明degrees (默认 0.3)
+        show_cartoon: 是否同时Display cartoon (默认 True)
         cartoon_color: cartoon 颜色 (默认 "tv_yellow")
-        selection_name: 自定义选择名称 (默认自动生成)
+        selection_name: 自定义SelectName (默认自动生成)
         clear_old: 是否清除旧的 G-loop 表面 (默认 True)
     
-    返回:
+    Return:
         dict: {
-            'selection_name': str,  # 创建的选择名称
+            'selection_name': str,  # Create的SelectName
             'atom_count': int,      # 选中的原子数
             'surface_area': float,  # 表面积 (Å²)
         }
@@ -959,7 +959,7 @@ def highlight_gloop_surface(obj=None, chain=None, start_resi=None, end_resi=None
             return None
         obj = objs[0]
     
-    # 验证参数
+    # 验证Parameters
     if chain is None or start_resi is None or end_resi is None:
         print("[highlight_gloop_surface] Error: chain, start_resi, end_resi are required")
         return None
@@ -970,11 +970,11 @@ def highlight_gloop_surface(obj=None, chain=None, start_resi=None, end_resi=None
             if name.startswith("gloop_surf_"):
                 cmd.delete(name)
     
-    # 创建选择名称 (作为新的对象名)
+    # CreateSelectName (作为新的对象名)
     if selection_name is None:
         selection_name = f"gloop_surf_{chain}_{start_resi}_{end_resi}"
     
-    # 构建源选择表达式
+    # 构建源Select表达式
     try:
         start_int = int(start_resi)
         end_int = int(end_resi)
@@ -990,21 +990,21 @@ def highlight_gloop_surface(obj=None, chain=None, start_resi=None, end_resi=None
         print(f"[highlight_gloop_surface] Warning: No atoms selected for {chain}:{start_resi}-{end_resi}")
         return None
 
-    # 创建新对象 (extract/create)
+    # Create新对象 (extract/create)
     cmd.create(selection_name, sel_expr)
     
     # 获取新对象的原子数
     atom_count = cmd.count_atoms(selection_name)
     
-    # 设置新对象的显示方式
-    cmd.hide("everything", selection_name) # 隐藏所有默认表示
-    cmd.show("surface", selection_name)     # 只显示表面
+    # Settings新对象的Display方式
+    cmd.hide("everything", selection_name) # Hide所有默认表示
+    cmd.show("surface", selection_name)     # 只Display表面
     
-    # 设置颜色和透明度
+    # Settings颜色和透明degrees
     cmd.color(surface_color, selection_name)
     cmd.set("surface_transparency", surface_transparency, selection_name)
     
-    # 可选：显示 cartoon (在新对象上)
+    # 可选：Display cartoon (在新对象上)
     if show_cartoon:
         cmd.show("cartoon", selection_name)
         cmd.color(cartoon_color, selection_name)
@@ -1015,7 +1015,7 @@ def highlight_gloop_surface(obj=None, chain=None, start_resi=None, end_resi=None
     except Exception:
         surface_area = None
     
-    # 缩放到选择区域
+    # 缩放到Select区域
     cmd.zoom(selection_name, buffer=5.0, complete=1)
     
     print(f"[highlight_gloop_surface] ✅ Highlighted G-loop surface: {chain}:{start_resi}-{end_resi}")
@@ -1035,16 +1035,16 @@ def get_gloop_coordinates(obj=None, chain=None, start_resi=None, end_resi=None,
     """
     获取 G-loop 区域的原子坐标
     
-    参数:
-        obj: PyMOL 对象名称
+    Parameters:
+        obj: PyMOL 对象Name
         chain: 链 ID
-        start_resi: 起始残基编号
-        end_resi: 结束残基编号
-        atom_types: 要提取的原子类型列表 (默认 ["CA"] 只提取 Cα)
+        start_resi: 起始残基Number
+        end_resi: 结束残基Number
+        atom_types: 要提取的原子Type列表 (默认 ["CA"] 只提取 Cα)
                     可选: ["CA"], ["CA", "CB"], ["all"], None (等同于 ["CA"])
-        output_csv: 输出 CSV 文件路径 (可选)
+        output_csv: 输出 CSV FilePath (可选)
     
-    返回:
+    Return:
         dict: {
             'coordinates': [
                 {
@@ -1075,7 +1075,7 @@ def get_gloop_coordinates(obj=None, chain=None, start_resi=None, end_resi=None,
             return None
         obj = objs[0]
     
-    # 验证参数
+    # 验证Parameters
     if chain is None or start_resi is None or end_resi is None:
         print("[get_gloop_coordinates] Error: chain, start_resi, end_resi are required")
         return None
@@ -1084,7 +1084,7 @@ def get_gloop_coordinates(obj=None, chain=None, start_resi=None, end_resi=None,
     if atom_types is None:
         atom_types = ["CA"]
     
-    # 构建选择表达式
+    # 构建Select表达式
     try:
         start_int = int(start_resi)
         end_int = int(end_resi)
@@ -1094,7 +1094,7 @@ def get_gloop_coordinates(obj=None, chain=None, start_resi=None, end_resi=None,
                                                     int(end_resi.rstrip('ABCDEFGHIJ')) + 1))
         sel_expr = f"model {obj} and chain {chain} and resi {resi_list}"
     
-    # 如果不是 "all"，添加原子类型过滤
+    # 如果不是 "all"，Add原子TypeFilter
     if atom_types != ["all"]:
         atom_filter = "+".join(atom_types)
         sel_expr = f"({sel_expr}) and name {atom_filter}"
@@ -1124,7 +1124,7 @@ def get_gloop_coordinates(obj=None, chain=None, start_resi=None, end_resi=None,
         }
         coordinates.append(coord_dict)
         
-        # 累加用于计算质心
+        # 累加用于Calculate center of mass
         sum_x += atom.coord[0]
         sum_y += atom.coord[1]
         sum_z += atom.coord[2]
@@ -1133,7 +1133,7 @@ def get_gloop_coordinates(obj=None, chain=None, start_resi=None, end_resi=None,
         if atom.name.strip().upper() == 'CA':
             ca_coords.append((atom.coord[0], atom.coord[1], atom.coord[2]))
     
-    # 计算质心
+    # Calculate center of mass
     n_atoms = len(coordinates)
     centroid = (
         round(sum_x / n_atoms, 3),
@@ -1154,7 +1154,7 @@ def get_gloop_coordinates(obj=None, chain=None, start_resi=None, end_resi=None,
                     coord['chain'], coord['resi'], coord['resn'], coord['atom'],
                     coord['x'], coord['y'], coord['z'], coord['b_factor']
                 ])
-            # 添加质心行
+            # Add质心行
             writer.writerow(['', '', 'CENTROID', '', centroid[0], centroid[1], centroid[2], ''])
         print(f"[get_gloop_coordinates] Coordinates saved to: {csv_path}")
     
@@ -1175,34 +1175,34 @@ def highlight_gloop_with_coords(csv_path=None, obj=None, chain=None, start_resi=
                                  surface_color="yellow", show_surface=True, show_coords=True,
                                  output_coords_csv=None):
     """
-    综合功能：高亮 G-loop 表面并导出坐标
+    综合功能：高亮 G-loop 表面并Export坐标
     
-    可以从 CSV 文件读取 G-loop 信息，或直接指定参数
+    可以从 CSV File读取 G-loop Information，或直接指定Parameters
     
-    参数:
-        csv_path: G-Motif CSV 文件路径 (可选，如果提供则从中读取第一个 hit)
-        obj: PyMOL 对象名称
+    Parameters:
+        csv_path: G-Motif CSV FilePath (可选，如果提供则从中读取First hit)
+        obj: PyMOL 对象Name
         chain: 链 ID (如果 csv_path 提供则可选)
-        start_resi: 起始残基编号
-        end_resi: 结束残基编号
+        start_resi: 起始残基Number
+        end_resi: 结束残基Number
         surface_color: 表面颜色
-        show_surface: 是否显示表面
+        show_surface: 是否Display表面
         show_coords: 是否提取坐标
-        output_coords_csv: 坐标输出 CSV 路径
+        output_coords_csv: 坐标输出 CSV Path
     
-    返回:
+    Return:
         dict: {
-            'surface_result': {...},  # highlight_gloop_surface 的返回值
-            'coords_result': {...},   # get_gloop_coordinates 的返回值
+            'surface_result': {...},  # highlight_gloop_surface 的ReturnValue
+            'coords_result': {...},   # get_gloop_coordinates 的ReturnValue
         }
     """
-    # 如果提供了 CSV，从中读取 G-loop 信息
+    # 如果提供了 CSV，从中读取 G-loop Information
     if csv_path and os.path.exists(csv_path):
         import csv as csv_module
         with open(csv_path, 'r', encoding='utf-8-sig') as f:
             reader = csv_module.DictReader(f)
             for row in reader:
-                # 只处理 Pass 状态的 hit
+                # 只处理 Pass Status的 hit
                 if row.get('Status', '').strip() == 'Pass':
                     chain = row.get('Chain', chain)
                     start_resi = row.get('Start', start_resi)

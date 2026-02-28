@@ -188,62 +188,62 @@ T = {
     "tab_analysis": {"zh": "相互作用分析与高亮", "en": "Interaction Analysis & Highlight"},
     "tab_apbs": {"zh": "静电势（APBS/Quick）", "en": "Electrostatics (APBS/Quick)"},
     "grp_csv": {"zh": "CSV 高亮", "en": "CSV Highlight"},
-    "csv_path": {"zh": "CSV 文件路径", "en": "CSV File Path"},
+    "csv_path": {"zh": "CSV FilePath", "en": "CSV File Path"},
     "browse": {"zh": "浏览…", "en": "Browse…"},
     "target_obj": {"zh": "目标对象", "en": "Target Object"},
-    "refresh": {"zh": "刷新", "en": "Refresh"},
-    "btn_highlight": {"zh": "高亮显示", "en": "Highlight"},
-    "btn_clear": {"zh": "清空高亮", "en": "Clear"},
+    "refresh": {"zh": "Refresh", "en": "Refresh"},
+    "btn_highlight": {"zh": "高亮Display", "en": "Highlight"},
+    "btn_clear": {"zh": "Clear高亮", "en": "Clear"},
     "grp_analysis": {"zh": "相互作用分析", "en": "Interaction Analysis"},
-    "pdb_file": {"zh": "PDB 文件（可选）", "en": "PDB File (optional)"},
+    "pdb_file": {"zh": "PDB File（可选）", "en": "PDB File (optional)"},
     "output_csv": {"zh": "输出 CSV（可选）", "en": "Output CSV (optional)"},
-    "btn_analyze": {"zh": "开始分析", "en": "Start"},
-    "btn_render_interactions": {"zh": "一键渲染（分析+美化+PNG）", "en": "Render (Analyze + Beautify + PNG)"},
-    "right_results": {"zh": "结果与日志", "en": "Results & Logs"},
+    "btn_analyze": {"zh": "Start分析", "en": "Start"},
+    "btn_render_interactions": {"zh": "一Key渲染（分析+美化+PNG）", "en": "Render (Analyze + Beautify + PNG)"},
+    "right_results": {"zh": "Results与日志", "en": "Results & Logs"},
     "table_header": {
         "zh": ["链1", "残基1", "链2", "残基2", "距离", "相互作用"],
         "en": ["Chain1", "Residue1", "Chain2", "Residue2", "Distance", "Interaction"],
     },
     "table_header_gmotif": {
-        "zh": ["链", "序列", "起始", "结束", "RMSD (Å)", "类型"],
+        "zh": ["链", "序列", "起始", "结束", "RMSD (Å)", "Type"],
         "en": ["Chain", "Sequence", "Start", "End", "RMSD (Å)", "Type"],
     },
     "no_object": {"zh": "(无对象)", "en": "(No object)"},
-    "select_csv": {"zh": "选择 CSV 文件", "en": "Select CSV"},
-    "select_pdb": {"zh": "选择 PDB 文件", "en": "Select PDB"},
-    "select_outcsv": {"zh": "选择输出 CSV", "en": "Select output CSV"},
+    "select_csv": {"zh": "Select CSV File", "en": "Select CSV"},
+    "select_pdb": {"zh": "Select PDB File", "en": "Select PDB"},
+    "select_outcsv": {"zh": "Select输出 CSV", "en": "Select output CSV"},
     "log_ready": {"zh": "就绪", "en": "Ready"},
-    "log_highlight_ok": {"zh": "高亮完成", "en": "Highlight done"},
-    "log_clear_ok": {"zh": "已清空高亮", "en": "Cleared"},
-    "log_start": {"zh": "开始相互作用分析…", "en": "Starting interaction analysis…"},
-    "log_done": {"zh": "完成，发现 {n} 条记录", "en": "Done: {n} records"},
-    "log_error": {"zh": "错误：{msg}", "en": "Error: {msg}"},
-    "btn_close": {"zh": "关闭", "en": "Close"},
+    "log_highlight_ok": {"zh": "高亮Completed", "en": "Highlight done"},
+    "log_clear_ok": {"zh": "已Clear高亮", "en": "Cleared"},
+    "log_start": {"zh": "Start相互作用分析…", "en": "Starting interaction analysis…"},
+    "log_done": {"zh": "Completed，发现 {n} 条记录", "en": "Done: {n} records"},
+    "log_error": {"zh": "Error：{msg}", "en": "Error: {msg}"},
+    "btn_close": {"zh": "Close", "en": "Close"},
     "btn_load_csv_to_table": {"zh": "载入到表��", "en": "Load to Table"},
     # G-Motif
     "grp_gmotif": {"zh": "G-Motif（CRBN G-loop）识别", "en": "G-Motif (CRBN G-loop) Detection"},
-    "rmsd": {"zh": "RMSD 阈值 (Å)", "en": "RMSD cutoff (Å)"},
+    "rmsd": {"zh": "RMSD 阈Value (Å)", "en": "RMSD cutoff (Å)"},
     "require_gly": {"zh": "第6位必须为 Gly", "en": "Require Gly at pos6"},
-    "btn_gmotif": {"zh": "开始识别", "en": "Detect"},
-    "btn_gmotif_render": {"zh": "一键渲染（G-Motif + 电势 + PNG）", "en": "Render (G-Motif + ESP + PNG)"},
-    # APBS/Quick + 导出
-    "grp_apbs": {"zh": "静电势显示", "en": "Electrostatics Display"},
+    "btn_gmotif": {"zh": "Start识别", "en": "Detect"},
+    "btn_gmotif_render": {"zh": "一Key渲染（G-Motif + 电势 + PNG）", "en": "Render (G-Motif + ESP + PNG)"},
+    # APBS/Quick + Export
+    "grp_apbs": {"zh": "静电势Display", "en": "Electrostatics Display"},
     "apbs_target": {"zh": "目标对象", "en": "Target Object"},
     "apbs_grid": {"zh": "网格间距 (Å)", "en": "Grid spacing (Å)"},
     "apbs_range": {"zh": "色阶范围 (kT/e)", "en": "Color range (kT/e)"},
     "btn_quick": {"zh": "快速静电图（Coulomb）", "en": "Quick (Coulomb)"},
     "btn_apbs": {"zh": "运行 APBS（若可用）", "en": "Run APBS (if available)"},
-    "grp_export": {"zh": "导出", "en": "Export"},
-    "img_w": {"zh": "宽度 (px)", "en": "Width (px)"},
-    "img_h": {"zh": "高度 (px)", "en": "Height (px)"},
+    "grp_export": {"zh": "Export", "en": "Export"},
+    "img_w": {"zh": "宽degrees (px)", "en": "Width (px)"},
+    "img_h": {"zh": "高degrees (px)", "en": "Height (px)"},
     "img_dpi": {"zh": "DPI", "en": "DPI"},
     "img_bg": {"zh": "背景", "en": "Background"},
     "bg_white": {"zh": "白色", "en": "White"},
     "bg_trans": {"zh": "透明", "en": "Transparent"},
     "raytrace": {"zh": "光线追踪（高质量）", "en": "Ray trace (high quality)"},
-    "btn_viewport": {"zh": "使用当前视口尺寸", "en": "Use current viewport"},
-    "btn_export_png": {"zh": "导出 PNG", "en": "Export PNG"},
-    "btn_export_dx": {"zh": "导出 DX 网格", "en": "Export DX"},
+    "btn_viewport": {"zh": "using当前视口尺寸", "en": "Use current viewport"},
+    "btn_export_png": {"zh": "Export PNG", "en": "Export PNG"},
+    "btn_export_dx": {"zh": "Export DX 网格", "en": "Export DX"},
 }
 
 def t(key: str) -> str:
@@ -326,7 +326,7 @@ class GMotifWorker(QThread):
         try:
             if find_crbn_g_motif is None:
                 raise RuntimeError("find_crbn_g_motif not found; ensure g_motif_analyzer.py exists in the plugin directory.")
-            self.progress.emit("[G-Motif] " + ("开始识别…" if get_lang()=="zh" else "Detecting…"))
+            self.progress.emit("[G-Motif] " + ("Start识别…" if get_lang()=="zh" else "Detecting…"))
             out_csv_path = self.out_csv
             if not out_csv_path:
                 import tempfile, os
@@ -345,7 +345,7 @@ class GMotifWorker(QThread):
                 check_surface_exposure=bool(self.check_surface_exposure),
                 min_sasa_per_residue=float(self.min_sasa),
             ) or []
-            self.progress.emit("[G-Motif] " + (f"完成，命中 {len(hits)} 条" if get_lang()=="zh" else f"Done, {len(hits)} hits"))
+            self.progress.emit("[G-Motif] " + (f"Completed，命中 {len(hits)} 条" if get_lang()=="zh" else f"Done, {len(hits)} hits"))
             self.finished.emit(hits, out_csv_path)
         except Exception as e:
             self.error.emit(str(e))
@@ -465,7 +465,7 @@ class GLINTDialog(QDialog):
                     sub_layout = None
                 if sub_layout is not None:
                     _tune_layout_obj(sub_layout)
-                    # 继续深入子布局的子项
+                    # Continue深入子布局的子项
                     try:
                         for j in range(sub_layout.count()):
                             sub_item = sub_layout.itemAt(j)
@@ -538,7 +538,7 @@ class GLINTDialog(QDialog):
         self.modules_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self.modules_btn.setFlat(True)
         self.modules_btn.setToolTip("Modules")
-        self.modules_btn.setMinimumWidth(120)  # 设置最小宽度以显示完整文本
+        self.modules_btn.setMinimumWidth(120)  # Settings最小宽degrees以Display完整文本
         
         nav_header.addStretch()
         # nav_header.addWidget(self.theme_toggle_btn)
@@ -558,7 +558,7 @@ class GLINTDialog(QDialog):
         # 导航按钮列表
         self.nav_list = QListWidget()
 
-        # 更新为工作流导向的导航结构
+        # Update为工作流导向的导航结构
         nav_items = [
             ("Welcome", "Welcome"),
             ("Target Discovery", "Target Discovery"),      # G-Motif, Disease, Pocket
@@ -608,12 +608,12 @@ class GLINTDialog(QDialog):
         contact_btn.clicked.connect(lambda: self.content_stack.setCurrentIndex(6))
         nav_layout.addWidget(contact_btn)
 
-        # log_edit已在__init__中创建，这里不需要再设置
+        # log_edit已在__init__中Create，这里不需要再Settings
         
         # ========== 内容区域 ==========
         self.content_stack = QStackedWidget()
 
-        # 创建各个页面（log_edit 必须先创建）
+        # Create各个页面（log_edit 必须先Create）
         # 0: Welcome
         self.content_stack.addWidget(self.create_welcome_tab())         
         
@@ -659,17 +659,17 @@ class GLINTDialog(QDialog):
         self.content_stack.setCurrentIndex(index)
 
     def create_interaction_tab(self) -> QWidget:
-        """创建整合的相互作用分析标签页（Protein-Protein + Protein-Ligand + Atom Pairs）"""
-        # 创建滚动区域
+        """Create整合的相互作用分析Label页（Protein-Protein + Protein-Ligand + Atom Pairs）"""
+        # Create滚动区域
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         
-        # 创建内容容器
+        # Create内容容器
         content_widget = QWidget()
         content_widget.setObjectName("scroll_content")
-        self._interaction_scroll_content = content_widget  # 保存引用以便主题切换
-        # 强制设置背景色（macOS 兼容性）
+        self._interaction_scroll_content = content_widget  # Save引用以便主题切换
+        # 强制Settings背景色（macOS 兼容性）
         bg_color = "#0d1117" if self._dark_mode else "#f8fafc"
         content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
         main_layout = QVBoxLayout(content_widget)
@@ -1112,7 +1112,7 @@ class GLINTDialog(QDialog):
         # 
         # main_layout.addWidget(grp_ap)
         # 
-        # # Quick templates - 确保所有按钮在一行显示
+        # # Quick templates - 确保所有按钮在一行Display
         # main_layout.addWidget(QLabel("Quick Templates:"))
         # template_row = QHBoxLayout()
         # templates = [
@@ -1149,10 +1149,10 @@ class GLINTDialog(QDialog):
         
         main_layout.addStretch(1)
         
-        # 将内容设置到滚动区域
+        # 将内容Settings到滚动区域
         scroll_area.setWidget(content_widget)
         
-        # 返回包裹的滚动区域
+        # ReturnPackage裹的滚动区域
         wrapper = QWidget()
         wrapper_layout = QVBoxLayout(wrapper)
         wrapper_layout.setContentsMargins(0, 0, 0, 0)
@@ -1251,17 +1251,17 @@ class GLINTDialog(QDialog):
         return w
 
     def create_molecular_glue_tab(self) -> QWidget:
-        """创建分子胶设计模块 - POI Discovery"""
-        # 创建滚动区域
+        """Create分子胶设计Module - POI Discovery"""
+        # Create滚动区域
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         
-        # 创建内容容器
+        # Create内容容器
         content_widget = QWidget()
         content_widget.setObjectName("scroll_content")
-        self._molecular_glue_scroll_content = content_widget  # 保存引用以便主题切换
-        # 强制设置背景色（macOS 兼容性）
+        self._molecular_glue_scroll_content = content_widget  # Save引用以便主题切换
+        # 强制Settings背景色（macOS 兼容性）
         bg_color = "#0d1117" if self._dark_mode else "#f8fafc"
         content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
         main_layout = QVBoxLayout(content_widget)
@@ -1270,7 +1270,7 @@ class GLINTDialog(QDialog):
         
         # ========== POI Discovery - G-Motif Detection ==========
         grp_gm = QGroupBox("POI Discovery - G-Motif (CRBN G-loop) Detection")
-        # 使用网格布局代替FormLayout，实现两栏式
+        # using网格布局代替FormLayout，实现两栏式
         gm_grid = QGridLayout(grp_gm)
         gm_grid.setColumnStretch(0, 0)
         gm_grid.setColumnStretch(1, 1)
@@ -1386,7 +1386,7 @@ class GLINTDialog(QDialog):
         
         # ========== Ternary Complex Analysis (with integrated interface tools) ==========
         grp_ternary = QGroupBox("Ternary Complex Analysis (E3-PROTAC-POI with Interface Tools)")
-        # 使用网格布局实现两栏式
+        # using网格布局实现两栏式
         ternary_grid = QGridLayout(grp_ternary)
         ternary_grid.setColumnStretch(0, 0)
         ternary_grid.setColumnStretch(1, 1)
@@ -1598,10 +1598,10 @@ class GLINTDialog(QDialog):
         
         main_layout.addStretch(1)
         
-        # 将内容设置到滚动区域
+        # 将内容Settings到滚动区域
         scroll_area.setWidget(content_widget)
         
-        # 返回包裹的滚动区域
+        # ReturnPackage裹的滚动区域
         wrapper = QWidget()
         wrapper_layout = QVBoxLayout(wrapper)
         wrapper_layout.setContentsMargins(0, 0, 0, 0)
@@ -1684,17 +1684,17 @@ class GLINTDialog(QDialog):
         return w
 
     def create_docking_scoring_tab(self) -> QWidget:
-        """创建 Docking & Scoring 标签页 - 优化布局"""
-        # 创建滚动区域
+        """Create Docking & Scoring Label页 - 优化布局"""
+        # Create滚动区域
         scroll_area = QScrollArea()
         scroll_area.setWidgetResizable(True)
         scroll_area.setFrameShape(QFrame.Shape.NoFrame)
         
-        # 创建内容容器
+        # Create内容容器
         content_widget = QWidget()
         content_widget.setObjectName("scroll_content")
-        self._docking_scroll_content = content_widget  # 保存引用以便主题切换
-        # 强制设置背景色（macOS 兼容性）
+        self._docking_scroll_content = content_widget  # Save引用以便主题切换
+        # 强制Settings背景色（macOS 兼容性）
         bg_color = "#0d1117" if self._dark_mode else "#f8fafc"
         content_widget.setStyleSheet(f"#scroll_content {{ background-color: {bg_color}; }}")
         main_layout = QVBoxLayout(content_widget)
@@ -1725,20 +1725,20 @@ class GLINTDialog(QDialog):
         
         main_layout.addStretch(1)
         
-        # 结果显示在底部日志
+        # ResultsDisplay在底部日志
         self.score_result_text = self.log_edit
         
-        # 将内容设置到滚动区域
+        # 将内容Settings到滚动区域
         scroll_area.setWidget(content_widget)
         
-        # 返回包裹的滚动区域
+        # ReturnPackage裹的滚动区域
         wrapper = QWidget()
         wrapper_layout = QVBoxLayout(wrapper)
         wrapper_layout.setContentsMargins(0, 0, 0, 0)
         wrapper_layout.addWidget(scroll_area)
         return wrapper
     def _create_pocket_detection_card(self) -> QWidget:
-        """创建口袋检测与可视化卡片"""
+        """Create口袋检测与可视化卡片"""
         card = QGroupBox("Pocket Detection")
         layout = QVBoxLayout(card)
         layout.setSpacing(10)
@@ -1806,7 +1806,7 @@ class GLINTDialog(QDialog):
         return card
     
     def _create_vina_docking_card(self) -> QWidget:
-        """创建 Vina 对接卡片（支持自定义盒子）"""
+        """Create Vina 对接卡片（支持自定义盒子）"""
         card = QGroupBox("AutoDock Vina")
         layout = QVBoxLayout(card)
         layout.setSpacing(10)
@@ -1831,7 +1831,7 @@ class GLINTDialog(QDialog):
         ligand_layout.addWidget(ligand_browse)
         layout.addLayout(ligand_layout)
         
-        # 参数设置
+        # ParametersSettings
         param_layout = QGridLayout()
         param_layout.setSpacing(10)
         
@@ -1853,7 +1853,7 @@ class GLINTDialog(QDialog):
         
         layout.addLayout(param_layout)
         
-        # 自定义盒子选项
+        # 自定义盒子Options
         self.vina_use_custom_box = QCheckBox("Use custom box (skip pocket detection)")
         layout.addWidget(self.vina_use_custom_box)
         
@@ -1911,12 +1911,12 @@ class GLINTDialog(QDialog):
     
     
     def _create_advanced_pocket_card(self) -> QWidget:
-        """创建高级口袋分析卡片"""
+        """Create高级口袋分析卡片"""
         card = QGroupBox("Advanced Pocket Analysis")
         layout = QVBoxLayout(card)
         layout.setSpacing(8)
         
-        # 创建标签页
+        # CreateLabel页
         self.pocket_advanced_tabs = QTabWidget()
         self.pocket_advanced_tabs.setFixedHeight(220)
         
@@ -1924,7 +1924,7 @@ class GLINTDialog(QDialog):
         comparison_tab = self._create_pocket_comparison_tab()
         self.pocket_advanced_tabs.addTab(comparison_tab, "Comparison")
         
-        # Tab 2: 界面口袋
+        # Tab 2: interface口袋
         interface_tab = self._create_pocket_interface_tab()
         self.pocket_advanced_tabs.addTab(interface_tab, "PPI Interface")
         
@@ -1936,7 +1936,7 @@ class GLINTDialog(QDialog):
         gmotif_pocket_tab = self._create_gmotif_pocket_tab()
         self.pocket_advanced_tabs.addTab(gmotif_pocket_tab, "G-motif")
         
-        # 强制设置所有 tab 的背景色（macOS Qt 兼容性）
+        # 强制Settings所有 tab 的背景色（macOS Qt 兼容性）
         bg_color = "#161b22" if self._dark_mode else "white"
         for i in range(self.pocket_advanced_tabs.count()):
             tab_widget = self.pocket_advanced_tabs.widget(i)
@@ -1949,7 +1949,7 @@ class GLINTDialog(QDialog):
         return card
     
     def _create_pocket_comparison_tab(self) -> QWidget:
-        """创建口袋对比标签页"""
+        """Create口袋对比Label页"""
         w = QWidget()
         w.setObjectName("tab_content")
         w.setAutoFillBackground(True)
@@ -2012,7 +2012,7 @@ class GLINTDialog(QDialog):
         return w
     
     def _create_pocket_interface_tab(self) -> QWidget:
-        """创建 PPI 界面口袋标签页"""
+        """Create PPI interface口袋Label页"""
         w = QWidget()
         w.setObjectName("tab_content")
         w.setAutoFillBackground(True)
@@ -2071,7 +2071,7 @@ class GLINTDialog(QDialog):
         return w
     
     def _create_mutation_analysis_card(self) -> QWidget:
-        """创建突变分析卡片"""
+        """Create突变分析卡片"""
         card = QGroupBox("Protein Mutation & ΔΔG Analysis")
         layout = QVBoxLayout(card)
         layout.setSpacing(8)
@@ -2080,7 +2080,7 @@ class GLINTDialog(QDialog):
         input_grid = QGridLayout()
         input_grid.setSpacing(6)
         
-        # 对象选择
+        # 对象Select
         input_grid.addWidget(QLabel("Object:"), 0, 0)
         self.mut_obj_combo = QComboBox()
         self.mut_obj_combo.setFixedHeight(28)
@@ -2100,7 +2100,7 @@ class GLINTDialog(QDialog):
         self.mut_input.setFixedHeight(28)
         input_grid.addWidget(self.mut_input, 1, 1)
         
-        # 方法选择 (FoldX only)
+        # MethodSelect (FoldX only)
         input_grid.addWidget(QLabel("Method:"), 2, 0)
         method_row = QHBoxLayout()
         self.mut_method_combo = QComboBox()
@@ -2143,7 +2143,7 @@ class GLINTDialog(QDialog):
         return card
     
     def _create_pocket_correlation_tab(self) -> QWidget:
-        """创建口袋-相互作用关联标签页"""
+        """Create口袋-相互作用关联Label页"""
         w = QWidget()
         w.setObjectName("tab_content")
         w.setAutoFillBackground(True)
@@ -2189,7 +2189,7 @@ class GLINTDialog(QDialog):
         return w
     
     def _create_gmotif_pocket_tab(self) -> QWidget:
-        """创建 G-motif 口袋分析标签页"""
+        """Create G-motif 口袋分析Label页"""
         w = QWidget()
         w.setObjectName("tab_content")
         w.setAutoFillBackground(True)
@@ -2344,7 +2344,7 @@ class GLINTDialog(QDialog):
                    getattr(self, "pocket_interface_obj", None),
                    getattr(self, "gmotif_pocket_obj", None),
                    getattr(self, "glue_obj_combo", None),
-                   getattr(self, "mut_obj_combo", None)):  # 添加突变分析对象下拉框
+                   getattr(self, "mut_obj_combo", None)):  # Add突变分析对象下拉框
             if cb is not None:
                 cb.blockSignals(True); cb.clear()
                 for n in names: cb.addItem(n)
@@ -2414,7 +2414,7 @@ class GLINTDialog(QDialog):
             QMessageBox.warning(self, t("title"), t("no_object")); return
         self.analyze_btn.setEnabled(False)
         self.progress_bar.setVisible(True); self.progress_bar.setRange(0, 0)
-        self.analysis_thread = AnalysisWorker(obj, None, out_csv)  # pdb_file=None，只从PyMOL加载
+        self.analysis_thread = AnalysisWorker(obj, None, out_csv)  # pdb_file=None，只从PyMOLLoad
         self.analysis_thread.progress.connect(self.log)
         self.analysis_thread.error.connect(self.on_error)
         self.analysis_thread.finished.connect(self.on_finished_analysis)
@@ -2456,7 +2456,7 @@ class GLINTDialog(QDialog):
         self.gmotif_thread.finished.connect(self.on_finished_gmotif)
         self.gmotif_thread.start()
 
-    # ---- 一键渲染（G-Motif + 电势 + PNG）----
+    # ---- 一Key渲染（G-Motif + 电势 + PNG）----
     def render_gmotif_with_esp(self):
         try:
             obj = self.obj_combo_gm.currentText().strip()
@@ -2465,7 +2465,7 @@ class GLINTDialog(QDialog):
 
             from pymol import cmd
 
-            # 1) 若有最近一次 G-Motif CSV，使用专用高亮函数
+            # 1) 若有最近一次 G-Motif CSV，using专用高亮Function
             if self._last_gmotif_csv and os.path.exists(self._last_gmotif_csv):
                 try:
                     highlight_gmotif_loops(self._last_gmotif_csv, obj, color="yellow", show_labels=True)
@@ -2495,12 +2495,12 @@ class GLINTDialog(QDialog):
             cmd.ramp_new(ramp_name, map_name, [vmin, v0, vmax], ["blue", "white", "red"])
             self._esp_maps[obj] = (map_name, ramp_name)
 
-            # 3) 显示整体 cartoon（半透明）
+            # 3) Display整体 cartoon（半透明）
             cmd.hide("everything", obj)
             cmd.show("cartoon", obj)
             cmd.set("cartoon_transparency", 0.3, obj)
 
-            # 4) 只在 G-loop 周围显示静电势表面
+            # 4) 只在 G-loop 周围Display静电势表面
             if self._last_gmotif_csv and os.path.exists(self._last_gmotif_csv):
                 try:
                     import csv
@@ -2516,29 +2516,29 @@ class GLINTDialog(QDialog):
                                 gloop_regions.append((chain, start, end))
 
                     if gloop_regions:
-                        # 创建一个包含所有 G-loop 的选择
+                        # Create一个Package含所有 G-loop 的Select
                         gloop_selections = [f"(chain {ch} and resi {st}-{ed})" for ch, st, ed in gloop_regions]
                         all_gloop_sel = " or ".join(gloop_selections)
 
-                        # 创建 G-loop 周围 10 埃的选择（用于显示静电势表面）
+                        # Create G-loop 周围 10 埃的Select（用于Display静电势表面）
                         surface_sel_name = "gloop_surface_area"
                         cmd.select(surface_sel_name, f"byres ({obj} within 10 of ({all_gloop_sel}))")
 
-                        # 只在这个区域显示表面并用电势着色
+                        # 只在这个区域Display表面并用电势着色
                         cmd.show("surface", surface_sel_name)
                         cmd.set("surface_quality", 1, surface_sel_name)
                         cmd.set("surface_color_smoothing", 1, surface_sel_name)
                         cmd.set("transparency", 0.2, surface_sel_name)
                         cmd.color(ramp_name, surface_sel_name)
 
-                        # 在 G-loop 自身隐藏表面（只显示 sticks）
+                        # 在 G-loop 自身Hide表面（只Display sticks）
                         for ch, st, ed in gloop_regions:
                             gloop_sel = f"{obj} and chain {ch} and resi {st}-{ed}"
                             cmd.hide("surface", gloop_sel)
 
                         self.log("Electrostatic surface shown only around G-loop (10 Å region)")
                     else:
-                        # 没有 G-loop 数据，显示整个蛋白表面
+                        # 没有 G-loop 数据，Display整个蛋白表面
                         self._show_full_surface_esp(obj, ramp_name)
                 except Exception as e:
                     self.log(f"ESP around G-loop failed; fallback to full surface: {e}")
@@ -2548,7 +2548,7 @@ class GLINTDialog(QDialog):
                 self._show_full_surface_esp(obj, ramp_name)
 
 
-            # 4) 设置光照参数
+            # 4) Settings光照Parameters
             cmd.set("ambient", 0.2)
             cmd.set("spec_power", 80)
             cmd.set("spec_reflect", 0.3)
@@ -2558,7 +2558,7 @@ class GLINTDialog(QDialog):
 
             self.log(f"Rendered: G-Motif + ESP (grid={grid} Å, range=({vmin},{v0},{vmax}))")
 
-            # 5) 导出 PNG
+            # 5) Export PNG
             self._export_png_for_object(obj)
 
         except Exception as e:
@@ -2629,7 +2629,7 @@ class GLINTDialog(QDialog):
             if b: b.setEnabled(True)
 
 
-    # --- APBS/Quick & 导出 ---
+    # --- APBS/Quick & Export ---
     def apbs_run_quick(self):
         try:
             obj = self.obj_combo_apbs.currentText().strip()
@@ -2704,7 +2704,7 @@ class GLINTDialog(QDialog):
             self.on_error(str(e))
 
     def _export_png_for_object(self, obj: str):
-        """按导出面板参数导出当前视图 PNG。"""
+        """按Export面板ParametersExport当前视图 PNG。"""
         from pymol import cmd
         fn, _ = QFileDialog.getSaveFileName(self, t("btn_export_png"), f"{obj}_gmotif_esp.png", "PNG (*.png)")
         if not fn: return
@@ -2731,7 +2731,7 @@ class GLINTDialog(QDialog):
         cmd.png(fn, width=W, height=H, dpi=dpi, ray=ray)
         self.log(f"PNG export done: {os.path.basename(fn)} | {W}x{H}px @ {dpi} dpi | ray={ray} | bg={'transparent' if want_trans else 'white'}")
 
-        # 恢复背景设置
+        # 恢复背景Settings
         try:
             if isinstance(old_bg, (list, tuple)) and len(old_bg) == 3:
                 r, g, b = [max(0.0, min(1.0, float(c))) for c in old_bg]
@@ -2741,7 +2741,7 @@ class GLINTDialog(QDialog):
             pass
 
     def export_png(self):
-        """从 APBS 页显式导出 PNG（与一键渲染共享同一套参数）。"""
+        """从 APBS 页显式Export PNG（与一Key渲染共享同一套Parameters）。"""
         try:
             obj = self.obj_combo_apbs.currentText().strip()
             if not obj or obj == t("no_object"):
@@ -2753,7 +2753,7 @@ class GLINTDialog(QDialog):
 
     # ==============  New Workflow Tabs (Refactored) ==============\n    \n    def create_target_discovery_tab(self) -> QWidget:\n        \"\"\"Target Discovery Tab: G-Motif, Disease, Pocket\"\"\"\n        scroll_area = QScrollArea()\n        scroll_area.setWidgetResizable(True)\n        scroll_area.setFrameShape(QFrame.Shape.NoFrame)\n        \n        content_widget = QWidget()\n        content_widget.setObjectName(\"scroll_content\")\n        self._target_scroll_content = content_widget\n        bg_color = \"#0d1117\" if self._dark_mode else \"#f8fafc\"\n        content_widget.setStyleSheet(f\"#scroll_content {{ background-color: {bg_color}; }}\")\n        \n        layout = QVBoxLayout(content_widget)\n        layout.setSpacing(14)\n        layout.setContentsMargins(12, 12, 12, 12)\n        \n        # 1. Disease Analysis (if available)\n        if search_disease is not None:\n            try:\n                disease_card = self.create_disease_analysis_tab() \n                grp_disease = QGroupBox(\"Disease Target Analysis\")\n                d_layout = QVBoxLayout(grp_disease)\n                d_layout.addWidget(disease_card)\n                layout.addWidget(grp_disease)\n            except Exception as e:\n                self.log(f\"Failed to load Disease Analysis: {e}\")\n        \n        # 2. G-Motif Detection (Refactored from create_molecular_glue_tab)\n        grp_gm = QGroupBox(\"G-Motif (CRBN G-loop) Detection\")\n        gm_grid = QGridLayout(grp_gm)\n        gm_grid.setColumnStretch(1, 1); gm_grid.setColumnStretch(3, 1)\n        gm_grid.setHorizontalSpacing(8); gm_grid.setVerticalSpacing(10)\n        \n        # Row 0\n        gm_grid.addWidget(QLabel(\"Target Object:\"), 0, 0, Qt.AlignmentFlag.AlignRight)\n        self.obj_combo_gm = QComboBox(); self.obj_combo_gm.setMinimumHeight(32)\n        self.refresh_obj_gm = QPushButton(t(\"refresh\")); self.refresh_obj_gm.clicked.connect(self.refresh_objects)\n        r0 = QHBoxLayout(); r0.addWidget(self.obj_combo_gm, 1); r0.addWidget(self.refresh_obj_gm)\n        gm_grid.addLayout(r0, 0, 1)\n        \n        gm_grid.addWidget(QLabel(\"PDB File (opt):\"), 0, 2, Qt.AlignmentFlag.AlignRight)\n        self.gm_pdb = QLineEdit(); self.gm_pdb_browse = QPushButton(t(\"browse\"))\n        self.gm_pdb_browse.clicked.connect(self.browse_gm_pdb)\n        r0b = QHBoxLayout(); r0b.addWidget(self.gm_pdb, 1); r0b.addWidget(self.gm_pdb_browse)\n        gm_grid.addLayout(r0b, 0, 3)\n        \n        # Row 1\n        gm_grid.addWidget(QLabel(\"RMSD cutoff (Å):\"), 1, 0, Qt.AlignmentFlag.AlignRight)\n        self.gm_rmsd = QLineEdit(\"3.5\")\n        gm_grid.addWidget(self.gm_rmsd, 1, 1)\n        \n        self.gm_require_gly = QCheckBox(t(\"require_gly\")); self.gm_require_gly.setChecked(True)\n        gm_grid.addWidget(self.gm_require_gly, 1, 3)\n        \n        # Row 2\n        gm_grid.addWidget(QLabel(\"Template:\"), 2, 0, Qt.AlignmentFlag.AlignRight)\n        self.gm_template_mode = QComboBox()\n        self.gm_template_mode.addItems([\"Idealized (8×Cα)\", \"Built-in: GSPT1\", \"Built-in: CK1α\", \"Built-in: VAV1\", \"From Selection\"])\n        gm_grid.addWidget(self.gm_template_mode, 2, 1)\n        \n        gm_grid.addWidget(QLabel(\"Selection:\"), 2, 2, Qt.AlignmentFlag.AlignRight)\n        self.gm_template_sel = QLineEdit()\n        self.gm_template_pick = QPushButton(\"Pick (sele)\"); self.gm_template_pick.clicked.connect(lambda: self.gm_template_sel.setText(\"sele\"))\n        r2b = QHBoxLayout(); r2b.addWidget(self.gm_template_sel, 1); r2b.addWidget(self.gm_template_pick)\n        gm_grid.addLayout(r2b, 2, 3)\n        \n        def _toggle_template_inputs(idx):\n            use_sel = (idx == 4)\n            self.gm_template_sel.setEnabled(use_sel); self.gm_template_pick.setEnabled(use_sel)\n        self.gm_template_mode.currentIndexChanged.connect(_toggle_template_inputs)\n        _toggle_template_inputs(0)\n        \n        # Row 3\n        gm_grid.addWidget(QLabel(\"Output CSV:\"), 3, 0, Qt.AlignmentFlag.AlignRight)\n        self.gm_out_csv = QLineEdit()\n        self.gm_out_browse = QPushButton(t(\"browse\")); self.gm_out_browse.clicked.connect(self.browse_gm_out_csv)\n        r3 = QHBoxLayout(); r3.addWidget(self.gm_out_csv, 1); r3.addWidget(self.gm_out_browse)\n        gm_grid.addLayout(r3, 3, 1, 1, 3)\n        \n        # Buttons\n        gm_btn_row = QHBoxLayout()\n        self.gm_btn = QPushButton(\"Detect POI\"); self.gm_btn.setObjectName(\"highlight_btn\")\n        self.gm_btn.clicked.connect(self.start_gmotif)\n        self.gm_btn_render = QPushButton(\"Render All (POI + ESP + PNG)\"); self.gm_btn_render.setObjectName(\"highlight_btn\")\n        self.gm_btn_render.clicked.connect(self.render_gmotif_with_esp)\n        gm_btn_row.addWidget(self.gm_btn); gm_btn_row.addWidget(self.gm_btn_render); gm_btn_row.addStretch(1)\n        \n        layout.addWidget(grp_gm)\n        layout.addLayout(gm_btn_row)\n        \n        # 3. Pocket Detection (Existing logic)\n        layout.addWidget(self._create_pocket_detection_card())\n        \n        # 4. Advanced Pocket Analysis (Existing logic)\n        layout.addWidget(self._create_advanced_pocket_card())\n        \n        layout.addStretch(1)\n        scroll_area.setWidget(content_widget)\n        \n        wrapper = QWidget()\n        wl = QVBoxLayout(wrapper); wl.setContentsMargins(0,0,0,0); wl.addWidget(scroll_area)\n        return wrapper\n\n    def create_hit_identification_tab(self) -> QWidget:\n        \"\"\"Hit Identification Tab: Vina Docking\"\"\"\n        scroll_area = QScrollArea()\n        scroll_area.setWidgetResizable(True)\n        scroll_area.setFrameShape(QFrame.Shape.NoFrame)\n        \n        content_widget = QWidget()\n        content_widget.setObjectName(\"scroll_content\")\n        bg_color = \"#0d1117\" if self._dark_mode else \"#f8fafc\"\n        content_widget.setStyleSheet(f\"#scroll_content {{ background-color: {bg_color}; }}\")\n        \n        layout = QVBoxLayout(content_widget)\n        layout.setSpacing(14)\n        layout.setContentsMargins(12, 12, 12, 12)\n        \n        # Vina Docking Card\n        layout.addWidget(self._create_vina_docking_card())\n        \n        # Placeholder for future Virtual Screening\n        grp_vs = QGroupBox(\"Virtual Screening (Coming Soon)\")\n        vs_layout = QVBoxLayout(grp_vs)\n        vs_layout.addWidget(QLabel(\"Batch docking and scoring functionality will be available in future updates.\"))\n        layout.addWidget(grp_vs)\n        \n        layout.addStretch(1)\n        scroll_area.setWidget(content_widget)\n        \n        wrapper = QWidget()\n        wl = QVBoxLayout(wrapper); wl.setContentsMargins(0,0,0,0); wl.addWidget(scroll_area)\n        return wrapper\n        \n    def create_lead_optimization_tab(self) -> QWidget:\n        \"\"\"Lead Optimization: PPI, Glue, Ternary, Mutation\"\"\"\n        scroll_area = QScrollArea()\n        scroll_area.setWidgetResizable(True)\n        scroll_area.setFrameShape(QFrame.Shape.NoFrame)\n        \n        content_widget = QWidget()\n        content_widget.setObjectName(\"scroll_content\")\n        self._lead_scroll_content = content_widget\n        bg_color = \"#0d1117\" if self._dark_mode else \"#f8fafc\"\n        content_widget.setStyleSheet(f\"#scroll_content {{ background-color: {bg_color}; }}\")\n        \n        layout = QVBoxLayout(content_widget)\n        layout.setSpacing(14)\n        layout.setContentsMargins(12, 12, 12, 12)\n        \n        # 1. Molecular Glue Specifics\n        grp_glue = QGroupBox(\"Molecular Glue Analysis (PPI + Neo-Epitope)\")\n        glue_grid = QGridLayout(grp_glue)\n        glue_grid.setColumnStretch(1, 1); glue_grid.setColumnStretch(3, 1)\n        glue_grid.setHorizontalSpacing(8); glue_grid.setVerticalSpacing(10)\n        \n        glue_grid.addWidget(QLabel(\"Target Object:\"), 0, 0, Qt.AlignmentFlag.AlignRight)\n        self.glue_obj_combo = QComboBox(); self.glue_obj_combo.setMinimumHeight(36)\n        self.glue_refresh_btn = QPushButton(t(\"refresh\")); self.glue_refresh_btn.clicked.connect(self.refresh_objects)\n        r0 = QHBoxLayout(); r0.addWidget(self.glue_obj_combo, 1); r0.addWidget(self.glue_refresh_btn)\n        glue_grid.addLayout(r0, 0, 1)\n        \n        glue_grid.addWidget(QLabel(\"Glue Resname:\"), 0, 2, Qt.AlignmentFlag.AlignRight)\n        self.glue_resname = QLineEdit(); self.glue_resname.setPlaceholderText(\"e.g. CC885\")\n        glue_grid.addWidget(self.glue_resname, 0, 3)\n        \n        glue_grid.addWidget(QLabel(\"E3 Chains:\"), 1, 0, Qt.AlignmentFlag.AlignRight)\n        self.glue_e3_chains = QLineEdit(); self.glue_e3_chains.setPlaceholderText(\"e.g. A\")\n        glue_grid.addWidget(self.glue_e3_chains, 1, 1)\n        \n        glue_grid.addWidget(QLabel(\"Substrate Chains:\"), 1, 2, Qt.AlignmentFlag.AlignRight)\n        self.glue_sub_chains = QLineEdit(); self.glue_sub_chains.setPlaceholderText(\"e.g. B\")\n        glue_grid.addWidget(self.glue_sub_chains, 1, 3)\n        \n        glue_grid.addWidget(QLabel(\"Interface Dist (Å):\"), 2, 0, Qt.AlignmentFlag.AlignRight)\n        self.glue_interface_dist = QLineEdit(\"4.5\")\n        glue_grid.addWidget(self.glue_interface_dist, 2, 1)\n        \n        glue_grid.addWidget(QLabel(\"Neo-Epitope Dist (Å):\"), 2, 2, Qt.AlignmentFlag.AlignRight)\n        self.glue_neo_dist = QLineEdit(\"5.0\")\n        glue_grid.addWidget(self.glue_neo_dist, 2, 3)\n        \n        glue_btn_row = QHBoxLayout()\n        self.glue_full_btn = QPushButton(\"Full Glue Analysis\"); self.glue_full_btn.setObjectName(\"highlight_btn\")\n        self.glue_full_btn.clicked.connect(self.run_glue_full_analysis)\n        glue_btn_row.addWidget(self.glue_full_btn)\n        glue_btn_row.addStretch(1)\n        \n        layout.addWidget(grp_glue)\n        layout.addLayout(glue_btn_row)\n        \n        # 2. Ternary Complex\n        grp_ternary = QGroupBox(\"Ternary Complex Analysis\")\n        t_grid = QGridLayout(grp_ternary)\n        t_grid.setColumnStretch(1, 1); t_grid.setColumnStretch(3, 1)\n        \n        t_grid.addWidget(QLabel(\"Target Object:\"), 0, 0)\n        self.tc_obj_combo = QComboBox(); \n        t_grid.addWidget(self.tc_obj_combo, 0, 1)\n        \n        t_grid.addWidget(QLabel(\"Ligand:\"), 0, 2)\n        self.tc_ligand_name = QLineEdit(); self.tc_ligand_name.setPlaceholderText(\"Auto\")\n        t_grid.addWidget(self.tc_ligand_name, 0, 3)\n        \n        t_grid.addWidget(QLabel(\"E3 Chains:\"), 1, 0)\n        self.tc_protein1_chains = QLineEdit(); self.tc_protein1_chains.setPlaceholderText(\"e.g. A\")\n        t_grid.addWidget(self.tc_protein1_chains, 1, 1)\n        \n        t_grid.addWidget(QLabel(\"POI Chains:\"), 1, 2)\n        self.tc_protein2_chains = QLineEdit(); self.tc_protein2_chains.setPlaceholderText(\"e.g. B\")\n        t_grid.addWidget(self.tc_protein2_chains, 1, 3)\n        \n        t_btn_row = QHBoxLayout()\n        self.tc_analyze_btn = QPushButton(\"Analyze Complex\"); self.tc_analyze_btn.setObjectName(\"highlight_btn\")\n        self.tc_analyze_btn.clicked.connect(self.run_tc_analysis)\n        self.tc_render_btn = QPushButton(\"Render All\"); self.tc_render_btn.setObjectName(\"highlight_btn\")\n        self.tc_render_btn.clicked.connect(self.run_tc_render)\n        t_btn_row.addWidget(self.tc_analyze_btn); t_btn_row.addWidget(self.tc_render_btn); t_btn_row.addStretch(1)\n        \n        layout.addWidget(grp_ternary)\n        layout.addLayout(t_btn_row)\n        \n        # 3. General Interactions (PP, PL)\n        grp_pl = QGroupBox(\"Protein-Ligand Interactions\")\n        pl_layout = QHBoxLayout(grp_pl)\n        self.pl_obj_combo = QComboBox(); self.pl_obj_combo.setMinimumWidth(150)\n        self.pl_analyze_btn = QPushButton(\"Analyze PL\"); self.pl_analyze_btn.clicked.connect(self.run_pl_analysis)\n        pl_layout.addWidget(QLabel(\"Object:\")); pl_layout.addWidget(self.pl_obj_combo)\n        pl_layout.addWidget(self.pl_analyze_btn)\n        layout.addWidget(grp_pl)\n        \n        # 4. Mutation Analysis\n        layout.addWidget(self._create_mutation_analysis_card())\n        \n        layout.addStretch(1)\n        scroll_area.setWidget(content_widget)\n        \n        wrapper = QWidget()\n        wl = QVBoxLayout(wrapper); wl.setContentsMargins(0,0,0,0); wl.addWidget(scroll_area)\n        return wrapper\n        \n    def create_visualization_tab(self) -> QWidget:\n        \"\"\"Visualization: APBS, Export\"\"\"\n        return self.create_apbs_tab()\n\n
 
-    # ==============  蛋白-配体分析标签页 ==============
+    # ==============  蛋白-配体分析Label页 ==============
     def create_disease_analysis_tab(self) -> QWidget:
         """Create Disease Analysis Tab (V3)"""
         if DiseaseAnalysisTab:
@@ -2767,7 +2767,7 @@ class GLINTDialog(QDialog):
             return w
 
     def _create_mutation_analysis_card(self) -> QWidget:
-        """创建突变分析卡片"""
+        """Create突变分析卡片"""
         card = QGroupBox("Protein Mutation & ΔΔG Analysis")
         layout = QVBoxLayout(card)
         layout.setSpacing(8)
@@ -2776,7 +2776,7 @@ class GLINTDialog(QDialog):
         input_grid = QGridLayout()
         input_grid.setSpacing(6)
         
-        # 对象选择
+        # 对象Select
         input_grid.addWidget(QLabel("Object:"), 0, 0)
         self.mut_obj_combo = QComboBox()
         self.mut_obj_combo.setFixedHeight(28)
@@ -2796,7 +2796,7 @@ class GLINTDialog(QDialog):
         self.mut_input.setFixedHeight(28)
         input_grid.addWidget(self.mut_input, 1, 1)
         
-        # 方法选择 (FoldX only)
+        # MethodSelect (FoldX only)
         input_grid.addWidget(QLabel("Method:"), 2, 0)
         method_row = QHBoxLayout()
         self.mut_method_combo = QComboBox()
@@ -2844,7 +2844,7 @@ class GLINTDialog(QDialog):
         mutations_str = self.mut_input.text().strip()
         
         if not obj_name or not mutations_str:
-            self.log("❌ 请选择对象并输入突变")
+            self.log("❌ 请Select对象并输入突变")
             return
         
         try:
@@ -2858,19 +2858,19 @@ class GLINTDialog(QDialog):
                         mutations.append((parts[0], parts[1], parts[2]))
             
             if not mutations:
-                self.log("❌ 突变格式错误，示例: A:23:ALA, B:45:GLY")
+                self.log("❌ 突变格式Error，示例: A:23:ALA, B:45:GLY")
                 return
             
             self.log(f"🧬 执行突变: {obj_name}")
             
-            # 调用突变分析模块
+            # 调用突变分析Module
             from pymol import cmd
             cmd.perform_mutation(obj_name, mutations, method='pymol')
             
-            self.log("✅ 突变完成")
+            self.log("✅ 突变Completed")
             
         except Exception as e:
-            self.log(f"❌ 突变失败: {e}")
+            self.log(f"❌ 突变Failed: {e}")
             import traceback
             traceback.print_exc()
 
@@ -2879,7 +2879,7 @@ class GLINTDialog(QDialog):
         obj_name = self.mut_obj_combo.currentText()
         
         if not obj_name:
-            self.log("❌ 请选择对象")
+            self.log("❌ 请Select对象")
             return
         
         try:
@@ -2888,10 +2888,10 @@ class GLINTDialog(QDialog):
             from pymol import cmd
             cmd.minimize_energy(obj_name, cycles=100)
             
-            self.log("✅ 最小化完成")
+            self.log("✅ 最小化Completed")
             
         except Exception as e:
-            self.log(f"❌ 最小化失败: {e}")
+            self.log(f"❌ 最小化Failed: {e}")
             import traceback
             traceback.print_exc()
 
@@ -2902,7 +2902,7 @@ class GLINTDialog(QDialog):
         method = self.mut_method_combo.currentText().lower()
         
         if not obj_name or not mutations_str:
-            self.log("❌ 请选择对象并输入突变")
+            self.log("❌ 请Select对象并输入突变")
             return
         
         try:
@@ -2916,21 +2916,21 @@ class GLINTDialog(QDialog):
                         mutations.append((parts[0], parts[1], parts[2]))
             
             if not mutations:
-                self.log("❌ 突变格式错误")
+                self.log("❌ 突变格式Error")
                 return
             
-            self.log(f"🧬 开始完整分析: {obj_name}")
-            self.log(f"突变数量: {len(mutations)}")
-            self.log(f"方法: {method}")
+            self.log(f"🧬 Start完整分析: {obj_name}")
+            self.log(f"突变Count: {len(mutations)}")
+            self.log(f"Method: {method}")
             
             # 调用完整分析
             from pymol import cmd
             cmd.analyze_mutation_effects(obj_name, mutations, method=method)
             
-            self.log("✅ 分析完成")
+            self.log("✅ 分析Completed")
             
         except Exception as e:
-            self.log(f"❌ 分析失败: {e}")
+            self.log(f"❌ 分析Failed: {e}")
             import traceback
             traceback.print_exc()
         w = QWidget()
@@ -2943,7 +2943,7 @@ class GLINTDialog(QDialog):
         form.setVerticalSpacing(10)
         form.setSpacing(10)
 
-        # 对象选择
+        # 对象Select
         obj_row = QHBoxLayout()
         self.pl_obj_combo = QComboBox()
         self.pl_obj_combo.setMinimumHeight(26)
@@ -2976,7 +2976,7 @@ class GLINTDialog(QDialog):
         csv_row = QHBoxLayout()
         self.pl_csv = QLineEdit()
         self.pl_csv.setMinimumHeight(26)
-        self.pl_csv.setPlaceholderText("可选，留空不保存" if get_lang() == "zh" else "Optional")
+        self.pl_csv.setPlaceholderText("可选，留空不Save" if get_lang() == "zh" else "Optional")
         self.pl_csv_btn = QPushButton(t("browse"))
         self.pl_csv_btn.setObjectName("browse_btn")
         self.pl_csv_btn.setMinimumHeight(32)
@@ -2989,10 +2989,10 @@ class GLINTDialog(QDialog):
         pl_grid.addWidget(pl_csv_row_container, 2, 1, 1, 3)  # 跨三列
         layout.addWidget(grp)
         
-        # 提示信息
+        # 提示Information
         info_label = QLabel()
         info_label.setText(
-            "自动检测并使用最优分析模式（RDKit高级分析 或 基础分析）"
+            "自动检测并using最优分析模式（RDKit高级分析 或 基础分析）"
             if get_lang() == "zh" else
             "Automatically uses best mode (RDKit advanced or basic analysis)"
         )
@@ -3035,7 +3035,7 @@ class GLINTDialog(QDialog):
         return w
 
     def create_ternary_tab(self) -> QWidget:
-        """创建三元复合体分析标签页"""
+        """Create三元复合体分析Label页"""
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(12)
@@ -3046,7 +3046,7 @@ class GLINTDialog(QDialog):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setSpacing(10)
 
-        # 对象选择
+        # 对象Select
         obj_row = QHBoxLayout()
         self.tc_obj_combo = QComboBox()
         self.tc_obj_combo.setMinimumHeight(26)
@@ -3061,7 +3061,7 @@ class GLINTDialog(QDialog):
         # 配体残基名
         self.tc_ligand_name = QLineEdit()
         self.tc_ligand_name.setMinimumHeight(26)
-        self.tc_ligand_name.setPlaceholderText("PROTAC分子名称，留空自动检测" if get_lang() == "zh" else "PROTAC name, auto-detect if blank")
+        self.tc_ligand_name.setPlaceholderText("PROTAC分子Name，留空自动检测" if get_lang() == "zh" else "PROTAC name, auto-detect if blank")
         form.addRow(QLabel("配体残基名:" if get_lang() == "zh" else "Ligand Resname:"), self.tc_ligand_name)
 
         # 蛋白1链
@@ -3122,7 +3122,7 @@ class GLINTDialog(QDialog):
         return w
 
     def create_atom_pair_tab(self) -> QWidget:
-        """创建原子对分析标签页"""
+        """Create原子对分析Label页"""
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(12)
@@ -3133,7 +3133,7 @@ class GLINTDialog(QDialog):
         form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
         form.setSpacing(10)
 
-        # 对象选择
+        # 对象Select
         obj_row = QHBoxLayout()
         self.ap_obj_combo = QComboBox()
         self.ap_obj_combo.setMinimumHeight(26)
@@ -3145,17 +3145,17 @@ class GLINTDialog(QDialog):
         obj_row.addWidget(self.ap_refresh_btn)
         form.addRow(QLabel(t("target_obj")), obj_row)
 
-        # 原子1选择
+        # 原子1Select
         self.ap_atom1 = QLineEdit()
         self.ap_atom1.setMinimumHeight(26)
         self.ap_atom1.setPlaceholderText('例如: "resn LIG and name N1" 或 "LIG/301/N1"' if get_lang() == "zh" else 'e.g.: "resn LIG and name N1"')
-        form.addRow(QLabel("原子1选择:" if get_lang() == "zh" else "Atom1 Selection:"), self.ap_atom1)
+        form.addRow(QLabel("原子1Select:" if get_lang() == "zh" else "Atom1 Selection:"), self.ap_atom1)
 
-        # 原子2选择
+        # 原子2Select
         self.ap_atom2 = QLineEdit()
         self.ap_atom2.setMinimumHeight(26)
         self.ap_atom2.setPlaceholderText('例如: "elem O" 或 "SER/50/OG"' if get_lang() == "zh" else 'e.g.: "elem O"')
-        form.addRow(QLabel("原子2选择:" if get_lang() == "zh" else "Atom2 Selection:"), self.ap_atom2)
+        form.addRow(QLabel("原子2Select:" if get_lang() == "zh" else "Atom2 Selection:"), self.ap_atom2)
 
         # 距离截断
         self.ap_distance = QLineEdit("5.0")
@@ -3185,9 +3185,9 @@ class GLINTDialog(QDialog):
         template_layout.setSpacing(8)
         
         templates = [
-            ("N-O氢键" if get_lang() == "zh" else "N-O H-bonds", '"elem N"', '"elem O"', "3.5"),
+            ("N-O氢Key" if get_lang() == "zh" else "N-O H-bonds", '"elem N"', '"elem O"', "3.5"),
             ("配体-SER" if get_lang() == "zh" else "Lig-SER", '"resn LIG"', '"resn SER"', "4.5"),
-            ("二硫键" if get_lang() == "zh" else "S-S", '"name SG"', '"name SG"', "2.5"),
+            ("二硫Key" if get_lang() == "zh" else "S-S", '"name SG"', '"name SG"', "2.5"),
             ("金属配位" if get_lang() == "zh" else "Metal", '"resn ZN"', '"elem N or elem O or elem S"', "3.0"),
         ]
 
@@ -3226,7 +3226,7 @@ class GLINTDialog(QDialog):
 
     # ========== V3: Disease Analysis Tab ==========
     def create_disease_analysis_tab(self) -> QWidget:
-        """创建疾病分析标签页（V3 功能）"""
+        """Create疾病分析Label页（V3 功能）"""
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.addWidget(QLabel("Disease Analysis module has been removed."))
@@ -3234,7 +3234,7 @@ class GLINTDialog(QDialog):
         return w
 
     def create_readme_tab(self) -> QWidget:
-        """创建README页面"""
+        """CreateREADME页面"""
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(16)
@@ -3267,9 +3267,9 @@ class GLINTDialog(QDialog):
         
         if get_lang() == "zh":
             readme_content = """
-<h2>欢迎使用 GLINT</h2>
+<h2>欢迎using GLINT</h2>
 
-<p><b>GLINT</b> 是一个专为分子胶降解剂分析设计的 PyMOL 插件。</p>
+<p><b>GLINT</b> 是一个专为分子胶降解剂分析设计的 PyMOL Plugin。</p>
 
 <h3>主要功能</h3>
 <ul>
@@ -3283,33 +3283,33 @@ class GLINTDialog(QDialog):
 
 <h3>快速上手</h3>
 <ol>
-<li>在 PyMOL 中加载你的结构文件</li>
-<li>从左侧导航栏选择功能模块</li>
-<li>配置参数并执行分析</li>
-<li>在右侧查看结果和日志</li>
+<li>在 PyMOL 中Load你的结构File</li>
+<li>从左侧导航栏Select功能Module</li>
+<li>ConfigurationParameters并执行分析</li>
+<li>在右侧ViewResults和日志</li>
 </ol>
 
 <h3>提示</h3>
 <ul>
-<li>所有功能都支持 CSV 导出</li>
-<li>结果可以直接在 PyMOL 中可视化</li>
-<li>支持高分辨率图片导出 (300 DPI)</li>
+<li>所有功能都支持 CSV Export</li>
+<li>Results可以直接在 PyMOL 中可视化</li>
+<li>支持高分辨率图片Export (300 DPI)</li>
 <li>部分功能需要安装 RDKit 和 SciPy</li>
 </ul>
 
 <h3>文档</h3>
-<p>查看插件目录中的以下文档：</p>
+<p>ViewPluginDirectory中的以下文档：</p>
 <ul>
-<li><code>QUICK_START.md</code> - 快速开始指南</li>
-<li><code>MODERN_UI_GUIDE.md</code> - 界面设计指南</li>
-<li><code>README_MODERN_UI.md</code> - 现代化界面总结</li>
+<li><code>QUICK_START.md</code> - 快速Start指南</li>
+<li><code>MODERN_UI_GUIDE.md</code> - interface设计指南</li>
+<li><code>README_MODERN_UI.md</code> - 现代化interface总结</li>
 </ul>
 
 <h3>主题</h3>
-<p>当前使用的是<b>现代化深色主题</b>，也可切换到浅色主题。</p>
-<p>编辑 <code>unified_gui.py</code> 的第 2030 行进行切换。</p>
+<p>当前using的是<b>现代化深色主题</b>，也可切换到浅色主题。</p>
+<p>Edit <code>unified_gui.py</code> 的第 2030 行进行切换。</p>
 
-<p style="margin-top: 20px; color: #64748b;">版本: 1.0 | 更新: 2025-11-05</p>
+<p style="margin-top: 20px; color: #64748b;">Version: 1.0 | Update: 2025-11-05</p>
             """
         else:
             readme_content = """
@@ -3364,7 +3364,7 @@ class GLINTDialog(QDialog):
         return w
     
     def create_contact_tab(self) -> QWidget:
-        """创建 Contact Us 页面"""
+        """Create Contact Us 页面"""
         w = QWidget()
         layout = QVBoxLayout(w)
         layout.setSpacing(16)
@@ -3390,7 +3390,7 @@ class GLINTDialog(QDialog):
 
         if get_lang() == "zh":
             contact_content = f'''
-<h3>👋 感谢使用 GLINT！</h3>
+<h3>👋 感谢using GLINT！</h3>
 
 <p>如果你有任何问题、建议或反馈，欢迎联系我们！</p>
 
@@ -3403,20 +3403,20 @@ class GLINTDialog(QDialog):
 </p>
 
 <h3>问题报告</h3>
-<p>发现 Bug？请在 GitHub 上提交 Issue，并包含：</p>
-<ul><li>PyMOL 版本</li><li>Python 版本</li><li>操作系统</li><li>错误信息和日志</li><li>复现步骤</li></ul>
+<p>发现 Bug？请在 GitHub 上提交 Issue，并Package含：</p>
+<ul><li>PyMOL Version</li><li>Python Version</li><li>操作系统</li><li>ErrorInformation和日志</li><li>复现步骤</li></ul>
 
 <h3>功能建议</h3>
-<p>有新功能想法？欢迎在 GitHub Discussions 中分享！</p>
+<p>有新功能想法？欢迎在 GitHub Discussions 中Share！</p>
 
 <h3>贡献</h3>
 <p>欢迎提交 Pull Request！请阅读 <code>CONTRIBUTING.md</code> 了解贡献指南。</p>
 
 <h3>支持项目</h3>
-<p>如果 GLINT 对你的研究有帮助，请考虑：</p><ul><li>在 GitHub 上给我们一个 Star ⭐</li><li>在论文中引用 GLINT</li><li>分享给同事</li></ul>
+<p>如果 GLINT 对你的研究有Help，请考虑：</p><ul><li>在 GitHub 上给我们一个 Star ⭐</li><li>在论文中引用 GLINT</li><li>Share给同事</li></ul>
 
 <p style='{privacy_style}'>
-<b>隐私声明：</b>GLINT 不会收集任何个人数据或结构信息。所有分析都在本地进行。
+<b>隐私声明：</b>GLINT 不会收集任何个人数据或结构Information。所有分析都在本地进行。
 </p>
 
 <p style='margin-top: 20px; color: {footer_color}; text-align: center;'>
@@ -3465,41 +3465,41 @@ Thank you for your support! 🚀
 
     # ==============  新增：蛋白-配体分析功能实现 ==============
     def _browse_save_file(self, line_edit, file_filter):
-        """通用文件保存浏览"""
-        fn, _ = QFileDialog.getSaveFileName(self, "保存文件" if get_lang() == "zh" else "Save File", "", file_filter)
+        """通用FileSave浏览"""
+        fn, _ = QFileDialog.getSaveFileName(self, "SaveFile" if get_lang() == "zh" else "Save File", "", file_filter)
         if fn:
             line_edit.setText(fn)
 
     # def apply_ap_template(self, atom1, atom2, dist):
-    #     """应用原子对模板"""
+    #     """Apply原子对模板"""
     #     self.ap_atom1.setText(atom1)
     #     self.ap_atom2.setText(atom2)
     #     self.ap_distance.setText(dist)
-    #     msg = f"已应用模板: {atom1} - {atom2}" if get_lang() == "zh" else f"Template applied: {atom1} - {atom2}"
+    #     msg = f"已Apply模板: {atom1} - {atom2}" if get_lang() == "zh" else f"Template applied: {atom1} - {atom2}"
     #     self.log(msg)
 
     def _export_pymol_to_pdb_sdf(self, obj_name, ligand_resname=None):
         """
-        将 PyMOL 对象导出为 PDB 和 SDF 文件供高级分析使用
+        将 PyMOL 对象Export为 PDB 和 SDF File供高级分析using
 
-        返回:
+        Return:
             (protein_pdb_path, ligand_sdf_path) 或 (None, None)
         """
         import tempfile
         from pymol import cmd
 
         try:
-            # 创建临时文件
+            # Create临时File
             protein_fd, protein_pdb = tempfile.mkstemp(suffix=".pdb", prefix="protein_")
             ligand_fd, ligand_sdf = tempfile.mkstemp(suffix=".sdf", prefix="ligand_")
             os.close(protein_fd)
             os.close(ligand_fd)
 
-            # 如果指定了配体残基名，分别保存
+            # 如果指定了配体残基名，分别Save
             if ligand_resname:
-                # 保存蛋白（排除配体）
+                # Save蛋白（排除配体）
                 cmd.save(protein_pdb, f"{obj_name} and not resn {ligand_resname}")
-                # 保存配体
+                # Save配体
                 cmd.save(ligand_sdf, f"{obj_name} and resn {ligand_resname}")
             else:
                 # 自动检测配体（非标准残基）
@@ -3522,37 +3522,37 @@ Thank you for your support! 🚀
                 ligand_resname = ligand_resnames[0]
                 self.log(f"📌 自动检测到配体: {ligand_resname}")
 
-                # 保存文件
+                # SaveFile
                 cmd.save(protein_pdb, f"{obj_name} and not resn {ligand_resname}")
                 cmd.save(ligand_sdf, f"{obj_name} and resn {ligand_resname}")
 
-            # 验证文件
+            # 验证File
             if not os.path.exists(protein_pdb) or not os.path.exists(ligand_sdf):
-                self.log("导出文件失败" if get_lang() == "zh" else "Export failed")
+                self.log("ExportFileFailed" if get_lang() == "zh" else "Export failed")
                 return None, None
 
             if os.path.getsize(protein_pdb) == 0 or os.path.getsize(ligand_sdf) == 0:
-                self.log("导出文件为空" if get_lang() == "zh" else "Exported files are empty")
+                self.log("ExportFile为空" if get_lang() == "zh" else "Exported files are empty")
                 return None, None
 
-            self.log(f"已导出: {os.path.basename(protein_pdb)}, {os.path.basename(ligand_sdf)}")
+            self.log(f"已Export: {os.path.basename(protein_pdb)}, {os.path.basename(ligand_sdf)}")
             return protein_pdb, ligand_sdf
 
         except Exception as e:
-            self.log(f"导出失败: {e}")
+            self.log(f"ExportFailed: {e}")
             import traceback
             traceback.print_exc()
             return None, None
 
     def _check_and_install_dependencies(self):
         """
-        检查高级分析依赖，如果缺失则提示用户安装
+        检查高级分析Dependencies，如果缺失则提示用户安装
 
-        返回:
-            True: 依赖满足
-            False: 用户取消或安装失败
+        Return:
+            True: Dependencies满足
+            False: 用户Cancel或安装Failed
         """
-        # 检查各个包
+        # 检查各个Package
         missing = []
 
         try:
@@ -3571,12 +3571,12 @@ Thank you for your support! 🚀
             missing.append("numpy")
 
         if not missing:
-            return True  # 所有依赖都满足
+            return True  # 所有Dependencies都满足
 
-        # 有缺失的包，询问用户
+        # 有缺失的Package，询问用户
         packages_str = " ".join(missing)
         msg = (
-            f"高级分析需要以下 Python 包：\n\n{', '.join(missing)}\n\n"
+            f"高级分析需要以下 Python Package：\n\n{', '.join(missing)}\n\n"
             f"是否现在自动安装？\n\n"
             f"（将在后台运行: pip install {packages_str}）"
             if get_lang() == "zh" else
@@ -3587,7 +3587,7 @@ Thank you for your support! 🚀
 
         reply = QMessageBox.question(
             self,
-            "安装依赖？" if get_lang() == "zh" else "Install Dependencies?",
+            "安装Dependencies？" if get_lang() == "zh" else "Install Dependencies?",
             msg,
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.Yes
@@ -3596,15 +3596,15 @@ Thank you for your support! 🚀
         if reply != QMessageBox.StandardButton.Yes:
             return False
 
-        # 用户同意，开始安装
-        self.log(f"\n{'开始安装依赖包...' if get_lang() == 'zh' else 'Installing dependencies...'}")
-        self.log(f"   包: {', '.join(missing)}")
+        # 用户同意，Start安装
+        self.log(f"\n{'Start安装DependenciesPackage...' if get_lang() == 'zh' else 'Installing dependencies...'}")
+        self.log(f"   Package: {', '.join(missing)}")
 
         import subprocess
         import sys
 
         try:
-            # 使用 PyMOL 的 Python 解释器
+            # using PyMOL 的 Python 解释器
             python_exe = sys.executable
 
             # 构建安装命令
@@ -3613,7 +3613,7 @@ Thank you for your support! 🚀
             self.log(f"   命令: {' '.join(cmd)}")
             self.log("   ⏳ 正在安装，请稍候...")
 
-            # 运行安装（显示输出）
+            # 运行安装（Display输出）
             process = subprocess.Popen(
                 cmd,
                 stdout=subprocess.PIPE,
@@ -3622,7 +3622,7 @@ Thank you for your support! 🚀
                 bufsize=1
             )
 
-            # 实时显示输出
+            # 实时Display输出
             for line in process.stdout:
                 line = line.strip()
                 if line:
@@ -3631,19 +3631,19 @@ Thank you for your support! 🚀
             process.wait()
 
             if process.returncode == 0:
-                self.log("\n依赖安装成功！")
+                self.log("\nDependencies安装Success！")
                 QMessageBox.information(
                     self,
-                    "成功" if get_lang() == "zh" else "Success",
-                    "依赖包已成功安装！\n请重新运行分析。" if get_lang() == "zh" else "Dependencies installed!\nPlease re-run the analysis."
+                    "Success" if get_lang() == "zh" else "Success",
+                    "DependenciesPackage已Success安装！\n请重新运行分析。" if get_lang() == "zh" else "Dependencies installed!\nPlease re-run the analysis."
                 )
                 return True
             else:
-                self.log(f"\n安装失败，返回码: {process.returncode}")
+                self.log(f"\n安装Failed，Return码: {process.returncode}")
                 QMessageBox.critical(
                     self,
-                    "安装失败" if get_lang() == "zh" else "Installation Failed",
-                    f"安装失败。\n\n请手动运行:\npip install {packages_str}\n\n或联系管理员。"
+                    "安装Failed" if get_lang() == "zh" else "Installation Failed",
+                    f"安装Failed。\n\n请手动运行:\npip install {packages_str}\n\n或联系管理员。"
                     if get_lang() == "zh" else
                     f"Installation failed.\n\nPlease run manually:\npip install {packages_str}\n\nOr contact admin."
                 )
@@ -3656,8 +3656,8 @@ Thank you for your support! 🚀
 
             QMessageBox.critical(
                 self,
-                "安装错误" if get_lang() == "zh" else "Installation Error",
-                f"自动安装失败: {e}\n\n请手动安装:\npip install {packages_str}"
+                "安装Error" if get_lang() == "zh" else "Installation Error",
+                f"自动安装Failed: {e}\n\n请手动安装:\npip install {packages_str}"
                 if get_lang() == "zh" else
                 f"Auto-install failed: {e}\n\nPlease install manually:\npip install {packages_str}"
             )
@@ -3668,13 +3668,13 @@ Thank you for your support! 🚀
         try:
             obj_name = self.pl_obj_combo.currentText()
             if obj_name == t("no_object"):
-                QMessageBox.warning(self, t("title"), "请先加载PDB结构" if get_lang() == "zh" else "Load PDB first")
+                QMessageBox.warning(self, t("title"), "请先LoadPDB结构" if get_lang() == "zh" else "Load PDB first")
                 return
 
             ligand_resname = self.pl_ligand_name.text().strip() or None
             output_csv = self.pl_csv.text().strip() or None
 
-            # ========== 使用严格标准分析 ==========
+            # ========== using严格标准分析 ==========
             from .interaction_analyzer import analyze_protein_ligand_interactions
 
             protein_chains_str = self.pl_protein_chains.text().strip()
@@ -3682,9 +3682,9 @@ Thank you for your support! 🚀
             
             try:
                 distance_cutoff = float(self.pl_distance.text())
-            except (ValueError, TypeError):  # float() 转换可能失败
+            except (ValueError, TypeError):  # float() 转换可能Failed
                 distance_cutoff = 4.5
-                self.log(f"距离参数无效，使用默认值 4.5 Å")
+                self.log(f"距离Parameters无效，using默认Value 4.5 Å")
 
             lig_txt = ligand_resname or ('自动' if get_lang() == 'zh' else 'auto')
             self.log(f"\n▶ {obj_name} | Lig: {lig_txt} | Cutoff: {distance_cutoff}Å")
@@ -3702,20 +3702,20 @@ Thank you for your support! 🚀
                 standard = result.get("standard", "Publication")
                 mode_text = f"{standard}标准" if get_lang() == "zh" else f"{standard} Standard"
                 
-                # 处理结果
+                # 处理Results
                 if mode == "advanced":
-                    # 高级分析模式（如果有定制advanced模块）
+                    # 高级分析模式（如果有定制advancedModule）
                     advanced_results = result.get("advanced_results", {})
                     total = sum(len(v) for v in advanced_results.values())
                     details = ', '.join([f"{k}:{len(v)}" for k,v in advanced_results.items() if v])
                     self.log(f"✓ {total} total ({details})")
                     
-                    # 保存结果供可视化使用
+                    # SaveResults供可视化using
                     self.current_pl_result_advanced = advanced_results
                     self.current_pl_result = result
                     self.current_pl_ligand_sdf = result.get("ligand_sdf", None)
                     
-                    result_msg = f"分析完成 ({mode_text})\n总计: {total} 个相互作用" if get_lang() == "zh" else f"Done ({mode_text})\nTotal: {total} interactions"
+                    result_msg = f"分析Completed ({mode_text})\nTotal: {total} 个相互作用" if get_lang() == "zh" else f"Done ({mode_text})\nTotal: {total} interactions"
                 else:
                     # 严格标准模式
                     n_interactions = len(result["interactions"])
@@ -3724,53 +3724,53 @@ Thank you for your support! 🚀
                     if hasattr(self, 'current_pl_result_advanced'):
                         delattr(self, 'current_pl_result_advanced')
                     
-                    result_msg = f"发现 {n_interactions} 个关键相互作用 ({mode_text})" if get_lang() == "zh" else f"Found {n_interactions} key interactions ({mode_text})"
+                    result_msg = f"发现 {n_interactions} 个关Key相互作用 ({mode_text})" if get_lang() == "zh" else f"Found {n_interactions} key interactions ({mode_text})"
                 
-                # 显示CSV表格
+                # DisplayCSV表格
                 if output_csv and os.path.exists(output_csv):
                     try:
                         self.fill_table_from_csv(output_csv)
                     except Exception as e:
                         self.log(f"✗ Table error: {e}")
                 
-                # 显示结果对话框
-                QMessageBox.information(self, "完成" if get_lang() == "zh" else "Done", result_msg)
+                # DisplayResults对话框
+                QMessageBox.information(self, "Completed" if get_lang() == "zh" else "Done", result_msg)
             else:
                 self.log("未找到相互作用" if get_lang() == "zh" else "No interactions found")
 
         except Exception as e:
-            self.log(f"错误: {e}")
+            self.log(f"Error: {e}")
             import traceback; traceback.print_exc()
 
     def run_pl_visualize(self):
         """运行3D可视化"""
         try:
             if not hasattr(self, 'current_pl_result') and not hasattr(self, 'current_pl_result_advanced'):
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
+                QMessageBox.warning(self, "Warning" if get_lang() == "zh" else "Warning",
                     "请先运行分析" if get_lang() == "zh" else "Run analysis first")
                 return
 
             obj_name = self.pl_obj_combo.currentText()
             ligand_resname = self.pl_ligand_name.text().strip() or None
             
-            # 获取CSV路径（如果有的话）
+            # 获取CSVPath（如果有的话）
             csv_path = self.pl_csv.text().strip() or None
             
-            # 获取可视化选项
+            # 获取可视化Options
             show_hydrophobic = self.pl_show_hydrophobic.isChecked()
             
-            # 解析置信度阈值
+            # 解析置信degrees阈Value
             conf_text = self.pl_min_confidence.currentText()
             try:
                 min_confidence = float(conf_text.split()[0])  # 提取数字部分，如"0.8 (default)"→0.8
-            except (ValueError, TypeError):  # float() 转换可能失败
-                min_confidence = 0.8  # 默认值
+            except (ValueError, TypeError):  # float() 转换可能Failed
+                min_confidence = 0.8  # 默认Value
 
-            # 静默生成,仅显示结果
+            # 静默生成,仅DisplayResults
             
-            # 检查是否使用了高级分析模式
+            # 检查是否using了高级分析模式
             if hasattr(self, 'current_pl_result_advanced'):
-                # 高级分析模式 - 使用专用的可视化函数
+                # 高级分析模式 - using专用的可视化Function
                 from .interaction_analyzer_advanced import visualize_advanced_interactions
                 visualize_advanced_interactions(obj_name=obj_name, csv_path=csv_path, ligand_resname=ligand_resname)
                 self.log("✓")
@@ -3799,7 +3799,7 @@ Thank you for your support! 🚀
                 self.log("✓")
 
         except Exception as e:
-            self.log(f"错误: {e}")
+            self.log(f"Error: {e}")
             import traceback; traceback.print_exc()
 
     def run_pl_network(self):
@@ -3808,18 +3808,18 @@ Thank you for your support! 🚀
             from .interaction_analyzer import generate_interaction_network_plot
 
             if not hasattr(self, 'current_pl_result') and not hasattr(self, 'current_pl_result_advanced'):
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
+                QMessageBox.warning(self, "Warning" if get_lang() == "zh" else "Warning",
                     "请先运行分析" if get_lang() == "zh" else "Run analysis first")
                 return
 
-            fn, _ = QFileDialog.getSaveFileName(self, "保存网络图" if get_lang() == "zh" else "Save Network",
+            fn, _ = QFileDialog.getSaveFileName(self, "Save网络图" if get_lang() == "zh" else "Save Network",
                 "interaction_network.png", "PNG (*.png)")
             if not fn:
                 return
 
             # 静默生成
             
-            # 优先使用CSV文件（支持两种模式）
+            # 优先usingCSVFile（支持两种模式）
             csv_path = self.pl_csv.text().strip() or None
             ligand_sdf = getattr(self, 'current_pl_ligand_sdf', None)
             obj_name = self.pl_obj_combo.currentText()
@@ -3858,7 +3858,7 @@ Thank you for your support! 🚀
                 self.log(f"✗ Failed" if get_lang() == "zh" else "✗ Failed")
 
         except Exception as e:
-            self.log(f"错误: {e}")
+            self.log(f"Error: {e}")
             import traceback; traceback.print_exc()
 
     def run_ll_analysis(self):
@@ -4014,7 +4014,7 @@ Thank you for your support! 🚀
         try:
             from .interaction_analyzer import generate_interaction_network_plot
             
-            # 让用户选择保存路径（默认文件名：pn_network.png）
+            # 让用户SelectSavePath（默认File名：pn_network.png）
             fn, _ = QFileDialog.getSaveFileName(self, "Save Network Plot", "pn_network.png", "PNG (*.png)")
             if fn:
                 output_path = generate_interaction_network_plot(
@@ -4063,7 +4063,7 @@ Thank you for your support! 🚀
 
             obj_name = self.tc_obj_combo.currentText()
             if obj_name == t("no_object"):
-                QMessageBox.warning(self, t("title"), "请先加载PDB结构" if get_lang() == "zh" else "Load PDB first")
+                QMessageBox.warning(self, t("title"), "请先LoadPDB结构" if get_lang() == "zh" else "Load PDB first")
                 return
 
             ligand_resname = self.tc_ligand_name.text().strip() or None
@@ -4093,10 +4093,10 @@ Thank you for your support! 🚀
                     f"P1: {stats['protein1_interactions_count']}  P2: {stats['protein2_interactions_count']}" if get_lang() == "zh" else
                     f"P1: {stats['protein1_interactions_count']}  P2: {stats['protein2_interactions_count']}")
             else:
-                self.log("分析失败" if get_lang() == "zh" else "Analysis failed")
+                self.log("分析Failed" if get_lang() == "zh" else "Analysis failed")
 
         except Exception as e:
-            self.log(f"错误: {e}")
+            self.log(f"Error: {e}")
             import traceback; traceback.print_exc()
 
     def run_tc_network(self):
@@ -4105,11 +4105,11 @@ Thank you for your support! 🚀
             from .interaction_analyzer import generate_interaction_network_plot
 
             if not hasattr(self, 'current_tc_result'):
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
+                QMessageBox.warning(self, "Warning" if get_lang() == "zh" else "Warning",
                     "请先运行三元复合体分析" if get_lang() == "zh" else "Run ternary analysis first")
                 return
 
-            fn, _ = QFileDialog.getSaveFileName(self, "保存网络图" if get_lang() == "zh" else "Save Network",
+            fn, _ = QFileDialog.getSaveFileName(self, "Save网络图" if get_lang() == "zh" else "Save Network",
                 "ternary_network.png", "PNG (*.png)")
             if not fn:
                 return
@@ -4125,23 +4125,23 @@ Thank you for your support! 🚀
                 self.log(f"✓ {os.path.basename(output_path)}")
 
         except Exception as e:
-            self.log(f"错误: {e}")
+            self.log(f"Error: {e}")
 
     def run_tc_interface(self):
-        """分析三元复合体蛋白-蛋白界面"""
+        """分析三元复合体蛋白-蛋白interface"""
         try:
             from pymol import cmd
             
             obj_name = self.tc_obj_combo.currentText()
             if obj_name == t("no_object"):
-                QMessageBox.warning(self, t("title"), "请先加载PDB结构" if get_lang() == "zh" else "Load PDB first")
+                QMessageBox.warning(self, t("title"), "请先LoadPDB结构" if get_lang() == "zh" else "Load PDB first")
                 return
 
             p1_chains = self.tc_protein1_chains.text().strip()
             p2_chains = self.tc_protein2_chains.text().strip()
             
             if not p1_chains or not p2_chains:
-                QMessageBox.warning(self, "警告" if get_lang() == "zh" else "Warning",
+                QMessageBox.warning(self, "Warning" if get_lang() == "zh" else "Warning",
                     "请指定E3和POI链" if get_lang() == "zh" else "Please specify E3 and POI chains")
                 return
                 
@@ -4149,14 +4149,14 @@ Thank you for your support! 🚀
             
             self.log(f"\n▶ PPI: E3[{p1_chains}] - POI[{p2_chains}]")
             
-            # 创建界面选择
+            # CreateinterfaceSelect
             interface_sel = f"interface_{obj_name}"
             e3_sel = f"{obj_name} and chain {p1_chains}"
             poi_sel = f"{obj_name} and chain {p2_chains}"
             
             cmd.select(interface_sel, f"(byres ({e3_sel} within {cutoff} of {poi_sel})) or (byres ({poi_sel} within {cutoff} of {e3_sel}))")
             
-            # 高亮界面
+            # 高亮interface
             cmd.hide("everything", obj_name)
             cmd.show("cartoon", obj_name)
             cmd.show("sticks", interface_sel)
@@ -4164,7 +4164,7 @@ Thank you for your support! 🚀
             cmd.color("cyan", f"{interface_sel} and chain {p1_chains}")
             cmd.color("orange", f"{interface_sel} and chain {p2_chains}")
             
-            # 计算界面统计
+            # 计算interface统计
             n_e3_residues = cmd.count_atoms(f"{interface_sel} and chain {p1_chains} and name CA")
             n_poi_residues = cmd.count_atoms(f"{interface_sel} and chain {p2_chains} and name CA")
             
@@ -4172,16 +4172,16 @@ Thank you for your support! 🚀
             
             # 如果选中了计算ΔΔG
             if hasattr(self, 'tc_include_ddg') and self.tc_include_ddg.isChecked():
-                self.log(f"计算界面ΔΔG..." if get_lang() == "zh" else "Calculating interface ΔΔG...")
-                # 这里可以调用FoldX或其他方法计算ΔΔG
-                # 暂时使用简化的ASA方法估算
+                self.log(f"计算interfaceΔΔG..." if get_lang() == "zh" else "Calculating interface ΔΔG...")
+                # 这里可以调用FoldX或其他Method计算ΔΔG
+                # 暂时using简化的ASAMethod估算
                 import numpy as np
                 asa = cmd.get_area(interface_sel)
                 ddg_estimate = asa * 0.01  # 简化估算: ~0.01 kcal/mol per Å²
                 self.log(f"  估算ΔΔG: {ddg_estimate:.2f} kcal/mol (基于ASA)")
                 
         except Exception as e:
-            self.log(f"错误: {e}")
+            self.log(f"Error: {e}")
             import traceback; traceback.print_exc()
 
     def run_tc_render(self):
@@ -4191,7 +4191,7 @@ Thank you for your support! 🚀
             
             obj_name = self.tc_obj_combo.currentText()
             if obj_name == t("no_object"):
-                QMessageBox.warning(self, t("title"), "请先加载PDB结构" if get_lang() == "zh" else "Load PDB first")
+                QMessageBox.warning(self, t("title"), "请先LoadPDB结构" if get_lang() == "zh" else "Load PDB first")
                 return
                 
             self.log(f"\n▶ Rendering {obj_name}")
@@ -4206,7 +4206,7 @@ Thank you for your support! 🚀
             p2_chains = self.tc_protein2_chains.text().strip()
             ligand_resname = self.tc_ligand_name.text().strip()
             
-            # 设置显示样式
+            # SettingsDisplay样式
             cmd.hide("everything", obj_name)
             cmd.show("cartoon", obj_name)
             
@@ -4229,7 +4229,7 @@ Thank you for your support! 🚀
                 cmd.set("sphere_scale", 0.3, ligand_sel)
                 cmd.set("stick_radius", 0.2, ligand_sel)
             
-            # 显示界面残基
+            # Displayinterface残基
             if self.tc_analyze_interface.isChecked():
                 cutoff = float(self.tc_distance.text())
                 interface_sel = f"interface_{obj_name}_render"
@@ -4240,26 +4240,26 @@ Thank you for your support! 🚀
                 cmd.show("sticks", f"{interface_sel} and sidechain")
                 cmd.set("stick_radius", 0.15, interface_sel)
             
-            # 设置视角和光照
+            # Settings视角和光照
             cmd.orient(obj_name)
             cmd.zoom(obj_name, 5)
             cmd.set("ambient", 0.3)
             cmd.set("spec_power", 200)
             cmd.set("spec_reflect", 0.2)
             
-            # 导出PNG
+            # ExportPNG
             output_path = os.path.join(os.getcwd(), f"ternary_complex_{obj_name}.png")
             cmd.png(output_path, width=2400, height=2400, dpi=300, ray=1)
             
             self.log(f"✓ {os.path.basename(output_path)}")
             
         except Exception as e:
-            self.log(f"错误: {e}")
+            self.log(f"Error: {e}")
             import traceback; traceback.print_exc()
     
-    # ========== 新增: Molecular Glue 特异分析函数 ==========
+    # ========== 新增: Molecular Glue 特异分析Function ==========
     def run_glue_ppi_analysis(self):
-        """分析蛋白-蛋白界面 (PPI Interface)"""
+        """分析蛋白-蛋白interface (PPI Interface)"""
         try:
             from .ppi_analyzer import analyze_protein_protein_interface
             
@@ -4291,10 +4291,10 @@ Thank you for your support! 🚀
             )
             
             if result:
-                # 保存结果
+                # SaveResults
                 self.current_glue_ppi_result = result
                 
-                # 显示结果
+                # DisplayResults
                 contacts = result.get('interface_contacts', 0)
                 bsa = result.get('bsa')
                 is_strong = result.get('is_strong_interface', False)
@@ -4361,10 +4361,10 @@ Thank you for your support! 🚀
             )
             
             if result:
-                # 保存结果
+                # SaveResults
                 self.current_glue_neo_result = result
                 
-                # 显示结果
+                # DisplayResults
                 neo_count = result.get('neo_epitope_count', 0)
                 bridging_atoms = result.get('bridging_glue_atoms', 0)
                 is_glue = result.get('is_molecular_glue', False)
@@ -4379,7 +4379,7 @@ Thank you for your support! 🚀
                 # 列出Neo-表位残基
                 if result.get('neo_substrate_residues'):
                     self.log(f"\n   Neo-Epitope Residues:")
-                    for res in result['neo_substrate_residues'][:10]:  # 显示前10个
+                    for res in result['neo_substrate_residues'][:10]:  # Display前10个
                         self.log(f"      {res['chain']}:{res['resname']} {res['resid']}")
                 
                 QMessageBox.information(self, "Neo-Epitope Detection Complete",
@@ -4435,7 +4435,7 @@ Thank you for your support! 🚀
             ppi_result = self.current_glue_ppi_result
             neo_result = getattr(self, 'current_glue_neo_result', None)
             
-            # 提取关键指标
+            # 提取关Key指标
             ppi_contacts = ppi_result.get('interface_contacts', 0)
             bsa = ppi_result.get('bsa')
             is_strong_ppi = ppi_result.get('is_strong_interface', False)
@@ -4477,7 +4477,7 @@ Thank you for your support! 🚀
             self.log(f"      Strong PPI: {'Yes' if is_strong_ppi else 'No'}")
             self.log("="*60)
             
-            # 弹窗显示
+            # 弹窗Display
             icon = QMessageBox.Icon.Information if "Glue" in final_mechanism else QMessageBox.Icon.Warning
             glue_msg = 'This complex exhibits Molecular Glue characteristics!'
             protac_msg = 'This complex likely uses a PROTAC/linker mechanism.'
@@ -4506,13 +4506,13 @@ Thank you for your support! 🚀
 
     # --- 杂项 ---
     def render_interactions_beautifully_clicked(self):
-        """相互作用一键渲染：分析 → 高亮 → 美化渲染 → PNG"""
+        """相互作用一Key渲染：分析 → 高亮 → 美化渲染 → PNG"""
         try:
             obj = self.obj_combo_analysis.currentText().strip()
             if not obj or obj == t("no_object"):
                 QMessageBox.warning(self, t("title"), t("no_object")); return
 
-            # 步骤1: 如果没有CSV文件或相互作用数据，先进行分析
+            # 步骤1: 如果没有CSVFile或相互作用数据，先进行分析
             csv_path = self.out_csv.text().strip()
             has_csv = csv_path and os.path.exists(csv_path)
 
@@ -4521,7 +4521,7 @@ Thank you for your support! 🚀
                 pdb = self.pdb_path.text().strip() or None
                 only_between = True  # 默认只分析链间相互作用
 
-                # 直接调用分析函数（不使用线程，避免UI卡顿）
+                # 直接调用分析Function（不using线程，避免UI卡顿）
                 interactions = analyze_pdb_interactions(
                     obj_name=obj,
                     pdb_file=pdb,
@@ -4537,7 +4537,7 @@ Thank you for your support! 🚀
                     # 填充表格
                     self.fill_table_from_interactions(interactions)
                 else:
-                    # 创建临时CSV
+                    # Create临时CSV
                     import tempfile
                     fd, csv_path = tempfile.mkstemp(suffix="_interactions.csv")
                     os.close(fd)
@@ -4561,16 +4561,16 @@ Thank you for your support! 🚀
                 try:
                     highlight_csv_residues(csv_path, obj=obj, show_labels=1,
                                          stick_by_element=1, clear_old=1)
-                    # 静默完成
+                    # 静默Completed
                 except Exception as e:
-                    self.log(f"高亮失败: {e}")
+                    self.log(f"高亮Failed: {e}")
 
             # 步骤3: 美化渲染（不再重复高亮）
             # 静默渲染
             render_interactions_beautifully(obj, csv_path=None)  # 不传csv_path，避免重复高亮
             self.log("✓ Done")
 
-            # 步骤4: 导出 PNG
+            # 步骤4: Export PNG
             self._export_png_for_object(obj)
 
         except Exception as e:
@@ -4584,19 +4584,19 @@ Thank you for your support! 🚀
             QMessageBox.warning(self, t("title"), t("select_csv"))
 
     def _browse_open_file(self, line_edit, file_filter):
-        """通用文件打开浏览"""
-        fn, _ = QFileDialog.getOpenFileName(self, "选择文件" if get_lang() == "zh" else "Select File", "", file_filter)
+        """通用FileOpen浏览"""
+        fn, _ = QFileDialog.getOpenFileName(self, "SelectFile" if get_lang() == "zh" else "Select File", "", file_filter)
         if fn:
             line_edit.setText(fn)
     
     # Note: CRBN interface tools have been integrated into Ternary Complex analysis
     
     def check_environment(self):
-        """检查环境和依赖状态"""
+        """检查环境和DependenciesStatus"""
         try:
             from .env_checker import _quick_check_deps
             
-            # 快速检查依赖
+            # 快速检查Dependencies
             all_ok, missing = _quick_check_deps()
             
             if all_ok:
@@ -4608,7 +4608,7 @@ Thank you for your support! 🚀
                 self.log("✅ Environment check passed - all dependencies installed")
                 return
             
-            # 缺少依赖，提供安装选项
+            # 缺少Dependencies，提供安装Options
             reply = QMessageBox.question(
                 self,
                 "Missing Dependencies",
@@ -4638,10 +4638,10 @@ Thank you for your support! 🚀
         import subprocess
         import sys
         
-        # 多种方式查找 install.sh
+        # 多种方式Find install.sh
         candidates = []
         
-        # 方法1: 从 __file__ 推断
+        # Method1: 从 __file__ 推断
         try:
             script_dir = os.path.dirname(os.path.abspath(__file__))
             candidates.append(os.path.join(os.path.dirname(script_dir), "install.sh"))
@@ -4649,25 +4649,25 @@ Thank you for your support! 🚀
         except Exception:  # __file__ 可能未定义
             pass
         
-        # 方法2: 从 glint 模块位置推断
+        # Method2: 从 glint Module位置推断
         try:
             import glint
             glint_dir = os.path.dirname(os.path.abspath(glint.__file__))
             candidates.append(os.path.join(os.path.dirname(glint_dir), "install.sh"))
-        except (ImportError, AttributeError):  # 模块导入或属性访问可能失败
+        except (ImportError, AttributeError):  # ModuleImport或Property访问可能Failed
             pass
         
-        # 方法3: 用户目录下的常见位置
+        # Method3: 用户Directory下的常见位置
         candidates.append(os.path.expanduser("~/git/GLINT/install.sh"))
         
-        # 查找存在的脚本
+        # Find存在的脚本
         install_script = None
         for path in candidates:
             if os.path.exists(path):
                 install_script = path
                 break
         
-        # 生成内联安装命令（当找不到脚本时使用）
+        # 生成内联安装命令（当找不到脚本时using）
         inline_cmd = '''echo "============================================================"
 echo "🧬 GLINT - Installing Dependencies"
 echo "============================================================"
@@ -4692,7 +4692,7 @@ echo "============================================================"'''
         
         try:
             if sys.platform == "darwin":  # macOS
-                # 使用 osascript 打开 Terminal 并运行脚本
+                # using osascript Open Terminal 并运行脚本
                 apple_script = f'''
                 tell application "Terminal"
                     activate
@@ -4715,7 +4715,7 @@ echo "============================================================"'''
                         continue
                         
             elif sys.platform == "win32":  # Windows
-                # Windows: 写入临时批处理文件
+                # Windows: 写入临时批处理File
                 import tempfile
                 bat_file = os.path.join(tempfile.gettempdir(), "glint_install.bat")
                 with open(bat_file, "w") as f:
@@ -4745,30 +4745,30 @@ echo "============================================================"'''
     def _check_environment_simple(self):
         """简单版环境检查（备用）"""
         self.log(f"\n{'='*50}")
-        self.log("检查环境和依赖 (简单模式)" if get_lang() == "zh" else "Checking Environment (Simple Mode)")
+        self.log("检查环境和Dependencies (简单模式)" if get_lang() == "zh" else "Checking Environment (Simple Mode)")
         self.log(f"{'='*50}\n")
         
-        # 检查 Python 依赖
+        # 检查 Python Dependencies
         try:
             from .env_setup import get_dependency_status
             status = get_dependency_status()
             
-            self.log("Python 依赖:" if get_lang() == "zh" else "Python Dependencies:")
+            self.log("Python Dependencies:" if get_lang() == "zh" else "Python Dependencies:")
             for pkg, available in status.items():
                 symbol = "[OK]" if available else "[MISS]" 
                 self.log(f"  {symbol} {pkg:20} {'已安装' if available else '未安装'}")
             
             missing = [pkg for pkg, avail in status.items() if not avail]
             if missing:
-                self.log(f"\n缺失依赖: {', '.join(missing)}")
+                self.log(f"\n缺失Dependencies: {', '.join(missing)}")
                 self.log("安装命令: pip install " + " ".join(missing))
             else:
-                self.log("\n所有 Python 依赖已满足" if get_lang() == "zh" else "\nAll Python dependencies satisfied")
+                self.log("\n所有 Python Dependencies已满足" if get_lang() == "zh" else "\nAll Python dependencies satisfied")
         except Exception as e:
-            self.log(f"无法检查 Python 依赖: {e}")
+            self.log(f"无法检查 Python Dependencies: {e}")
         
         self.log(f"\n{'='*50}")
-        self.log("环境检查完成" if get_lang() == "zh" else "Environment check complete")
+        self.log("环境检查Completed" if get_lang() == "zh" else "Environment check complete")
         self.log(f"{'='*50}\n")
     
     # ==========================
@@ -4918,13 +4918,13 @@ echo "============================================================"'''
                 QMessageBox.warning(self, "Warning", f"Object '{receptor_obj}' not found in PyMOL")
                 return
             
-            # 获取配体文件
+            # 获取配体File
             ligand = self.vina_ligand.text().strip()
             if not ligand or not os.path.exists(ligand):
                 QMessageBox.warning(self, "Warning", "Please select a valid ligand file")
                 return
             
-            # 获取参数
+            # 获取Parameters
             max_pockets = self.vina_max_pockets.value()
             exhaustiveness = self.vina_exhaustiveness.value()
             
@@ -4933,7 +4933,7 @@ echo "============================================================"'''
             self.log(f"   Ligand: {os.path.basename(ligand)}")
             self.log(f"   Exhaustiveness: {exhaustiveness}")
             
-            # 导入 vina_integration
+            # Import vina_integration
             try:
                 from .vina_integration import pocket_based_docking, manual_box_docking, check_vina_available
             except ImportError:
@@ -5015,7 +5015,7 @@ echo "============================================================"'''
             traceback.print_exc()
     
     def load_vina_result(self):
-        """加载 Vina 对接结果"""
+        """Load Vina 对接Results"""
         fn, _ = QFileDialog.getOpenFileName(self, "Select Docking Result", "", "PDBQT (*.pdbqt);;All Files (*)")
         if fn:
             try:
@@ -5100,7 +5100,7 @@ echo "============================================================"'''
             traceback.print_exc()
     
     def visualize_pocket_comparison(self):
-        """可视化口袋对比结果"""
+        """可视化口袋对比Results"""
         try:
             if not hasattr(self, '_comparison_result') or not self._comparison_result:
                 QMessageBox.warning(self, "Warning", "Please run pocket comparison first")
@@ -5132,7 +5132,7 @@ echo "============================================================"'''
             traceback.print_exc()
     
     def run_interface_pockets(self):
-        """运行 PPI 界面口袋分析"""
+        """运行 PPI interface口袋分析"""
         try:
             obj = self.pocket_interface_obj.currentText().strip()
             chain_a = self.pocket_interface_chain_a.text().strip()
@@ -5327,7 +5327,7 @@ echo "============================================================"'''
         mutations_str = self.mut_input.text().strip()
         
         if not obj_name or not mutations_str:
-            self.log("❌ 请选择对象并输入突变")
+            self.log("❌ 请Select对象并输入突变")
             return
         
         try:
@@ -5341,19 +5341,19 @@ echo "============================================================"'''
                         mutations.append((parts[0], parts[1], parts[2]))
             
             if not mutations:
-                self.log("❌ 突变格式错误，示例: A:23:ALA, B:45:GLY")
+                self.log("❌ 突变格式Error，示例: A:23:ALA, B:45:GLY")
                 return
             
             self.log(f"🧬 执行突变: {obj_name}")
             
-            # 调用突变分析模块
+            # 调用突变分析Module
             from pymol import cmd
             cmd.perform_mutation(obj_name, mutations, method='pymol')
             
-            self.log("✅ 突变完成")
+            self.log("✅ 突变Completed")
             
         except Exception as e:
-            self.log(f"❌ 突变失败: {e}")
+            self.log(f"❌ 突变Failed: {e}")
             import traceback
             traceback.print_exc()
     
@@ -5362,7 +5362,7 @@ echo "============================================================"'''
         obj_name = self.mut_obj_combo.currentText()
         
         if not obj_name:
-            self.log("❌ 请选择对象")
+            self.log("❌ 请Select对象")
             return
         
         try:
@@ -5371,10 +5371,10 @@ echo "============================================================"'''
             from pymol import cmd
             cmd.minimize_energy(obj_name, cycles=100)
             
-            self.log("✅ 最小化完成")
+            self.log("✅ 最小化Completed")
             
         except Exception as e:
-            self.log(f"❌ 最小化失败: {e}")
+            self.log(f"❌ 最小化Failed: {e}")
             import traceback
             traceback.print_exc()
     
@@ -5385,7 +5385,7 @@ echo "============================================================"'''
         method = self.mut_method_combo.currentText().lower()
         
         if not obj_name or not mutations_str:
-            self.log("❌ 请选择对象并输入突变")
+            self.log("❌ 请Select对象并输入突变")
             return
         
         try:
@@ -5399,28 +5399,28 @@ echo "============================================================"'''
                         mutations.append((parts[0], parts[1], parts[2]))
             
             if not mutations:
-                self.log("❌ 突变格式错误")
+                self.log("❌ 突变格式Error")
                 return
             
-            self.log(f"🧬 开始完整分析: {obj_name}")
-            self.log(f"突变数量: {len(mutations)}")
-            self.log(f"方法: {method}")
+            self.log(f"🧬 Start完整分析: {obj_name}")
+            self.log(f"突变Count: {len(mutations)}")
+            self.log(f"Method: {method}")
             
             # 调用完整分析
             from pymol import cmd
             cmd.analyze_mutation_effects(obj_name, mutations, method=method)
             
-            self.log("✅ 分析完成")
+            self.log("✅ 分析Completed")
             
         except Exception as e:
-            self.log(f"❌ 分析失败: {e}")
+            self.log(f"❌ 分析Failed: {e}")
             import traceback
             traceback.print_exc()
     
-    # ==================== 其他方法 ====================
+    # ==================== 其他Method ====================
     
     def run_compare_scoring(self):
-        """对比评分方法 - DEPRECATED"""
+        """对比评分Method - DEPRECATED"""
         QMessageBox.information(
             self,
             "Feature Removed",
@@ -5443,7 +5443,7 @@ echo "============================================================"'''
         self.log("Ternary scoring feature has been removed")
     
     def browse_heatmap_folder(self):
-        """浏览选择热图 CSV 文件夹"""
+        """浏览Select热图 CSV File夹"""
         from PyQt5.QtWidgets import QFileDialog
         folder = QFileDialog.getExistingDirectory(self, "Select Folder Containing CSV Files", "")
         if folder:
@@ -5492,7 +5492,7 @@ Heatmap saved successfully!
                 self.score_result_text.setPlainText(report)
                 self.log(f"Heatmap saved: {result['output_path']}")
                 
-                # 询问是否打开图片
+                # 询问是否Open图片
                 reply = QMessageBox.question(
                     self, 
                     "Success", 
@@ -5545,7 +5545,7 @@ Heatmap saved successfully!
     def toggle_theme(self):
         """Toggle theme (dark/light)"""
         self._dark_mode = not self._dark_mode
-        # 先清空样式再重新应用，避免残留规则
+        # 先Clear样式再重新Apply，避免残留规则
         try:
             self.setStyleSheet("")
         except Exception:
@@ -5573,7 +5573,7 @@ Heatmap saved successfully!
                 widget = getattr(self, attr)
                 if widget:
                     widget.setStyleSheet(f"#scroll_content {{ background-color: {scroll_bg}; }}")
-        # 主题变化后重新应用自动缩放，以确保字体与行距匹配
+        # 主题变化后重新Apply自动缩放，以确保字体与行距匹配
         self.apply_auto_scaling()
         try:
             self.update()
@@ -5611,8 +5611,8 @@ Heatmap saved successfully!
             return 1.0
 
     def apply_auto_scaling(self):
-        """应用自动缩放"""
-        # 暂时禁用，因为使用了布局调优
+        """Apply自动缩放"""
+        # 暂时Disable，因为using了布局调优
         pass
 
 # ============================================================================
@@ -5636,7 +5636,7 @@ class DiseaseQueryWorker(QThread):
     
     def run(self):
         try:
-            # 步骤 1: 搜索疾病
+            # 步骤 1: Search疾病
             self.progress.emit(f"Searching for disease: {self.disease_name}...")
             if search_disease is None:
                 raise ImportError("Open Targets API modules not available")
@@ -5647,7 +5647,7 @@ class DiseaseQueryWorker(QThread):
                 self.error.emit(f"No disease found for '{self.disease_name}'")
                 return
             
-            # 使用第一个候选
+            # usingFirst候选
             disease_id = candidates[0]['id']
             disease_name = candidates[0]['name']
             
@@ -5659,12 +5659,12 @@ class DiseaseQueryWorker(QThread):
                 self.error.emit(f"No targets found for {disease_name}")
                 return
             
-            # 步骤 3: 添加 E3 评分
+            # 步骤 3: Add E3 评分
             if self.include_e3:
                 self.progress.emit(f"Calculating E3 compatibility scores ({self.e3_symbol})...")
                 df = enrich_targets_with_e3_scores(df, e3_symbol=self.e3_symbol)
             
-            # 添加疾病信息
+            # Add疾病Information
             df['disease_name'] = disease_name
             df['disease_id'] = disease_id
             
@@ -5677,27 +5677,27 @@ class DiseaseQueryWorker(QThread):
 
 class DiseaseAnalysisTab(QWidget):
     """
-    疾病分析主标签页
+    疾病分析主Label页
     """
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.current_results = None  # 当前查询结果 DataFrame
+        self.current_results = None  # 当前查询Results DataFrame
         self.query_worker = None
         
         self.init_ui()
     
     def init_ui(self):
-        """初始化界面"""
+        """Initializeinterface"""
         main_layout = QVBoxLayout(self)
         main_layout.setSpacing(12)
         main_layout.setContentsMargins(12, 12, 12, 12)
         
-        # ========== 疾病搜索区域 ==========
+        # ========== 疾病Search区域 ==========
         search_group = QGroupBox("Disease Search")
         search_layout = QVBoxLayout(search_group)
         search_layout.setSpacing(10)
         
-        # 疾病名称输入
+        # 疾病Name输入
         disease_row = QHBoxLayout()
         disease_row.addWidget(QLabel("Disease Name:"))
         self.disease_input = QLineEdit()
@@ -5706,7 +5706,7 @@ class DiseaseAnalysisTab(QWidget):
         disease_row.addWidget(self.disease_input, 1)
         search_layout.addLayout(disease_row)
         
-        # 参数设置
+        # ParametersSettings
         params_layout = QHBoxLayout()
         
         # Top N
@@ -5728,7 +5728,7 @@ class DiseaseAnalysisTab(QWidget):
         
         params_layout.addSpacing(20)
         
-        # E3 评分选项
+        # E3 评分Options
         self.e3_checkbox = QCheckBox("Include E3 Score")
         self.e3_checkbox.setChecked(True)
         params_layout.addWidget(self.e3_checkbox)
@@ -5746,7 +5746,7 @@ class DiseaseAnalysisTab(QWidget):
         btn_row.addStretch()
         search_layout.addLayout(btn_row)
         
-        # 进度条
+        # 进degrees条
         self.progress_bar = QProgressBar()
         self.progress_bar.setTextVisible(True)
         self.progress_bar.setVisible(False)
@@ -5754,25 +5754,25 @@ class DiseaseAnalysisTab(QWidget):
         
         main_layout.addWidget(search_group)
         
-        # ========== 结果展示区域 ==========
+        # ========== Results展示区域 ==========
         results_group = QGroupBox("Results")
         results_layout = QVBoxLayout(results_group)
         results_layout.setSpacing(10)
         
-        # 结果表格
+        # Results表格
         self.results_table = QTableWidget()
         self.results_table.setColumnCount(6)
         self.results_table.setHorizontalHeaderLabels([
             "Symbol", "Name", "Disease Score", "E3 Score", "Composite Score", "Actions"
         ])
         
-        # 设置表格属性
+        # Settings表格Property
         from PyQt5.QtWidgets import QAbstractItemView, QHeaderView
         self.results_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.results_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.results_table.setSortingEnabled(True)
         
-        # 设置列宽
+        # Settings列宽
         header = self.results_table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Symbol
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Name
@@ -5784,7 +5784,7 @@ class DiseaseAnalysisTab(QWidget):
         
         results_layout.addWidget(self.results_table)
         
-        # 导出按钮
+        # Export按钮
         export_row = QHBoxLayout()
         self.export_csv_btn = QPushButton("📄 Export CSV")
         self.export_csv_btn.setMinimumHeight(32)
@@ -5796,7 +5796,7 @@ class DiseaseAnalysisTab(QWidget):
         
         main_layout.addWidget(results_group, 1)
         
-        # ========== 状态栏 ==========
+        # ========== Status栏 ==========
         self.status_label = QLabel("Ready")
         self.status_label.setStyleSheet("color: #666; font-size: 11px;")
         main_layout.addWidget(self.status_label)
@@ -5809,7 +5809,7 @@ class DiseaseAnalysisTab(QWidget):
             QMessageBox.warning(self, "Input Required", "Please enter a disease name")
             return
         
-        # 检查模块是否可用
+        # 检查Module是否可用
         if search_disease is None or get_disease_targets is None:
             QMessageBox.critical(
                 self,
@@ -5819,12 +5819,12 @@ class DiseaseAnalysisTab(QWidget):
             )
             return
         
-        # 禁用查询按钮
+        # Disable查询按钮
         self.query_btn.setEnabled(False)
         self.progress_bar.setVisible(True)
-        self.progress_bar.setRange(0, 0)  # 不确定进度
+        self.progress_bar.setRange(0, 0)  # 不确定进degrees
         
-        # 创建并启动 Worker 线程
+        # Create并启动 Worker 线程
         top_n = self.top_n_spin.value()
         include_e3 = self.e3_checkbox.isChecked()
         e3_symbol = self.e3_combo.currentText()
@@ -5836,11 +5836,11 @@ class DiseaseAnalysisTab(QWidget):
         self.query_worker.start()
     
     def on_query_progress(self, message: str):
-        """查询进度更新"""
+        """查询进degreesUpdate"""
         self.status_label.setText(message)
     
     def on_query_finished(self, df):
-        """查询完成"""
+        """查询Completed"""
         self.current_results = df
         self.populate_results_table(df)
         
@@ -5853,7 +5853,7 @@ class DiseaseAnalysisTab(QWidget):
         self.status_label.setText(f"Query complete: {len(df)} targets found for {disease_name}")
     
     def on_query_error(self, error_msg: str):
-        """查询错误"""
+        """查询Error"""
         self.query_btn.setEnabled(True)
         self.progress_bar.setVisible(False)
         
@@ -5870,13 +5870,13 @@ class DiseaseAnalysisTab(QWidget):
         self.status_label.setText(f"Error: {error_msg}")
     
     def populate_results_table(self, df):
-        """填充结果表格"""
+        """填充Results表格"""
         if df is None or df.empty:
             self.results_table.setRowCount(0)
             return
         
         self.results_table.setRowCount(len(df))
-        self.results_table.setSortingEnabled(False)  # 填充时禁用排序
+        self.results_table.setSortingEnabled(False)  # 填充时DisableSort
         
         # Check if pandas is available
         try:
@@ -5918,10 +5918,10 @@ class DiseaseAnalysisTab(QWidget):
             load_btn.clicked.connect(lambda checked, symbol=row['symbol']: self.on_load_structure(symbol))
             self.results_table.setCellWidget(i, 5, load_btn)
         
-        self.results_table.setSortingEnabled(True)  # 重新启用排序
+        self.results_table.setSortingEnabled(True)  # 重新EnableSort
     
     def on_load_structure(self, symbol: str):
-        """加载蛋白结构到 PyMOL"""
+        """Load蛋白结构到 PyMOL"""
         try:
             from pymol import cmd
             
@@ -5937,7 +5937,7 @@ class DiseaseAnalysisTab(QWidget):
             if reply == QMessageBox.StandardButton.Yes:
                 # 尝试 fetch
                 try:
-                    # 先显示提示
+                    # 先Display提示
                     QMessageBox.information(
                         self,
                         "Load Structure",
@@ -5961,12 +5961,12 @@ class DiseaseAnalysisTab(QWidget):
             )
     
     def on_export_csv(self):
-        """导出 CSV"""
+        """Export CSV"""
         if self.current_results is None or self.current_results.empty:
             QMessageBox.warning(self, "No Data", "No results to export")
             return
         
-        # 文件对话框
+        # File对话框
         file_path, _ = QFileDialog.getSaveFileName(
             self,
             "Export CSV",
@@ -5976,10 +5976,10 @@ class DiseaseAnalysisTab(QWidget):
         
         if file_path:
             try:
-                # 确保目录存在
+                # 确保Directory存在
                 os.makedirs(os.path.dirname(file_path), exist_ok=True)
                 
-                # 导出
+                # Export
                 self.current_results.to_csv(file_path, index=False)
                 
                 QMessageBox.information(
@@ -6005,7 +6005,7 @@ class DiseaseAnalysisTab(QWidget):
 
 # Monkey-patch these methods onto GLINTDialog
 def _glint_setup_style(self):
-    # 现代化样式 - 根据深色/浅色主题应用不同的样式
+    # 现代化样式 - 根据深色/浅色主题Apply不同的样式
     # Mac兼容性优先
     if self._dark_mode:
         # 深色主题 - 优化版（更现代，更舒适，大字体）
@@ -6070,7 +6070,7 @@ QGroupBox::title {
     color: #58a6ff;
 }
 
-/* 标签 - 更好的对比度 */
+/* Label - 更好的对比degrees */
 QLabel {
     color: #c9d1d9;
     font-size: 14px;
@@ -6110,7 +6110,7 @@ QComboBox::down-arrow {
     margin-right: 8px;
 }
 
-/* 数值输入框 */
+/* 数Value输入框 */
 QSpinBox {
     border: 1px solid #30363d;
     border-radius: 8px;
@@ -6260,7 +6260,7 @@ QPushButton#highlight_btn:pressed {
     background: #1d4ed8;
 }
 
-/* 刷新按钮 */
+/* Refresh按钮 */
 QPushButton#refresh_btn {
     background-color: #21262d;
     color: #8b949e;
@@ -6328,7 +6328,7 @@ QPushButton#browse_btn:hover {
                                 stop:0 #60a5fa, stop:1 #3b82f6);
 }
 
-/* 保存按钮 - 绿色 */
+/* Save按钮 - 绿色 */
 QPushButton#save_btn {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                                 stop:0 #10b981, stop:1 #059669);
@@ -6358,7 +6358,7 @@ QPushButton#clear_btn:hover {
     background-color: #6e7681;
 }
 
-/* 关闭按钮 - 红色 */
+/* Close按钮 - 红色 */
 QPushButton#close_btn {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                                 stop:0 #ef4444, stop:1 #dc2626);
@@ -6374,7 +6374,7 @@ QPushButton#close_btn:hover {
                                 stop:0 #f87171, stop:1 #ef4444);
 }
 
-/* 文本编辑器 - 代码风格 */
+/* 文本Edit器 - 代码风格 */
 QTextEdit {
     border: 1px solid #30363d;
     border-radius: 8px;
@@ -6454,7 +6454,7 @@ QCheckBox::indicator:checked:after {
     font-weight: bold;
 }
 
-/* 进度条 */
+/* 进degrees条 */
 QProgressBar {
     border: 1px solid #30363d;
     border-radius: 8px;
@@ -6471,7 +6471,7 @@ QProgressBar::chunk {
     border-radius: 6px;
 }
 
-/* 标签页 - QTabWidget */
+/* Label页 - QTabWidget */
 QTabWidget::pane {
     border: 1px solid #30363d;
     border-radius: 8px;
@@ -6606,7 +6606,7 @@ QGroupBox::title {
     color: #3b82f6;
 }
 
-/* 标签 - 更好的对比度 */
+/* Label - 更好的对比degrees */
 QLabel {
     color: #475569;
     font-size: 14px;
@@ -6646,7 +6646,7 @@ QComboBox::down-arrow {
     margin-right: 8px;
 }
 
-/* 数值输入框 */
+/* 数Value输入框 */
 QSpinBox {
     border: 1px solid #cbd5e1;
     border-radius: 8px;
@@ -6796,7 +6796,7 @@ QPushButton#highlight_btn:pressed {
     background: #1d4ed8;
 }
 
-/* 刷新按钮 */
+/* Refresh按钮 */
 QPushButton#refresh_btn {
     background-color: white;
     color: #64748b;
@@ -6863,7 +6863,7 @@ QPushButton#browse_btn:hover {
                                 stop:0 #60a5fa, stop:1 #3b82f6);
 }
 
-/* 保存按钮 - 绿色 */
+/* Save按钮 - 绿色 */
 QPushButton#save_btn {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                                 stop:0 #10b981, stop:1 #059669);
@@ -6893,7 +6893,7 @@ QPushButton#clear_btn:hover {
     background-color: #475569;
 }
 
-/* 关闭按钮 - 红色 */
+/* Close按钮 - 红色 */
 QPushButton#close_btn {
     background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
                                 stop:0 #ef4444, stop:1 #dc2626);
@@ -6909,7 +6909,7 @@ QPushButton#close_btn:hover {
                                 stop:0 #f87171, stop:1 #ef4444);
 }
 
-/* 文本编辑器 - 纯白背景 */
+/* 文本Edit器 - 纯白背景 */
 QTextEdit {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -6989,7 +6989,7 @@ QCheckBox::indicator:checked:after {
     font-weight: bold;
 }
 
-/* 进度条 */
+/* 进degrees条 */
 QProgressBar {
     border: 1px solid #e2e8f0;
     border-radius: 8px;
@@ -7006,7 +7006,7 @@ QProgressBar::chunk {
     border-radius: 6px;
 }
 
-/* 标签页 - QTabWidget */
+/* Label页 - QTabWidget */
 QTabWidget::pane {
     border: 1px solid #e2e8f0;
     border-radius: 8px;

@@ -21,7 +21,7 @@ class HitIdentificationTab(CommonTab):
         self.init_ui()
 
     def init_ui(self):
-        """初始化UI - 现代卡片式布局"""
+        """InitializeUI - 现代卡片式布局"""
         self.setObjectName("scroll_content")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.parent_window._hit_scroll_content = self

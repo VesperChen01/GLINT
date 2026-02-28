@@ -2,16 +2,16 @@
 """
 GLINT Pocket Detector
 ======================
-纯 Python 实现的蛋白口袋检测与性质分析模块
+纯 Python 实现的蛋白口袋检测与性质分析Module
 
 功能：
 - 基于网格法的口袋检测
-- 几何性质：体积、表面积、深度、开口大小、球形度
-- 化学性质：疏水性、极性、电荷、芳香性、氢键供受体
+- 几何性质：体积、表面积、深degrees、开口Size、球形degrees
+- 化学性质：疏水性、极性、电荷、芳香性、氢Key供受体
 - 可成药性评分
-- 与 PPI 界面、相互作用、静电势联动
+- 与 PPI interface、相互作用、静电势联动
 
-依赖：NumPy, SciPy (现有依赖)
+Dependencies：NumPy, SciPy (现有Dependencies)
 """
 
 import os
@@ -27,7 +27,7 @@ try:
 except ImportError:
     cmd = None
 
-# 氨基酸性质分类
+# 氨基酸性质Category
 HYDROPHOBIC_RESIDUES = {'ALA', 'VAL', 'ILE', 'LEU', 'MET', 'PHE', 'TRP', 'PRO', 'GLY'}
 POLAR_RESIDUES = {'SER', 'THR', 'CYS', 'TYR', 'ASN', 'GLN'}
 POSITIVE_RESIDUES = {'LYS', 'ARG', 'HIS'}
@@ -42,32 +42,32 @@ VDW_RADII = {
     'FE': 2.00, 'ZN': 1.39, 'CU': 1.40, 'MN': 1.61
 }
 
-# 氢键供体/受体原子类型
+# 氢Key供体/受体原子Type
 HBOND_DONOR_ATOMS = {'N', 'O'}  # 简化：带H的N/O
 HBOND_ACCEPTOR_ATOMS = {'O', 'N', 'S'}
 
 
-# 从包级别导入统一的中文检测函数，避免重复定义
+# 从Package级别Import统一的中文检测Function，避免重复定义
 from . import _zh
 
 
 def _info(cn, en):
-    """双语信息输出"""
+    """双语Information输出"""
     print(cn if _zh() else en)
 
 
 class PocketDetector:
-    """口袋检测器（严格标准参数）"""
+    """口袋检测器（严格标准Parameters）"""
     
     def __init__(self, grid_spacing=0.5, probe_radius=1.4, 
                  min_volume=30.0, min_depth=2.5, max_solvent_access=0.2):
         """
-        参数：
+        Parameters：
             grid_spacing: 网格间距 (Å)
             probe_radius: 探针半径 (Å, 模拟水分子)
             min_volume: 最小口袋体积 (ų)
-            min_depth: 最小埋藏深度 (Å)
-            max_solvent_access: 最大溶剂可及度 (0=完全埋藏, 1=完全暴露)
+            min_depth: 最小埋藏深degrees (Å)
+            max_solvent_access: 最大溶剂可及degrees (0=完全埋藏, 1=完全暴露)
         """
         self.grid_spacing = grid_spacing
         self.probe_radius = probe_radius
@@ -79,7 +79,7 @@ class PocketDetector:
         """
         检测口袋
         
-        返回：[{
+        Return：[{
             'id': int,
             'volume': float,
             'surface_area': float,
@@ -94,7 +94,7 @@ class PocketDetector:
         # 获取原子坐标
         atoms = self._get_atoms(obj_name, pdb_file, selection)
         if len(atoms) == 0:
-            _info("错误：未找到原子", "Error: No atoms found")
+            _info("Error：未找到原子", "Error: No atoms found")
             return []
         
         _info(f"检测口袋：{len(atoms)} 个原子", 
@@ -125,19 +125,19 @@ class PocketDetector:
                 occupied, solvent, atoms
             )
             
-            # 过滤
+            # Filter
             if (pocket_info['volume'] >= self.min_volume and 
                 pocket_info['depth'] >= self.min_depth and
                 pocket_info['solvent_access'] <= self.max_solvent_access):
                 pockets.append(pocket_info)
         
-        _info(f"过滤后保留 {len(pockets)} 个口袋", 
+        _info(f"Filter后保留 {len(pockets)} 个口袋", 
               f"Retained {len(pockets)} pockets after filtering")
         
         return pockets
     
     def _get_atoms(self, obj_name, pdb_file, selection):
-        """获取原子信息"""
+        """获取Atom information"""
         atoms = []
         
         if obj_name and cmd:
@@ -153,7 +153,7 @@ class PocketDetector:
                     'name': atom.name.strip()
                 })
         elif pdb_file:
-            # 从 PDB 文件读取
+            # 从 PDB File读取
             with open(pdb_file, 'r') as f:
                 for line in f:
                     if line.startswith('ATOM') or line.startswith('HETATM'):
@@ -172,7 +172,7 @@ class PocketDetector:
                                 'resi': line[22:27].strip(),
                                 'name': line[12:16].strip()
                             })
-                        except (ValueError, IndexError):  # PDB 行解析可能失败
+                        except (ValueError, IndexError):  # PDB 行解析可能Failed
                             continue
         
         return atoms
@@ -206,7 +206,7 @@ class PocketDetector:
         # 为每个原子标记其 VDW + probe 范围内的格点
         for coord in atom_coords:
             # 计算原子影响的格点范围
-            radius = 2.0 + self.probe_radius  # 保守估计，使用通用半径
+            radius = 2.0 + self.probe_radius  # 保守估计，using通用半径
             grid_coord = ((coord - origin) / self.grid_spacing).astype(int)
             grid_radius = int(np.ceil(radius / self.grid_spacing))
             
@@ -229,8 +229,8 @@ class PocketDetector:
         """标记外部溶剂可及区域（flood fill）"""
         solvent = np.zeros(occupied.shape, dtype=bool)
         
-        # 从边界开始 flood fill
-        # 使用 scipy 的连通性分析
+        # 从边界Start flood fill
+        # using scipy 的连通性分析
         external = ~occupied
         labeled, num = ndimage.label(external)
         
@@ -261,7 +261,7 @@ class PocketDetector:
         volume = num_voxels * (self.grid_spacing ** 3)
         
         # 表面积：统计与蛋白接触的边界格点
-        # 使用形态学膨胀
+        # using形态学膨胀
         struct = ndimage.generate_binary_structure(3, 1)  # 6-连通
         dilated = ndimage.binary_dilation(pocket_mask, structure=struct)
         surface_mask = dilated & occupied
@@ -271,7 +271,7 @@ class PocketDetector:
         center_grid = pocket_coords.mean(axis=0)
         center = origin + center_grid * self.grid_spacing
         
-        # 深度：口袋中心到最近溶剂格点的距离
+        # 深degrees：口袋中心到最近溶剂格点的距离
         if np.any(solvent):
             solvent_coords = np.argwhere(solvent)
             distances = cdist([center_grid], solvent_coords)[0]
@@ -279,16 +279,16 @@ class PocketDetector:
         else:
             depth = 0.0
         
-        # 开口大小：估计为与溶剂接触的表面积
+        # 开口Size：估计为与溶剂接触的表面积
         mouth_mask = dilated & solvent
         mouth_size = np.sqrt(np.sum(mouth_mask) * (self.grid_spacing ** 2) / np.pi) * 2
         
-        # 球形度：实际体积 / 等效球体体积
+        # 球形degrees：实际体积 / 等效球体体积
         equivalent_radius = (3 * volume / (4 * np.pi)) ** (1/3)
         bounding_radius = np.max(cdist([center_grid], pocket_coords)) * self.grid_spacing
         sphericity = equivalent_radius / bounding_radius if bounding_radius > 0 else 0
         
-        # 溶剂可及度
+        # 溶剂可及degrees
         boundary_mask = dilated & (~pocket_mask)
         boundary_coords = np.argwhere(boundary_mask)
         solvent_contact = np.sum(dilated & solvent)
@@ -326,7 +326,7 @@ class PocketDetector:
         # 找出距离 < cutoff 的原子
         close_atom_indices = np.unique(np.where(distances < cutoff)[1])
         
-        # 提取残基信息（去重）
+        # 提取残基Information（去重）
         residues = []
         seen = set()
         for idx in close_atom_indices:
@@ -351,7 +351,7 @@ class PocketAnalyzer:
         """
         分析口袋化学性质
         
-        返回：{
+        Return：{
             'hydrophobicity': float,
             'polarity': float,
             'net_charge': int,
@@ -392,7 +392,7 @@ class PocketAnalyzer:
         aromatic_count = sum(1 for r in resn_list if r in AROMATIC_RESIDUES)
         aromaticity = aromatic_count / len(resn_list)
         
-        # 氢键供受体（简化统计：从原子类型推断）
+        # 氢Key供受体（简化统计：从原子Type推断）
         hbond_donors = 0
         hbond_acceptors = 0
         for atom in atoms:
@@ -406,10 +406,10 @@ class PocketAnalyzer:
                     hbond_acceptors += 1
         
         # 可成药性评分（经验公式）
-        # 参考 Fpocket 的评分：考虑体积、疏水性、深度、开口
+        # 参考 Fpocket 的评分：考虑体积、疏水性、深degrees、开口
         volume_score = min(pocket['volume'] / 500.0, 1.0)  # 理想体积 300-500 ų
-        hydro_score = hydrophobicity * 0.7  # 适度疏水性
-        depth_score = min(pocket['depth'] / 10.0, 1.0)  # 深度 > 5Å
+        hydro_score = hydrophobicity * 0.7  # 适degrees疏水性
+        depth_score = min(pocket['depth'] / 10.0, 1.0)  # 深degrees > 5Å
         mouth_score = 1.0 - min(pocket['mouth_size'] / 20.0, 1.0)  # 开口不宜过大
         
         druggability_score = (
@@ -435,20 +435,20 @@ def detect_pockets(obj_name=None, pdb_file=None, selection='all',
                    min_volume=30.0, min_depth=2.5, max_solvent_access=0.2,
                    output_csv=None):
     """
-    检测蛋白口袋（严格标准参数）
+    检测蛋白口袋（严格标准Parameters）
     
-    参数：
+    Parameters：
         obj_name: PyMOL 对象名
-        pdb_file: PDB 文件路径
-        selection: PyMOL 选择语法
-        grid_spacing: 网格间距 (Å, 默认 0.5 高精度)
+        pdb_file: PDB FilePath
+        selection: PyMOL Select语法
+        grid_spacing: 网格间距 (Å, 默认 0.5 高精degrees)
         probe_radius: 探针半径 (Å, 1.4 模拟水分子)
         min_volume: 最小口袋体积 (Å³, 默认 30)
-        min_depth: 最小埋藏深度 (Å, 默认 2.5)
-        max_solvent_access: 最大溶剂可及度 (0-1, 默认 0.2 高选择性)
-        output_csv: 输出 CSV 文件路径
+        min_depth: 最小埋藏深degrees (Å, 默认 2.5)
+        max_solvent_access: 最大溶剂可及degrees (0-1, 默认 0.2 高Select性)
+        output_csv: 输出 CSV FilePath
     
-    返回：口袋列表
+    Return：口袋列表
     """
     
     # 检测
@@ -478,7 +478,7 @@ def detect_pockets(obj_name=None, pdb_file=None, selection='all',
     if output_csv:
         _export_csv(pockets, output_csv)
     
-    # 打印摘要
+    # Print摘要
     _info(f"\n检测到 {len(pockets)} 个口袋：", f"\nDetected {len(pockets)} pockets:")
     for p in pockets:
         print(f"  Pocket {p['id']}: "
@@ -492,7 +492,7 @@ def detect_pockets(obj_name=None, pdb_file=None, selection='all',
 
 
 def _export_csv(pockets, output_csv):
-    """导出 CSV"""
+    """Export CSV"""
     fieldnames = [
         'Pocket_ID', 'Volume_A3', 'Surface_Area_A2', 'Depth_A',
         'Mouth_Size_A', 'Sphericity', 'Solvent_Access',
@@ -530,27 +530,27 @@ def _export_csv(pockets, output_csv):
                 'Residues': residues_str
             })
     
-    _info(f"已保存到 {output_csv}", f"Saved to {output_csv}")
+    _info(f"已Save到 {output_csv}", f"Saved to {output_csv}")
 
 
 def compare_pockets(obj_a, obj_b, align=True, output_csv=None, **kwargs):
     """
     对比两个结构的口袋（如分子胶前后）
     
-    参数：
-        obj_a, obj_b: PyMOL 对象名或 PDB 文件
+    Parameters：
+        obj_a, obj_b: PyMOL 对象名或 PDB File
         align: 是否先对齐
-        output_csv: 输出对比结果 CSV
-        **kwargs: 传递给 detect_pockets 的参数
+        output_csv: 输出对比Results CSV
+        **kwargs: 传递给 detect_pockets 的Parameters
     
-    返回：(pockets_a, pockets_b, comparison)
+    Return：(pockets_a, pockets_b, comparison)
     """
     # 对齐
     if align and cmd:
         try:
             cmd.align(obj_b, obj_a)
             _info(f"已对齐 {obj_b} 到 {obj_a}", f"Aligned {obj_b} to {obj_a}")
-        except Exception:  # PyMOL 对齐可能失败
+        except Exception:  # PyMOL 对齐可能Failed
             pass
     
     # 检测口袋
@@ -567,8 +567,8 @@ def compare_pockets(obj_a, obj_b, align=True, output_csv=None, **kwargs):
     if output_csv:
         _export_comparison_csv(comparison, output_csv)
     
-    # 打印摘要
-    _info(f"\n对比结果：", f"\nComparison results:")
+    # Print摘要
+    _info(f"\n对比Results：", f"\nComparison results:")
     print(f"  {obj_a}: {len(pockets_a)} pockets")
     print(f"  {obj_b}: {len(pockets_b)} pockets")
     print(f"  Matched: {sum(1 for c in comparison if c['match_type'] == 'matched')}")
@@ -636,7 +636,7 @@ def _match_pockets(pockets_a, pockets_b, distance_threshold=5.0):
 
 
 def _export_comparison_csv(comparison, output_csv):
-    """导出对比结果"""
+    """Export对比Results"""
     fieldnames = [
         'Match_Type', 'Pocket_A_ID', 'Pocket_B_ID', 'Distance_A',
         'Delta_Volume_A3', 'Delta_Surface_Area_A2', 'Delta_Druggability'
@@ -657,10 +657,10 @@ def _export_comparison_csv(comparison, output_csv):
                 'Delta_Druggability': f"{c['delta_druggability']:.3f}"
             })
     
-    _info(f"对比结果已保存到 {output_csv}", f"Comparison saved to {output_csv}")
+    _info(f"对比Results已Save到 {output_csv}", f"Comparison saved to {output_csv}")
 
 
 if __name__ == '__main__':
     # 测试（需要 PyMOL 环境）
-    print("GLINT Pocket Detector - 请在 PyMOL 中使用")
+    print("GLINT Pocket Detector - 请在 PyMOL 中using")
     print("示例：detect_pockets('protein', output_csv='pockets.csv')")

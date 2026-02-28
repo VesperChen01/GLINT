@@ -56,31 +56,31 @@ except ImportError:
 
 
 def _enhance_ec_contrast(ec_values: np.ndarray, power: float = 0.3) -> np.ndarray:
-    """对 EC 值应用非线性变换增强颜色对比度。
+    """对 EC ValueApply非线性变换增强颜色对比degrees。
 
-    通过 sign(x) * |x|^power 变换，使中间 EC 值（如 ±0.3）也能显示出
+    通过 sign(x) * |x|^power 变换，使中间 EC Value（如 ±0.3）也能Display出
     明显的红/绿色，而非被线性映射压缩到接近白色。
 
     Args:
-        ec_values: 原始 EC 值数组
-        power: 变换指数，< 1 时增强中间值饱和度（默认 0.3，
-               进一步增强中间值的颜色饱和度，让轻微互补/冲突更易辨识）
+        ec_values: 原始 EC Value数组
+        power: 变换指数，< 1 时增强中间Value饱和degrees（默认 0.3，
+               进一步增强中间Value的颜色饱和degrees，让轻微互补/冲突更易辨识）
 
     Returns:
-        增强后的 EC 值数组
+        增强后的 EC Value数组
     """
     return np.sign(ec_values) * np.abs(ec_values) ** power
 
 
 def _auto_ec_range(ec_values: np.ndarray, default_range: tuple = (-1.0, 1.0),
                    percentile: float = 5.0) -> tuple:
-    """根据实际 EC 值分布自适应计算颜色映射范围。
+    """根据实际 EC Value分布自适应计算颜色映射范围。
 
     如果数据的 5th/95th 百分位数远小于默认范围 (-1, 1)，则缩小范围
-    以充分利用颜色梯度，避免大片白色。
+    以充分利用颜色梯degrees，避免大片白色。
 
     Args:
-        ec_values: EC 值数组
+        ec_values: EC Value数组
         default_range: 默认映射范围
         percentile: 用于确定范围的百分位数
 
@@ -93,10 +93,10 @@ def _auto_ec_range(ec_values: np.ndarray, default_range: tuple = (-1.0, 1.0),
     p_low = np.percentile(ec_values, percentile)
     p_high = np.percentile(ec_values, 100 - percentile)
 
-    # 对称化范围，取绝对值较大的一端
+    # 对称化范围，取绝对Value较大的一端
     abs_max = max(abs(p_low), abs(p_high), 0.1)  # 最小 0.1 防止范围过窄
 
-    # 仅当实际范围远小于默认范围时才自适应（阈值：默认范围的 70%）
+    # 仅当实际范围远小于默认范围时才自适应（阈Value：默认范围的 70%）
     default_abs = max(abs(default_range[0]), abs(default_range[1]))
     if abs_max < default_abs * 0.7:
         print(f"[EC] 自适应颜色范围: ({-abs_max:.2f}, {abs_max:.2f})  "
@@ -108,7 +108,7 @@ def _auto_ec_range(ec_values: np.ndarray, default_range: tuple = (-1.0, 1.0),
 
 
 def _ec_5color_interpolate(t: float):
-    """将归一化进度 t ∈ [0,1] 映射到 5 色渐变的 RGB 值。
+    """将归一化进degrees t ∈ [0,1] 映射到 5 色渐变的 RGB Value。
     
     5 色锚点：
       t=0.00 → 深红 [0.6, 0.0, 0.0]  (强 clash)
@@ -117,15 +117,15 @@ def _ec_5color_interpolate(t: float):
       t=0.75 → 浅绿 [0.4, 1.0, 0.4]  (轻微互补)
       t=1.00 → 深绿 [0.0, 0.6, 0.0]  (强互补)
     
-    相邻锚点之间线性插值。
+    相邻锚点之间线性插Value。
     
     Args:
-        t: 归一化进度 [0, 1]
+        t: 归一化进degrees [0, 1]
     
     Returns:
         (r, g, b) 元组，每个分量 ∈ [0, 1]
     """
-    # 5 色锚点定义（增强饱和度，让颜色区分更明显）
+    # 5 色锚点定义（增强饱和degrees，让颜色区分更明显）
     anchors = [
         (0.00, (0.5, 0.0, 0.0)),   # 深红（更暗，强 clash）
         (0.25, (0.95, 0.25, 0.25)), # 浅红（更饱和，轻微 clash）
@@ -140,12 +140,12 @@ def _ec_5color_interpolate(t: float):
     if t >= 1.0:
         return anchors[-1][1]
     
-    # 找到 t 所在的区间并线性插值
+    # 找到 t 所在的区间并线性插Value
     for i in range(len(anchors) - 1):
         t0, c0 = anchors[i]
         t1, c1 = anchors[i + 1]
         if t0 <= t <= t1:
-            s = (t - t0) / (t1 - t0)  # 区间内归一化进度
+            s = (t - t0) / (t1 - t0)  # 区间内归一化进degrees
             r = c0[0] + s * (c1[0] - c0[0])
             g = c0[1] + s * (c1[1] - c0[1])
             b = c0[2] + s * (c1[2] - c0[2])
@@ -156,10 +156,10 @@ def _ec_5color_interpolate(t: float):
 
 
 def _apply_5color_ec_gradient(surface_obj: str, b_min: float, b_max: float):
-    """在 PyMOL 中应用 5 色 EC 渐变（深红-浅红-白-浅绿-深绿）。
+    """在 PyMOL 中Apply 5 色 EC 渐变（深红-浅红-白-浅绿-深绿）。
     
-    使用 cmd.set_color 定义 5 个自定义颜色锚点，然后用 cmd.spectrum
-    的自定义色板名称进行渐变着色。比内置 red_white_green (3色) 更有区分度，
+    using cmd.set_color 定义 5 个自定义颜色锚点，然后用 cmd.spectrum
+    的自定义色板Name进行渐变着色。比内置 red_white_green (3色) 更有区分degrees，
     能让用户直观分辨强clash、轻微clash、中性、轻微互补、强互补五个等级。
     
     颜色定义：
@@ -170,23 +170,23 @@ def _apply_5color_ec_gradient(surface_obj: str, b_min: float, b_max: float):
       深绿 [0.0, 0.5, 0.0] = 强互补      (EC > 0.5)
     
     Args:
-        surface_obj: PyMOL surface 对象名称
-        b_min: B-factor 最小值（对应 EC 最小值 * 100）
-        b_max: B-factor 最大值（对应 EC 最大值 * 100）
+        surface_obj: PyMOL surface 对象Name
+        b_min: B-factor 最小Value（对应 EC 最小Value * 100）
+        b_max: B-factor 最大Value（对应 EC 最大Value * 100）
     """
-    # 定义 5 个自定义颜色锚点（增强饱和度，让颜色更鲜明）
+    # 定义 5 个自定义颜色锚点（增强饱和degrees，让颜色更鲜明）
     cmd.set_color('ec_dark_red',  [0.5, 0.0, 0.0])    # 强 clash（更深暗红）
     cmd.set_color('ec_light_red', [0.95, 0.25, 0.25])  # 轻微 clash（更饱和红）
     cmd.set_color('ec_white',     [1.0, 1.0, 1.0])     # 中性
     cmd.set_color('ec_light_green', [0.25, 0.95, 0.25]) # 轻微互补（更饱和绿）
     cmd.set_color('ec_dark_green',  [0.0, 0.5, 0.0])   # 强互补（更深暗绿）
     
-    # 使用 PyMOL 自定义色板名称列表进行 spectrum 着色
-    # spectrum 会在这些颜色之间线性插值
+    # using PyMOL 自定义色板Name列表进行 spectrum 着色
+    # spectrum 会在这些颜色之间线性插Value
     palette = 'ec_dark_red ec_light_red ec_white ec_light_green ec_dark_green'
     cmd.spectrum('b', palette, surface_obj, minimum=b_min, maximum=b_max)
     
-    print(f"[_apply_5color_ec_gradient] ✅ 已应用 5 色 EC 渐变: "
+    print(f"[_apply_5color_ec_gradient] ✅ 已Apply 5 色 EC 渐变: "
           f"深红→浅红→白→浅绿→深绿 (B: {b_min:.0f}~{b_max:.0f})")
 
 
@@ -226,7 +226,7 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
         ec_range: (min, max) EC values for color mapping
         surface_quality: PyMOL surface quality (0-4, higher=smoother)
         ray_trace: Whether to ray trace after visualization
-        enhance_contrast: 是否启用非线性对比度增强（默认 True）
+        enhance_contrast: 是否Enable非线性对比degrees增强（默认 True）
         
     Returns:
         True if successful
@@ -294,14 +294,14 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
     
     if color_scheme == 'rwg':
         # === 5 色渐变方案：深红-浅红-白-浅绿-深绿 ===
-        # 比原始 3 色 (red_white_green) 更有区分度，
+        # 比原始 3 色 (red_white_green) 更有区分degrees，
         # 用户可直观分辨强clash/轻微clash/中性/轻微互补/强互补
         _apply_5color_ec_gradient(surface_obj, b_min, b_max)
     elif color_scheme == 'bwr':
         # Blue-White-Red gradient
         cmd.spectrum('b', 'blue_white_red', surface_obj, minimum=b_min, maximum=b_max)
     else:
-        # 默认也使用 5 色渐变
+        # 默认也using 5 色渐变
         _apply_5color_ec_gradient(surface_obj, b_min, b_max)
     
     # Step 6: Set surface properties for smooth appearance
@@ -349,13 +349,13 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
     print("  🟢 浅绿 = 轻微互补        (0.1 < EC < 0.5)   → 有利于结合")
     print("  🟩 深绿 = 强互补          (EC > 0.5)   → 非常有利，结合驱动力区域")
     print("")
-    print("[visualize_ec_smooth_surface] 📊 结果解读指南:")
+    print("[visualize_ec_smooth_surface] 📊 Results解读指南:")
     print("  • 绿色越多 → 静电互补性越好 → 结合越有利")
     print("  • 红色越多 → 静电冲突越严重 → 结合越不利")
     print("  • 关注红色区域可指导药物化学优化方向")
     print("[visualize_ec_smooth_surface] 💡 Use 'ray' command for publication quality")
     
-    # 自动在 PyMOL 3D 视图中创建色标条
+    # 自动在 PyMOL 3D 视图中Create色标条
     create_ec_legend(ec_range=ec_range, color_scheme=color_scheme)
     
     return True
@@ -367,9 +367,9 @@ def _map_ec_to_bfactors_kdtree(surface_obj: str, surface_points: np.ndarray,
     """Map EC values to atom B-factors using KDTree for efficiency.
     
     Args:
-        enhance_contrast: 是否对 EC 值应用非线性增强
+        enhance_contrast: 是否对 EC ValueApply非线性增强
     """
-    # 非线性对比度增强
+    # 非线性对比degrees增强
     if enhance_contrast:
         ec_values = _enhance_ec_contrast(ec_values)
     
@@ -413,9 +413,9 @@ def _map_ec_to_bfactors_simple(surface_obj: str, surface_points: np.ndarray,
     """Map EC values to atom B-factors using simple nearest neighbor.
     
     Args:
-        enhance_contrast: 是否对 EC 值应用非线性增强
+        enhance_contrast: 是否对 EC ValueApply非线性增强
     """
-    # 非线性对比度增强
+    # 非线性对比degrees增强
     if enhance_contrast:
         ec_values = _enhance_ec_contrast(ec_values)
     
@@ -483,7 +483,7 @@ def visualize_ec_cgo_surface(obj_name: str, ligand_resname: str,
         sphere_scale: Size of each sphere
         color_scheme: 'rwg' (red-white-green) or 'bwr' (blue-white-red)
         ec_range: (min, max) EC values for color mapping
-        enhance_contrast: 是否启用非线性对比度增强（默认 True）
+        enhance_contrast: 是否Enable非线性对比degrees增强（默认 True）
         
     Returns:
         True if successful
@@ -497,7 +497,7 @@ def visualize_ec_cgo_surface(obj_name: str, ligand_resname: str,
     # 自适应颜色范围
     ec_range = _auto_ec_range(ec_values, default_range=ec_range)
     
-    # 非线性对比度增强
+    # 非线性对比degrees增强
     if enhance_contrast:
         ec_values = _enhance_ec_contrast(ec_values)
     
@@ -563,15 +563,15 @@ def create_ec_legend(position: str = 'bottom_right',
                      color_scheme: str = 'rwg',
                      title: str = 'EC Score') -> bool:
     """
-    在 PyMOL 3D 视图中创建 CGO 色标条。
+    在 PyMOL 3D 视图中Create CGO 色标条。
 
-    使用一系列小方块组成竖直渐变色标，并用 pseudoatom 标注 EC 值和含义。
-    如果 CGO 创建失败则 fallback 到控制台文字输出。
+    using一系列小方块组成竖直渐变色标，并用 pseudoatom 标注 EC Value和含义。
+    如果 CGO CreateFailed则 fallback 到控制台文字输出。
 
     Args:
-        position: 色标条位置（保留参数，暂只支持 'bottom_right'）
-        ec_range: (min, max) EC 值范围
-        color_scheme: 使用的颜色方案 ('rwg' 或 'bwr')
+        position: 色标条位置（保留Parameters，暂只支持 'bottom_right'）
+        ec_range: (min, max) EC Value范围
+        color_scheme: using的颜色方案 ('rwg' 或 'bwr')
         title: 色标条标题
 
     Returns:
@@ -582,21 +582,21 @@ def create_ec_legend(position: str = 'bottom_right',
 
     ec_min, ec_max = ec_range
 
-    # ── 尝试创建 CGO 色标条 ──
+    # ── 尝试Create CGO 色标条 ──
     try:
         n_steps = 50  # 色标条分段数
-        bar_width = 1.5   # 色条宽度
-        bar_height = 20.0  # 色条总高度
+        bar_width = 1.5   # 色条宽degrees
+        bar_height = 20.0  # 色条总高degrees
         step_h = bar_height / n_steps
 
-        # 固定屏幕位置（右侧偏移）
+        # 固定屏幕位置（右侧shift）
         x_base = 25.0
         y_base = -bar_height / 2
 
         cgo_obj = []
 
         for i in range(n_steps):
-            # 归一化进度 [0, 1]
+            # 归一化进degrees [0, 1]
             t = i / (n_steps - 1)
 
             # 颜色映射：5 色渐变（深红→浅红→白→浅绿→深绿）
@@ -626,7 +626,7 @@ def create_ec_legend(position: str = 'bottom_right',
                 END,
             ])
 
-        # 删除旧的色标条对象（如果存在）
+        # Delete旧的色标条对象（如果存在）
         try:
             cmd.delete("ec_legend_bar")
         except Exception:
@@ -635,7 +635,7 @@ def create_ec_legend(position: str = 'bottom_right',
         cmd.load_cgo(cgo_obj, "ec_legend_bar")
         cmd.set("cgo_line_width", 1.0, "ec_legend_bar")
 
-        # ── 创建 5 个标注 pseudoatom（对应 5 色等级，含好坏判断说明） ──
+        # ── Create 5 个标注 pseudoatom（对应 5 色等级，含好坏判断说明） ──
         if color_scheme == 'rwg':
             label_items = [
                 ("ec_label_1", 0.00, f"Strong clash (<{ec_min * 0.5:.1f}) Bad"),
@@ -665,11 +665,11 @@ def create_ec_legend(position: str = 'bottom_right',
             cmd.hide("everything", label_name)
             cmd.show("labels", label_name)
 
-        print(f"[create_ec_legend] ✅ 色标条已创建 (ec_legend_bar, 5色渐变)")
+        print(f"[create_ec_legend] ✅ 色标条已Create (ec_legend_bar, 5色渐变)")
         return True
 
     except Exception as e:
-        print(f"[create_ec_legend] ⚠️ CGO 色标条创建失败: {e}")
+        print(f"[create_ec_legend] ⚠️ CGO 色标条CreateFailed: {e}")
         print("[create_ec_legend] 回退到文字输出...")
 
     # ── Fallback：纯文字输出 ──
@@ -826,13 +826,13 @@ def _create_interface_cgo(points: np.ndarray, ec_values: np.ndarray,
                           sphere_scale: float = 0.25):
     """Create CGO for an interface with EC-based coloring.
     
-    使用非线性增强后的 EC 值进行着色：
+    using非线性增强后的 EC Value进行着色：
     - 正 EC（互补）：向饱和绿色过渡
     - 负 EC（冲突）：向明亮红色过渡
     """
     cgo_obj = []
 
-    # 非线性增强 EC 值
+    # 非线性增强 EC Value
     enhanced = _enhance_ec_contrast(ec_values)
 
     # 基础色 RGB
@@ -846,14 +846,14 @@ def _create_interface_cgo(points: np.ndarray, ec_values: np.ndarray,
     base_rgb = base_colors.get(base_color, (1.0, 1.0, 1.0))
 
     for point, ec_val in zip(points, enhanced):
-        # 跳过零值点
+        # Skip零Value点
         if ec_val == 0:
             continue
 
         if ec_val > 0:
             # 正 EC（互补）：从基础色向饱和绿色过渡
             t = min(1.0, abs(ec_val))
-            # 混合基础色和饱和绿色（增强饱和度）
+            # 混合基础色和饱和绿色（增强饱和degrees）
             r = base_rgb[0] * (1 - t) + 0.0 * t
             g = base_rgb[1] * (1 - t) + 0.9 * t
             b = base_rgb[2] * (1 - t) + 0.05 * t

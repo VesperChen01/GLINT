@@ -36,62 +36,62 @@ T = {
     "tab_analysis": {"zh": "相互作用分析与高亮", "en": "Interaction Analysis & Highlight"},
     "tab_apbs": {"zh": "静电势（APBS/Quick）", "en": "Electrostatics (APBS/Quick)"},
     "grp_csv": {"zh": "CSV 高亮", "en": "CSV Highlight"},
-    "csv_path": {"zh": "CSV 文件路径", "en": "CSV File Path"},
+    "csv_path": {"zh": "CSV FilePath", "en": "CSV File Path"},
     "browse": {"zh": "浏览…", "en": "Browse…"},
     "target_obj": {"zh": "目标对象", "en": "Target Object"},
-    "refresh": {"zh": "刷新", "en": "Refresh"},
-    "btn_highlight": {"zh": "高亮显示", "en": "Highlight"},
-    "btn_clear": {"zh": "清空高亮", "en": "Clear"},
+    "refresh": {"zh": "Refresh", "en": "Refresh"},
+    "btn_highlight": {"zh": "高亮Display", "en": "Highlight"},
+    "btn_clear": {"zh": "Clear高亮", "en": "Clear"},
     "grp_analysis": {"zh": "相互作用分析", "en": "Interaction Analysis"},
-    "pdb_file": {"zh": "PDB 文件（可选）", "en": "PDB File (optional)"},
+    "pdb_file": {"zh": "PDB File（可选）", "en": "PDB File (optional)"},
     "output_csv": {"zh": "输出 CSV（可选）", "en": "Output CSV (optional)"},
-    "btn_analyze": {"zh": "开始分析", "en": "Start"},
-    "btn_render_interactions": {"zh": "一键渲染（分析+美化+PNG）", "en": "Render (Analyze + Beautify + PNG)"},
-    "right_results": {"zh": "结果与日志", "en": "Results & Logs"},
+    "btn_analyze": {"zh": "Start分析", "en": "Start"},
+    "btn_render_interactions": {"zh": "一Key渲染（分析+美化+PNG）", "en": "Render (Analyze + Beautify + PNG)"},
+    "right_results": {"zh": "Results与日志", "en": "Results & Logs"},
     "table_header": {
         "zh": ["链1", "残基1", "链2", "残基2", "距离", "相互作用"],
         "en": ["Chain1", "Residue1", "Chain2", "Residue2", "Distance", "Interaction"],
     },
     "table_header_gmotif": {
-        "zh": ["链", "序列", "起始", "结束", "RMSD (Å)", "类型"],
+        "zh": ["链", "序列", "起始", "结束", "RMSD (Å)", "Type"],
         "en": ["Chain", "Sequence", "Start", "End", "RMSD (Å)", "Type"],
     },
     "no_object": {"zh": "(无对象)", "en": "(No object)"},
-    "select_csv": {"zh": "选择 CSV 文件", "en": "Select CSV"},
-    "select_pdb": {"zh": "选择 PDB 文件", "en": "Select PDB"},
-    "select_outcsv": {"zh": "选择输出 CSV", "en": "Select output CSV"},
+    "select_csv": {"zh": "Select CSV File", "en": "Select CSV"},
+    "select_pdb": {"zh": "Select PDB File", "en": "Select PDB"},
+    "select_outcsv": {"zh": "Select输出 CSV", "en": "Select output CSV"},
     "log_ready": {"zh": "就绪", "en": "Ready"},
-    "log_highlight_ok": {"zh": "高亮完成", "en": "Highlight done"},
-    "log_clear_ok": {"zh": "已清空高亮", "en": "Cleared"},
-    "log_start": {"zh": "开始相互作用分析…", "en": "Starting interaction analysis…"},
-    "log_done": {"zh": "完成，发现 {n} 条记录", "en": "Done: {n} records"},
-    "log_error": {"zh": "错误：{msg}", "en": "Error: {msg}"},
-    "btn_close": {"zh": "关闭", "en": "Close"},
+    "log_highlight_ok": {"zh": "高亮Completed", "en": "Highlight done"},
+    "log_clear_ok": {"zh": "已Clear高亮", "en": "Cleared"},
+    "log_start": {"zh": "Start相互作用分析…", "en": "Starting interaction analysis…"},
+    "log_done": {"zh": "Completed，发现 {n} 条记录", "en": "Done: {n} records"},
+    "log_error": {"zh": "Error：{msg}", "en": "Error: {msg}"},
+    "btn_close": {"zh": "Close", "en": "Close"},
     "btn_load_csv_to_table": {"zh": "载入到表格", "en": "Load to Table"},
     # G-Motif
     "grp_gmotif": {"zh": "G-Motif（CRBN G-loop）识别", "en": "G-Motif (CRBN G-loop) Detection"},
-    "rmsd": {"zh": "RMSD 阈值 (Å)", "en": "RMSD cutoff (Å)"},
+    "rmsd": {"zh": "RMSD 阈Value (Å)", "en": "RMSD cutoff (Å)"},
     "require_gly": {"zh": "第6位必须为 Gly", "en": "Require Gly at pos6"},
-    "btn_gmotif": {"zh": "开始识别", "en": "Detect"},
-    "btn_gmotif_render": {"zh": "一键渲染（G-Motif + 电势 + PNG）", "en": "Render (G-Motif + ESP + PNG)"},
-    # APBS/Quick + 导出
-    "grp_apbs": {"zh": "静电势显示", "en": "Electrostatics Display"},
+    "btn_gmotif": {"zh": "Start识别", "en": "Detect"},
+    "btn_gmotif_render": {"zh": "一Key渲染（G-Motif + 电势 + PNG）", "en": "Render (G-Motif + ESP + PNG)"},
+    # APBS/Quick + Export
+    "grp_apbs": {"zh": "静电势Display", "en": "Electrostatics Display"},
     "apbs_target": {"zh": "目标对象", "en": "Target Object"},
     "apbs_grid": {"zh": "网格间距 (Å)", "en": "Grid spacing (Å)"},
     "apbs_range": {"zh": "色阶范围 (kT/e)", "en": "Color range (kT/e)"},
     "btn_quick": {"zh": "快速静电图（Coulomb）", "en": "Quick (Coulomb)"},
     "btn_apbs": {"zh": "运行 APBS（若可用）", "en": "Run APBS (if available)"},
-    "grp_export": {"zh": "导出", "en": "Export"},
-    "img_w": {"zh": "宽度 (px)", "en": "Width (px)"},
-    "img_h": {"zh": "高度 (px)", "en": "Height (px)"},
+    "grp_export": {"zh": "Export", "en": "Export"},
+    "img_w": {"zh": "宽degrees (px)", "en": "Width (px)"},
+    "img_h": {"zh": "高degrees (px)", "en": "Height (px)"},
     "img_dpi": {"zh": "DPI", "en": "DPI"},
     "img_bg": {"zh": "背景", "en": "Background"},
     "bg_white": {"zh": "白色", "en": "White"},
     "bg_trans": {"zh": "透明", "en": "Transparent"},
     "raytrace": {"zh": "光线追踪（高质量）", "en": "Ray trace (high quality)"},
-    "btn_viewport": {"zh": "使用当前视口尺寸", "en": "Use current viewport"},
-    "btn_export_png": {"zh": "导出 PNG", "en": "Export PNG"},
-    "btn_export_dx": {"zh": "导出 DX 网格", "en": "Export DX"},
+    "btn_viewport": {"zh": "using当前视口尺寸", "en": "Use current viewport"},
+    "btn_export_png": {"zh": "Export PNG", "en": "Export PNG"},
+    "btn_export_dx": {"zh": "Export DX 网格", "en": "Export DX"},
 }
 
 def t(key: str) -> str:
@@ -120,19 +120,19 @@ def t(key: str) -> str:
 def show_message_box(parent, title: str, message: str, icon_type: str = "information",
                      min_width: int = 400, font_size: int = 13) -> Any:
     """
-    显示一个格式良好的 QMessageBox，确保内容完整显示
-    弹窗大小会根据文本内容自动调整
+    Display一个格式良好的 QMessageBox，确保内容完整Display
+    弹窗Size会根据文本内容自动调整
 
     Args:
         parent: 父窗口
         title: 对话框标题
         message: 消息内容
-        icon_type: 图标类型 ("information", "warning", "critical", "question")
-        min_width: 最小宽度（像素）
-        font_size: 字体大小
+        icon_type: 图标Type ("information", "warning", "critical", "question")
+        min_width: 最小宽degrees（像素）
+        font_size: 字体Size
 
     Returns:
-        对话框的返回值
+        对话框的ReturnValue
 
     Example:
         show_message_box(self, "Success", "Analysis complete!\nResults saved to:\n/path/to/file.csv")
@@ -149,7 +149,7 @@ def show_message_box(parent, title: str, message: str, icon_type: str = "informa
     msg_box = QMessageBox(parent)
     msg_box.setWindowTitle(title)
 
-    # 设置图标
+    # Settings图标
     icon_map = {
         "information": QMessageBox.Icon.Information,
         "warning": QMessageBox.Icon.Warning,
@@ -158,20 +158,20 @@ def show_message_box(parent, title: str, message: str, icon_type: str = "informa
     }
     msg_box.setIcon(icon_map.get(icon_type, QMessageBox.Icon.Information))
 
-    # 设置消息文本
+    # Settings消息文本
     msg_box.setText(message)
 
-    # 根据文本内容动态计算宽度
+    # 根据文本内容动态计算宽degrees
     lines = message.split('\n')
     max_line_len = max(len(line) for line in lines) if lines else 0
     num_lines = len(lines)
 
-    # 估算宽度：每个字符约 10 像素，加上边距
+    # 估算宽degrees：每个字符约 10 像素，加上边距
     estimated_width = max(min_width, min(max_line_len * 10 + 100, 800))
-    # 估算高度：每行约 30 像素，加上边距 (Base height 150)
+    # 估算高degrees：每行约 30 像素，加上边距 (Base height 150)
     estimated_height = max(150, min(num_lines * 30 + 150, 600))
 
-    # 设置最小尺寸和样式，确保内容完整显示
+    # Settings最小尺寸和样式，确保内容完整Display
     msg_box.setMinimumWidth(estimated_width)
     msg_box.setMinimumHeight(estimated_height)
     msg_box.setStyleSheet(f"""
@@ -191,14 +191,14 @@ def show_message_box(parent, title: str, message: str, icon_type: str = "informa
 def show_question_box(parent, title: str, message: str,
                       min_width: int = 400, font_size: int = 13) -> bool:
     """
-    显示一个 Yes/No 问题对话框，大小根据内容自动调整
+    Display一个 Yes/No 问题对话框，Size根据内容自动调整
 
     Args:
         parent: 父窗口
         title: 对话框标题
         message: 消息内容
-        min_width: 最小宽度（像素）
-        font_size: 字体大小
+        min_width: 最小宽degrees（像素）
+        font_size: 字体Size
 
     Returns:
         True if Yes, False if No
@@ -217,7 +217,7 @@ def show_question_box(parent, title: str, message: str,
     msg_box.setText(message)
     msg_box.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
 
-    # 根据文本内容动态计算宽度
+    # 根据文本内容动态计算宽degrees
     lines = message.split('\n')
     max_line_len = max(len(line) for line in lines) if lines else 0
     estimated_width = max(min_width, min(max_line_len * 9 + 100, 800))

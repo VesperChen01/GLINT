@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 interaction_analyzer.py
-蛋白质相互作用分析模块
+蛋白质相互作用分析Module
 
-基于原始的pdb_interactions.py改进，增加了PyMOL集成功能
-自动检测并使用RDKit高级分析（如果环境可用）
+基于原始的pdb_interactions.py改进，增加了PyMOL集Success能
+自动检测并usingRDKit高级分析（如果环境可用）
 
-使用示例：
-    # 分析蛋白-配体相互作用（自动使用最优模式）
+using示例：
+    # 分析蛋白-配体相互作用（自动using最优模式）
     result = analyze_protein_ligand_interactions('protein', 'LIG')
     
     # 3D可视化
@@ -42,15 +42,15 @@ except ImportError:
         VisualizationSettings,
     )
 
-# ========== 自动检测RDKit和依赖 ==========
-# 尝试自动安装依赖
+# ========== 自动检测RDKit和Dependencies ==========
+# 尝试自动安装Dependencies
 try:
     from .env_checker import ensure_dependencies
     _deps_checked = ensure_dependencies()
 except Exception:
     _deps_checked = False
 
-# 导入高质量分析所需的包
+# Import高质量分析所需的Package
 RDKIT_AVAILABLE = False
 SCIPY_AVAILABLE = False
 NUMPY_AVAILABLE = False
@@ -85,7 +85,7 @@ try:
 except ImportError:
     print("[GLINT] ⚠️ Matplotlib not installed; plotting unavailable")
 
-# ========== 重构模块导入（性能优化）==========
+# ========== 重构ModuleImport（性能优化）==========
 try:
     from .interaction_types import (
         InteractionResult, HBond, SaltBridge, Hydrophobic,
@@ -99,7 +99,7 @@ except ImportError as e:
     # Silently fall back to legacy mode
     pass
 
-# ========== 相互作用参数（实用标准）==========
+# ========== 相互作用Parameters（实用标准）==========
 # 适用于大多数药物设计场景的均衡标准
 INTERACTION_PARAMS = {
     "hbond": {
@@ -121,11 +121,11 @@ INTERACTION_PARAMS = {
         "allowed_ligand_atoms": ["N", "O", "S", "CL", "BR", "F"]  # 非碳重原子
     },
     "water_bridge": {
-        "max_DA_dist": 3.5,         # Å (与氢键保持一致)
+        "max_DA_dist": 3.5,         # Å (与氢Key保持一致)
         "min_donor_angle": 110,     # °
         "min_acceptor_angle": 90    # °
     },
-    # 兼容旧参数名称
+    # 兼容旧ParametersName
     "saltbridge": {"max_distance": 4.5},  # 与 ionic 保持一致
     "pi_pi": {"max_distance": 5.5, "min_distance": 3.3, "parallel_angle": 30.0},
     "pi_cation": {"max_distance": 4.5},
@@ -141,7 +141,7 @@ SCHRODINGER_PARAMS = {
 }
 
 # ========== 盐桥/离子相互作用：残基电荷常量 ==========
-# 基于生理 pH (~7.4) 下的 pKa 值确定残基离子化状态。
+# 基于生理 pH (~7.4) 下的 pKa Value确定残基离子化Status。
 # 盐桥要求双方都带电（离子化），Henderson-Hasselbalch 方程决定
 # 在给定 pH 下各残基的质子化比例。
 #
@@ -159,18 +159,18 @@ ALL_POSITIVE_RESIDUES = ALWAYS_POSITIVE_RESIDUES | PROTONATED_HIS
 # 核酸磷酸基团所在残基（始终带负电）
 NUCLEIC_RESIDUES = {"DA", "DT", "DG", "DC", "A", "T", "G", "C", "U", "PS"}
 
-# HIS 盐桥跳过警告标志（确保全局只输出一次，避免日志刷屏）
+# HIS 盐桥SkipWarning标志（确保全局只输出一次，避免日志刷屏）
 _his_saltbridge_warning_shown = False
 
 def parse_pdb_structure(obj_name=None):
     """
-    从PyMOL对象解析原子信息
+    从PyMOL对象解析Atom information
     
-    参数:
-        obj_name: PyMOL对象名称，如果为None则使用第一个对象
+    Parameters:
+        obj_name: PyMOL对象Name，如果为None则usingFirst对象
     
-    返回:
-        atoms: 原子信息列表 [(chain, res_name, res_id, atom_name, (x, y, z))]
+    Return:
+        atoms: Atom information列表 [(chain, res_name, res_id, atom_name, (x, y, z))]
     """
     if obj_name is None:
         try:
@@ -210,13 +210,13 @@ def parse_pdb_structure(obj_name=None):
 
 def parse_pdb_file(pdb_file):
     """
-    从PDB文件解析原子信息
+    从PDBFile解析Atom information
     
-    参数:
-        pdb_file: PDB文件路径
+    Parameters:
+        pdb_file: PDBFilePath
     
-    返回:
-        atoms: 原子信息列表
+    Return:
+        atoms: Atom information列表
     """
     atoms = []
     try:
@@ -253,8 +253,8 @@ def get_element_from_atom_name(atom_name):
 
 def calculate_angle_three_points(p1, p2, p3):
     """
-    计算三点形成的角度 ∠p1-p2-p3（p2为顶点）
-    返回角度（度）
+    计算三点形成的角degrees ∠p1-p2-p3（p2为顶点）
+    Return角degrees（degrees）
     """
     v1 = [p1[i] - p2[i] for i in range(3)]
     v2 = [p3[i] - p2[i] for i in range(3)]
@@ -267,12 +267,12 @@ def calculate_angle_three_points(p1, p2, p3):
         return 0.0
     
     cos_angle = dot / (mag1 * mag2)
-    cos_angle = max(-1.0, min(1.0, cos_angle))  # 防止数值误差
+    cos_angle = max(-1.0, min(1.0, cos_angle))  # 防止数Value误差
     return math.degrees(math.acos(cos_angle))
 
 def find_hydrogen_or_estimate(donor_atom, acceptor_atom, all_atoms_by_residue):
     """
-    查找或估算氢原子位置
+    Find或估算氢原子位置
     
     Arguments:
         donor_atom: (chain, resn, resi, name, coord)
@@ -287,7 +287,7 @@ def find_hydrogen_or_estimate(donor_atom, acceptor_atom, all_atoms_by_residue):
     acceptor_coord = acceptor_atom[4]
     res_key = (donor_atom[0], donor_atom[1], donor_atom[2])
     
-    # 尝试查找同残基中的氢原子
+    # 尝试Find同残基中的氢原子
     if res_key in all_atoms_by_residue:
         for atom in all_atoms_by_residue[res_key]:
             if atom[3].startswith('H'):
@@ -306,28 +306,28 @@ def find_hydrogen_or_estimate(donor_atom, acceptor_atom, all_atoms_by_residue):
 
 def is_hbond(atom1, atom2, d):
     """
-    判断是否为氢键（简单版本，仅距离）
+    判断是否为氢Key（简单Version，仅距离）
     保留以兼容旧代码
     
-    参数:
-        atom1, atom2: 原子信息元组
+    Parameters:
+        atom1, atom2: Atom information元组
         d: 距离（Å）
     
-    返回:
-        bool: 是否为氢键
+    Return:
+        bool: 是否为氢Key
     """
     return d <= INTERACTION_PARAMS["hbond"]["max_DA_dist"]
 
 def is_hbond_precise(donor_atom, acceptor_atom, all_atoms_by_residue):
     """
-    精确的氢键判定（包括角度检查）
+    精确的氢Key判定（Package括角degrees检查）
     
-    参数:
+    Parameters:
         donor_atom: (chain, resn, resi, name, coord) - 供体原子
         acceptor_atom: (chain, resn, resi, name, coord) - 受体原子
         all_atoms_by_residue: dict {(chain, resn, resi): [atoms]}
     
-    返回:
+    Return:
         (is_hbond: bool, distance: float, angle_DHA: float or None)
     """
     donor_coord = donor_atom[4]
@@ -335,7 +335,7 @@ def is_hbond_precise(donor_atom, acceptor_atom, all_atoms_by_residue):
     donor_elem = get_element_from_atom_name(donor_atom[3])
     acceptor_elem = get_element_from_atom_name(acceptor_atom[3])
     
-    # 检查元素类型（供体：N/O/S，受体：N/O/S/F/CL）
+    # 检查元素Type（供体：N/O/S，受体：N/O/S/F/CL）
     donor_elements = {"N", "O", "S"}
     acceptor_elements = {"N", "O", "S", "F", "CL"}
     
@@ -347,7 +347,7 @@ def is_hbond_precise(donor_atom, acceptor_atom, all_atoms_by_residue):
     if d_da > INTERACTION_PARAMS["hbond"]["max_DA_dist"]:
         return False, None, None
     
-    # 2. 查找或估算氢原子位置
+    # 2. Find或估算氢原子位置
     h_coord = find_hydrogen_or_estimate(donor_atom, acceptor_atom, all_atoms_by_residue)
     
     # 3. 计算 ∠D–H···A
@@ -356,7 +356,7 @@ def is_hbond_precise(donor_atom, acceptor_atom, all_atoms_by_residue):
     if angle_dha < INTERACTION_PARAMS["hbond"]["min_donor_angle"]:
         return False, None, None
     
-    # 注意：∠H···A–X 的检查较复杂，这里简化处理，主要检查 D-H-A 角度
+    # 注意：∠H···A–X 的检查较复杂，这里简化处理，主要检查 D-H-A 角degrees
     
     return True, d_da, angle_dha
 
@@ -371,9 +371,9 @@ def is_saltbridge_atom(res1, atom1_name, res2, atom2_name, d):
     - ASP (pKa ~3.7):  几乎100%去质子化 → 始终带负电 ✅
     - GLU (pKa ~4.1):  几乎100%去质子化 → 始终带负电 ✅
     
-    参数:
-        res1, res2: 残基名称
-        atom1_name, atom2_name: 原子名称
+    Parameters:
+        res1, res2: 残基Name
+        atom1_name, atom2_name: 原子Name
         d: 距离
     """
     global _his_saltbridge_warning_shown
@@ -382,7 +382,7 @@ def is_saltbridge_atom(res1, atom1_name, res2, atom2_name, d):
     if d > max_dist:
         return False
 
-    # 使用模块级常量（定义于文件顶部）
+    # usingModule级常量（定义于File顶部）
     positive = ALWAYS_POSITIVE_RESIDUES
     protonated_his = PROTONATED_HIS
     negative = ALWAYS_NEGATIVE_RESIDUES
@@ -412,12 +412,12 @@ def is_saltbridge_atom(res1, atom1_name, res2, atom2_name, d):
             return atom in nucleic_neg_atoms
         return False
 
-    # ========== HIS 跳过检查 ==========
+    # ========== HIS Skip检查 ==========
     # 普通 HIS 在 pH 7.4 下为中性，不应参与盐桥检测。
     # 仅当 PDB 中明确标注为 HIP/HSP 时才视为正电残基。
     if res1 in CONDITIONALLY_POSITIVE_RESIDUES or res2 in CONDITIONALLY_POSITIVE_RESIDUES:
         if not _his_saltbridge_warning_shown:
-            print("[GLINT] ℹ️  HIS (pKa ~6.0) 在 pH 7.4 下为中性，已跳过盐桥检测。"
+            print("[GLINT] ℹ️  HIS (pKa ~6.0) 在 pH 7.4 下为中性，已Skip盐桥检测。"
                   "如需检测 HIS 盐桥，请在 PDB 中将其标注为 HIP (AMBER) 或 HSP (CHARMM)。")
             _his_saltbridge_warning_shown = True
         return False
@@ -434,17 +434,17 @@ def is_saltbridge_atom(res1, atom1_name, res2, atom2_name, d):
     # 需要判断配体原子是否带电。
     #
     # 策略：
-    #   - 有 RDKit 时：使用元素启发式（N→正电, O→负电）作为预筛，
+    #   - 有 RDKit 时：using元素启发式（N→正电, O→负电）作为预筛，
     #     后续分析流程可通过 formal charge 进一步验证
-    #   - 无 RDKit 时：跳过配体盐桥检测，避免假阳性
+    #   - 无 RDKit 时：Skip配体盐桥检测，避免假阳性
     if not RDKIT_AVAILABLE:
         return False
     
-    # 所有已知残基类型（包括 HIS），避免将标准氨基酸误判为配体
+    # 所有已知残基Type（Package括 HIS），避免将标准氨基酸误判为配体
     standard_known = positive | protonated_his | negative | nucleic | CONDITIONALLY_POSITIVE_RESIDUES
     
     def get_element_from_name(atom_name):
-        """从原子名称提取元素符号"""
+        """从原子Name提取元素符号"""
         name = atom_name.strip()
         if not name:
             return ""
@@ -477,11 +477,11 @@ def is_saltbridge(res1, res2, d):
     """
     判断是否为盐桥（旧接口兼容，仅基于残基距离）
     
-    注意：这可能导致过多假阳性，建议使用 is_saltbridge_atom。
+    注意：这可能导致过多假阳性，建议using is_saltbridge_atom。
     HIS 在 pH 7.4 下为中性（pKa ~6.0），不参与盐桥。
     仅 HIP/HSP（双质子化组氨酸）才作为正电残基。
     """
-    # 使用模块级常量（定义于文件顶部）
+    # usingModule级常量（定义于File顶部）
     all_positive = ALL_POSITIVE_RESIDUES
     negative = ALWAYS_NEGATIVE_RESIDUES
     nucleic = NUCLEIC_RESIDUES
@@ -502,18 +502,18 @@ def is_ionic_precise(res1, atoms1, res2, atoms2, hbond_exists=False):
     HIS 在 pH 7.4 下为中性（pKa ~6.0），不参与盐桥。
     仅 HIP/HSP（双质子化组氨酸）才作为正电残基。
     
-    参数:
-        res1, atoms1: 残基1名称和原子列表
-        res2, atoms2: 残基2名称和原子列表
-        hbond_exists: 是否已存在氢键
+    Parameters:
+        res1, atoms1: 残基1Name和原子列表
+        res2, atoms2: 残基2Name和原子列表
+        hbond_exists: 是否已存在氢Key
     
-    返回:
+    Return:
         (is_ionic: bool, distance: float or None)
     """
     if INTERACTION_PARAMS["ionic"]["exclude_if_hbond"] and hbond_exists:
         return False, None
     
-    # 使用模块级常量（定义于文件顶部）
+    # usingModule级常量（定义于File顶部）
     positive = ALWAYS_POSITIVE_RESIDUES
     protonated_his = PROTONATED_HIS
     all_positive = ALL_POSITIVE_RESIDUES
@@ -523,7 +523,7 @@ def is_ionic_precise(res1, atoms1, res2, atoms2, hbond_exists=False):
     if not ((res1 in all_positive and res2 in negative) or (res2 in all_positive and res1 in negative)):
         return False, None
     
-    # 查找带电原子
+    # Find带电原子
     charged_atoms1 = []
     charged_atoms2 = []
     
@@ -577,12 +577,12 @@ def is_hydrophobic(res1, res2, atom1, atom2, d):
     """
     判断是否为疏水相互作用
     
-    参数:
-        res1, res2: 残基名称
-        atom1, atom2: 原子信息元组 (chain, resn, resi, name, coord)
+    Parameters:
+        res1, res2: 残基Name
+        atom1, atom2: Atom information元组 (chain, resn, resi, name, coord)
         d: 距离（Å）
     
-    返回:
+    Return:
         bool: 是否为疏水相互作用
     
     标准：疏水接触 ≤ 4.0 Å (other_max)，且原子必须是碳或特定的非极性原子
@@ -597,7 +597,7 @@ def is_hydrophobic(res1, res2, atom1, atom2, d):
     if d > max_dist:
         return False
 
-    # 获取元素类型
+    # 获取元素Type
     elem1 = get_element_from_atom_name(atom1[3])
     elem2 = get_element_from_atom_name(atom2[3])
     
@@ -608,7 +608,7 @@ def is_hydrophobic(res1, res2, atom1, atom2, d):
     if elem1 not in hydrophobic_atoms or elem2 not in hydrophobic_atoms:
         return False
     
-    # 过滤主链 Carbonyl C（原子名为"C"的是主链羰基碳）
+    # Filter主链 Carbonyl C（原子名为"C"的是主链羰基碳）
     if atom1[3].strip() == "C" or atom2[3].strip() == "C":
         return False
     
@@ -651,27 +651,27 @@ def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7, return_names=Fa
     """
     检测配体中的芳香/平面环结构
     
-    [这是什么？] 通过几何方法检测配体分子中的环结构（不依赖 RDKit）
-    [为什么要这么做？] 配体没有标准残基名，无法使用预定义的原子列表
+    [这是什么？] 通过几何Method检测配体分子中的环结构（不Dependencies RDKit）
+    [为什么要这么做？] 配体没有标准残基名，无法using预定义的原子列表
     [为什么这是个好主意！] 使得 π-π 检测可以适用于任意配体
     
-    参数:
-        atoms: 原子信息列表 [(chain, resn, resi, name, coord), ...]
-        min_ring_size: 最小环大小（默认5，五元环）
-    参数:
-        atoms: 原子信息列表 [(chain, resn, resi, name, coord), ...]
-        min_ring_size: 最小环大小（默认5，五元环）
-        max_ring_size: 最大环大小（默认7，七元环）
-        return_names: 是否返回原子名称 (bool)
+    Parameters:
+        atoms: Atom information列表 [(chain, resn, resi, name, coord), ...]
+        min_ring_size: 最小环Size（默认5，五元环）
+    Parameters:
+        atoms: Atom information列表 [(chain, resn, resi, name, coord), ...]
+        min_ring_size: 最小环Size（默认5，五元环）
+        max_ring_size: 最大环Size（默认7，七元环）
+        return_names: 是否Return原子Name (bool)
     
-    返回:
-        list of lists: 每个内部列表包含一个环的原子坐标 [(x,y,z), ...]
-                       如果没有检测到环，返回空列表
+    Return:
+        list of lists: 每个内部列表Package含一个环的原子坐标 [(x,y,z), ...]
+                       如果没有检测到环，Return空列表
     
-    方法：
+    Method：
         1. 筛选 sp2 杂化可能的原子（C, N, O, S）
         2. 基于距离（1.2-1.6Å）构建连接图
-        3. 使用简单的 DFS 寻找环
+        3. using简单的 DFS 寻找环
         4. 验证环的共面性（法向量检查）
     """
     # 1. 筛选可能参与芳香环的原子（主要是 C 和 N）
@@ -691,7 +691,7 @@ def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7, return_names=Fa
         return []
     
     # 2. 构建连接图（基于距离）
-    # 芳香环 C-C 键长约 1.39Å，C-N 键长约 1.35Å
+    # 芳香环 C-C Key长约 1.39Å，C-N Key长约 1.35Å
     bond_min = 1.2
     bond_max = 1.65
     
@@ -705,12 +705,12 @@ def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7, return_names=Fa
                 adjacency[i].append(j)
                 adjacency[j].append(i)
     
-    # 3. 使用 DFS 寻找环
+    # 3. using DFS 寻找环
     detected_rings = []
     visited_rings = set()  # 避免重复检测相同的环
     
     def dfs_find_rings(start, current, path, depth):
-        """DFS 寻找从 start 开始的环"""
+        """DFS 寻找从 start Start的环"""
         if depth > max_ring_size:
             return
         
@@ -733,7 +733,7 @@ def detect_ligand_rings(atoms, min_ring_size=5, max_ring_size=7, return_names=Fa
             if neighbor not in path and neighbor > start:  # 避免重复和回退
                 dfs_find_rings(start, neighbor, path + [neighbor], depth + 1)
     
-    # 从每个节点开始搜索
+    # 从每个节点StartSearch
     for start in range(n):
         if len(adjacency[start]) >= 2:  # 至少有两个连接才可能形成环
             dfs_find_rings(start, start, [start], 1)
@@ -745,17 +745,17 @@ def is_planar_ring(coords, tolerance=0.5):
     """
     检查一组坐标是否共面（用于验证芳香环）
     
-    参数:
+    Parameters:
         coords: 坐标列表 [(x,y,z), ...]
         tolerance: 允许的最大偏离（Å）
     
-    返回:
+    Return:
         bool: 是否共面
     """
     if len(coords) < 4:
         return True  # 3个点总是共面
     
-    # 使用前3个点定义平面
+    # using前3个点定义平面
     p0, p1, p2 = coords[0], coords[1], coords[2]
     
     # 计算法向量
@@ -773,7 +773,7 @@ def is_planar_ring(coords, tolerance=0.5):
     
     nx, ny, nz = nx/norm, ny/norm, nz/norm
     
-    # 计算平面方程 d 值: ax + by + cz = d
+    # 计算平面方程 d Value: ax + by + cz = d
     d = nx * p0[0] + ny * p0[1] + nz * p0[2]
     
     # 检查其余点到平面的距离
@@ -789,15 +789,15 @@ def ring_atoms(res_name, atoms, return_names=False):
     """
     获取环状结构原子坐标
     
-    [这是什么？] 返回残基中芳香环的原子坐标
+    [这是什么？] Return残基中芳香环的原子坐标
     [为什么要这么做？] 用于计算 π-π 堆积和 π-阳离子相互作用
     [为什么这是个好主意！] 现在支持配体动态检测，不再局限于标准残基
     
-    参数:
-        res_name: 残基名称
+    Parameters:
+        res_name: 残基Name
         atoms: 原子列表 [(chain, resn, resi, name, coord), ...]
     
-    返回:
+    Return:
         coords: 环原子坐标列表，或 None（无环）
     """
     # 标准残基的预定义环原子
@@ -813,7 +813,7 @@ def ring_atoms(res_name, atoms, return_names=False):
         "U": ["N1", "C2", "N3", "C4", "C5", "C6"],
     }
     
-    # 标准残基使用预定义的原子列表
+    # 标准残基using预定义的原子列表
     if res_name in ring_dict:
         coords = [a[4] for a in atoms if a[3].strip() in ring_dict[res_name]]
         if return_names:
@@ -821,10 +821,10 @@ def ring_atoms(res_name, atoms, return_names=False):
             return (coords, names) if len(coords) >= 3 else None
         return coords if len(coords) >= 3 else None
     
-    # 非标准残基（配体）：使用动态检测
+    # 非标准残基（配体）：using动态检测
     detected_rings = detect_ligand_rings(atoms, return_names=return_names)
     if detected_rings:
-        # 返回第一个检测到的环（可根据需求扩展为返回所有环）
+        # ReturnFirst检测到的环（可根据需求Extension为Return所有环）
         return detected_rings[0]
     
     return None
@@ -834,11 +834,11 @@ def ring_atoms_all(res_name, atoms):
     """
     获取残基中所有芳香环的原子坐标（支持多环配体）
     
-    参数:
-        res_name: 残基名称
+    Parameters:
+        res_name: 残基Name
         atoms: 原子列表 [(chain, resn, resi, name, coord), ...]
     
-    返回:
+    Return:
         list of coords: 每个元素是一个环的原子坐标列表
     """
     # 标准残基的预定义环原子
@@ -860,7 +860,7 @@ def ring_atoms_all(res_name, atoms):
                 result.append(coords)
         return result if result else None
     
-    # 非标准残基（配体）：使用动态检测
+    # 非标准残基（配体）：using动态检测
     detected_rings = detect_ligand_rings(atoms)
     return detected_rings if detected_rings else None
 
@@ -873,14 +873,14 @@ def normal_vector(a, b, c):
     return [x/norm for x in n] if norm != 0 else None
 
 def angle_between(v1, v2):
-    """计算两向量夹角（度）"""
+    """计算两向量angle（degrees）"""
     dot = sum(v1[i]*v2[i] for i in range(3))
-    dot = max(min(dot, 1), -1)  # 防止数值误差
+    dot = max(min(dot, 1), -1)  # 防止数Value误差
     return math.degrees(math.acos(dot))
 
 def is_pipi(res1, atoms1, res2, atoms2):
     """
-    判断是否为π-π堆积（简单版本，兼容旧代码）
+    判断是否为π-π堆积（简单Version，兼容旧代码）
     """
     r1_info = ring_atoms(res1, atoms1, return_names=True)
     r2_info = ring_atoms(res2, atoms2, return_names=True)
@@ -915,7 +915,7 @@ def is_pipi_precise(res1, atoms1, res2, atoms2):
     """
     精确的π-π堆积判定，区分面-面和面-边模式
     
-    返回:
+    Return:
         (is_pipi: bool, mode: str or None, distance: float or None)
         mode: "face-face" 或 "edge-face"
     """
@@ -940,14 +940,14 @@ def is_pipi_precise(res1, atoms1, res2, atoms2):
     if n1 is None or n2 is None:
         return False, None, None
     
-    # 法向量夹角
+    # 法向量angle
     angle = angle_between(n1, n2)
     
-    # 面-面对：夹角 < 30° 或 > 150°
+    # 面-面对：angle < 30° 或 > 150°
     if angle < 30 or angle > 150:
         return True, "face-face", d
     
-    # 面-边：夹角 60-120°
+    # 面-边：angle 60-120°
     if 60 <= angle <= 120:
         return True, "edge-face", d
     
@@ -957,10 +957,10 @@ def is_metal_coordination(atom1, atom2):
     """
     判断是否为金属配位
     
-    参数:
+    Parameters:
         atom1, atom2: (chain, resn, resi, name, coord)
     
-    返回:
+    Return:
         (is_metal: bool, distance: float or None)
     """
     elem1 = get_element_from_atom_name(atom1[3])
@@ -993,14 +993,14 @@ def is_cationpi(res1, atoms1, res2, atoms2):
 
     标准：
     - 阳离子中心到环中心距离 ≤ 5.0 Å（修正为更严格的标准）
-    - 可选：检查阳离子到环平面的角度（未来可增强）
+    - 可选：检查阳离子到环平面的角degrees（未来可增强）
 
-    返回：
+    Return：
     - False 或 (True, cation_atom_names, ring_atom_names)
     """
     # Helper to find cation center and names
     def cation_info(atoms):
-        # 只匹配真正的阳离子原子，不使用 startswith("N") 以避免匹配主链 N 原子
+        # 只匹配真正的阳离子原子，不using startswith("N") 以避免匹配主链 N 原子
         CATION_ATOM_NAMES = {"NZ", "NH1", "NH2", "NE", "ND1", "NE2"}  # LYS: NZ; ARG: NH1,NH2,NE; HIS: ND1,NE2
         targets = [a for a in atoms if a[3].strip() in CATION_ATOM_NAMES]
         if not targets: return None
@@ -1010,7 +1010,7 @@ def is_cationpi(res1, atoms1, res2, atoms2):
         cen = centroid(coords)
         return (cen, names)
 
-    # 使用更严格的距离阈值（从 6.0 降低到 5.0 Å）
+    # using更严格的距离阈Value（从 6.0 降低到 5.0 Å）
     MAX_CATION_PI_DIST = 5.0  # Å，符合文献标准
 
     # 1. Check: Res1=Cation, Res2=Ring
@@ -1039,13 +1039,13 @@ def is_cationpi(res1, atoms1, res2, atoms2):
 
 def is_halogen_bond(atom1, atom2, d):
     """
-    判断是否为卤素键
+    判断是否为卤素Key
     
-    参数:
+    Parameters:
         atom1, atom2: (chain, resn, resi, name, coord)
         d: 距离
     
-    返回:
+    Return:
         (is_halogen: bool, distance: float, angle: float)
     """
     # 1. 识别卤素供体 (X) 和受体 (A)
@@ -1055,7 +1055,7 @@ def is_halogen_bond(atom1, atom2, d):
     elem1 = get_element_from_atom_name(atom1[3])
     elem2 = get_element_from_atom_name(atom2[3])
     
-    halogens = {"CL", "BR", "I", "F"}  # F 也可以形成卤素键，尽管较弱
+    halogens = {"CL", "BR", "I", "F"}  # F 也可以形成卤素Key，尽管较弱
     acceptors = {"O", "N", "S"}
     
     halogen_atom = None
@@ -1075,30 +1075,30 @@ def is_halogen_bond(atom1, atom2, d):
     if d > max_dist:
         return False, None, None
         
-    # 3. 检查角度 C-X···A
+    # 3. 检查角degrees C-X···A
     # 需要找到与卤素相连的碳原子 (C)
-    # 由于这里没有拓扑信息，我们只能在同残基中寻找距离卤素最近的碳原子
+    # 由于这里没有拓扑Information，我们只能在同残基中寻找距离卤素最近的碳原子
     
     # 获取卤素所在残基的所有原子 (需要传入 all_atoms_by_residue，或者在这里简化处理)
-    # 为了保持接口简单，我们暂时无法精确计算 C-X...A 角度，除非传入更多上下文
+    # 为了保持接口简单，我们暂时无法精确计算 C-X...A 角degrees，除非传入更多上下文
     # 这里做一个近似：假设 C 在 X 的反方向 (仅作示意，实际需要拓扑)
-    # 或者，我们修改调用签名，传入 all_atoms_by_residue
+    # 或者，我们Modify调用签名，传入 all_atoms_by_residue
     
-    # 暂时返回 True (距离满足)，角度检查留给更高级的分析或后续优化
+    # 暂时Return True (距离满足)，角degrees检查留给更高级的分析或后续优化
     # 为了严谨，我们至少要求距离比范德华半径之和略小，这里直接用 cutoff
     
-    return True, d, 180.0 # 假定角度理想，后续应优化
+    return True, d, 180.0 # 假定角degrees理想，后续应优化
 
 def is_water_bridge(ligand_atom, protein_atom, water_atom):
     """
     判断是否为水桥 (Ligand - Water - Protein)
     
-    参数:
+    Parameters:
         ligand_atom: 配体原子
         protein_atom: 蛋白原子
         water_atom: 水分子原子
     
-    返回:
+    Return:
         (is_wb: bool, d_lw: float, d_wp: float, angle: float)
     """
     # 1. 检查 Ligand-Water 距离 (H-bond)
@@ -1111,11 +1111,11 @@ def is_water_bridge(ligand_atom, protein_atom, water_atom):
     if d_wp > INTERACTION_PARAMS["water_bridge"]["max_DA_dist"]:
         return False, None, None, None
         
-    # 3. 检查角度 Ligand-Water-Protein
+    # 3. 检查角degrees Ligand-Water-Protein
     angle = calculate_angle_three_points(ligand_atom[4], water_atom[4], protein_atom[4])
     
-    # 水桥的角度通常在 75-140 度之间 (水的 H-O-H 角度约为 104.5)
-    # 这里使用较宽松的范围
+    # 水桥的角degrees通常在 75-140 degrees之间 (水的 H-O-H 角degrees约为 104.5)
+    # 这里using较宽松的范围
     if angle < INTERACTION_PARAMS["water_bridge"]["min_acceptor_angle"]:
         return False, None, None, None
         
@@ -1123,8 +1123,8 @@ def is_water_bridge(ligand_atom, protein_atom, water_atom):
 
 def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
     """
-    计算相互作用置信度分数 (0.0 - 1.0)
-    基于几何参数的理想程度
+    计算相互作用置信degrees分数 (0.0 - 1.0)
+    基于几何Parameters的理想程degrees
     """
     score = 1.0
     
@@ -1135,10 +1135,10 @@ def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
         if distance_val <= optimal_dist:
             dist_score = 1.0
         else:
-            # 在 cutoff 处给予 0.5 的置信度，避免直接归零
+            # 在 cutoff 处给予 0.5 的置信degrees，避免直接归零
             dist_score = max(0.1, 1.0 - 0.5 * (distance_val - optimal_dist) / (max_dist - optimal_dist))
             
-        # 角度衰减: 180 -> 1.0, min_angle -> 0.6
+        # 角degrees衰减: 180 -> 1.0, min_angle -> 0.6
         if angle_val:
             optimal_angle = 180.0
             min_angle = INTERACTION_PARAMS["hbond"]["min_donor_angle"]
@@ -1164,15 +1164,15 @@ def calculate_confidence_score(interaction_type, distance_val, angle_val=None):
         else:
             score = max(0.1, 1.0 - 0.5 * (distance_val - optimal_dist) / (max_dist - optimal_dist))
             
-    # ... 其他类型
+    # ... 其他Type
     
     return round(score, 2)
 
 def identify_molecule_type(res_name):
     """
-    识别分子类型
+    识别分子Type
 
-    返回: "protein", "ligand", "peptide", "dna", "rna", "unknown"
+    Return: "protein", "ligand", "peptide", "dna", "rna", "unknown"
     """
     # 标准氨基酸（20种）
     standard_aa = {"ALA", "ARG", "ASN", "ASP", "CYS", "GLN", "GLU", "GLY", "HIS", "ILE",
@@ -1201,9 +1201,9 @@ def identify_molecule_type(res_name):
 
 def classify_chain_type(atoms_in_chain):
     """
-    根据链中的残基类型分类整条链
+    根据链中的残基TypeCategory整条链
 
-    返回: "protein", "ligand", "peptide", "dna", "rna", "mixed"
+    Return: "protein", "ligand", "peptide", "dna", "rna", "mixed"
     """
     res_types = {}
     for atom in atoms_in_chain:
@@ -1215,14 +1215,14 @@ def classify_chain_type(atoms_in_chain):
     if not res_types:
         return "unknown"
 
-    # 找出主要类型
+    # 找出主要Type
     main_type = max(res_types, key=res_types.get)
 
     # 如果是蛋白质但残基数很少（<15），可能是多肽
     if main_type == "protein" and res_types[main_type] < 15:
         return "peptide"
 
-    # 如果只有一种类型占绝对优势（>80%），返回该类型
+    # 如果只有一种Type占绝对优势（>80%），Return该Type
     total = sum(res_types.values())
     if res_types[main_type] / total > 0.8:
         return main_type
@@ -1233,14 +1233,14 @@ def analyze_interactions(atoms, only_between_chains=False):
     """
     分析原子间相互作用
 
-    参数:
-        atoms: 原子信息列表
+    Parameters:
+        atoms: Atom information列表
         only_between_chains: 是否只分析链间相互作用
 
-    返回:
+    Return:
         interactions: 相互作用列表
     
-    使用严格标准：氢键 ≤2.8Å，盐桥 ≤4.0Å
+    using严格标准：氢Key ≤2.8Å，盐桥 ≤4.0Å
     """
     # 按残基分组
     grouped = defaultdict(list)
@@ -1292,14 +1292,14 @@ def analyze_interactions(atoms, only_between_chains=False):
                         centroid2 = centroid(c2_coords)
                         centroid_dist = distance(centroid1, centroid2)
 
-                        # 如果质心距离过大，跳过详细检查（缩小到10埃，接触界面更精确）
+                        # 如果质心距离过大，Skip详细检查（缩小到10埃，接触interface更精确）
                         if centroid_dist > 10.0:
                             continue
 
                         # 检查相互作用
                         _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, interactions)
     else:
-        # 分析所有残基对（包括链内）
+        # 分析所有残基对（Package括链内）
         print(f"[analyze_interactions] Analyzing all interactions among {len(keys)} residues...")
 
         total_pairs = len(keys) * (len(keys) - 1) // 2
@@ -1311,7 +1311,7 @@ def analyze_interactions(atoms, only_between_chains=False):
                 c1, r1, id1 = keys[i]
                 c2, r2, id2 = keys[j]
 
-                # 进度输出（每10%输出一次）
+                # 进degrees输出（每10%输出一次）
                 checked += 1
                 percent = int(checked * 100 / total_pairs)
                 if percent >= last_percent + 10:
@@ -1327,7 +1327,7 @@ def analyze_interactions(atoms, only_between_chains=False):
                 centroid2 = centroid(c2_coords)
                 centroid_dist = distance(centroid1, centroid2)
 
-                # 如果质心距离过大，跳过详细检查
+                # 如果质心距离过大，Skip详细检查
                 if centroid_dist > 15.0:
                     continue
 
@@ -1338,28 +1338,28 @@ def analyze_interactions(atoms, only_between_chains=False):
 
 def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, interactions):
     """
-    检查两个残基间的相互作用（提取为独立函数避免代码重复）
+    检查两个残基间的相互作用（提取为独立Function避免代码重复）
     
-    使用严格标准进行相互作用判断
-    修复：并行检测所有相互作用类型，而非互斥判断
+    using严格标准进行相互作用判断
+    修复：并行检测所有相互作用Type，而非互斥判断
     """
-    # 使用集合记录已检测到的相互作用类型，避免重复
+    # using集合记录已检测到的相互作用Type，避免重复
     found_hbond = False
     found_saltbridge = False
     found_hydrophobic = False
     found_halogen = False
     
-    # 检查原子间相互作用（氢键、盐桥、疏水、卤素键）
+    # 检查原子间相互作用（氢Key、盐桥、疏水、卤素Key）
     for at1 in a1:
         for at2 in a2:
             d = distance(at1[4], at2[4])
-            if d > 6.0:  # 扩大初筛阈值，覆盖所有相互作用类型
+            if d > 6.0:  # 扩大初筛阈Value，覆盖所有相互作用Type
                 continue
 
-            # 并行检测所有类型（不使用 elif）
+            # 并行检测所有Type（不using elif）
             if not found_hbond:
-                 # 尝试双向检测氢键
-                 is_hb, hb_dist, hb_angle = is_hbond_precise(at1, at2, grouped) # 注意：这里 grouped 并不完全等同于 all_atoms_by_residue，需要确认
+                 # 尝试双向检测氢Key
+                 is_hb, hb_dist, hb_angle = is_hbond_precise(at1, at2, grouped) # 注意：这里 grouped 并不完全等同于 all_atoms_by_residue，需要Confirm
                  if not is_hb:
                      is_hb, hb_dist, hb_angle = is_hbond_precise(at2, at1, grouped)
                  
@@ -1436,7 +1436,7 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
             "Atom2": "Ring",
             "Distance": "-",
             "Interaction": "Pi-Pi Stacking",
-            "Confidence": 0.9 # 默认高置信度
+            "Confidence": 0.9 # 默认高置信degrees
         })
 
     if is_cationpi(r1, a1, r2, a2):
@@ -1455,24 +1455,24 @@ def _check_residue_interactions(c1, r1, id1, c2, r2, id2, a1, a2, grouped, inter
 def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains=True, 
                            auto_highlight=True, pdb_file=None):
     """
-    分析PDB结构中的相互作用并可选地在PyMOL中高亮显示
+    分析PDB结构中的相互作用并可选地在PyMOL中高亮Display
     
-    参数:
-        obj_name: PyMOL对象名称
-        output_csv: 输出CSV文件路径
+    Parameters:
+        obj_name: PyMOL对象Name
+        output_csv: 输出CSVFilePath
         only_between_chains: 是否只分析链间相互作用
-        auto_highlight: 是否自动高亮显示结果
-        pdb_file: PDB文件路径（如果提供，将从文件读取而不是PyMOL对象）
+        auto_highlight: 是否自动高亮DisplayResults
+        pdb_file: PDBFilePath（如果提供，将从File读取而不是PyMOL对象）
     
-    返回:
+    Return:
         interactions: 相互作用列表
     
-    使用严格标准：氢键 ≤2.8Å，盐桥 ≤4.0Å，适合发表
+    using严格标准：氢Key ≤2.8Å，盐桥 ≤4.0Å，适合发表
     
     示例:
         analyze_pdb_interactions('protein', output_csv='interactions.csv')
     """
-    # 获取原子信息
+    # 获取Atom information
     if pdb_file:
         atoms = parse_pdb_file(pdb_file)
         if not atoms:
@@ -1489,7 +1489,7 @@ def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains
     # 分析相互作用
     interactions = analyze_interactions(atoms, only_between_chains)
     
-    # 输出到CSV文件
+    # 输出到CSVFile
     if output_csv:
         try:
             with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
@@ -1513,18 +1513,18 @@ def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains
     
     print(f"[analyze_pdb_interactions] Analysis complete: found {len(interactions)} interactions")
     
-    # 自动高亮显示（如枟启用且在PyMOL环境中）
+    # 自动高亮Display（如枟Enable且在PyMOL环境中）
     if auto_highlight and not pdb_file and interactions:
         print(f"[analyze_pdb_interactions] Auto-highlighting {len(interactions)} interactions in PyMOL...")
         try:
-            # 如果已经有CSV文件，直接使用
+            # 如果已经有CSVFile，直接using
             if output_csv and os.path.exists(output_csv):
                 from .highlight_residues import highlight_csv_residues
                 highlight_csv_residues(output_csv, obj=obj_name, show_labels=1,
                                      stick_by_element=1)
                 print(f"[analyze_pdb_interactions] ✅ Highlighted interactions from {output_csv}")
             else:
-                # 创建临时CSV文件
+                # Create临时CSVFile
                 temp_csv = tempfile.NamedTemporaryFile(mode='w', suffix='.csv',
                                                      delete=False, encoding='utf-8')
                 writer = csv.writer(temp_csv)
@@ -1550,7 +1550,7 @@ def analyze_pdb_interactions(obj_name=None, output_csv=None, only_between_chains
                 
                 print(f"[analyze_pdb_interactions] ✅ Highlighted interactions in PyMOL")
 
-                # 清理临时文件
+                # 清理临时File
                 os.unlink(temp_csv.name)
 
         except Exception as e:
@@ -1571,17 +1571,17 @@ def render_interactions_beautifully(obj_name, csv_path=None, interactions=None):
     """
     美化渲染相互作用
 
-    参数:
-        obj_name: PyMOL对象名称
-        csv_path: CSV文件路径（可选）
+    Parameters:
+        obj_name: PyMOL对象Name
+        csv_path: CSVFilePath（可选）
         interactions: 相互作用列表（可选，如果没有提供将从csv_path读取）
     """
     from pymol import cmd
 
-    # 分析链类型
+    # 分析链Type
     atoms = parse_pdb_structure(obj_name)
     if not atoms:
-        print(f"[render_interactions_beautifully] 无法获取 {obj_name} 的原子信息")
+        print(f"[render_interactions_beautifully] 无法获取 {obj_name} 的Atom information")
         return
 
     # 按链分组
@@ -1589,19 +1589,19 @@ def render_interactions_beautifully(obj_name, csv_path=None, interactions=None):
     for atom in atoms:
         chains[atom[0]].append(atom)
 
-    # 分类每条链
+    # Category每条链
     chain_types = {}
     for chain, atoms_in_chain in chains.items():
         chain_types[chain] = classify_chain_type(atoms_in_chain)
 
-    print(f"[render_interactions_beautifully] 链类型分析: {chain_types}")
+    print(f"[render_interactions_beautifully] 链Type分析: {chain_types}")
 
-    # 基础视图设置
+    # 基础视图Settings
     cmd.hide("everything", obj_name)
     cmd.bg_color("white")
     cmd.set("ray_opaque_background", 1)
 
-    # 根据链类型设置显示样式和颜色
+    # 根据链TypeSettingsDisplay样式和颜色
     color_scheme = {
         "protein": "skyblue",
         "peptide": "lightpink",
@@ -1640,7 +1640,7 @@ def render_interactions_beautifully(obj_name, csv_path=None, interactions=None):
             cmd.color(color_scheme[ctype], sel)
 
         else:
-            # 未知/混合：默认显示
+            # 未知/混合：默认Display
             cmd.show("lines", sel)
             cmd.color(color_scheme[ctype], sel)
 
@@ -1648,13 +1648,13 @@ def render_interactions_beautifully(obj_name, csv_path=None, interactions=None):
     if csv_path and os.path.exists(csv_path):
         try:
             from .highlight_residues import highlight_csv_residues
-            # 使用现有的高亮函数
+            # using现有的高亮Function
             highlight_csv_residues(csv_path, obj=obj_name, show_labels=1,
                                  stick_by_element=1, clear_old=0)
         except Exception as e:
-            print(f"[render_interactions_beautifully] 高亮相互作用失败: {e}")
+            print(f"[render_interactions_beautifully] 高亮相互作用Failed: {e}")
 
-    # 设置光照和质量
+    # Settings光照和质量
     cmd.set("ambient", 0.2)
     cmd.set("spec_power", 80)
     cmd.set("spec_reflect", 0.4)
@@ -1666,7 +1666,7 @@ def render_interactions_beautifully(obj_name, csv_path=None, interactions=None):
     cmd.orient(obj_name)
     cmd.zoom(obj_name, buffer=5.0)
 
-    # 渲染完成,静默返回
+    # 渲染Completed,静默Return
 
 cmd.extend("render_interactions_beautifully", render_interactions_beautifully)
 
@@ -1675,18 +1675,18 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                                        distance_cutoff=4.5, pdb_file=None,
                                        key_interactions_only=False):
     """
-    分析蛋白质-配体相互作用（使用严格标准）
+    分析蛋白质-配体相互作用（using严格标准）
 
-    参数:
-        obj_name: PyMOL对象名称
-        ligand_resname: 配体残基名称（例如 "LIG", "ATP" 等）,如果为None则自动检测
+    Parameters:
+        obj_name: PyMOL对象Name
+        ligand_resname: 配体残基Name（例如 "LIG", "ATP" 等）,如果为None则自动检测
         protein_chains: 蛋白质链ID列表（例如 ["A", "B"]）,如果为None则自动检测
-        output_csv: 输出CSV文件路径
-        distance_cutoff: 距离截断值（埃）
-        pdb_file: PDB文件路径（可选）
-        key_interactions_only: 仅检测关键相互作用（氢键、盐桥、π相互作用、金属配位）,排除疏水接触 (默认False,包含疏水)
+        output_csv: 输出CSVFilePath
+        distance_cutoff: 距离截断Value（埃）
+        pdb_file: PDBFilePath（可选）
+        key_interactions_only: 仅检测关Key相互作用（氢Key、盐桥、π相互作用、金属配位）,排除疏水接触 (默认False,Package含疏水)
 
-    返回:
+    Return:
         dict: {
             "ligand_residues": [{"chain": X, "resname": Y, "resid": Z}, ...],
             "protein_chains": ["A", "B", ...],
@@ -1695,19 +1695,19 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
         }
     
     推荐标准（适合大多数场景）：
-        - 氢键: ≤3.2Å，角度≥120° (精确几何验证)
+        - 氢Key: ≤3.2Å，角degrees≥120° (精确几何验证)
         - 盐桥: ≤4.5Å
         - 疏水: ≤4.0Å
         - π相互作用: 严格几何判定
         - 金属配位: ≤3.4Å
     
-    注：现已使用精确氢键检测（距离+角度），避免假阳性
+    注：现已using精确氢Key检测（距离+角degrees），避免假阳性
     
     示例:
         result = analyze_protein_ligand_interactions('complex', 'LIG', output_csv='interactions.csv')
     """
     
-    # ========== 确保使用高质量分析模式 ==========
+    # ========== 确保using高质量分析模式 ==========
     if not RDKIT_AVAILABLE:
         error_msg = "[analyze_protein_ligand_interactions] ❌ RDKit not installed. High-quality analysis unavailable.\nRun: pip install rdkit scipy matplotlib pillow numpy"
         print(error_msg)
@@ -1718,25 +1718,25 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
         print(error_msg)
         raise RuntimeError(error_msg)
     
-    # 使用RDKit进行高质量分析（直接在本模块实现，不依赖external advanced模块）
-    # print("[analyze_protein_ligand_interactions] 🚀 使用高质量 RDKit 分析模式")
+    # usingRDKit进行高质量分析（直接在本Module实现，不Dependenciesexternal advancedModule）
+    # print("[analyze_protein_ligand_interactions] 🚀 using高质量 RDKit 分析模式")
     
-    # 如果存在 advanced 模块则使用它
+    # 如果存在 advanced Module则using它
     try:
         from .interaction_analyzer_advanced import analyze_interactions_advanced
         
-        # 导出蛋白质和配体为临时文件
+        # Export蛋白质和配体为临时File
         protein_pdb = tempfile.NamedTemporaryFile(delete=False, suffix=".pdb").name
         ligand_sdf = tempfile.NamedTemporaryFile(delete=False, suffix=".sdf").name
         
-        # 保存蛋白质
+        # Save蛋白质
         if obj_name:
             cmd.save(protein_pdb, f"{obj_name} and polymer")
         elif pdb_file:
             import shutil
             shutil.copy(pdb_file, protein_pdb)
         
-        # 保存配体
+        # Save配体
         if ligand_resname:
             cmd.save(ligand_sdf, f"{obj_name} and resn {ligand_resname}", format="sdf")
         else:
@@ -1746,36 +1746,36 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
         # 调用高级分析
         result_advanced = analyze_interactions_advanced(protein_pdb, ligand_sdf, output_csv)
         
-        # 清理临时蛋白文件（保留ligand_sdf用于2D图绘制）
+        # 清理临时蛋白File（保留ligand_sdf用于2D图绘制）
         try:
             os.remove(protein_pdb)
-        except OSError:  # 文件删除可能失败
+        except OSError:  # FileDelete可能Failed
             pass
         
         if result_advanced:
-            # 转换格式以兼容返回值
+            # 转换格式以兼容ReturnValue
             return {
                 "ligand_residues": [],
                 "protein_chains": protein_chains or [],
                 "interactions": [],
                 "mode": "advanced",
                 "advanced_results": result_advanced,
-                "ligand_sdf": ligand_sdf  # 保存SDF路径用于2D图
+                "ligand_sdf": ligand_sdf  # SaveSDFPath用于2D图
             }
     except ModuleNotFoundError:
-        # advanced 模块不存在，使用内置实现（继续下面的代码）
+        # advanced Module不存在，using内置实现（Continue下面的代码）
         # print("[analyze_protein_ligand_interactions] 📋 Using built-in high-quality analysis")
         pass
     except Exception as e:
         print(f"[analyze_protein_ligand_interactions] ⚠️ Advanced module failed: {e}")
         import traceback
         traceback.print_exc()
-        # 继续使用内置实现
+        # Continueusing内置实现
     
-    # ========== 严格标准分析（使用RDKit） ==========
+    # ========== 严格标准分析（usingRDKit） ==========
     # print("[analyze_protein_ligand_interactions] 🔬 Using strict standards (H-bond ≤2.8Å, Salt bridge ≤4.0Å)")
     
-    # 获取原子信息
+    # 获取Atom information
     if pdb_file:
         atoms = parse_pdb_file(pdb_file)
         if not atoms:
@@ -1795,7 +1795,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
 
     # print(f"[analyze_protein_ligand_interactions] 📋 Structure info: {len(chain_residues)} residues total")
     
-    # 统计残基类型
+    # 统计残基Type
     residue_type_count = defaultdict(int)
     for res_key in chain_residues.keys():
         _, res_name, _ = res_key
@@ -1823,7 +1823,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
         mol_type = identify_molecule_type(res_name)
 
         if ligand_resname:
-            # 用户指定了配体名称，精确匹配
+            # 用户指定了配体Name，精确匹配
             if res_name.upper() == ligand_resname.upper():
                 ligand_residues.append((res_key, res_atoms))
                 # print(f"[analyze_protein_ligand_interactions]   ✓ Ligand: {res_name} {res_id} (chain {chain_id})")
@@ -1840,7 +1840,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
             protein_chains_set.add(res_key[0])
         protein_chains = list(protein_chains_set)
     else:
-        # 过滤指定的蛋白链
+        # Filter指定的蛋白链
         old_count = len(protein_residues)
         protein_residues = [(rk, ra) for rk, ra in protein_residues if rk[0] in protein_chains]
         # print(f"[analyze_protein_ligand_interactions] Filtered protein chains: {old_count} -> {len(protein_residues)} residues")
@@ -1886,14 +1886,14 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
         print("[analyze_protein_ligand_interactions] ⚠️ No receptor residues (Protein/DNA/RNA) found")
         return None
 
-    # ✅ 调试打印
+    # ✅ 调试Print
     print(f"[DEBUG] ✅ 检测到 {len(ligand_residues)} 个配体分子")
     for lig_key, lig_atoms in ligand_residues:
         print(f"[DEBUG]   配体: {lig_key[1]} (chain='{lig_key[0]}', resid={lig_key[2]}, 原子数={len(lig_atoms)})")
     print(f"[DEBUG] ✅ 检测到 {len(protein_residues)} 个蛋白质残基")
     print(f"[DEBUG]   蛋白质链: {protein_chains}")
-    print(f"[DEBUG] 检测参数:")
-    print(f"[DEBUG]   氢键: D···A ≤ {INTERACTION_PARAMS['hbond']['max_DA_dist']} Å")
+    print(f"[DEBUG] 检测Parameters:")
+    print(f"[DEBUG]   氢Key: D···A ≤ {INTERACTION_PARAMS['hbond']['max_DA_dist']} Å")
     print(f"[DEBUG]   盐桥: ≤ {INTERACTION_PARAMS['ionic']['max_dist']} Å")
     print(f"[DEBUG]   疏水: ≤ {INTERACTION_PARAMS['hydrophobic']['other_max']} Å")
     print(f"[DEBUG]   距离截断: {distance_cutoff} Å")
@@ -1901,7 +1901,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
     # 分析相互作用
     interactions = []
     
-    # 构建残基原子索引（用于精确氢键检测）
+    # 构建残基原子索引（用于精确氢Key检测）
     all_atoms_by_residue = {}
     for lig_key, lig_atoms in ligand_residues:
         all_atoms_by_residue[lig_key] = lig_atoms
@@ -1943,7 +1943,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     
                     close_pairs_count += 1
 
-                    # 判断相互作用类型（优先级：盐桥 > 氢键 > 疏水）
+                    # 判断相互作用Type（优先级：盐桥 > 氢Key > 疏水）
                     interaction_type = None
                     hb_angle = None
                     
@@ -1952,11 +1952,11 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                         interaction_type = "Salt Bridge"
                     else:
                         # ② Next priority: hydrogen bonds
-                        # DEBUG: 检查氢键检测
+                        # DEBUG: 检查氢Key检测
                         lig_elem = get_element_from_atom_name(lig_atom[3])
                         prot_elem = get_element_from_atom_name(prot_atom[3])
 
-                        # 只对可能的氢键供体/受体进行检测
+                        # 只对可能的氢Key供体/受体进行检测
                         if (lig_elem in {"N", "O", "S"} or prot_elem in {"N", "O", "S"}) and d <= 3.5:
                             is_hb, hb_dist, hb_angle = is_hbond_precise(lig_atom, prot_atom, all_atoms_by_residue)
                             if not is_hb:
@@ -1965,19 +1965,19 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                             if is_hb:
                                 interaction_type = "Hydrogen Bond"
                                 print(f"[DEBUG] ✓ H-Bond: {lig_name} {lig_atom[3]} ({lig_elem}) <-> {prot_name} {prot_atom[3]} ({prot_elem}), d={d:.2f}Å, angle={hb_angle:.1f}°")
-                            elif d <= 3.5 and checked_pairs < 10:  # 只打印前几个失败的案例
+                            elif d <= 3.5 and checked_pairs < 10:  # 只Print前几个Failed的案例
                                 print(f"[DEBUG] ✗ H-Bond failed: {lig_name} {lig_atom[3]} ({lig_elem}) <-> {prot_name} {prot_atom[3]} ({prot_elem}), d={d:.2f}Å")
 
                         # ③ Lowest priority: hydrophobic
                         if not interaction_type and not key_interactions_only and is_hydrophobic(lig_name, prot_name, lig_atom, prot_atom, d):
                             interaction_type = "Hydrophobic"
 
-                    # 严格模式：只检测关键相互作用
-                    # key_interactions_only=False时才启用宽松规则（不推荐）
+                    # 严格模式：只检测关Key相互作用
+                    # key_interactions_only=False时才Enable宽松规则（不推荐）
 
                     if interaction_type:
                         conf = calculate_confidence_score(interaction_type, d, hb_angle if interaction_type == "Hydrogen Bond" else None)
-                        # 添加配体原子3D坐标，用于2D绘图时的精确映射
+                        # Add配体原子3D坐标，用于2D绘图时的精确映射
                         lig_coords = lig_atom[4]  # (x, y, z) tuple
                         interactions.append({
                             "Ligand_Chain": lig_chain,
@@ -1994,7 +1994,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                             "Confidence": conf
                         })
                         
-                    # 检查卤素键
+                    # 检查卤素Key
                     is_hal, hal_dist, hal_angle = is_halogen_bond(lig_atom, prot_atom, d)
                     if is_hal:
                         conf = calculate_confidence_score("Halogen Bond", hal_dist, hal_angle)
@@ -2041,7 +2041,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
             if cationpi_res:
                 _, lig_part, prot_part = cationpi_res
                 # Determine identifying string (Ring(...) or Cation(...))
-                # 使用已知的阳离子原子名集合来判断，而不是用 len(p) > 2
+                # using已知的阳离子原子名集合来判断，而不是用 len(p) > 2
                 CATION_ATOM_SET = {"NZ", "NH1", "NH2", "NE", "ND1", "NE2"}
                 def fmt_cationpi(p):
                     # 如果列表中任意一个原子名属于阳离子原子集合，则标记为 Cation
@@ -2079,7 +2079,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
     if water_atoms:
         # print(f"[analyze_protein_ligand_interactions] Checking water bridges with {len(water_atoms)} water molecules...")
         # 优化：建立空间索引或只检查配体附近的水
-        # 这里使用简单距离筛选
+        # 这里using简单距离筛选
         
         for lig_key, lig_atoms in ligand_residues:
             lig_chain, lig_name, lig_id = lig_key
@@ -2111,7 +2111,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                         is_wb, d_lw, d_wp, angle = is_water_bridge(closest_lig_atom, pa, water)
                         if is_wb:
                             conf = calculate_confidence_score("Water Bridge", max(d_lw, d_wp), angle)
-                            # 添加配体原子3D坐标，与其他交互类型保持一致，用于2D绘图精确匹配
+                            # Add配体原子3D坐标，与其他交互Type保持一致，用于2D绘图精确匹配
                             lig_wb_coords = closest_lig_atom[4]
                             interactions.append({
                                 "Ligand_Chain": lig_chain,
@@ -2133,12 +2133,12 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
     print(f"[DEBUG] 距离内的原子对: {close_pairs_count}")
     print(f"[DEBUG] 检测到的相互作用: {len(interactions)}")
     
-    # 输出到CSV（包含配体原子3D坐标用于2D绘图精确匹配）
+    # 输出到CSV（Package含配体原子3D坐标用于2D绘图精确匹配）
     if output_csv and interactions:
         try:
             with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
                 writer = csv.writer(f)
-                # 添加 Ligand_Atom_X/Y/Z 列用于2D绘图时精确匹配原子位置
+                # Add Ligand_Atom_X/Y/Z 列用于2D绘图时精确匹配原子位置
                 writer.writerow(["Ligand_Chain", "Ligand_Residue", "Ligand_Atom",
                                "Ligand_Atom_X", "Ligand_Atom_Y", "Ligand_Atom_Z",
                                "Protein_Chain", "Protein_Residue", "Protein_Atom",
@@ -2188,18 +2188,18 @@ def analyze_ternary_complex(obj_name=None, ligand_resname=None,
                            output_csv=None, distance_cutoff=4.5, pdb_file=None):
     """
     分析三元复合体（蛋白-配体-蛋白）相互作用
-    典型应用：PROTAC分子同时结合两个蛋白质
+    典型Apply：PROTAC分子同时结合两个蛋白质
 
-    参数:
-        obj_name: PyMOL对象名称
-        ligand_resname: 配体残基名称（如PROTAC分子）
+    Parameters:
+        obj_name: PyMOL对象Name
+        ligand_resname: 配体残基Name（如PROTAC分子）
         protein1_chains: 蛋白质1的链ID列表（例如 ["A"]）
         protein2_chains: 蛋白质2的链ID列表（例如 ["B"]）
-        output_csv: 输出CSV文件路径
-        distance_cutoff: 距离截断值（埃）
-        pdb_file: PDB文件路径（可选）
+        output_csv: 输出CSVFilePath
+        distance_cutoff: 距离截断Value（埃）
+        pdb_file: PDBFilePath（可选）
 
-    返回:
+    Return:
         dict: {
             "ligand_info": {...},
             "protein1_interactions": [...],
@@ -2207,7 +2207,7 @@ def analyze_ternary_complex(obj_name=None, ligand_resname=None,
             "bridging_analysis": {...}
         }
     """
-    # 获取原子信息
+    # 获取Atom information
     if pdb_file:
         atoms = parse_pdb_file(pdb_file)
         if not atoms:
@@ -2302,7 +2302,7 @@ def analyze_ternary_complex(obj_name=None, ligand_resname=None,
         "ligand_bridges": len(ligand_residues) > 0
     }
 
-    # 保存到CSV
+    # Save到CSV
     if output_csv:
         try:
             with open(output_csv, "w", newline="", encoding="utf-8-sig") as f:
@@ -2382,19 +2382,19 @@ def analyze_atom_pair_interactions(obj_name=None,
     分析特定原子对之间的相互作用
     例如: 分析配体的N原子与蛋白质某残基的O原子之间的相互作用
 
-    参数:
-        obj_name: PyMOL对象名称
-        atom1_selection: 原子1的选择语法，支持:
-            - PyMOL选择语法: "resn LIG and name N1"
+    Parameters:
+        obj_name: PyMOL对象Name
+        atom1_selection: 原子1的Select语法，支持:
+            - PyMOLSelect语法: "resn LIG and name N1"
             - 简化格式: "LIG/301/N1" (残基名/残基号/原子名)
-            - 元素类型: "elem N" (所有氮原子)
-        atom2_selection: 原子2的选择语法(同上)
-        distance_cutoff: 距离截断值（埃）
-        output_csv: 输出CSV文件路径
-        pdb_file: PDB文件路径（可选）
+            - 元素Type: "elem N" (所有氮原子)
+        atom2_selection: 原子2的Select语法(同上)
+        distance_cutoff: 距离截断Value（埃）
+        output_csv: 输出CSVFilePath
+        pdb_file: PDBFilePath（可选）
 
-    返回:
-        list: 原子对相互作用列表，包含距离、角度等信息
+    Return:
+        list: 原子对相互作用列表，Package含距离、角degrees等Information
 
     示例:
         # 分析配体LIG的N原子与所有氧原子的相互作用
@@ -2405,7 +2405,7 @@ def analyze_atom_pair_interactions(obj_name=None,
             distance_cutoff=3.5
         )
 
-        # 使用简化格式
+        # using简化格式
         analyze_atom_pair_interactions(
             obj_name="complex",
             atom1_selection="LIG/301/N1",
@@ -2415,7 +2415,7 @@ def analyze_atom_pair_interactions(obj_name=None,
     """
     from pymol import cmd as pymol_cmd
 
-    # 获取原子信息
+    # 获取Atom information
     if pdb_file:
         atoms = parse_pdb_file(pdb_file)
         if not atoms:
@@ -2427,9 +2427,9 @@ def analyze_atom_pair_interactions(obj_name=None,
             print("[analyze_atom_pair_interactions] Unable to obtain atom information")
             return None
 
-    # 解析选择语法
+    # 解析Select语法
     def parse_selection(sel_str, atoms_list):
-        """解析选择语法并返回匹配的原子列表"""
+        """解析Select语法并Return匹配的原子列表"""
         if not sel_str:
             return []
 
@@ -2447,11 +2447,11 @@ def analyze_atom_pair_interactions(obj_name=None,
                         matched_atoms.append(atom)
                 return matched_atoms
 
-        # 格式2: 元素类型 "elem N"
+        # 格式2: 元素Type "elem N"
         if sel_str.lower().startswith("elem "):
             elem = sel_str[5:].strip().upper()
             for atom in atoms_list:
-                atom_elem = atom[3].strip()[0].upper()  # 取原子名第一个字母作为元素
+                atom_elem = atom[3].strip()[0].upper()  # 取原子名First字母作为元素
                 if atom_elem == elem[0]:
                     matched_atoms.append(atom)
             return matched_atoms
@@ -2472,7 +2472,7 @@ def analyze_atom_pair_interactions(obj_name=None,
                     matched_atoms.append(atom)
             return matched_atoms
 
-        # 格式5: PyMOL复杂选择语法（尝试解析）
+        # 格式5: PyMOL复杂Select语法（尝试解析）
         # 支持 "resn LIG and name N1"
         if " and " in sel_str.lower():
             conditions = sel_str.lower().split(" and ")
@@ -2524,7 +2524,7 @@ def analyze_atom_pair_interactions(obj_name=None,
         for atom2 in atoms2:
             chain2, res2, resid2, name2, coord2 = atom2
 
-            # 跳过同一原子
+            # Skip同一原子
             if (chain1 == chain2 and res1 == res2 and
                 resid1 == resid2 and name1 == name2):
                 continue
@@ -2535,12 +2535,12 @@ def analyze_atom_pair_interactions(obj_name=None,
             if d > distance_cutoff:
                 continue
 
-            # 判断相互作用类型
+            # 判断相互作用Type
             interaction_type = _classify_atom_interaction(
                 name1, name2, res1, res2, d
             )
 
-            # 计算方向向量和角度（如果有其他原子）
+            # 计算方向向量和角degrees（如果有其他原子）
             direction_info = _calculate_interaction_geometry(
                 atom1, atom2, atoms
             )
@@ -2559,7 +2559,7 @@ def analyze_atom_pair_interactions(obj_name=None,
                 "Geometry": direction_info
             })
 
-    # 按距离排序
+    # 按距离Sort
     interactions.sort(key=lambda x: x["Distance"])
 
     # 输出到CSV
@@ -2592,7 +2592,7 @@ def analyze_atom_pair_interactions(obj_name=None,
 
     print(f"[analyze_atom_pair_interactions] ✅ Analysis complete: found {len(interactions)} atom-pair interactions")
 
-    # 打印前5个最近的相互作用
+    # Print前5个最近的相互作用
     if interactions:
         print("\nTop 5 closest interactions:")
         for i, inter in enumerate(interactions[:5], 1):
@@ -2603,8 +2603,8 @@ def analyze_atom_pair_interactions(obj_name=None,
     return interactions
 
 def _classify_atom_interaction(atom1_name, atom2_name, res1, res2, dist):
-    """根据原子类型和距离分类相互作用"""
-    # 获取元素类型（原子名的第一个字母）
+    """根据原子Type和距离Category相互作用"""
+    # 获取元素Type（原子名的First字母）
     elem1 = atom1_name.strip()[0].upper()
     elem2 = atom2_name.strip()[0].upper()
 
@@ -2659,11 +2659,11 @@ def _classify_atom_interaction(atom1_name, atom2_name, res1, res2, dist):
     return "Weak Interaction"
 
 def _calculate_interaction_geometry(atom1, atom2, all_atoms):
-    """计算相互作用的几何信息（角度等）"""
-    # 这里可以添加更复杂的几何计算
-    # 例如：氢键角度、二面角等
+    """计算相互作用的几何Information（角degrees等）"""
+    # 这里可以Add更复杂的几何计算
+    # 例如：氢Key角degrees、二面角等
 
-    # 简化版本：计算方向
+    # 简化Version：计算方向
     coord1, coord2 = atom1[4], atom2[4]
 
     dx = coord2[0] - coord1[0]
@@ -2687,10 +2687,10 @@ def visualize_atom_pairs(obj_name, interactions_result=None, csv_path=None):
     """
     在PyMOL中可视化原子对相互作用
 
-    参数:
-        obj_name: PyMOL对象名称
-        interactions_result: analyze_atom_pair_interactions的返回结果
-        csv_path: 或者提供CSV文件路径
+    Parameters:
+        obj_name: PyMOL对象Name
+        interactions_result: analyze_atom_pair_interactions的ReturnResults
+        csv_path: 或者提供CSVFilePath
     """
     from pymol import cmd
 
@@ -2710,11 +2710,11 @@ def visualize_atom_pairs(obj_name, interactions_result=None, csv_path=None):
         print("[visualize_atom_pairs] No interaction data")
         return
 
-    # 创建选择
+    # CreateSelect
     cmd.delete("atom_pairs_*")
 
     # 颜色映射
-    # 统一使用 PYMOL_COLOR_NAMES 配色方案（与 PPI / 配体-配体模块一致）
+    # 统一using PYMOL_COLOR_NAMES 配色方案（与 PPI / 配体-配体Module一致）
     color_map = {
         "Hydrogen Bond": PYMOL_COLOR_NAMES.get('hbond', 'blue'),
         "Salt Bridge": PYMOL_COLOR_NAMES.get('salt', 'red'),
@@ -2727,9 +2727,9 @@ def visualize_atom_pairs(obj_name, interactions_result=None, csv_path=None):
         "Weak Interaction": "lightgray"
     }
 
-    for i, inter in enumerate(interactions_result[:20], 1):  # 最多显示20个
+    for i, inter in enumerate(interactions_result[:20], 1):  # 最多Display20个
         try:
-            # 解析原子信息
+            # 解析Atom information
             chain1 = inter["Atom1_Chain"]
             res1_full = inter["Atom1_Residue"].split()
             res1_name = res1_full[0] if res1_full else ""
@@ -2742,11 +2742,11 @@ def visualize_atom_pairs(obj_name, interactions_result=None, csv_path=None):
             res2_id = res2_full[1] if len(res2_full) > 1 else ""
             atom2_name = inter["Atom2_Name"]
 
-            # 创建选择
+            # CreateSelect
             sel1 = f"{obj_name} and chain {chain1} and resi {res1_id} and name {atom1_name}"
             sel2 = f"{obj_name} and chain {chain2} and resi {res2_id} and name {atom2_name}"
 
-            # 显示原子
+            # Display原子
             cmd.show("spheres", sel1)
             cmd.show("spheres", sel2)
             cmd.set("sphere_scale", 0.3, sel1)
@@ -2756,14 +2756,14 @@ def visualize_atom_pairs(obj_name, interactions_result=None, csv_path=None):
             pair_name = f"atom_pairs_{i}"
             cmd.distance(pair_name, sel1, sel2, cutoff=10.0)
 
-            # 设置颜色
+            # Settings颜色
             interaction_type = inter.get("Interaction", "")
             for key, color in color_map.items():
                 if key in interaction_type:
                     cmd.color(color, pair_name)
                     break
 
-            # 设置标签
+            # SettingsLabel
             cmd.set("label_size", 20)
             cmd.set("label_color", "black")
 
@@ -2786,15 +2786,15 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     """
     在PyMOL中3D可视化蛋白-配体相互作用（改进版，参考专业脚本）
 
-    参数:
-        obj_name: PyMOL对象名称
-        interactions_result: analyze_protein_ligand_interactions的返回结果
-        ligand_resname: 配体残基名称(可选)
-        csv_path: 或者提供CSV文件路径
-        show_distance_labels: 是否显示距离标签（默认False）
-        viz_settings: 统一可视化配置对象，若提供则优先使用
+    Parameters:
+        obj_name: PyMOL对象Name
+        interactions_result: analyze_protein_ligand_interactions的ReturnResults
+        ligand_resname: 配体残基Name(可选)
+        csv_path: 或者提供CSVFilePath
+        show_distance_labels: 是否Display距离Label（默认False）
+        viz_settings: 统一可视化Configuration对象，若提供则优先using
     """
-    # 统一配置入口：优先使用 VisualizationSettings，保持旧参数向后兼容
+    # 统一Configuration入口：优先using VisualizationSettings，保持旧Parameters向后兼容
     settings = viz_settings or VisualizationSettings(
         show_hydrophobic=show_hydrophobic,
         min_confidence=min_confidence,
@@ -2820,7 +2820,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                     interactions.append(row)
             from_csv = True
         except Exception as e:
-            print(f"[visualize_protein_ligand_3d] 读取CSV失败: {e}")
+            print(f"[visualize_protein_ligand_3d] 读取CSVFailed: {e}")
             return
     elif interactions_result:
         if isinstance(interactions_result, dict) and "interactions" in interactions_result:
@@ -2835,7 +2835,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         print("[visualize_protein_ligand_3d] No interaction data")
         return
 
-    # ========== 置信度过滤：只保留高置信度相互作用 ==========
+    # ========== 置信degreesFilter：只保留高置信degrees相互作用 ==========
     if min_confidence is not None:
         filtered = []
         dropped = 0
@@ -2844,7 +2844,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             try:
                 conf = float(conf_val)
             except (TypeError, ValueError):
-                # 没有置信度字段时默认视为 1.0（不丢弃）
+                # 没有置信degrees字段时默认视为 1.0（不丢弃）
                 conf = 1.0
             if conf >= float(min_confidence):
                 filtered.append(inter)
@@ -2863,7 +2863,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             if "_row_index" not in inter:
                 inter["_row_index"] = idx
 
-    # ========== 第一步：清理和基础设置 ==========
+    # ========== 第一步：清理和基础Settings ==========
     print("[visualize_protein_ligand_3d] 🎨 Starting 3D visualization...")
     
     # 清除旧的可视化对象
@@ -2873,7 +2873,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     cmd.delete("polar_*")
     cmd.delete("don_*")
     
-    # ========== 第二步：自动检测或使用指定的配体 ==========
+    # ========== 第二步：自动检测或using指定的配体 ==========
     if not ligand_resname:
         # 自动检测配体（非标准残基）
         standard_residues = {
@@ -2902,61 +2902,61 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             
             ligand_resname = None
     
-    # 定义配体选择
+    # 定义配体Select
     if ligand_resname:
         lig_sel = f"{obj_name} and resn {ligand_resname}"
-        # Debug: 检查配体选择
+        # Debug: 检查配体Select
         n_lig_atoms = cmd.count_atoms(lig_sel)
-        print(f"[visualize_protein_ligand_3d] 🔍 配体选择: {lig_sel}")
+        print(f"[visualize_protein_ligand_3d] 🔍 配体Select: {lig_sel}")
         print(f"[visualize_protein_ligand_3d] 🔍 配体原子数: {n_lig_atoms}")
     else:
         print(f"[visualize_protein_ligand_3d] ❌ No ligand; cannot proceed")
         return
 
-    # ========== 第三步：隐藏所有，准备重新显示 ==========
-    print(f"[visualize_protein_ligand_3d] 🧹 步骤3: 隐藏所有显示")
+    # ========== 第三步：Hide所有，准备重新Display ==========
+    print(f"[visualize_protein_ligand_3d] 🧹 步骤3: Hide所有Display")
     cmd.hide("everything", obj_name)
 
-    # Debug: 检查隐藏后的状态
-    print(f"[visualize_protein_ligand_3d] 🔍 隐藏后检查: 应该看不到任何 sticks/licorice")
+    # Debug: 检查Hide后的Status
+    print(f"[visualize_protein_ligand_3d] 🔍 Hide后检查: 应该看不到任何 sticks/licorice")
     
-    # ========== 第四步：选择并创建口袋区域 ==========
+    # ========== 第四步：Select并Create口袋区域 ==========
     cmd.select("lig_pocket", f"byres ({obj_name} and polymer within 5 of ({lig_sel}))")
     
-    # ========== 第五步：添加氢原子（关键！）==========
-    print(f"[visualize_protein_ligand_3d] ➕ 正在添加氢原子...")
+    # ========== 第五步：Add氢原子（关Key！）==========
+    print(f"[visualize_protein_ligand_3d] ➕ 正在Add氢原子...")
     
     # 检测配体是否已有氢原子
     n_h_lig = cmd.count_atoms(f"({lig_sel}) and hydro")
     if n_h_lig == 0:
         try:
             cmd.h_add(lig_sel)
-            print(f"[visualize_protein_ligand_3d]    ✓ 已为配体添加氢原子")
+            print(f"[visualize_protein_ligand_3d]    ✓ 已为配体Add氢原子")
         except Exception as e:
-            print(f"[visualize_protein_ligand_3d]    ⚠️ 为配体添加氢原子失败: {e}")
+            print(f"[visualize_protein_ligand_3d]    ⚠️ 为配体Add氢原子Failed: {e}")
     
     # 检测口袋残基是否已有氢原子
     n_h_pocket = cmd.count_atoms("lig_pocket and hydro")
     if n_h_pocket == 0:
         try:
             cmd.h_add("lig_pocket")
-            print(f"[visualize_protein_ligand_3d]    ✓ 已为口袋残基添加氢原子")
-            # ⚠️ 关键修复：h_add 会自动显示 sticks，必须立即隐藏
+            print(f"[visualize_protein_ligand_3d]    ✓ 已为口袋残基Add氢原子")
+            # ⚠️ 关Key修复：h_add 会自动Display sticks，必须立即Hide
             cmd.hide("everything", "lig_pocket")
         except Exception as e:
-            print(f"[visualize_protein_ligand_3d]    ⚠️ 为口袋残基添加氢原子失败: {e}")
+            print(f"[visualize_protein_ligand_3d]    ⚠️ 为口袋残基Add氢原子Failed: {e}")
 
-    # 删除 lig_pocket 选择，避免PyMOL自动显示
+    # Delete lig_pocket Select，避免PyMOL自动Display
     cmd.delete("lig_pocket")
 
-    # 再次明确隐藏所有 sticks/licorice（h_add 可能会自动显示）
-    # 注意:这里隐藏整个对象,包括配体,后面会重新显示配体
+    # 再次明确Hide所有 sticks/licorice（h_add 可能会自动Display）
+    # 注意:这里Hide整个对象,Package括配体,后面会重新Display配体
     cmd.hide("everything", obj_name)
-    print(f"[visualize_protein_ligand_3d] 🧹 清除所有默认显示")
+    print(f"[visualize_protein_ligand_3d] 🧹 清除所有默认Display")
 
-    # ========== 第六步：基础显示设置 ==========
-    print(f"[visualize_protein_ligand_3d] 🎨 步骤6: 基础显示设置")
-    # 统一应用出版级渲染风格，确保白底、抗锯齿、标签字体一致
+    # ========== 第六步：基础DisplaySettings ==========
+    print(f"[visualize_protein_ligand_3d] 🎨 步骤6: 基础DisplaySettings")
+    # 统一Apply出版级渲染风格，确保白底、抗锯齿、Label字体一致
     apply_publication_pymol_style(
         cmd,
         background=settings.background,
@@ -2964,7 +2964,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         label_font_id=settings.label_font_id
     )
 
-    # ========== 应用专业可视化样式 ==========
+    # ========== Apply专业可视化样式 ==========
     try:
         from .pymol_styles import (
             apply_professional_style,
@@ -2974,29 +2974,29 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             LIGAND_COLORS
         )
         
-        # 应用专业渲染设置
+        # Apply专业渲染Settings
         apply_professional_style(background=settings.background, ray_trace_mode=1)
         
-        # 设置蛋白质 cartoon (Science cover style: deep blue/green)
+        # Settings蛋白质 cartoon (Science cover style: deep blue/green)
         prot_sel = f"{obj_name} and polymer.protein"
         setup_protein_cartoon(prot_sel, color='auto', transparency=0.0, color_scheme='science')
         
-        # 可选显示 surface
+        # 可选Display surface
         if settings.show_surface:
             from .pymol_styles import setup_protein_surface
             setup_protein_surface(prot_sel, color='auto', transparency=0.36, color_scheme='science')
             cmd.set('surface_smooth_edges', 'on', prot_sel)
-            print(f"[visualize_protein_ligand_3d] 🎨 显示蛋白质表面")
+            print(f"[visualize_protein_ligand_3d] 🎨 Display蛋白质表面")
         
-        # 设置配体 sticks (classic CNO coloring: blue N, red O)
-        print(f"[visualize_protein_ligand_3d] 🔍 显示配体 sticks: {lig_sel}")
+        # Settings配体 sticks (classic CNO coloring: blue N, red O)
+        print(f"[visualize_protein_ligand_3d] 🔍 Display配体 sticks: {lig_sel}")
         setup_ligand_sticks(lig_sel, show_polar_h=True, stick_radius=0.28, color_scheme='classic')
         
-        print(f"[visualize_protein_ligand_3d] ✓ 已应用专业可视化样式")
+        print(f"[visualize_protein_ligand_3d] ✓ 已Apply专业可视化样式")
         
     except ImportError:
         # 回退到原有样式
-        print(f"[visualize_protein_ligand_3d] ⚠️ 使用默认样式（pymol_styles 模块未找到）")
+        print(f"[visualize_protein_ligand_3d] ⚠️ using默认样式（pymol_styles Module未找到）")
         
         # 定义多链颜色（支持更多链）
         chain_colors = [
@@ -3014,18 +3014,18 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         
         prot_sel = f"{obj_name} and polymer.protein"
         
-        # 默认显示 cartoon
+        # 默认Display cartoon
         cmd.show("cartoon", prot_sel)
         cmd.set("cartoon_fancy_helices", 1)
         cmd.set("cartoon_smooth_loops", 1)
         
-        # 可选显示 surface
+        # 可选Display surface
         if settings.show_surface:
             cmd.show("surface", prot_sel)
             cmd.set("transparency", 0.36, prot_sel)
             cmd.set("surface_quality", 1, prot_sel)
             cmd.set("surface_smooth_edges", "on", prot_sel)
-            print(f"[visualize_protein_ligand_3d] 🎨 显示蛋白质表面")
+            print(f"[visualize_protein_ligand_3d] 🎨 Display蛋白质表面")
         
         cmd.set("two_sided_lighting", "on")
         cmd.set("depth_cue", 0)
@@ -3038,11 +3038,11 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 cmd.color(color_name, f"{prot_sel} and chain {chain}")
             print(f"[visualize_protein_ligand_3d] 🎨 蛋白质着色: {len(chains)} 条链 (cartoon{' + surface' if settings.show_surface else ''})")
         except Exception as e:
-            print(f"[visualize_protein_ligand_3d] ⚠️ 蛋白质着色失败: {e}")
+            print(f"[visualize_protein_ligand_3d] ⚠️ 蛋白质着色Failed: {e}")
             cmd.color(chain_colors[0][0], prot_sel)
 
         # ========== 配体：STICKS + 橙色系CHNO着色 ==========
-        print(f"[visualize_protein_ligand_3d] 🔍 显示配体 sticks: {lig_sel}")
+        print(f"[visualize_protein_ligand_3d] 🔍 Display配体 sticks: {lig_sel}")
         cmd.show("sticks", lig_sel)
         cmd.set("stick_radius", 0.28, lig_sel)
         
@@ -3052,19 +3052,19 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         cmd.color("tan", f"{lig_sel} and elem N")
         cmd.color("firebrick", f"{lig_sel} and elem O")
         
-        # 只显示极性氢（NH, OH, SH）
+        # 只Display极性氢（NH, OH, SH）
         cmd.hide("sticks", f"{lig_sel} and elem H")
         cmd.show("sticks", f"{lig_sel} and elem H and (neighbor elem N+O+S)")
 
-        # 明确隐藏蛋白部分的 sticks/licorice（防止意外显示）
-        print(f"[visualize_protein_ligand_3d] 🔍 隐藏蛋白质 sticks/licorice")
+        # 明确Hide蛋白部分的 sticks/licorice（防止意外Display）
+        print(f"[visualize_protein_ligand_3d] 🔍 Hide蛋白质 sticks/licorice")
         cmd.hide("sticks", f"{obj_name} and polymer")
         cmd.hide("licorice", f"{obj_name} and polymer")
 
-        # Debug: 检查当前显示状态
+        # Debug: 检查当前DisplayStatus
         print(f"[visualize_protein_ligand_3d] 🔍 此时应该只看到: 蛋白 cartoon{' + surface' if settings.show_surface else ''} + 配体 sticks")
         
-        # ========== 增强光照：深度 + 边缘光照效果 ==========
+        # ========== 增强光照：深degrees + 边缘光照效果 ==========
         cmd.set("antialias", 2)
         cmd.set("ambient", 0.52)
         cmd.set("direct", 0.58)
@@ -3075,7 +3075,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         cmd.rebuild()
     
     # ========== 第八步：验证数据存在 ==========
-    # ⚠️ 关键：必须提供 interactions 数据，不再回退到 PyMOL 几何检测
+    # ⚠️ 关Key：必须提供 interactions 数据，不再回退到 PyMOL 几何检测
     if not interactions:
         error_msg = (
             "[visualize_protein_ligand_3d] ❌ Error: No interaction data provided!\n"
@@ -3089,9 +3089,9 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         print(error_msg)
         return
     
-    print(f"[visualize_protein_ligand_3d] 🔗 正在绘制相互作用 (基于分析结果)...")
+    print(f"[visualize_protein_ligand_3d] 🔗 正在绘制相互作用 (基于分析Results)...")
     
-    # 删除旧的 PyMOL 几何检测对象（如果有）
+    # Delete旧的 PyMOL 几何检测对象（如果有）
     try:
         cmd.delete("polar_donors_lig")
         cmd.delete("polar_donors_res")
@@ -3101,17 +3101,17 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         cmd.delete("don_hydrogens_res")
         cmd.delete("hbonds_res_to_lig")
         cmd.delete("hbonds_lig_to_res")
-    except Exception:  # PyMOL 对象删除可能失败
+    except Exception:  # PyMOL 对象Delete可能Failed
         pass
     
-    # ========== 第九步：注册统一配色方案 (使用 color_scheme.py) ==========
-    # 使用统一的 Schrödinger 风格颜色方案
+    # ========== 第九步：注册统一配色方案 (using color_scheme.py) ==========
+    # using统一的 Schrödinger 风格颜色方案
     try:
         register_pymol_colors(cmd)
     except Exception as e:
         print(f"[visualize_protein_ligand_3d] Warning: Failed to register custom colors: {e}")
 
-    # 氢键样式设置（使用统一虚线样式函数，保持与 PPI 一致）
+    # 氢Key样式Settings（using统一虚线样式Function，保持与 PPI 一致）
     apply_interaction_dash_style(
         cmd,
         "hbonds_*",
@@ -3127,13 +3127,13 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     
     try:
         cmd.color("glue_hbond", "hbonds_*")
-    except Exception:  # PyMOL 颜色设置可能失败
+    except Exception:  # PyMOL 颜色Settings可能Failed
         pass
     
-    # ========== 第十步：预处理与筛选 (关键修复：先筛选再高亮残基) ==========
-    print(f"[visualize_protein_ligand_3d] 🎨 正在处理关键药物设计相互作用...")
+    # ========== 第十步：预处理与筛选 (关Key修复：先筛选再高亮残基) ==========
+    print(f"[visualize_protein_ligand_3d] 🎨 正在处理关Key药物设计相互作用...")
     
-    # 相互作用类型到颜色的映射（已更新为统一配色）
+    # 相互作用Type到颜色的映射（已Update为统一配色）
     color_map = {
         "Hydrogen Bond": "glue_hbond",
         "Hbond": "glue_hbond",
@@ -3174,7 +3174,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         "Hydrophobic": 6  # Lowest priority
     }
     
-    # 按类型分组并按距离排序
+    # 按Type分组并按距离Sort
     interactions_by_type = {}
     for inter in interactions:
         itype = inter.get("Interaction", "")
@@ -3182,9 +3182,9 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             interactions_by_type[itype] = []
         interactions_by_type[itype].append(inter)
     
-    # 对每种类型按距离排序（短距离优先）
+    # 对每种Type按距离Sort（短距离优先）
     def safe_distance(x):
-        """安全获取距离值，处理 '-' 等非数字情况"""
+        """安全获取距离Value，处理 '-' 等非数字情况"""
         d = x.get("Distance", "999")
         try:
             return float(d)
@@ -3194,7 +3194,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     for itype in interactions_by_type:
         interactions_by_type[itype].sort(key=safe_distance)
     
-    # 设置每种相互作用类型的默认显示数量（专业筛选策略）
+    # Settings每种相互作用Type的默认DisplayCount（专业筛选策略）
     if max_interactions_per_type is None:
         max_interactions_per_type = {
             "Hydrogen Bond": 10,         # Show all H-bonds (important)
@@ -3208,7 +3208,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
     sorted_types = sorted(interactions_by_type.keys(), 
                          key=lambda x: interaction_priority.get(x, 999))
 
-    # --- 这里是新的筛选逻辑: 预先计算要显示的相互作用 ---
+    # --- 这里是新的筛选逻辑: 预先计算要Display的相互作用 ---
     visible_interactions_flat = []
     visible_interactions_map = {} # type -> list of interactions
     
@@ -3225,9 +3225,9 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             visible_interactions_map[interaction_type] = subset
             visible_interactions_flat.extend(subset)
             
-    # ========== 第十一步（新）：高亮成键残基 (只基于筛选后的可见相互作用) ==========
+    # ========== 第十一步（新）：高亮成Key残基 (只基于筛选后的可见相互作用) ==========
     protein_residues = set()
-    for inter in visible_interactions_flat: # 使用筛选后的列表
+    for inter in visible_interactions_flat: # using筛选后的列表
         prot_chain = inter.get("Protein_Chain", "")
         prot_res = inter.get("Protein_Residue", "")
         if prot_res:
@@ -3237,13 +3237,13 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 protein_residues.add((prot_chain, res_name, res_id))
     
     if protein_residues:
-        print(f"[visualize_protein_ligand_3d] 📍 显示 {len(protein_residues)} 个相互作用残基 (已基于显示策略过滤)")
+        print(f"[visualize_protein_ligand_3d] 📍 Display {len(protein_residues)} 个相互作用残基 (已基于Display策略Filter)")
 
-        # 再次确保所有蛋白残基默认隐藏 sticks/licorice
-        print(f"[visualize_protein_ligand_3d] 🔍 再次隐藏所有蛋白质 sticks/licorice")
+        # 再次确保所有蛋白残基默认Hide sticks/licorice
+        print(f"[visualize_protein_ligand_3d] 🔍 再次Hide所有蛋白质 sticks/licorice")
         cmd.hide("sticks", f"{obj_name} and polymer")
         cmd.hide("licorice", f"{obj_name} and polymer")
-        print(f"[visualize_protein_ligand_3d] 🔍 隐藏完成，准备显示 {len(protein_residues)} 个残基")
+        print(f"[visualize_protein_ligand_3d] 🔍 HideCompleted，准备Display {len(protein_residues)} 个残基")
         
         # 3字母氨基酸代码 -> 1字母代码
         aa_map = {
@@ -3254,22 +3254,22 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
             "THR": "T", "TRP": "W", "TYR": "Y", "VAL": "V",
         }
         
-        # 显示相互作用残基为 licorice 并添加标签
+        # Display相互作用残基为 licorice 并AddLabel
         for i, (chain, res_name, res_id) in enumerate(protein_residues, 1):
             res_sel = f"{obj_name} and chain {chain} and resi {res_id}"
             print(f"[visualize_protein_ligand_3d] DEBUG: Showing licorice for {res_name}{res_id} (chain {chain})")
             cmd.show("licorice", res_sel)
             
-            # 应用标准原子配色（按元素着色）
+            # Apply标准原子配色（按元素着色）
             cmd.util.cnc(res_sel)  # Color by element: C=cyan, N=blue, O=red, etc.
             
-            # 隐藏这些残基上连接到碳的氢
+            # Hide这些残基上连接到碳的氢
             cmd.hide("everything", f"({res_sel}) and (elem H and neighbor elem C)")
             
-            # 添加残基标签（使用一字母代码 + 残基号）
+            # Add残基Label（using一字母代码 + 残基号）
             label_text = aa_map.get(res_name.upper(), res_name[:1]) + res_id
             try:
-                # 使用CA原子位置放置标签
+                # usingCA原子位置放置Label
                 ca_sel = f"{res_sel} and name CA"
                 if cmd.count_atoms(ca_sel) > 0:
                     coords = cmd.get_atom_coords(ca_sel)
@@ -3277,39 +3277,39 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                     cmd.pseudoatom(label_obj, pos=coords, label=label_text)
                     cmd.set("label_size", 16, label_obj)
                     cmd.set("label_color", "black", label_obj)
-                    cmd.set("label_font_id", 5, label_obj)  # 统一使用 font_id=5 (Times-like)
+                    cmd.set("label_font_id", 5, label_obj)  # 统一using font_id=5 (Times-like)
                     cmd.hide("everything", label_obj)
                     cmd.show("label", label_obj)
             except Exception as e:
-                pass  # 静默失败
+                pass  # 静默Failed
     
     interaction_count = {}
     
-    # 先删除旧的相互作用对象
+    # 先Delete旧的相互作用对象
     try:
         cmd.delete("pl_interact_*")
         cmd.delete("interact_*")
-    except Exception:  # PyMOL 对象删除可能失败
+    except Exception:  # PyMOL 对象Delete可能Failed
         pass
     
     total_shown = 0
-    hbonds_drawn_from_csv = 0  # 追踪从 CSV 绘制的氢键数量
+    hbonds_drawn_from_csv = 0  # 追踪从 CSV 绘制的氢KeyCount
     
     # ========== 第十二步：绘制相互作用线条 (遍历可见集) ==========
     for interaction_type in sorted_types:
-        # 获取筛选后的结果 (如果为空则跳过)
+        # 获取筛选后的Results (如果为空则Skip)
         interactions_to_show = visible_interactions_map.get(interaction_type, [])
         if not interactions_to_show:
             continue
         
         for idx, inter in enumerate(interactions_to_show, 1):
             try:
-                # 解析配体信息
+                # 解析配体Information
                 lig_chain = inter.get("Ligand_Chain", "")
                 lig_res = inter.get("Ligand_Residue", "").split()
                 lig_atom = inter.get("Ligand_Atom", "")
 
-                # 解析蛋白信息
+                # 解析蛋白Information
                 prot_chain = inter.get("Protein_Chain", "")
                 prot_res = inter.get("Protein_Residue", "").split()
                 prot_atom = inter.get("Protein_Atom", "")
@@ -3320,7 +3320,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 lig_resname_int, lig_resid = lig_res[0], lig_res[1]
                 prot_resname, prot_resid = prot_res[0], prot_res[1]
 
-                # 创建选择（处理空链 ID）
+                # CreateSelect（处理空链 ID）
                 if lig_chain and lig_chain.strip():
                     sel1 = f"{obj_name} and chain {lig_chain} and resi {lig_resid}"
                 else:
@@ -3331,15 +3331,15 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                 else:
                     sel2 = f"{obj_name} and resi {prot_resid}"
 
-                # 生成合法的PyMOL对象名（只使用英文和数字），并带上 CSV 中的行号，方便一一对应
-                # 将中文相互作用类型转换为英文
+                # 生成合法的PyMOL对象名（只using英文和数字），并带上 CSV 中的行号，方便一一对应
+                # 将中文相互作用Type转换为英文
                 type_en = type_name_map.get(interaction_type, interaction_type)
-                # 移除所有非字母数字和下划线的字符
+                # Remove所有非字母数字和下划线的字符
                 type_en_clean = ''.join(c for c in type_en if c.isalnum())
                 row_idx = inter.get("_row_index", idx)
                 dist_name = f"interact_{type_en_clean}_{row_idx}"
                 
-                # ========== π-π / π-cation 相互作用：使用环中心/阳离子中心 pseudoatom ==========
+                # ========== π-π / π-cation 相互作用：using环中心/阳离子中心 pseudoatom ==========
                 if "ring" in str(lig_atom).lower() or "ring" in str(prot_atom).lower() or "cation" in str(lig_atom).lower() or "cation" in str(prot_atom).lower():
                     try:
                         # 定义蛋白质芳香环原子
@@ -3366,7 +3366,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                                         if model.atom:
                                             coord = model.atom[0].coord
                                             coords.append((coord[0], coord[1], coord[2]))
-                                    except Exception:  # PyMOL get_model 可能失败
+                                    except Exception:  # PyMOL get_model 可能Failed
                                         continue
                                 if len(coords) >= 3:
                                     x = sum(c[0] for c in coords) / len(coords)
@@ -3377,18 +3377,18 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                                 print(f"[visualize_protein_ligand_3d] DEBUG: 蛋白质环 {resname} 坐标不足: {len(coords)} < 3")
                                 return None
 
-                            # 配体：使用动态检测
+                            # 配体：using动态检测
                             if chain and chain.strip():
                                 sel = f"{obj} and chain {chain} and resi {resi}"
                             else:
                                 sel = f"{obj} and resi {resi}"
 
-                            print(f"[visualize_protein_ligand_3d] DEBUG: 配体选择: {sel}")
+                            print(f"[visualize_protein_ligand_3d] DEBUG: 配体Select: {sel}")
 
                             # 获取配体所有原子
                             model = cmd.get_model(sel)
                             if not model.atom:
-                                print(f"[visualize_protein_ligand_3d] DEBUG: 配体选择无原子")
+                                print(f"[visualize_protein_ligand_3d] DEBUG: 配体Select无原子")
                                 return None
 
                             print(f"[visualize_protein_ligand_3d] DEBUG: 配体原子数: {len(model.atom)}")
@@ -3401,7 +3401,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                             print(f"[visualize_protein_ligand_3d] DEBUG: 检测到的环数: {len(detected_rings) if detected_rings else 0}")
 
                             if detected_rings:
-                                ring_coords = detected_rings[0]  # 使用第一个检测到的环
+                                ring_coords = detected_rings[0]  # usingFirst检测到的环
                                 x = sum(c[0] for c in ring_coords) / len(ring_coords)
                                 y = sum(c[1] for c in ring_coords) / len(ring_coords)
                                 z = sum(c[2] for c in ring_coords) / len(ring_coords)
@@ -3417,7 +3417,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                             if m:
                                 atom_names = [n.strip() for n in m.group(1).split(",")]
                             else:
-                                # 没有匹配到 Cation(...) 格式，使用已知阳离子原子名作为 fallback
+                                # 没有匹配到 Cation(...) 格式，using已知阳离子原子名作为 fallback
                                 atom_names = []
 
                             if atom_names:
@@ -3433,7 +3433,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                                             c = mdl.atom[0].coord
                                             coords.append((c[0], c[1], c[2]))
                                             print(f"[get_cation_center] DEBUG: 找到原子 {aname} at ({c[0]:.2f}, {c[1]:.2f}, {c[2]:.2f})")
-                                    except Exception:  # PyMOL get_model 可能失败
+                                    except Exception:  # PyMOL get_model 可能Failed
                                         continue
                                 if coords:
                                     x = sum(c[0] for c in coords) / len(coords)
@@ -3442,7 +3442,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                                     print(f"[get_cation_center] DEBUG: 阳离子中心 = ({x:.2f}, {y:.2f}, {z:.2f})")
                                     return (x, y, z)
 
-                            # fallback: 尝试查找已知阳离子原子 (NZ, NH1, NH2, NE, ND1, NE2)
+                            # fallback: 尝试Find已知阳离子原子 (NZ, NH1, NH2, NE, ND1, NE2)
                             KNOWN_CATION_ATOMS = ["NZ", "NH1", "NH2", "NE", "ND1", "NE2"]
                             if chain and chain.strip():
                                 base_sel = f"{obj} and chain {chain} and resi {resi}"
@@ -3462,9 +3462,9 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                                         z = sum(c[2] for c in cation_coords) / len(cation_coords)
                                         print(f"[get_cation_center] DEBUG fallback: 阳离子中心 = ({x:.2f}, {y:.2f}, {z:.2f})")
                                         return (x, y, z)
-                                    # 最后 fallback: 如果连已知阳离子原子都没有，返回 None (不再用残基第一个原子)
+                                    # 最后 fallback: 如果连已知阳离子原子都没有，Return None (不再用残基First原子)
                                     print(f"[get_cation_center] WARNING: 残基 {resi} 中未找到阳离子原子")
-                            except Exception:  # PyMOL 阳离子中心计算可能失败
+                            except Exception:  # PyMOL 阳离子中心计算可能Failed
                                 pass
                             return None
 
@@ -3487,7 +3487,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                             prot_center = get_ring_center_from_selection(obj_name, prot_chain, prot_resid, prot_resname)
                         
                         if lig_center and prot_center:
-                            # 创建 pseudoatom 在环中心
+                            # Create pseudoatom 在环中心
                             pseudo1 = f"pl_centroid_{type_en_clean}_{row_idx}_lig"
                             pseudo2 = f"pl_centroid_{type_en_clean}_{row_idx}_prot"
 
@@ -3496,27 +3496,27 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                             cmd.hide("everything", pseudo1)
                             cmd.hide("everything", pseudo2)
 
-                            # 使用 pseudoatom 作为选择
+                            # using pseudoatom 作为Select
                             sel1 = pseudo1
                             sel2 = pseudo2
 
-                            print(f"[visualize_protein_ligand_3d] ✓ π相互作用: 使用环中心 {lig_resname_int}-{prot_resname}")
+                            print(f"[visualize_protein_ligand_3d] ✓ π相互作用: using环中心 {lig_resname_int}-{prot_resname}")
                         else:
-                            # ⚠️ 关键修复：无法计算环中心时，跳过该相互作用，避免绘制数千条线
-                            print(f"[visualize_protein_ligand_3d] ⚠️ π相互作用: 无法计算环中心，跳过 {lig_resname_int}-{prot_resname}")
-                            continue  # 跳过此相互作用
+                            # ⚠️ 关Key修复：无法计算环中心时，Skip该相互作用，避免绘制数千条线
+                            print(f"[visualize_protein_ligand_3d] ⚠️ π相互作用: 无法计算环中心，Skip {lig_resname_int}-{prot_resname}")
+                            continue  # Skip此相互作用
 
                     except Exception as e:
-                        print(f"[visualize_protein_ligand_3d] ⚠️ π相互作用环中心计算失败: {e}，跳过")
-                        continue  # 跳过此相互作用
+                        print(f"[visualize_protein_ligand_3d] ⚠️ π相互作用环中心计算Failed: {e}，Skip")
+                        continue  # Skip此相互作用
                 else:
-                    # 非 π 相互作用：使用原子名选择
+                    # 非 π 相互作用：using原子名Select
                     if lig_atom and lig_atom != "":
                         sel1 += f" and name {lig_atom}"
                     if prot_atom and prot_atom != "":
                         sel2 += f" and name {prot_atom}"
                 
-                # 设置颜色（在创建距离对象之前确定颜色）
+                # Settings颜色（在Create距离对象之前确定颜色）
                 interaction_color = "gray50"  # 默认颜色
                 for key, color in color_map.items():
                     if key in interaction_type or key == type_en:
@@ -3543,15 +3543,15 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                     elif "water" in itype_lower:
                         interaction_color = "glue_water"
                 
-                # 尝试创建距离对象（参考 PPI 可视化代码）
+                # 尝试Create距离对象（参考 PPI 可视化代码）
                 try:
-                    # 检查选择是否有效（pseudoatom 不需要检查）
+                    # 检查Select是否有效（pseudoatom 不需要检查）
                     is_pseudoatom = sel1.startswith("pl_centroid_") or sel2.startswith("pl_centroid_")
                     
                     if not is_pseudoatom:
-                        # 检查配体选择是否有效，如果无效则尝试不使用链 ID
+                        # 检查配体Select是否有效，如果无效则尝试不using链 ID
                         if cmd.count_atoms(sel1) == 0:
-                            # 尝试不使用链 ID 的选择（处理 PDB 文件中配体没有链 ID 的情况）
+                            # 尝试不using链 ID 的Select（处理 PDB File中配体没有链 ID 的情况）
                             sel1_no_chain = f"{obj_name} and resi {lig_resid}"
                             if lig_atom and lig_atom != "" and "ring" not in str(lig_atom).lower():
                                 sel1_no_chain += f" and name {lig_atom}"
@@ -3570,7 +3570,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                                     print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Ligand selection empty: {sel1}")
                                     continue
                         
-                        # 检查蛋白选择是否有效
+                        # 检查蛋白Select是否有效
                         if cmd.count_atoms(sel2) == 0:
                             print(f"[visualize_protein_ligand_3d] ⚠️ Warning: Protein selection empty: {sel2}")
                             continue
@@ -3594,13 +3594,13 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                     elif "Metal" in interaction_type:
                         cutoff = 4.0
 
-                    # 创建距离对象
+                    # Create距离对象
                     cmd.distance(dist_name, sel1, sel2, cutoff=cutoff, mode=0)
                     
-                    # 强制显示并应用统一虚线样式
+                    # 强制Display并Apply统一虚线样式
                     cmd.enable(dist_name)
 
-                    # 根据相互作用类型设置虚线粗细，确保 π 相互作用更醒目
+                    # 根据相互作用TypeSettings虚线粗细，确保 π 相互作用更醒目
                     dash_width = 2.0
                     if "PiPi" in type_en_clean or "PiCation" in type_en_clean:
                         dash_width = 3.0
@@ -3622,7 +3622,7 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                     print(f"[visualize_protein_ligand_3d] ⚠️ Error creating distance {dist_name}: {e}")
                     continue
 
-                # 统计相互作用类型
+                # 统计相互作用Type
                 interaction_count[interaction_type] = interaction_count.get(interaction_type, 0) + 1
                 total_shown += 1
                 
@@ -3631,19 +3631,19 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
                     hbonds_drawn_from_csv += 1
 
             except Exception as e:
-                # print(f"[visualize_protein_ligand_3d] ⚠️ 相互作用跳过: {e}")
+                # print(f"[visualize_protein_ligand_3d] ⚠️ 相互作用Skip: {e}")
                 continue
     
-    # 如果没有显示任何非氢键相互作用，提示用户
+    # 如果没有Display任何非氢Key相互作用，提示用户
     if total_shown == 0 and not show_hydrophobic:
         print(f"[visualize_protein_ligand_3d] 💡 Note: hydrophobic interactions are hidden (professional mode)")
         print(f"                                  To show them, use: visualize_protein_ligand_3d('{obj_name}', show_hydrophobic=True)")
 
-    # 根据设置控制距离标签显示
+    # 根据Settings控制距离LabelDisplay
     if settings.show_distance_labels:
         cmd.show("labels", "interact_*")
         cmd.show("labels", "hbonds_*")
-        # 统一距离标签字体和大小
+        # 统一距离Label字体和Size
         cmd.set("label_size", settings.label_size, "interact_*")
         cmd.set("label_size", settings.label_size, "hbonds_*")
         cmd.set("label_font_id", settings.label_font_id, "interact_*")
@@ -3651,22 +3651,22 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         cmd.set("label_color", "black", "interact_*")
         cmd.set("label_color", "black", "hbonds_*")
     else:
-        # 隐藏所有距离标签（但保留线条可见）
+        # Hide所有距离Label（但保留线条可见）
         cmd.hide("labels", "interact_*")
         cmd.hide("labels", "hbonds_*")
 
-    # 显式显示交互线条（有些主题/样式下需要）
+    # 显式Display交互线条（有些主题/样式下需要）
     cmd.show("dashes", "interact_*")
     cmd.show("dashes", "hbonds_*")
     
-    # 确保线条宽度足够
+    # 确保线条宽degrees足够
     cmd.set("dash_width", 3.0, "interact_*")
     cmd.set("dash_width", 3.0, "hbonds_*")
     
     # ========== 第十二步：调整视角 ==========
-    # 创建临时选择用于视角调整
+    # Create临时Select用于视角调整
     if protein_residues:
-        # 选择配体和有相互作用的残基
+        # Select配体和有相互作用的残基
         res_sels = []
         for chain, res_name, res_id in protein_residues:
             res_sels.append(f"(chain {chain} and resi {res_id})")
@@ -3679,39 +3679,39 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         cmd.orient(lig_sel)
 
     
-    # ========== 第十三步：美化参数（出版级统一参数补充）==========
-    # 这里保留局部对象尺寸参数，渲染/标签基础风格已由 apply_publication_pymol_style 统一设置
+    # ========== 第十三步：美化Parameters（出版级统一Parameters补充）==========
+    # 这里保留局部对象尺寸Parameters，渲染/Label基础风格已由 apply_publication_pymol_style 统一Settings
     cmd.set("stick_radius", 0.15)
     cmd.set("sphere_scale", 0.25)
     
     # ========== 第十四步:最终清理 ==========
-    # 最后再次确保只显示配体和有相互作用的残基
-    print(f"[visualize_protein_ligand_3d] 🧹 最终清理: 确保只显示配体和相互作用残基")
+    # 最后再次确保只Display配体和有相互作用的残基
+    print(f"[visualize_protein_ligand_3d] 🧹 最终清理: 确保只Display配体和相互作用残基")
 
-    # 隐藏所有蛋白的 sticks/licorice
-    print(f"[visualize_protein_ligand_3d] 🔍 最终清理: 隐藏所有蛋白质 sticks/licorice")
+    # Hide所有蛋白的 sticks/licorice
+    print(f"[visualize_protein_ligand_3d] 🔍 最终清理: Hide所有蛋白质 sticks/licorice")
     cmd.hide("sticks", f"{obj_name} and polymer")
     cmd.hide("licorice", f"{obj_name} and polymer")
 
-    # 只显示配体的 sticks
-    print(f"[visualize_protein_ligand_3d] 🔍 最终清理: 显示配体 sticks: {lig_sel}")
+    # 只Display配体的 sticks
+    print(f"[visualize_protein_ligand_3d] 🔍 最终清理: Display配体 sticks: {lig_sel}")
     cmd.show("sticks", lig_sel)
 
-    # 只显示有相互作用的残基的 licorice
+    # 只Display有相互作用的残基的 licorice
     if protein_residues:
-        print(f"[visualize_protein_ligand_3d] 🔍 最终清理: 显示 {len(protein_residues)} 个残基的 licorice")
+        print(f"[visualize_protein_ligand_3d] 🔍 最终清理: Display {len(protein_residues)} 个残基的 licorice")
         for chain, res_name, res_id in protein_residues:
             res_sel = f"{obj_name} and chain {chain} and resi {res_id}"
-            print(f"[visualize_protein_ligand_3d] 🔍   - 显示: {res_sel}")
+            print(f"[visualize_protein_ligand_3d] 🔍   - Display: {res_sel}")
             cmd.show("licorice", res_sel)
 
     # Debug: 最终检查
-    print(f"[visualize_protein_ligand_3d] 🔍 最终状态: 应该只看到配体sticks + {len(protein_residues) if protein_residues else 0}个残基licorice")
+    print(f"[visualize_protein_ligand_3d] 🔍 最终Status: 应该只看到配体sticks + {len(protein_residues) if protein_residues else 0}个残基licorice")
     
     # ========== 第十五步：输出统计 ==========
 
-    print(f"\n[visualize_protein_ligand_3d] ✅ 3D 可视化完成!")
-    print(f"   📊 相互作用统计 (来自分析结果):")
+    print(f"\n[visualize_protein_ligand_3d] ✅ 3D 可视化Completed!")
+    print(f"   📊 相互作用统计 (来自分析Results):")
     
     # Count H-bonds
     total_hbonds = interaction_count.get("Hydrogen Bond", 0) + interaction_count.get("Hbond", 0)
@@ -3727,26 +3727,26 @@ def visualize_protein_ligand_3d(obj_name, interactions_result=None, ligand_resna
         print(f"   📍 涉及 {len(protein_residues)} 个蛋白残基")
     
     print(f"\n   💡 PyMOL 提示:")
-    print(f"      show labels, hbonds_*       # 显示氢键距离")
-    print(f"      hide labels, hbonds_*       # 隐藏氢键距离")
-    print(f"      show labels, interact_*     # 显示其他相互作用距离")
-    print(f"      hide dashes, interact_*     # 隐藏相互作用线条")
-    print(f"      show dashes, interact_*     # 显示相互作用线条")
-    print(f"      delete interact_*           # 删除所有相互作用对象")
-    print(f"      delete hbonds_*             # 删除氢键对象")
+    print(f"      show labels, hbonds_*       # Display氢Key距离")
+    print(f"      hide labels, hbonds_*       # Hide氢Key距离")
+    print(f"      show labels, interact_*     # Display其他相互作用距离")
+    print(f"      hide dashes, interact_*     # Hide相互作用线条")
+    print(f"      show dashes, interact_*     # Display相互作用线条")
+    print(f"      delete interact_*           # Delete所有相互作用对象")
+    print(f"      delete hbonds_*             # Delete氢Key对象")
     print(f"      ray                         # 高质量渲染")
-    print(f"      png output.png, dpi=300     # 保存高清图片")
+    print(f"      png output.png, dpi=300     # Save高清图片")
 
 cmd.extend("visualize_protein_ligand_3d", visualize_protein_ligand_3d)
 
 def diagnose_csv_visualization(obj_name, csv_path, max_rows=5):
     """
-    诊断CSV可视化问题 - 检查CSV中的选择是否有效
+    诊断CSV可视化问题 - 检查CSV中的Select是否有效
     Diagnose CSV visualization issues - check if selections in CSV are valid
     
-    参数:
-        obj_name: PyMOL对象名称
-        csv_path: CSV文件路径
+    Parameters:
+        obj_name: PyMOL对象Name
+        csv_path: CSVFilePath
         max_rows: 最多检查多少行 (default: 5)
     """
     from pymol import cmd
@@ -3853,18 +3853,18 @@ cmd.extend("diagnose_csv_visualization", diagnose_csv_visualization)
 
 def toggle_interaction_lines(show=True, line_width=2.5, dash_gap=0.15, dash_length=0.25):
     """
-    切换相互作用线条的显示/隐藏状态
+    切换相互作用线条的Display/HideStatus
     Toggle interaction lines visibility and properties
     
-    参数:
-        show: True显示线条, False隐藏线条 (Show/hide interaction lines)
-        line_width: 线条宽度 (Line width)
+    Parameters:
+        show: TrueDisplay线条, FalseHide线条 (Show/hide interaction lines)
+        line_width: 线条宽degrees (Line width)
         dash_gap: 虚线间隙 (Gap between dashes)
-        dash_length: 虚线长度 (Length of each dash)
+        dash_length: 虚线长degrees (Length of each dash)
     
-    使用示例:
-        toggle_interaction_lines(True, 3.0)  # 显示粗线条
-        toggle_interaction_lines(False)      # 隐藏所有线条
+    using示例:
+        toggle_interaction_lines(True, 3.0)  # Display粗线条
+        toggle_interaction_lines(False)      # Hide所有线条
     """
     from pymol import cmd
     
@@ -3888,10 +3888,10 @@ cmd.extend("toggle_interaction_lines", toggle_interaction_lines)
 
 def apply_plot_style(style="professional"):
     """
-    应用不同的matplotlib绘图样式
+    Apply不同的matplotlib绘图样式
     
-    参数:
-        style: 样式名称 (professional/hand-drawn/minimalist/publication/colorful)
+    Parameters:
+        style: 样式Name (professional/hand-drawn/minimalist/publication/colorful)
     """
     import matplotlib.pyplot as plt
     import matplotlib as mpl
@@ -3941,13 +3941,13 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
     """
     为高级分析生成<unk>D相互作用图（带配体化学结构）
     
-    参数:
+    Parameters:
         interactions: 相互作用列表（高级格式）
-        output_path: 输出路径
-        show_plot: 是否显示
-        ligand_sdf: 配体SDF文件路径（可选）
-        obj_name: PyMOL对象名称（可选，用于从PyMOL提取配体）
-        ligand_resname: 配体残基名称（与obj_name配合使用）
+        output_path: 输出Path
+        show_plot: 是否Display
+        ligand_sdf: 配体SDFFilePath（可选）
+        obj_name: PyMOL对象Name（可选，用于从PyMOL提取配体）
+        ligand_resname: 配体残基Name（与obj_name配合using）
         plot_style: 绘图样式 (professional/hand-drawn/minimalist/publication/colorful)
     """
     try:
@@ -3971,7 +3971,7 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
         print(error_msg)
         raise RuntimeError(error_msg)
     
-    # 收集相互作用信息
+    # 收集相互作用Information
     interaction_map = {}  # {residue_key: [(type, distance, ligand_atom)]}
     residue_names = {}  # {residue_key: residue_name}
     
@@ -3980,14 +3980,14 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
         p_atom = inter.get("Protein_Atom", "")
         l_atom = inter.get("Ligand_Atom", "")
         distance_str = inter.get("Distance", "0.0")
-        protein_residue = inter.get("Protein_Residue", "")  # 新增：读取残基名称
+        protein_residue = inter.get("Protein_Residue", "")  # 新增：读取残基Name
         
         try:
             distance = float(distance_str)
         except (ValueError, TypeError):
             distance = 0.0
         
-        # 使用残基名称作为key（如果有的话）
+        # using残基Name作为key（如果有的话）
         if protein_residue and protein_residue != "":
             res_key = protein_residue
         else:
@@ -4002,15 +4002,15 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
         print("[generate_advanced_interaction_plot] No data to plot")
         return None
     
-    # 应用绘图样式 (必须在创建图形之前,且在import之后)
+    # Apply绘图样式 (必须在Create图形之前,且在import之后)
     apply_plot_style(plot_style)
     
-    # 设置基础字体支持 (不覆盖样式)
+    # Settings基础字体支持 (不覆盖样式)
     if matplotlib.rcParams.get('font.sans-serif') is None:
         matplotlib.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans']
     matplotlib.rcParams['axes.unicode_minus'] = False
     
-    # 创建图形
+    # Create图形
     fig = plt.figure(figsize=(14, 10), dpi=150)
     ax = fig.add_subplot(111)
     
@@ -4035,12 +4035,12 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
         "Halogen": "--"
     }
     
-    # 设置画布
+    # Settings画布
     ax.set_xlim(-8, 8)
     ax.set_ylim(-6, 6)
     ax.axis('off')
     
-    # 绘制配体结构（必须使用RDKit）
+    # 绘制配体结构（必须usingRDKit）
     from matplotlib.patches import FancyBboxPatch, Circle, FancyArrowPatch
     ligand_drawn = False
     atom_coords_2d = {}  # 配体原子的2D坐标
@@ -4050,10 +4050,10 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
     import tempfile
     
     # 尝试从多个来源获取配体结构
-    # 优先级1: ligand_sdf文件
+    # 优先级1: ligand_sdfFile
     if ligand_sdf and os.path.exists(ligand_sdf):
         try:
-            # 从SDF文件读取配体
+            # 从SDFFile读取配体
             supplier = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
             mol = supplier[0] if len(supplier) > 0 else None
             if mol:
@@ -4107,10 +4107,10 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
                                  highlightAtoms=list(ligand_atoms_interacting),
                                  kekulize=True, wedgeBonds=True, fitImage=True)
             
-            # 将PIL图像转换为numpy数组并显示在matplotlib中
+            # 将PIL图像转换为numpy数组并Display在matplotlib中
             img_array = np.array(img)
             
-            # 在中心显示配体结构
+            # 在中心Display配体结构
             ax.imshow(img_array, extent=[-3, 3, -2.2, 2.2], zorder=10)
             ligand_drawn = True
             print("[generate_advanced_interaction_plot] ✅ Drawn ligand chemical structure and highlighted interacting atoms")
@@ -4122,7 +4122,7 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
                 idx = atom.GetIdx()
                 if idx in ligand_atoms_interacting:
                     pos = conformer.GetAtomPosition(idx)
-                    # 归一化坐标到显示范围
+                    # 归一化坐标到Display范围
                     atom_coords_2d[idx] = (pos.x, pos.y)
             
             # 将2D坐标归一化到matplotlib坐标系
@@ -4148,7 +4148,7 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
             traceback.print_exc()
             raise RuntimeError(error_msg)
     
-    # 确保配体结构已成功绘制
+    # 确保配体结构已Success绘制
     if not ligand_drawn:
         error_msg = "[generate_advanced_interaction_plot] ❌ Ligand SDF file missing or cannot be parsed"
         print(error_msg)
@@ -4184,7 +4184,7 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
         "VAL": "CC(C)C(N)C(=O)O"
     }
     
-    # 第一遍：放置残基标签/结构
+    # 第一遍：放置残基Label/结构
     residue_positions = {}
     for i, res_key in enumerate(residues):
         angle = 2 * math.pi * i / n_res - math.pi/2
@@ -4192,11 +4192,11 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
         y = radius * math.sin(angle)
         residue_positions[res_key] = (x, y)
         
-        # 显示残基标签
-        # 使用不同颜色区分不同类型的残基
+        # Display残基Label
+        # using不同颜色区分不同Type的残基
         res_name_3letter = res_key[:3] if len(res_key) >= 3 else res_key
         
-        # 根据残基类型着色
+        # 根据残基Type着色
         if res_name_3letter in ['ARG', 'LYS', 'HIS']:  # 碱性
             box_color = '#E3F2FD'
             edge_color = '#1976D2'
@@ -4228,29 +4228,29 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
                                             kekulize=True, wedgeBonds=False)
                     aa_img_array = np.array(aa_img)
                     
-                    # 在残基位置显示结构
-                    img_size = 0.8  # 图片大小
+                    # 在残基位置Display结构
+                    img_size = 0.8  # 图片Size
                     ax.imshow(aa_img_array, 
                              extent=[x-img_size, x+img_size, y-img_size, y+img_size], 
                              zorder=5, alpha=0.95)
                     
-                    # 在结构下方显示残基名称标签
+                    # 在结构下方Display残基NameLabel
                     ax.text(x, y-img_size-0.25, res_key, ha='center', va='top',
                            fontsize=7, fontweight='bold', color='#424242', zorder=6,
                            bbox=dict(boxstyle='round,pad=0.3', facecolor='white',
                                    edgecolor='gray', alpha=0.8, linewidth=0.5))
                     structure_drawn = True
             except Exception as e:
-                # 如果绘制失败,回退到标签模式
+                # 如果绘制Failed,回退到Label模式
                 pass
         
-        # 如果没有绘制结构,使用传统的圆圈+标签
+        # 如果没有绘制结构,using传统的圆圈+Label
         if not structure_drawn:
             res_box = Circle((x, y), 0.7, facecolor=box_color, 
                             edgecolor=edge_color, linewidth=2, zorder=5)
             ax.add_patch(res_box)
             
-            # 显示残基标签
+            # Display残基Label
             ax.text(x, y, res_key, ha='center', va='center',
                    fontsize=8, fontweight='bold', color='#212121', zorder=6)
     
@@ -4270,7 +4270,7 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
                     l_atom_idx = int(l_atom_str)
                 
                 if l_atom_idx in atom_coords_2d:
-                    # 使用精确的原子坐标
+                    # using精确的原子坐标
                     lig_x, lig_y = atom_coords_2d[l_atom_idx]
                 else:
                     # 回退到边缘连接
@@ -4293,7 +4293,7 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
                                   alpha=0.7)
             ax.add_patch(arrow)
             
-            # 距离标签（靠近残基端）
+            # 距离Label（靠近残基端）
             mid_x = lig_x * 0.3 + res_x * 0.7
             mid_y = lig_y * 0.3 + res_y * 0.7
             ax.text(mid_x, mid_y, f"{dist:.1f}",
@@ -4329,7 +4329,7 @@ def generate_advanced_interaction_plot(interactions, output_path=None, show_plot
     
     plt.tight_layout()
     
-    # 保存
+    # Save
     if output_path:
         plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
         print(f"[generate_advanced_interaction_plot] ✅ 2D interaction diagram saved: {output_path}")
@@ -4345,19 +4345,19 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
                                      output_path=None, show_plot=True, ligand_sdf=None,
                                      obj_name=None, ligand_resname=None, plot_style="professional"):
     """
-    生成交互网络图（使用matplotlib或networkx）
+    生成交互网络图（usingmatplotlib或networkx）
 
-    参数:
-        interactions_result: 相互作用分析结果
-        csv_path: 或CSV文件路径
-        output_path: 输出图片路径
-        show_plot: 是否显示图片
-        ligand_sdf: 配体SDF文件路径（可选）
-        obj_name: PyMOL对象名称（可选，用于从PyMOL提取配体）
-        ligand_resname: 配体残基名称（与obj_name配合使用）
+    Parameters:
+        interactions_result: 相互作用分析Results
+        csv_path: 或CSVFilePath
+        output_path: 输出图片Path
+        show_plot: 是否Display图片
+        ligand_sdf: 配体SDFFilePath（可选）
+        obj_name: PyMOL对象Name（可选，用于从PyMOL提取配体）
+        ligand_resname: 配体残基Name（与obj_name配合using）
 
-    返回:
-        output_path: 生成的图片路径
+    Return:
+        output_path: 生成的图片Path
     """
     try:
         import matplotlib.pyplot as plt
@@ -4377,7 +4377,7 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
                 reader = csv.DictReader(f)
                 fieldnames = reader.fieldnames or []
                 
-                # 检测CSV格式 - 优先使用advanced版本
+                # 检测CSV格式 - 优先usingadvancedVersion
                 if "Protein_Atom" in fieldnames and "Ligand_Atom" in fieldnames:
                     csv_format = "advanced"
                     # print("[generate_interaction_network_plot] Detected advanced analysis format")
@@ -4414,7 +4414,7 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
         print("[generate_interaction_network_plot] No interaction data")
         return None
     
-    # 默认使用带配体结构的高级版本 (如果有ligand_sdf或obj_name)
+    # 默认using带配体结构的高级Version (如果有ligand_sdf或obj_name)
     use_advanced = csv_format == "advanced" or ligand_sdf or (obj_name and ligand_resname)
     
     if use_advanced:
@@ -4425,7 +4425,7 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
                 if "Ligand_Residue" in first_inter:
                     # 从Ligand_Residue字段提取，格式可能是 "LIG 301" 或 "LIG"
                     lig_res_str = first_inter["Ligand_Residue"].strip()
-                    # 提取残基名称（第一个单词）
+                    # 提取残基Name（First单词）
                     ligand_resname = lig_res_str.split()[0] if lig_res_str else None
                     print(f"[generate_interaction_network_plot] Auto-detected ligand residue: {ligand_resname}")
             except Exception as e:
@@ -4437,10 +4437,10 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
                                                  ligand_resname=ligand_resname,
                                                  plot_style=plot_style)
 
-    # 应用绘图样式 (简单网络图模式)
+    # Apply绘图样式 (简单网络图模式)
     apply_plot_style(plot_style)
     
-    # 创建图形
+    # Create图形
     fig, ax = plt.subplots(figsize=(14, 10), dpi=100)
     ax.set_xlim(-10, 10)
     ax.set_ylim(-10, 10)
@@ -4596,7 +4596,7 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
     title = f"Interaction Network\n({len(interactions)} interactions, {len(ligand_nodes)} ligands, {len(protein_nodes)} protein residues)"
     ax.text(0, 9.5, title, fontsize=14, fontweight='bold', ha='center')
 
-    # 保存
+    # Save
     if output_path is None:
         output_path = "interaction_network.png"
 
@@ -4617,7 +4617,7 @@ def generate_interaction_network_plot(interactions_result=None, csv_path=None,
 def generate_interaction_heatmap(interactions_result, output_path=None, show_plot=True):
     """
     生成相互作用热图 (Heatmap)
-    特别适用于蛋白-核酸或蛋白-蛋白界面分析，展示残基-残基接触矩阵。
+    特别适用于蛋白-核酸或蛋白-蛋白interface分析，展示残基-残基接触矩阵。
     """
     try:
         import matplotlib.pyplot as plt
@@ -4716,7 +4716,7 @@ def generate_interaction_heatmap(interactions_result, output_path=None, show_plo
             r = " ".join(a1.split(":")[:2]) if ":" in a1 else a1
             c = " ".join(a2.split(":")[:2]) if ":" in a2 else a2
         else: # generic/pp
-            # 尝试各种可能的键名
+            # 尝试各种可能的Key名
             r_val = get_key(inter, "Protein_Residue", "Residue1", "atom1", "Chain1")
             c_val = get_key(inter, "Ligand_Residue", "Nucleic_Residue", "Residue2", "atom2", "Chain2")
             
@@ -4743,7 +4743,7 @@ def generate_interaction_heatmap(interactions_result, output_path=None, show_plo
         print("[generate_interaction_heatmap] No valid data rows/cols extracted")
         return None
 
-    # 排序函数
+    # SortFunction
     def sort_key(res_str):
         # 尝试提取数字: "ARG 123" -> 123, "DA 5" -> 5
         import re
@@ -4812,16 +4812,16 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
     """
     分析蛋白质-核酸相互作用（DNA/RNA）
     
-    参数:
-        obj_name: PyMOL对象名称
+    Parameters:
+        obj_name: PyMOL对象Name
         nucleic_chains: 核酸链 ID列表（例如 ["A", "B"]）,如果为None则自动检测
         protein_chains: 蛋白质链 ID列表（例如 ["P", "Q"]）,如果为None则自动检测
-        output_csv: 输出CSV文件路径
-        distance_cutoff: 距离截断值（埃）
-        auto_highlight: 是否自动在PyMOL中进行3D高亮显示
-        pdb_file: PDB文件路径（可选）
+        output_csv: 输出CSVFilePath
+        distance_cutoff: 距离截断Value（埃）
+        auto_highlight: 是否自动在PyMOL中进行3D高亮Display
+        pdb_file: PDBFilePath（可选）
     
-    返回:
+    Return:
         dict: {
             "nucleic_chains": [...],
             "protein_chains": [...],
@@ -4829,8 +4829,8 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
             "mode": "protein-nucleic"
         }
     
-    相互作用类型:
-        - 氢键: 蛋白与磷酸骨架/碱基
+    相互作用Type:
+        - 氢Key: 蛋白与磷酸骨架/碱基
         - 盐桥: 带电氨基酸与磷酸骨架
         - 疏水: 疏水氨基酸与碱基
         - π-π 堆积: 芳香氨基酸与碱基
@@ -4840,7 +4840,7 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
         result = analyze_protein_nucleic_interactions('complex', nucleic_chains=["D"], protein_chains=["A"], output_csv='pn_interactions.csv')
     """
     
-    # 获取原子信息
+    # 获取Atom information
     if pdb_file:
         atoms = parse_pdb_file(pdb_file)
         if not atoms:
@@ -4896,7 +4896,7 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
     print(f"[analyze_protein_nucleic_interactions] ✅ Detected {len(nucleic_residues)} nucleic acid residues (chains: {', '.join(nucleic_chains)})")
     print(f"[analyze_protein_nucleic_interactions] ✅ Detected {len(protein_residues)} protein residues (chains: {', '.join(protein_chains)})")
     
-    # 构建残基原子索引（用于精确氢键检测）
+    # 构建残基原子索引（用于精确氢Key检测）
     all_atoms_by_residue = {}
     for nuc_key, nuc_atoms in nucleic_residues:
         all_atoms_by_residue[nuc_key] = nuc_atoms
@@ -4927,10 +4927,10 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
                     if d > distance_cutoff:
                         continue
                     
-                    # 判断相互作用类型
+                    # 判断相互作用Type
                     interaction_type = None
                     
-                    # ✅ 使用精确的氢键检测
+                    # ✅ using精确的氢Key检测
                     is_hb, hb_dist, hb_angle = is_hbond_precise(nuc_atom, prot_atom, all_atoms_by_residue)
                     if not is_hb:
                         # 反向检测：蛋白作为供体
@@ -4986,7 +4986,7 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
     csv_path_to_use = output_csv
     is_temp_csv = False
 
-    # 如果需要高亮但没有输出路径，创建临时文件
+    # 如果需要高亮但没有输出Path，Create临时File
     if auto_highlight and not csv_path_to_use and interactions:
         try:
             fd, temp_path = tempfile.mkstemp(suffix=".csv", prefix="glue_pn_")
@@ -5018,7 +5018,7 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
                 print(f"[analyze_protein_nucleic_interactions] Results saved to: {output_csv}")
         except Exception as e:
             print(f"[analyze_protein_nucleic_interactions] Failed to save CSV: {e}")
-            # 如果写入失败，且是临时文件，则无法高亮
+            # 如果写入Failed，且是临时File，则无法高亮
             if is_temp_csv:
                 csv_path_to_use = None
 

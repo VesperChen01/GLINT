@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 vina_integration.py
-GLINT - AutoDock Vina 完整集成模块
+GLINT - AutoDock Vina 完整集成Module
 """
 
 from __future__ import print_function
@@ -15,13 +15,13 @@ from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
 from pymol import cmd
 
-# 版本标记 - 用于确认代码是否被正确加载
+# Version标记 - 用于Confirm代码是否被正确Load
 _VINA_MODULE_VERSION = "2026-01-03-v2"
-print(f"[vina_integration] 模块版本: {_VINA_MODULE_VERSION}")
+print(f"[vina_integration] ModuleVersion: {_VINA_MODULE_VERSION}")
 
 
 def find_vina_executable():
-    """自动查找 Vina 可执行文件"""
+    """自动Find Vina 可执行File"""
     vina = shutil.which('vina') or shutil.which('vina.exe')
     if vina:
         return vina
@@ -32,7 +32,7 @@ def find_vina_executable():
             return conda_vina
     
 
-    # 3. 遍历常见 conda 安装路径回退（与 find_obabel_executable 保持一致）
+    # 3. 遍历常见 conda 安装Path回退（与 find_obabel_executable 保持一致）
     home = os.path.expanduser('~')
     for env_name in ["glint", "base"]:
         for base in [
@@ -48,7 +48,7 @@ def find_vina_executable():
             if os.path.exists(vina_path):
                 return vina_path
 
-    # 4. 其他常见路径
+    # 4. 其他常见Path
     user_paths = [
         os.path.join(home, 'bin', 'vina'),
         os.path.join(home, '.local', 'bin', 'vina'),
@@ -67,7 +67,7 @@ def find_vina_executable():
 
 
 def find_obabel_executable():
-    """查找 Open Babel 可执行文件"""
+    """Find Open Babel 可执行File"""
     if os.environ.get("OBABEL_BINARY"):
         return os.environ.get("OBABEL_BINARY")
     
@@ -91,7 +91,7 @@ def find_obabel_executable():
 
 
 def find_mgltools_scripts():
-    """查找 MGLTools 脚本路径"""
+    """Find MGLTools 脚本Path"""
     possible_paths = ['/usr/local/MGLTools', '/opt/mgltools', os.path.join(os.path.expanduser('~'), 'MGLTools')]
     if 'MGLTOOLS_HOME' in os.environ:
         possible_paths.insert(0, os.environ['MGLTOOLS_HOME'])
@@ -116,10 +116,10 @@ def check_vina_available():
 
 
 def export_to_pdbqt(obj_name, selection, output_pdbqt, is_receptor=True):
-    """标准 PDBQT 导出
+    """标准 PDBQT Export
     
-    对于受体：使用 -xr 参数生成刚性受体格式（无 ROOT/ENDROOT 标签）
-    对于配体：使用 -h 参数添加氢原子
+    对于受体：using -xr Parameters生成刚性受体格式（无 ROOT/ENDROOT Label）
+    对于配体：using -h ParametersAdd氢原子
     """
     print(f"[vina_integration] export_to_pdbqt: is_receptor={is_receptor}, output={output_pdbqt}")
     
@@ -127,28 +127,28 @@ def export_to_pdbqt(obj_name, selection, output_pdbqt, is_receptor=True):
     cmd.save(temp_pdb, selection)
     
     if not os.path.exists(temp_pdb):
-        print(f"[vina_integration] ❌ 临时 PDB 文件创建失败")
+        print(f"[vina_integration] ❌ 临时 PDB FileCreateFailed")
         return False
     
     obabel = find_obabel_executable()
     if obabel:
         try:
             if is_receptor:
-                # 受体：使用 -xr 生成刚性受体格式，不包含 ROOT 标签
+                # 受体：using -xr 生成刚性受体格式，不Package含 ROOT Label
                 cmd_args = [obabel, temp_pdb, '-O', output_pdbqt, '-xr']
-                print(f"[vina_integration] 使用 -xr 参数（刚性受体格式）")
+                print(f"[vina_integration] using -xr Parameters（刚性受体格式）")
             else:
-                # 配体：添加氢原子
+                # 配体：Add氢原子
                 cmd_args = [obabel, temp_pdb, '-O', output_pdbqt, '-h']
-                print(f"[vina_integration] 使用 -h 参数（配体格式）")
+                print(f"[vina_integration] using -h Parameters（配体格式）")
             
             result = subprocess.run(cmd_args, capture_output=True, text=True, timeout=60)
             if result.returncode == 0 and os.path.exists(output_pdbqt):
                 os.unlink(temp_pdb)
-                print(f"[vina_integration] ✅ PDBQT 导出成功")
+                print(f"[vina_integration] ✅ PDBQT ExportSuccess")
                 return True
             else:
-                print(f"[vina_integration] ❌ obabel 失败: {result.stderr}")
+                print(f"[vina_integration] ❌ obabel Failed: {result.stderr}")
         except Exception as e:
             print(f"[vina_integration] ❌ 异常: {e}")
     
@@ -158,8 +158,8 @@ def export_to_pdbqt(obj_name, selection, output_pdbqt, is_receptor=True):
 
 
 def convert_ligand_to_pdbqt(ligand_file: str, output_pdbqt: str) -> bool:
-    """将配体文件转换为 PDBQT（不通过 PyMOL）"""
-    # 如果源文件和目标文件相同，直接返回成功
+    """将配体File转换为 PDBQT（不通过 PyMOL）"""
+    # 如果源File和目标File相同，直接ReturnSuccess
     if os.path.abspath(ligand_file) == os.path.abspath(output_pdbqt):
         return True
     obabel = find_obabel_executable()
@@ -176,7 +176,7 @@ def convert_ligand_to_pdbqt(ligand_file: str, output_pdbqt: str) -> bool:
 def generate_vina_config(receptor_pdbqt: str, ligand_pdbqt: str, box_params: Dict[str, float],
                         output_pdbqt: str, config_path: Optional[str] = None,
                         exhaustiveness: int = 8, num_modes: int = 9) -> str:
-    """生成 Vina 配置文件"""
+    """生成 Vina ConfigurationFile"""
     if config_path is None:
         fd, config_path = tempfile.mkstemp(suffix='_vina_config.txt', text=True)
         os.close(fd)
@@ -215,15 +215,15 @@ def run_vina_docking(receptor_pdbqt: str, ligand_pdbqt: str, box_params: Dict[st
     
     try:
         print(f"[vina_integration] 运行 Vina: {vina_bin}")
-        # 新版 Vina 不支持 --log 参数，输出到 stdout
+        # 新版 Vina 不支持 --log Parameters，输出到 stdout
         result = subprocess.run([vina_bin, '--config', config_path],
                       capture_output=True, text=True, timeout=600)
         if result.returncode != 0:
             error_msg = result.stderr.strip() if result.stderr else 'Vina execution failed'
-            print(f"[vina_integration] ❌ Vina 失败: {error_msg}")
+            print(f"[vina_integration] ❌ Vina Failed: {error_msg}")
             return {'success': False, 'error': error_msg, 'ligand': ligand_name}
 
-        # 保存输出到日志文件
+        # Save输出到日志File
         with open(log_file, 'w') as f:
             f.write(result.stdout)
 
@@ -232,7 +232,7 @@ def run_vina_docking(receptor_pdbqt: str, ligand_pdbqt: str, box_params: Dict[st
     except Exception as e:
         return {'success': False, 'error': str(e), 'ligand': ligand_name}
 
-    # 从 stdout 或日志文件中解析结果
+    # 从 stdout 或日志File中解析Results
     affinity = None
     output_text = result.stdout if result.stdout else ""
     if os.path.exists(log_file):
@@ -251,7 +251,7 @@ def run_vina_docking(receptor_pdbqt: str, ligand_pdbqt: str, box_params: Dict[st
     if affinity is None:
         return {'success': False, 'error': 'Parse failed', 'ligand': ligand_name}
     
-    print(f"[vina_integration] ✅ 对接成功: {affinity:.2f} kcal/mol")
+    print(f"[vina_integration] ✅ 对接Success: {affinity:.2f} kcal/mol")
     return {'success': True, 'affinity': affinity, 'output_pdbqt': output_pdbqt,
             'log_file': log_file, 'ligand': ligand_name}
 
@@ -259,7 +259,7 @@ def run_vina_docking(receptor_pdbqt: str, ligand_pdbqt: str, box_params: Dict[st
 def manual_box_docking(obj_name: str, ligand_file: str, box_params: Dict[str, float],
                        output_dir: Optional[str] = None, exhaustiveness: int = 8,
                        num_modes: int = 9, remove_selection: Optional[str] = None) -> Dict[str, Any]:
-    """使用自定义对接盒参数进行 Vina 对接"""
+    """using自定义对接盒Parameters进行 Vina 对接"""
     if not check_vina_available():
         return {'success': False, 'error': 'Vina not available'}
 
@@ -275,14 +275,14 @@ def manual_box_docking(obj_name: str, ligand_file: str, box_params: Dict[str, fl
         output_dir = f"{obj_name}_docking"
     os.makedirs(output_dir, exist_ok=True)
 
-    # 导出受体 PDBQT
+    # Export受体 PDBQT
     receptor_pdbqt = os.path.join(output_dir, f"{obj_name}_receptor.pdbqt")
     receptor_sel = f"({obj_name}) and not ({remove_selection})" if remove_selection else obj_name
     
     if not export_to_pdbqt(obj_name, receptor_sel, receptor_pdbqt, is_receptor=True):
         return {'success': False, 'error': 'Receptor export failed'}
 
-    # 导出配体 PDBQT
+    # Export配体 PDBQT
     ligand_pdbqt = os.path.join(output_dir, "ligand.pdbqt")
     ligand_obj = "temp_ligand"
     cmd.load(ligand_file, ligand_obj)
@@ -302,7 +302,7 @@ def manual_box_docking(obj_name: str, ligand_file: str, box_params: Dict[str, fl
 
 # ==================== 批量对接功能 ====================
 def get_ligand_files(ligand_path: str) -> List[str]:
-    """获取配体文件列表（支持单文件或文件夹）"""
+    """获取配体File列表（支持单File或File夹）"""
     SUPPORTED_EXTS = {'.mol2', '.sdf', '.pdbqt', '.mol', '.pdb'}
     
     if os.path.isfile(ligand_path):
@@ -321,19 +321,19 @@ def batch_docking(obj_name: str, ligand_path: str, box_params: Dict[str, float],
                   num_modes: int = 9, remove_selection: Optional[str] = None,
                   progress_callback: Optional[Callable[[int, int, str], None]] = None) -> Dict[str, Any]:
     """
-    批量对接：支持单个配体文件或配体文件夹
+    批量对接：支持单个配体File或配体File夹
     
-    参数:
+    Parameters:
         obj_name: 受体的 PyMOL 对象名
-        ligand_path: 配体文件或文件夹路径
-        box_params: 对接盒参数
-        output_dir: 输出目录
-        exhaustiveness: Vina 搜索精度
-        num_modes: 输出构象数量
-        remove_selection: 要移除的共晶配体 selection
-        progress_callback: 进度回调函数 (current, total, ligand_name)
+        ligand_path: 配体File或File夹Path
+        box_params: 对接盒Parameters
+        output_dir: 输出Directory
+        exhaustiveness: Vina Search精degrees
+        num_modes: 输出构象Count
+        remove_selection: 要Remove的共晶配体 selection
+        progress_callback: 进degrees回调Function (current, total, ligand_name)
     """
-    print(f"[vina_integration] batch_docking 开始，模块版本: {_VINA_MODULE_VERSION}")
+    print(f"[vina_integration] batch_docking Start，ModuleVersion: {_VINA_MODULE_VERSION}")
     
     if not check_vina_available():
         return {'success': False, 'error': 'Vina not available'}
@@ -354,11 +354,11 @@ def batch_docking(obj_name: str, ligand_path: str, box_params: Dict[str, float],
         output_dir = f"{obj_name}_batch_docking"
     os.makedirs(output_dir, exist_ok=True)
 
-    # 导出受体 PDBQT（只做一次）
+    # Export受体 PDBQT（只做一次）
     receptor_pdbqt = os.path.join(output_dir, f"{obj_name}_receptor.pdbqt")
     receptor_sel = f"({obj_name}) and not ({remove_selection})" if remove_selection else obj_name
     
-    print(f"[vina_integration] 导出受体: {receptor_pdbqt}")
+    print(f"[vina_integration] Export受体: {receptor_pdbqt}")
     if not export_to_pdbqt(obj_name, receptor_sel, receptor_pdbqt, is_receptor=True):
         return {'success': False, 'error': 'Receptor export failed'}
 
@@ -375,10 +375,10 @@ def batch_docking(obj_name: str, ligand_path: str, box_params: Dict[str, float],
         ligand_pdbqt = os.path.join(output_dir, f"{ligand_name}.pdbqt")
         # 如果已经是 pdbqt 格式
         if lig_file.lower().endswith(".pdbqt"):
-            # 检查源文件和目标文件是否相同，避免 shutil.copy 报错
+            # 检查源File和目标File是否相同，避免 shutil.copy 报错
             if os.path.abspath(lig_file) != os.path.abspath(ligand_pdbqt):
                 shutil.copy(lig_file, ligand_pdbqt)
-            # 如果相同，直接使用原文件路径
+            # 如果相同，直接using原FilePath
             else:
                 ligand_pdbqt = lig_file
         elif not convert_ligand_to_pdbqt(lig_file, ligand_pdbqt):
@@ -400,7 +400,7 @@ def batch_docking(obj_name: str, ligand_path: str, box_params: Dict[str, float],
                                   ligand_name, exhaustiveness, num_modes)
         results.append(result)
     
-    # 按亲和力排序
+    # 按亲和力Sort
     successful = [r for r in results if r.get('success')]
     successful.sort(key=lambda x: x.get('affinity', 0))
     

@@ -29,10 +29,10 @@ class VisualizationSettings:
 
     # Interaction display parameters
     display_mode: str = 'surface_interaction'
-    show_labels: bool = True  # 是否显示残基标签（必须显示）
-    show_distance_labels: bool = False  # 是否显示距离标签（可选）
+    show_labels: bool = True  # 是否Display残基Label（必须Display）
+    show_distance_labels: bool = False  # 是否Display距离Label（可选）
     show_hydrophobic: bool = False
-    show_surface: bool = False  # 是否显示蛋白质表面
+    show_surface: bool = False  # 是否Display蛋白质表面
     min_confidence: float = 0.8
     max_interactions_per_type: Optional[Dict[str, int]] = None
 
@@ -319,7 +319,7 @@ def apply_interaction_dash_style(cmd, obj_name, color_name=None,
         cmd.hide('labels', obj_name)
     else:
         cmd.show('labels', obj_name)
-        # 统一距离标签字体和大小
+        # 统一距离Label字体和Size
         cmd.set('label_size', label_size, obj_name)
         cmd.set('label_font_id', label_font_id, obj_name)
         cmd.set('label_color', 'black', obj_name)

@@ -768,7 +768,7 @@ class PDB2PQRRunner:
             main_driver(parsed_args)
             
             if os.path.exists(output_pqr):
-                # 修复 PQR 格式：将固定列格式转为空格分隔，防止 APBS 解析失败
+                # 修复 PQR 格式：将固定列格式转为空格分隔，防止 APBS 解析Failed
                 _fix_pqr_format(output_pqr)
                 print(f"[PDB2PQR] ✅ Generated: {output_pqr}")
                 return True
@@ -824,7 +824,7 @@ class PDB2PQRRunner:
                         timeout=300
                     )
                     if result.returncode == 0 and os.path.exists(output_pqr):
-                        # 修复 PQR 格式：将固定列格式转为空格分隔，防止 APBS 解析失败
+                        # 修复 PQR 格式：将固定列格式转为空格分隔，防止 APBS 解析Failed
                         _fix_pqr_format(output_pqr)
                         print(f"[PDB2PQR] ✅ Generated (without keep-chain): {output_pqr}")
                         return True
@@ -833,7 +833,7 @@ class PDB2PQRRunner:
                 return False
             
             if os.path.exists(output_pqr):
-                # 修复 PQR 格式：将固定列格式转为空格分隔，防止 APBS 解析失败
+                # 修复 PQR 格式：将固定列格式转为空格分隔，防止 APBS 解析Failed
                 _fix_pqr_format(output_pqr)
                 print(f"[PDB2PQR] ✅ Generated: {output_pqr}")
                 return True
@@ -853,7 +853,7 @@ class PDB2PQRRunner:
             return False
 
 
-# 尝试导入 APBS 原生 Python 模块（如 conda install apbs）
+# 尝试Import APBS 原生 Python Module（如 conda install apbs）
 APBS_PYTHON_AVAILABLE = False
 _apbs_module = None
 try:
@@ -863,8 +863,8 @@ try:
 except ImportError:
     pass
 
-# 尝试导入 apbs-binary pip 包（安装器通过 pip install apbs-binary 安装）
-# 该包提供 run_apbs / popen_apbs 函数，内部调用打包的 apbs 可执行文件
+# 尝试Import apbs-binary pip Package（安装器通过 pip install apbs-binary 安装）
+# 该Package提供 run_apbs / popen_apbs Function，内部调用打Package的 apbs 可执行File
 APBS_BINARY_AVAILABLE = False
 _apbs_binary_run = None
 try:
@@ -892,26 +892,26 @@ class APBSRunner:
         """
         self.apbs_path = apbs_path or self._find_apbs()
         self.use_python_api = APBS_PYTHON_AVAILABLE
-        # 标记 apbs-binary pip 包是否可用，作为第二优先级运行方式
+        # 标记 apbs-binary pip Package是否可用，作为第二优先级运行方式
         self.use_apbs_binary = APBS_BINARY_AVAILABLE
     
     def _find_apbs(self) -> str:
-        """尝试在 PATH、conda 环境、apbs-binary 包等多个位置查找 APBS。"""
-        # 1. 系统 PATH 中查找
+        """尝试在 PATH、conda 环境、apbs-binary Package等多个位置Find APBS。"""
+        # 1. 系统 PATH 中Find
         path = shutil.which('apbs')
         if path:
             return path
 
-        # 2. 原生 Python API 可用时直接使用
+        # 2. 原生 Python API 可用时直接using
         if APBS_PYTHON_AVAILABLE:
             return 'python_api'
 
-        # 3. 通过 apbs-binary pip 包定位其内置的 apbs 可执行文件
+        # 3. 通过 apbs-binary pip PackageLocate其内置的 apbs 可执行File
         if APBS_BINARY_AVAILABLE:
             try:
                 import apbs_binary
                 pkg_dir = os.path.dirname(apbs_binary.__file__)
-                # apbs-binary 包通常在包目录或 bin 子目录下放置可执行文件
+                # apbs-binary Package通常在PackageDirectory或 bin 子Directory下放置可执行File
                 for candidate in [
                     os.path.join(pkg_dir, 'apbs'),
                     os.path.join(pkg_dir, 'apbs.exe'),
@@ -923,8 +923,8 @@ class APBSRunner:
             except Exception:
                 pass
 
-        # 4. 通过当前 Python 解释器路径推断 conda 环境的 bin 目录
-        #    从 .app 束启动 PyMOL 时 CONDA_PREFIX 可能未设置，
+        # 4. 通过当前 Python 解释器Path推断 conda 环境的 bin Directory
+        #    从 .app 束启动 PyMOL 时 CONDA_PREFIX 可能未Settings，
         #    但 sys.executable 仍指向 conda 环境内的 python
         try:
             python_dir = os.path.dirname(os.path.realpath(sys.executable))
@@ -942,7 +942,7 @@ class APBSRunner:
             if os.path.exists(conda_path):
                 return conda_path
 
-        # 6. GLINT 安装器创建的 glint conda 环境（硬编码路径兜底）
+        # 6. GLINT 安装器Create的 glint conda 环境（硬编码Path兜底）
         for conda_root in [os.path.expanduser('~/miniconda3'), os.path.expanduser('~/anaconda3')]:
             if os.path.exists(conda_root):
                 # 优先检查 glint 虚拟环境
@@ -954,12 +954,12 @@ class APBSRunner:
                 if os.path.exists(base_apbs):
                     return base_apbs
 
-        # 7. macOS Homebrew 路径
+        # 7. macOS Homebrew Path
         for homebrew_path in ['/usr/local/opt/apbs/bin/apbs', '/opt/homebrew/bin/apbs']:
             if os.path.exists(homebrew_path):
                 return homebrew_path
 
-        # 8. 其他常见安装路径
+        # 8. 其他常见安装Path
         common_paths = [
             '/usr/local/bin/apbs',
             '/usr/bin/apbs',
@@ -971,7 +971,7 @@ class APBSRunner:
             if os.path.exists(p):
                 return p
 
-        # 如果 apbs-binary 可用，可以通过其 run_apbs 函数运行，无需可执行文件路径
+        # 如果 apbs-binary 可用，可以通过其 run_apbs Function运行，无需可执行FilePath
         if APBS_BINARY_AVAILABLE:
             return 'apbs_binary_api'
 
@@ -996,11 +996,11 @@ class APBSRunner:
         Returns:
             Path to generated input file
         """
-        # 网格中心：如提供 grid_center 则以坐标定位，否则以分子质心定位
+        # 网格中心：如提供 grid_center 则以坐标Locate，否则以分子质心Locate
         if grid_center is not None:
             cgcent_line = f"  cgcent {grid_center[0]:.4f} {grid_center[1]:.4f} {grid_center[2]:.4f}"
             fgcent_line = f"  fgcent {grid_center[0]:.4f} {grid_center[1]:.4f} {grid_center[2]:.4f}"
-            print(f"[APBS] 使用自定义网格中心: ({grid_center[0]:.2f}, {grid_center[1]:.2f}, {grid_center[2]:.2f})")
+            print(f"[APBS] using自定义网格中心: ({grid_center[0]:.2f}, {grid_center[1]:.2f}, {grid_center[2]:.2f})")
         else:
             cgcent_line = "  cgcent mol 1"
             fgcent_line = "  fgcent mol 1"
@@ -1051,33 +1051,33 @@ quit
         """
         运行 APBS 计算。
         
-        优先级：原生 Python API > apbs-binary 包 > CLI 命令行
+        优先级：原生 Python API > apbs-binary Package > CLI 命令行
         
         Args:
-            input_file: APBS 输入文件
-            working_dir: 工作目录（默认使用输入文件所在目录）
+            input_file: APBS 输入File
+            working_dir: 工作Directory（默认using输入File所在Directory）
             
         Returns:
-            输出 DX 文件路径，失败则返回 None
+            输出 DX FilePath，Failed则Return None
         """
         if working_dir is None:
             working_dir = os.path.dirname(input_file) or '.'
         
-        # 方式1: 原生 Python API（如 conda install apbs 提供的模块）
+        # 方式1: 原生 Python API（如 conda install apbs 提供的Module）
         if self.use_python_api and APBS_PYTHON_AVAILABLE:
             result = self._run_python_api(input_file, working_dir)
             if result:
                 return result
-            print("[APBS] Python API 执行失败，尝试其他方式...")
+            print("[APBS] Python API 执行Failed，尝试其他方式...")
         
-        # 方式2: apbs-binary pip 包（安装器通过 pip install apbs-binary 安装）
+        # 方式2: apbs-binary pip Package（安装器通过 pip install apbs-binary 安装）
         if self.use_apbs_binary and APBS_BINARY_AVAILABLE:
             result = self._run_apbs_binary(input_file, working_dir)
             if result:
                 return result
-            print("[APBS] apbs-binary 包执行失败，尝试命令行...")
+            print("[APBS] apbs-binary Package执行Failed，尝试命令行...")
         
-        # 方式3: 命令行 CLI（直接调用 apbs 可执行文件）
+        # 方式3: 命令行 CLI（直接调用 apbs 可执行File）
         return self._run_command_line(input_file, working_dir)
     
     def _run_python_api(self, input_file: str, working_dir: str) -> Optional[str]:
@@ -1141,34 +1141,34 @@ quit
             return None
     
     def _run_apbs_binary(self, input_file: str, working_dir: str) -> Optional[str]:
-        """通过 apbs-binary pip 包运行 APBS。
+        """通过 apbs-binary pip Package运行 APBS。
         
-        apbs-binary 包提供 run_apbs() 函数，内部调用打包的 apbs 可执行文件。
-        返回 subprocess.CompletedProcess 对象。
+        apbs-binary Package提供 run_apbs() Function，内部调用打Package的 apbs 可执行File。
+        Return subprocess.CompletedProcess 对象。
         """
-        print("[APBS] 通过 apbs-binary 包运行...")
-        print(f"[APBS] 输入文件: {input_file}")
+        print("[APBS] 通过 apbs-binary Package运行...")
+        print(f"[APBS] 输入File: {input_file}")
         
         try:
             from apbs_binary import run_apbs
             
-            # run_apbs 在当前工作目录下运行，需要切换到工作目录
+            # run_apbs 在当前工作Directory下运行，需要切换到工作Directory
             old_cwd = os.getcwd()
             try:
                 os.chdir(working_dir)
-                # run_apbs 接受输入文件路径，返回 subprocess.CompletedProcess
+                # run_apbs 接受输入FilePath，Return subprocess.CompletedProcess
                 completed = run_apbs(input_file)
                 
                 if completed.returncode != 0:
                     stderr_text = completed.stderr if hasattr(completed, 'stderr') and completed.stderr else ''
-                    print(f"[APBS] apbs-binary 返回非零退出码: {completed.returncode}")
+                    print(f"[APBS] apbs-binary Return非零Exit码: {completed.returncode}")
                     if stderr_text:
-                        print(f"[APBS] 错误输出:\n{stderr_text}")
-                    # APBS 有时返回非零但仍生成输出，继续查找
+                        print(f"[APBS] Error输出:\n{stderr_text}")
+                    # APBS 有时Return非零但仍生成输出，ContinueFind
             finally:
                 os.chdir(old_cwd)
             
-            # 查找输出 DX 文件（复用与其他方式相同的查找逻辑）
+            # Find输出 DX File（复用与其他方式相同的Find逻辑）
             base_name = os.path.splitext(os.path.basename(input_file))[0]
             dx_file = os.path.join(working_dir, base_name + '.dx')
             
@@ -1176,18 +1176,18 @@ quit
                 print(f"[APBS] ✅ 生成: {dx_file}")
                 return dx_file
             
-            # 尝试其他命名方式（APBS 可能使用不同的输出文件名）
+            # 尝试其他命名方式（APBS 可能using不同的输出File名）
             for f in os.listdir(working_dir):
                 if f.endswith('.dx'):
                     dx_file = os.path.join(working_dir, f)
                     print(f"[APBS] ✅ 找到输出: {dx_file}")
                     return dx_file
             
-            print("[APBS] ❌ 未找到输出 DX 文件")
+            print("[APBS] ❌ 未找到输出 DX File")
             return None
             
         except Exception as e:
-            print(f"[APBS] apbs-binary 执行错误: {e}")
+            print(f"[APBS] apbs-binary 执行Error: {e}")
             return None
     
     def _run_command_line(self, input_file: str, working_dir: str) -> Optional[str]:
@@ -1322,12 +1322,12 @@ class ECCalculator:
         
         Args:
             ec_local: Array of local EC values
-            exclude_zeros: 是否排除零值点（三元复合物 mask 后的点）。默认 False 保持向后兼容。
+            exclude_zeros: 是否排除零Value点（三元复合物 mask 后的点）。默认 False 保持向后兼容。
             
         Returns:
             Dictionary of statistics
         """
-        # 修复: 当 exclude_zeros=True 时，先过滤掉被 mask 为 0 的点，避免统计被稀释
+        # 修复: 当 exclude_zeros=True 时，先Filter掉被 mask 为 0 的点，避免统计被稀释
         if exclude_zeros:
             nonzero_mask = ec_local != 0
             if np.sum(nonzero_mask) == 0:
@@ -1510,7 +1510,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     protein_pdb = os.path.join(output_dir, 'protein.pdb')
     ligand_sdf = os.path.join(output_dir, 'ligand.sdf')
     
-    # 追踪保留的水分子数量（用于后续 advanced_features 记录）
+    # 追踪保留的水分子Count（用于后续 advanced_features 记录）
     n_waters_kept = 0
     
     if PYMOL_AVAILABLE and obj_name:
@@ -1522,7 +1522,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         else:
             protein_sel = f"byres (({obj_name} and polymer) within {contact_cutoff} of ({ligand_within_sel}))"
         
-        # 打印接触区信息
+        # Print接触区Information
         try:
             n_contact_atoms = cmd.count_atoms(protein_sel)
             # 统计残基数
@@ -1535,16 +1535,16 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         except Exception:
             pass
         
-        # 如果需要保留桥联水，使用 BridgingWaterFilter 筛选结构性水分子
+        # 如果需要保留桥联水，using BridgingWaterFilter 筛选结构性水分子
         if keep_bridging_waters and ADVANCED_PATCHES_AVAILABLE:
             print("[calculate_ligand_ec] ✨ 筛选结构性桥联水...")
             try:
                 water_filter = BridgingWaterFilter()
-                # 先保存包含水的复合物临时文件
+                # 先SavePackage含水的复合物临时File
                 complex_with_water_pdb = os.path.join(output_dir, 'complex_with_water.pdb')
                 cmd.save(complex_with_water_pdb, f"{obj_name} and (polymer or resn HOH)")
                 
-                # 筛选桥联水（返回值为 (chain, resnum) 元组列表）
+                # 筛选桥联水（ReturnValue为 (chain, resnum) 元组列表）
                 water_result = water_filter.filter_pdb(complex_with_water_pdb, ligand_resname)
                 bridging_waters = water_result.get('bridging_waters', [])
                 protein_bound_waters = water_result.get('protein_bound_waters', [])
@@ -1559,7 +1559,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
                 n_waters_kept = len(waters_to_keep)
                 
                 if waters_to_keep:
-                    # 构建包含关键水分子的 PyMOL 选择器
+                    # 构建Package含关Key水分子的 PyMOL Select器
                     water_resi_sel = ' or '.join(
                         [f"(chain {c} and resi {r})" for c, r in waters_to_keep]
                     )
@@ -1569,8 +1569,8 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
                 else:
                     print("[calculate_ligand_ec] 未发现符合条件的桥联水")
             except Exception as e:
-                print(f"[calculate_ligand_ec] ⚠️ 桥联水筛选失败: {e}")
-                print("[calculate_ligand_ec] 继续分析（不含水）")
+                print(f"[calculate_ligand_ec] ⚠️ 桥联水筛选Failed: {e}")
+                print("[calculate_ligand_ec] Continue分析（不含水）")
         
         cmd.save(protein_pdb, protein_sel)
         
@@ -1641,35 +1641,35 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     
     print(f"[calculate_ligand_ec] Ligand SDF file size: {sdf_size} bytes")
     
-    # 使用 RDKit 加载配体 SDF（含 sanitize=False 降级策略）
+    # using RDKit Load配体 SDF（含 sanitize=False 降级策略）
     ligand_mol = None
     try:
-        # 优先尝试正常加载（sanitize=True，默认值）
+        # 优先尝试正常Load（sanitize=True，默认Value）
         supplier = Chem.SDMolSupplier(ligand_sdf, removeHs=False)
         ligand_mol = supplier[0] if len(supplier) > 0 else None
     except Exception as e:
         print(f"[calculate_ligand_ec] ⚠️ RDKit standard read failed: {e}")
     
-    # 降级策略：关闭 sanitize 重新加载（常见于 MD 快照或 PyMOL 导出的 SDF）
+    # 降级策略：Close sanitize 重新Load（常见于 MD 快照或 PyMOL Export的 SDF）
     if ligand_mol is None:
         try:
             print(f"[calculate_ligand_ec] 🔄 Retrying with sanitize=False (common for MD snapshots)...")
             supplier = Chem.SDMolSupplier(ligand_sdf, removeHs=False, sanitize=False)
             ligand_mol = supplier[0] if len(supplier) > 0 else None
             if ligand_mol is not None:
-                # 尝试部分清理：跳过严格的价态检查，保留其他校验
+                # 尝试部分清理：Skip严格的价态检查，保留其他校验
                 try:
                     Chem.SanitizeMol(ligand_mol, 
                         sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL ^ Chem.SanitizeFlags.SANITIZE_PROPERTIES)
                     print(f"[calculate_ligand_ec] ✅ Loaded with partial sanitization (valence check skipped)")
                 except Exception:
-                    # 部分清理也失败，使用未清理的分子（坐标和原子类型仍然可用）
+                    # 部分清理也Failed，using未清理的分子（坐标和原子Type仍然可用）
                     print(f"[calculate_ligand_ec] ⚠️ Partial sanitization failed, using unsanitized molecule")
                     print(f"[calculate_ligand_ec] 💡 Coordinates and atom types are valid; charges may be approximate")
         except Exception as e2:
             print(f"[calculate_ligand_ec] ❌ Fallback read also failed: {e2}")
     
-    # 最终检查：如果仍然无法加载，输出调试信息并返回
+    # 最终检查：如果仍然无法Load，输出调试Information并Return
     if ligand_mol is None:
         print(f"[calculate_ligand_ec] ❌ Failed to load ligand from SDF file")
         print(f"[calculate_ligand_ec] 💡 The SDF file may have invalid format")
@@ -1684,7 +1684,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     print(f"[calculate_ligand_ec] Ligand: {ligand_mol.GetNumAtoms()} atoms")
     
     # Step 2: Run PDB2PQR
-    # 如果保留了桥联水，不要让 PDB2PQR 删除它们
+    # 如果保留了桥联水，不要让 PDB2PQR Delete它们
     print("\n[Step 2] Running PDB2PQR...")
     protein_pqr = os.path.join(output_dir, 'protein.pqr')
     
@@ -1715,7 +1715,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     
     dx_file = apbs.run(apbs_input, output_dir)
 
-    # 追踪是否使用了 Coulomb 近似回退
+    # 追踪是否using了 Coulomb 近似回退
     _coulomb_fallback = False
     _coulomb_fallback_reason = ""
     
@@ -1724,7 +1724,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         # Fallback: Use Coulomb potential from protein charges
         protein_grid = None
         _coulomb_fallback = True
-        _coulomb_fallback_reason = "APBS 执行失败或未安装，已使用 Coulomb 近似计算蛋白静电势。结果精度可能较低。"
+        _coulomb_fallback_reason = "APBS 执行Failed或未安装，已using Coulomb 近似计算蛋白静电势。Results精degrees可能较低。"
     else:
         # Step 4: Load protein potential grid
         print("\n[Step 4] Loading protein potential...")
@@ -1755,7 +1755,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     )
     phi_ligand = charge_calc.calculate_potential(ligand_mol, surface_points)
     
-    # 记录高级功能使用情况
+    # 记录高级功能using情况
     advanced_features = {
         'sigma_holes_enabled': use_sigma_holes,
         'lone_pairs_enabled': use_lone_pairs,
@@ -1925,7 +1925,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         print("[analyze_ternary_ec] ❌ Failed to load glue molecule")
         return None
     
-    # 生成 Glue 分子表面点（两个界面共用基础点集）
+    # 生成 Glue 分子表面点（两个interface共用基础点集）
     sampler = LigandSurfaceSampler(density=surface_density)
     surface_points, surface_normals = sampler.sample_molecule(glue_mol)
     
@@ -1933,11 +1933,11 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     charge_calc = GasteigerChargeCalculator()
     phi_glue = charge_calc.calculate_potential(glue_mol, surface_points)
     
-    # 链名称字符串
+    # 链Name字符串
     chains_a_str = "_".join(protein_a_chains)
     chains_b_str = "_".join(protein_b_chains)
     
-    # ====== 三元复合物关键改进：Glue 表面朝向分区 ======
+    # ====== 三元复合物关Key改进：Glue 表面朝向分区 ======
     # 提前获取 Protein A / B 坐标，用于面朝向判断
     INTERFACE_CUTOFF = 5.0  # Å — 与蛋白表面的距离截断
     face_a_mask = None  # Glue 表面朝向 Protein A 的点
@@ -1990,25 +1990,25 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
                 print(f"  朝 Protein A: {n_face_a} 点 (含桥接区)")
                 print(f"  朝 Protein B: {n_face_b} 点 (含桥接区)")
                 print(f"  桥接区 (重叠): {n_overlap} 点")
-                print(f"  非界面区: {n_neither} 点")
+                print(f"  非interface区: {n_neither} 点")
             else:
                 print("[analyze_ternary_ec] ⚠️ 无法获取蛋白坐标，降级为全表面分析")
         except Exception as e:
-            print(f"[analyze_ternary_ec] ⚠️ 面朝向分区失败: {e}")
+            print(f"[analyze_ternary_ec] ⚠️ 面朝向分区Failed: {e}")
             print("[analyze_ternary_ec] 降级为全表面分析")
     
-    # 桥联水筛选（三元复合物共用，如启用）
+    # 桥联水筛选（三元复合物共用，如Enable）
     ternary_waters_to_keep = set()
     if keep_bridging_waters and ADVANCED_PATCHES_AVAILABLE:
         print("[analyze_ternary_ec] ✨ 筛选结构性桥联水...")
         try:
             water_filter = BridgingWaterFilter()
-            # 保存包含水的复合物临时文件
+            # SavePackage含水的复合物临时File
             complex_with_water_pdb = os.path.join(output_dir, 'complex_with_water.pdb')
             if PYMOL_AVAILABLE and obj_name:
                 cmd.save(complex_with_water_pdb, f"{obj_name} and (polymer or resn HOH)")
             
-            # 筛选桥联水（返回值为 (chain, resnum) 元组列表）
+            # 筛选桥联水（ReturnValue为 (chain, resnum) 元组列表）
             water_result = water_filter.filter_pdb(complex_with_water_pdb, glue_resname)
             for chain, resnum in water_result.get('bridging_waters', []):
                 ternary_waters_to_keep.add((chain, resnum))
@@ -2020,17 +2020,17 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
             else:
                 print("[analyze_ternary_ec] 未发现符合条件的桥联水")
         except Exception as e:
-            print(f"[analyze_ternary_ec] ⚠️ 桥联水筛选失败: {e}")
-            print("[analyze_ternary_ec] 继续分析（不含水）")
+            print(f"[analyze_ternary_ec] ⚠️ 桥联水筛选Failed: {e}")
+            print("[analyze_ternary_ec] Continue分析（不含水）")
     
-    # 如果保留了桥联水，PDB2PQR 不删除水
+    # 如果保留了桥联水，PDB2PQR 不Delete水
     should_remove_water = not (keep_bridging_waters and ADVANCED_PATCHES_AVAILABLE and len(ternary_waters_to_keep) > 0)
     
-    # 初始化共享变量（避免变量作用域问题 —— 当某个 Interface 的 APBS 失败时仍可用）
+    # Initialize共享变量（避免变量作用域问题 —— 当某个 Interface 的 APBS Failed时仍可用）
     grid_a = None
     grid_b = None
-    ec_calc = ECCalculator()  # 修复: 提前初始化，避免 Interface A 失败时 Interface B 找不到 ec_calc
-    dx_file_a = None  # APBS 输出文件路径
+    ec_calc = ECCalculator()  # 修复: 提前Initialize，避免 Interface A Failed时 Interface B 找不到 ec_calc
+    dx_file_a = None  # APBS 输出FilePath
     dx_file_b = None
 
     # Interface 1: Protein A - Glue
@@ -2049,7 +2049,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         # 接触区残基提取：仅提取 Glue 周围 contact_cutoff 距离内的蛋白残基
         protein_a_sel = f"byres (({obj_name} and polymer and ({chain_sel})) within {contact_cutoff} of ({glue_sel}))"
         
-        # 打印接触区信息
+        # Print接触区Information
         try:
             n_contact_atoms_a = cmd.count_atoms(protein_a_sel)
             contact_residues_a = set()
@@ -2059,7 +2059,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         except Exception:
             pass
         
-        # 如果有桥联水，扩展选择器以包含关键水分子
+        # 如果有桥联水，ExtensionSelect器以Package含关Key水分子
         if ternary_waters_to_keep:
             water_resi_sel = ' or '.join(
                 [f"(chain {c} and resi {r})" for c, r in ternary_waters_to_keep]
@@ -2076,7 +2076,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     
     apbs = APBSRunner()
     apbs_prefix_a = os.path.join(protein_a_dir, 'protein_a_pot')
-    # 使用 Glue 几何中心作为 APBS 网格中心，确保网格覆盖 Glue 表面区域
+    # using Glue 几何中心作为 APBS 网格中心，确保网格覆盖 Glue 表面区域
     glue_center = _get_molecule_center(glue_mol)
     # 修复: 根据 contact_cutoff 动态调整网格尺寸，确保覆盖整个接触区
     fine_size = max(30, int(contact_cutoff * 2 + 10))
@@ -2088,29 +2088,29 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     )
     dx_file_a = apbs.run(apbs_input_a, protein_a_dir)
     
-    # APBS 成功时使用 DX 网格插值，失败时回退到 Coulomb 近似
+    # APBS Success时using DX 网格插Value，Failed时回退到 Coulomb 近似
     if dx_file_a:
         grid_a = DXGrid(dx_file_a)
         phi_protein_a = grid_a.interpolate(surface_points)
     else:
-        # Coulomb 近似回退：当 APBS 失败（如 PQR 解析错误）时，使用 Gasteiger 电荷直接计算静电势
+        # Coulomb 近似回退：当 APBS Failed（如 PQR 解析Error）时，using Gasteiger 电荷直接计算静电势
         print("[analyze_ternary_ec] ⚠️ APBS failed for Protein A, using Coulomb approximation...")
         grid_a = None
         charge_calc_a = GasteigerChargeCalculator()
         phi_protein_a = charge_calc_a.calculate_potential_from_pqr(protein_a_pqr, surface_points)
         # 标记 Coulomb 回退
         results['coulomb_fallback'] = True
-        results['coulomb_fallback_reason'] = "Protein A APBS 计算失败，已使用 Coulomb 近似。"
+        results['coulomb_fallback_reason'] = "Protein A APBS 计算Failed，已using Coulomb 近似。"
     
-    # 使用面朝向 mask（优先）或距离截断来筛选有效界面点（无论 APBS 是否成功都执行）
+    # using面朝向 mask（优先）或距离截断来筛选有效interface点（无论 APBS 是否Success都执行）
     phi_protein_a_masked = phi_protein_a.copy()
     if face_a_mask is not None:
         # 三元复合物改进：只保留朝向 Protein A 的 Glue 表面点
         mask_a_invalid = ~face_a_mask
         phi_protein_a_masked[mask_a_invalid] = 0.0
-        print(f"[Interface A-Glue] 使用面朝向 mask: {int(np.sum(face_a_mask))}/{len(surface_points)} 有效点")
+        print(f"[Interface A-Glue] using面朝向 mask: {int(np.sum(face_a_mask))}/{len(surface_points)} 有效点")
     elif SCIPY_AVAILABLE:
-        # 降级：使用 PDB 坐标 + 距离截断
+        # 降级：using PDB 坐标 + 距离截断
         prot_a_mol = Chem.MolFromPDBFile(protein_a_pdb, removeHs=False)
         if prot_a_mol:
             prot_coords = prot_a_mol.GetConformer().GetPositions()
@@ -2155,7 +2155,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         # 接触区残基提取：仅提取 Glue 周围 contact_cutoff 距离内的蛋白残基
         protein_b_sel = f"byres (({obj_name} and polymer and ({chain_sel})) within {contact_cutoff} of ({glue_sel}))"
         
-        # 打印接触区信息
+        # Print接触区Information
         try:
             n_contact_atoms_b = cmd.count_atoms(protein_b_sel)
             contact_residues_b = set()
@@ -2165,7 +2165,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         except Exception:
             pass
         
-        # 如果有桥联水，扩展选择器以包含关键水分子
+        # 如果有桥联水，ExtensionSelect器以Package含关Key水分子
         if ternary_waters_to_keep:
             water_resi_sel = ' or '.join(
                 [f"(chain {c} and resi {r})" for c, r in ternary_waters_to_keep]
@@ -2180,7 +2180,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     pdb2pqr.run(protein_b_pdb, protein_b_pqr, ph=ph, remove_water=should_remove_water)
     
     apbs_prefix_b = os.path.join(protein_b_dir, 'protein_b_pot')
-    # 同样使用 Glue 中心和动态网格
+    # 同样using Glue 中心和动态网格
     apbs_input_b = apbs.generate_input(
         protein_b_pqr, apbs_prefix_b,
         grid_center=glue_center,
@@ -2188,31 +2188,31 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     )
     dx_file_b = apbs.run(apbs_input_b, protein_b_dir)
     
-    # APBS 成功时使用 DX 网格插值，失败时回退到 Coulomb 近似
+    # APBS Success时using DX 网格插Value，Failed时回退到 Coulomb 近似
     if dx_file_b:
         grid_b = DXGrid(dx_file_b)
         phi_protein_b = grid_b.interpolate(surface_points)
     else:
-        # Coulomb 近似回退：当 APBS 失败（如 PQR 解析错误）时，使用 Gasteiger 电荷直接计算静电势
+        # Coulomb 近似回退：当 APBS Failed（如 PQR 解析Error）时，using Gasteiger 电荷直接计算静电势
         print("[analyze_ternary_ec] ⚠️ APBS failed for Protein B, using Coulomb approximation...")
         grid_b = None
         charge_calc_b = GasteigerChargeCalculator()
         phi_protein_b = charge_calc_b.calculate_potential_from_pqr(protein_b_pqr, surface_points)
         # 标记 Coulomb 回退
         results['coulomb_fallback'] = True
-        reason_b = "Protein B APBS 计算失败，已使用 Coulomb 近似。"
+        reason_b = "Protein B APBS 计算Failed，已using Coulomb 近似。"
         existing_reason = results.get('coulomb_fallback_reason', '')
         results['coulomb_fallback_reason'] = (existing_reason + " " + reason_b).strip()
     
-    # 使用面朝向 mask（优先）或距离截断来筛选有效界面点（无论 APBS 是否成功都执行）
+    # using面朝向 mask（优先）或距离截断来筛选有效interface点（无论 APBS 是否Success都执行）
     phi_protein_b_masked = phi_protein_b.copy()
     if face_b_mask is not None:
         # 三元复合物改进：只保留朝向 Protein B 的 Glue 表面点
         mask_b_invalid = ~face_b_mask
         phi_protein_b_masked[mask_b_invalid] = 0.0
-        print(f"[Interface B-Glue] 使用面朝向 mask: {int(np.sum(face_b_mask))}/{len(surface_points)} 有效点")
+        print(f"[Interface B-Glue] using面朝向 mask: {int(np.sum(face_b_mask))}/{len(surface_points)} 有效点")
     elif SCIPY_AVAILABLE:
-        # 降级：使用 PDB 坐标 + 距离截断
+        # 降级：using PDB 坐标 + 距离截断
         prot_b_mol = Chem.MolFromPDBFile(protein_b_pdb, removeHs=False)
         if prot_b_mol:
             prot_coords = prot_b_mol.GetConformer().GetPositions()
@@ -2338,7 +2338,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
             print("\n⚠️ Poor electrostatic complementarity in bridging zone (<50% positive)")
 
     # Interface 3: Protein A - Protein B (PPI interface with glue)
-    # 注意：PPI 分析使用 APBS 网格或 Coulomb 近似来计算 Protein B 在界面的电势
+    # 注意：PPI 分析using APBS 网格或 Coulomb 近似来计算 Protein B 在interface的电势
     print("\n" + "="*60)
     print("Interface 3: Protein A - Protein B (PPI with Glue)")
     print("="*60)
@@ -2352,7 +2352,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         chain_a_sel = ' or '.join([f"chain {c}" for c in protein_a_chains])
         chain_b_sel = ' or '.join([f"chain {c}" for c in protein_b_chains])
         
-        # Get interface atoms (within 5Å of each other) — 修复: 添加 polymer 过滤，排除配体/水/离子
+        # Get interface atoms (within 5Å of each other) — 修复: Add polymer Filter，排除配体/水/离子
         interface_a_sel = f"({obj_name} and polymer and ({chain_a_sel})) within 5.0 of ({obj_name} and polymer and ({chain_b_sel}))"
         interface_b_sel = f"({obj_name} and polymer and ({chain_b_sel})) within 5.0 of ({obj_name} and polymer and ({chain_a_sel}))"
         
@@ -2381,18 +2381,18 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
                 ppi_points_a, _ = ppi_sampler.sample_from_coords(
                     np.array(interface_a_coords), interface_a_elements)
                 
-                # 计算 Protein B 在 PPI 界面表面点的静电势
-                # 优先使用 APBS 网格插值，APBS 失败时回退到 Coulomb 近似
+                # 计算 Protein B 在 PPI interface表面点的静电势
+                # 优先using APBS 网格插Value，APBS Failed时回退到 Coulomb 近似
                 if grid_b is not None:
                     phi_b_at_interface = grid_b.interpolate(ppi_points_a)
                 else:
-                    # Coulomb 近似回退：使用 Protein B 的 PQR 电荷计算 PPI 界面电势
+                    # Coulomb 近似回退：using Protein B 的 PQR 电荷计算 PPI interface电势
                     print("[analyze_ternary_ec] ⚠️ PPI: Using Coulomb approximation for Protein B potential...")
                     charge_calc_ppi_b = GasteigerChargeCalculator()
                     phi_b_at_interface = charge_calc_ppi_b.calculate_potential_from_pqr(protein_b_pqr, ppi_points_a)
                 
                 # Calculate "potential" from interface A atoms (simplified)
-                # 修复: 预计算 charges 和坐标数组，避免循环内重复创建
+                # 修复: 预计算 charges 和坐标数组，避免循环内重复Create
                 charges_a = np.array([_get_element_charge(e) for e in interface_a_elements])
                 interface_a_np = np.array(interface_a_coords)
                 phi_a_at_interface = np.zeros(len(ppi_points_a))
@@ -2418,7 +2418,7 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
                 ec_pdb_ppi = os.path.join(ppi_dir, 'ec_map_ppi.pdb')
                 ECMapWriter.write_pseudo_pdb(ec_pdb_ppi, ppi_points_a, ec_ppi)
         except Exception as e:
-            # PPI 界面分析异常处理（修复：补全缺失的 except 子句）
+            # PPI interface分析异常处理（修复：补全缺失的 except 子句）
             print(f"[analyze_ternary_ec] PPI interface analysis failed: {e}")
     
     results['surface_points'] = surface_points
@@ -2483,9 +2483,9 @@ def _extract_protein_ligand_from_pdb(complex_pdb: str, protein_pdb: str,
 def _simple_pdb_to_pqr(pdb_file: str, pqr_file: str) -> Optional[str]:
     """Simple PDB to PQR conversion with basic charges (fallback).
     
-    使用空格分隔的 PQR 格式输出，避免固定列拼接导致 APBS 解析失败。
+    using空格分隔的 PQR 格式输出，避免固定列拼接导致 APBS 解析Failed。
     """
-    # 基于残基类型的简单电荷分配
+    # 基于残基Type的简单电荷分配
     charges = {
         'ARG': {'NH1': 0.5, 'NH2': 0.5, 'NE': 0.0},
         'LYS': {'NZ': 1.0},
@@ -2521,13 +2521,13 @@ def _simple_pdb_to_pqr(pdb_file: str, pqr_file: str) -> Optional[str]:
                     # 获取半径
                     radius = radii.get(element.upper(), 1.7)
                     
-                    # 格式化原子名称（保持 PDB 对齐规则：1字符元素右移一位）
+                    # 格式化原子Name（保持 PDB 对齐规则：1字符元素右移一位）
                     if len(atom_name) < 4:
                         atom_name_fmt = f" {atom_name:<3s}"
                     else:
                         atom_name_fmt = f"{atom_name:<4s}"
                     
-                    # 使用空格分隔的 PQR 格式写入，确保 APBS 可正确解析
+                    # using空格分隔的 PQR 格式写入，确保 APBS 可正确解析
                     pqr_line = (
                         f"{record_type:<6s}{int(serial):>5d} {atom_name_fmt} "
                         f"{resname:<3s} {chain:1s}{resseq:>4s}    "
@@ -2546,25 +2546,25 @@ def _simple_pdb_to_pqr(pdb_file: str, pqr_file: str) -> Optional[str]:
 
 
 def _fix_pqr_format(pqr_file: str) -> bool:
-    """修复 PQR 文件格式，将固定列格式转为空格分隔格式。
+    """修复 PQR File格式，将固定列格式转为空格分隔格式。
     
-    PDB2PQR（Python API 或命令行）生成的 PQR 文件可能使用 PDB 式固定列格式，
-    当坐标值较大（如 y=-104.24）时，相邻字段会连在一起（字段拼接），
+    PDB2PQR（Python API 或命令行）生成的 PQR File可能using PDB 式固定列格式，
+    当坐标Value较大（如 y=-104.24）时，相邻字段会连在一起（字段拼接），
     导致 APBS 无法解析并报错：
       "Valist_readPQR: Error parsing atom! ...no concatenated fields."
     
-    本函数依次尝试三种解析策略：
+    本Function依次尝试三种解析策略：
       1. PDB 固定列解析（标准 PDB 列位置）
       2. 空格分隔解析（适用于已经是空格分隔的行）
       3. 正则表达式兜底解析（从行中提取所有浮点数）
     
-    修复完成后会验证第一条 ATOM 行的字段数是否符合 APBS 要求。
+    修复Completed后会验证第一条 ATOM 行的字段数是否符合 APBS 要求。
     
     Args:
-        pqr_file: PQR 文件路径
+        pqr_file: PQR FilePath
         
     Returns:
-        True 表示修复成功，False 表示修复失败（原文件不受影响）
+        True 表示修复Success，False 表示修复Failed（原File不受影响）
     """
     import re
     
@@ -2572,7 +2572,7 @@ def _fix_pqr_format(pqr_file: str) -> bool:
         with open(pqr_file, 'r') as f:
             lines = f.readlines()
         
-        # 调试日志：打印修复前第一条 ATOM/HETATM 行
+        # 调试日志：Print修复前第一条 ATOM/HETATM 行
         first_atom_line = next((l for l in lines if l.startswith(('ATOM', 'HETATM'))), None)
         if first_atom_line:
             print(f"[_fix_pqr_format] 修复前第一行: {first_atom_line.rstrip()}")
@@ -2590,22 +2590,22 @@ def _fix_pqr_format(pqr_file: str) -> bool:
             
             total_atom_count += 1
             
-            # 依次尝试三种解析方法
-            # 方法一：按 PDB 固定列位置解析
+            # 依次尝试三种解析Method
+            # Method一：按 PDB 固定列位置解析
             parsed = _parse_pqr_fixed_columns(line)
             
-            # 方法二：按空格分割解析
+            # Method二：按空格分割解析
             if parsed is None:
                 parsed = _parse_pqr_whitespace(line)
             
-            # 方法三：正则表达式兜底（从拼接的行中提取浮点数）
+            # Method三：正则表达式兜底（从拼接的行中提取浮点数）
             if parsed is None:
                 parsed = _parse_pqr_regex(line)
             
             if parsed is None:
-                # 三种方式全部失败，记录并保留原行
+                # 三种方式全部Failed，记录并保留原行
                 parse_fail_count += 1
-                print(f"[_fix_pqr_format] ⚠️ 无法解析行 (三种方法均失败)，保留原样: {line.rstrip()}")
+                print(f"[_fix_pqr_format] ⚠️ 无法解析行 (三种Method均Failed)，保留原样: {line.rstrip()}")
                 fixed_lines.append(line)
                 continue
             
@@ -2623,7 +2623,7 @@ def _fix_pqr_format(pqr_file: str) -> bool:
             )
             fixed_lines.append(fixed_line)
             
-            # 调试日志：打印修复后第一条行，方便对比
+            # 调试日志：Print修复后第一条行，方便对比
             if not first_fixed_logged:
                 print(f"[_fix_pqr_format] 修复后第一行: {fixed_line.rstrip()}")
                 first_fixed_logged = True
@@ -2636,9 +2636,9 @@ def _fix_pqr_format(pqr_file: str) -> bool:
             parts = first_fixed_atom.split()
             # APBS 期望空格分隔后至少有 10-11 个字段
             if len(parts) < 10:
-                print(f"[_fix_pqr_format] ❌ 验证失败: 修复后第一行仅有 {len(parts)} 个字段 "
+                print(f"[_fix_pqr_format] ❌ 验证Failed: 修复后第一行仅有 {len(parts)} 个字段 "
                       f"(期望 ≥10): {first_fixed_atom.rstrip()}")
-                # 不写回文件，返回失败
+                # 不写回File，ReturnFailed
                 return False
             
             # 验证坐标和电荷/半径字段是否为有效浮点数
@@ -2647,16 +2647,16 @@ def _fix_pqr_format(pqr_file: str) -> bool:
                 for idx in range(-5, 0):
                     float(parts[idx])
             except (ValueError, IndexError):
-                print(f"[_fix_pqr_format] ❌ 验证失败: 修复后行的数值字段无法解析: "
+                print(f"[_fix_pqr_format] ❌ 验证Failed: 修复后行的数Value字段无法解析: "
                       f"{first_fixed_atom.rstrip()}")
                 return False
             
-            print(f"[_fix_pqr_format] ✅ 验证通过: 修复后第一行有 {len(parts)} 个字段，数值字段正常")
+            print(f"[_fix_pqr_format] ✅ 验证通过: 修复后第一行有 {len(parts)} 个字段，数Value字段正常")
         
         if parse_fail_count > 0:
-            print(f"[_fix_pqr_format] ⚠️ 有 {parse_fail_count}/{total_atom_count} 行解析失败")
+            print(f"[_fix_pqr_format] ⚠️ 有 {parse_fail_count}/{total_atom_count} 行解析Failed")
         
-        # 写回文件
+        # 写回File
         with open(pqr_file, 'w') as f:
             f.writelines(fixed_lines)
         
@@ -2664,7 +2664,7 @@ def _fix_pqr_format(pqr_file: str) -> bool:
         return True
         
     except Exception as e:
-        print(f"[_fix_pqr_format] ❌ 修复失败: {e}")
+        print(f"[_fix_pqr_format] ❌ 修复Failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -2677,21 +2677,21 @@ def _parse_pqr_fixed_columns(line: str):
       record_type: [0:6], serial: [6:11], atom_name: [12:16],
       resname: [17:20], chain: [21:22], resseq: [22:26],
       x: [30:38], y: [38:46], z: [46:54],
-      charge: [54:62], radius: [62:70] (PQR 扩展字段)
+      charge: [54:62], radius: [62:70] (PQR Extension字段)
     
     增强处理：
-      - 当坐标值较大（如 -104.240）导致字段拼接时，尝试智能拆分
+      - 当坐标Value较大（如 -104.240）导致字段拼接时，尝试智能拆分
       - 支持负坐标导致的列宽溢出（如 -1004.240 溢出 8 字符列宽）
-      - 支持 PDB2PQR Python API 输出的微小列偏移
+      - 支持 PDB2PQR Python API 输出的微小列shift
     
     Returns:
-        解析成功返回元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
-        解析失败返回 None
+        解析SuccessReturn元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
+        解析FailedReturn None
     """
     import re
     
     try:
-        # 行长度不够则无法按固定列解析
+        # 行长degrees不够则无法按固定列解析
         if len(line) < 54:
             return None
         
@@ -2706,7 +2706,7 @@ def _parse_pqr_fixed_columns(line: str):
         
         atom_name = line[12:16].strip()
         resname = line[17:20].strip()
-        # 有时 resname 会延伸到第 21 列（如 4 字符残基名），包容处理
+        # 有时 resname 会延伸到第 21 列（如 4 字符残基名），Package容处理
         if not resname:
             resname = line[16:21].strip()
         
@@ -2725,24 +2725,24 @@ def _parse_pqr_fixed_columns(line: str):
             pass
         
         if not coords_parsed:
-            # 标准列位置解析失败，使用增强正则从坐标区域提取
+            # 标准列位置解析Failed，using增强正则从坐标区域提取
             # 正则匹配：限制小数位数为 1-4 位，防止贪婪匹配吃掉相邻字段
             # 例如 "27.340-104.240" 正确拆分为 ["27.340", "-104.240"]
             enhanced_float = re.compile(r'[+-]?(?:\d+\.\d{1,4}|\.\d{1,4}|\d+(?:[eE][+-]?\d+))')
             
-            # 从第 26 列开始搜索（覆盖可能的列偏移），范围扩大到第 60 列
+            # 从第 26 列StartSearch（覆盖可能的列shift），范围扩大到第 60 列
             coord_region = line[26:60] if len(line) >= 60 else line[26:]
             coord_matches = enhanced_float.findall(coord_region)
             
-            # 过滤掉可能混入的残基编号（通常是纯整数且位于区域开头）
-            # 坐标值通常含小数点，残基编号通常不含
+            # Filter掉可能混入的残基Number（通常是纯整数且位于区域开头）
+            # 坐标Value通常含小数点，残基Number通常不含
             if len(coord_matches) > 3:
-                # 优先选择含小数点的匹配项
+                # 优先Select含小数点的匹配项
                 decimal_matches = [m for m in coord_matches if '.' in m]
                 if len(decimal_matches) >= 3:
                     coord_matches = decimal_matches[:3]
                 else:
-                    # 取最后 3 个（跳过前面可能的残基编号）
+                    # 取最后 3 个（Skip前面可能的残基Number）
                     # 但需确保取出的是坐标而非 charge/radius
                     coord_matches = coord_matches[:3]
             
@@ -2753,12 +2753,12 @@ def _parse_pqr_fixed_columns(line: str):
             y = float(coord_matches[1])
             z = float(coord_matches[2])
         
-        # ── 电荷和半径解析（增强版：处理列偏移） ──
+        # ── 电荷和半径解析（增强版：处理列shift） ──
         charge = 0.0
         radius = 0.0
         
-        # 尝试多个起始位置提取 charge/radius（应对坐标列溢出导致的偏移）
-        # 优先从标准位置 [54:] 开始，如果失败则向后偏移 1-2 列
+        # 尝试多个起始位置提取 charge/radius（应对坐标列溢出导致的shift）
+        # 优先从标准位置 [54:] Start，如果Failed则向后shift 1-2 列
         tail_candidates = []
         for start_col in [54, 55, 56, 52, 53]:
             if len(line) > start_col:
@@ -2801,11 +2801,11 @@ def _parse_pqr_whitespace(line: str):
     PQR 空格分隔格式通常为：
       ATOM serial atom_name resname [chain] resseq x y z charge radius
     
-    注意：chain 字段可能缺失，需要根据字段数量判断。
+    注意：chain 字段可能缺失，需要根据字段Count判断。
     
     Returns:
-        解析成功返回元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
-        解析失败返回 None
+        解析SuccessReturn元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
+        解析FailedReturn None
     """
     try:
         parts = line.split()
@@ -2821,7 +2821,7 @@ def _parse_pqr_whitespace(line: str):
         resname = parts[3]
         
         if len(parts) == 11:
-            # 包含 chain 字段
+            # Package含 chain 字段
             chain = parts[4]
             resseq = parts[5]
             x = float(parts[6])
@@ -2859,19 +2859,19 @@ def _parse_pqr_whitespace(line: str):
 def _parse_pqr_regex(line: str):
     """正则表达式兜底方案：从 PQR 行中提取所有浮点数。
     
-    当固定列和空格分隔方法都失败时（通常因为大坐标值导致字段拼接），
-    使用正则表达式从行中提取所有浮点数值，然后根据数量推断各字段含义。
+    当固定列和空格分隔Method都Failed时（通常因为大坐标Value导致字段拼接），
+    using正则表达式从行中提取所有浮点数Value，然后根据Count推断各字段含义。
     
-    PQR 行应包含 5 个浮点数：x, y, z, charge, radius
+    PQR 行应Package含 5 个浮点数：x, y, z, charge, radius
     
     Returns:
-        解析成功返回元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
-        解析失败返回 None
+        解析SuccessReturn元组 (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)
+        解析FailedReturn None
     """
     import re
     
     try:
-        # 确认是 ATOM/HETATM 行
+        # Confirm是 ATOM/HETATM 行
         if not line.startswith(('ATOM', 'HETATM')):
             return None
         
@@ -2888,15 +2888,15 @@ def _parse_pqr_regex(line: str):
             return None
         
         # 最后 5 个浮点数应该是 x, y, z, charge, radius
-        # （前面可能有混入的数值如残基编号等，但残基编号通常是整数）
+        # （前面可能有混入的数Value如残基Number等，但残基Number通常是整数）
         x = float(all_floats[-5])
         y = float(all_floats[-4])
         z = float(all_floats[-3])
         charge = float(all_floats[-2])
         radius = float(all_floats[-1])
         
-        # 从行首提取序号、原子名、残基名等文本字段
-        # 使用另一个正则提取 record_type 后面的整数和文本
+        # 从行首提取Index、原子名、残基名等文本字段
+        # using另一个正则提取 record_type 后面的整数和文本
         # 典型格式: "ATOM     1  N   MET A   1   ..."
         header_match = re.match(
             r'(ATOM|HETATM)\s+(\d+)\s+(\S+)\s+(\S+)\s*(\S?)\s*(\d+)',
@@ -2929,7 +2929,7 @@ def _parse_pqr_regex(line: str):
         if radius < 0:
             return None
         
-        print(f"[_parse_pqr_regex] 🔧 正则兜底解析成功: {record_type} {serial} {atom_name} "
+        print(f"[_parse_pqr_regex] 🔧 正则兜底解析Success: {record_type} {serial} {atom_name} "
               f"x={x:.3f} y={y:.3f} z={z:.3f} q={charge:.4f} r={radius:.4f}")
         
         return (record_type, serial, atom_name, resname, chain, resseq, x, y, z, charge, radius)

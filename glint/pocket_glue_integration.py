@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 pocket_glue_integration.py
-口袋分析与分子胶功能联动模块（精简版）
+口袋分析与分子胶功能联动Module（精简版）
 
 核心功能：
-1. 口袋与 PPI 界面关联分析
+1. 口袋与 PPI interface关联分析
 2. 分子胶前后口袋对比
 3. 口袋-相互作用关联
 4. G-motif 口袋综合分析
@@ -22,12 +22,12 @@ except ImportError:
 from .pocket_detector import detect_pockets, compare_pockets
 
 
-# 从包级别导入统一的中文检测函数，避免重复定义
+# 从Package级别Import统一的中文检测Function，避免重复定义
 from . import _zh
 
 
 def _info(cn, en):
-    """双语信息输出"""
+    """双语Information输出"""
     print(cn if _zh() else en)
 
 
@@ -35,27 +35,27 @@ def analyze_pockets_in_ppi_interface(obj_name, chain_a, chain_b,
                                      output_csv=None, visualize=True,
                                      **pocket_kwargs):
     """
-    分析 PPI 界面上的口袋
+    分析 PPI interface上的口袋
     
-    参数：
+    Parameters：
         obj_name: PyMOL 对象名
         chain_a, chain_b: 两个蛋白链
         output_csv: 输出 CSV
         visualize: 是否可视化
-        **pocket_kwargs: 传递给 detect_pockets 的参数
+        **pocket_kwargs: 传递给 detect_pockets 的Parameters
     
-    返回：界面口袋列表
+    Return：interface口袋列表
     """
     if not cmd:
-        _info("错误：需要 PyMOL 环境", "Error: PyMOL required")
+        _info("Error：需要 PyMOL 环境", "Error: PyMOL required")
         return []
     
-    _info(f"\n分析 {obj_name} 中链 {chain_a} 和 {chain_b} 的界面口袋...",
+    _info(f"\n分析 {obj_name} 中链 {chain_a} 和 {chain_b} 的interface口袋...",
           f"\nAnalyzing interface pockets in {obj_name} between chains {chain_a} and {chain_b}...")
     
     all_pockets = detect_pockets(obj_name=obj_name, **pocket_kwargs)
     
-    # 获取界面残基
+    # 获取interface残基
     try:
         from .ppi_analyzer import analyze_protein_protein_interface
         ppi_result = analyze_protein_protein_interface(obj_name, [chain_a], [chain_b], interface_distance=5.0, visualize=False)
@@ -65,10 +65,10 @@ def analyze_pockets_in_ppi_interface(obj_name, chain_a, chain_b,
             interface_residues.add((res['chain1'], res['resid1']))
             interface_residues.add((res['chain2'], res['resid2']))
     except Exception as e:
-        _info(f"警告：无法获取界面残基：{e}", f"Warning: Failed to get interface residues: {e}")
+        _info(f"Warning：无法获取interface残基：{e}", f"Warning: Failed to get interface residues: {e}")
         interface_residues = set()
     
-    # 筛选界面口袋
+    # 筛选interface口袋
     interface_pockets = []
     for pocket in all_pockets:
         pocket_res_set = set((r['chain'], r['resi']) for r in pocket['residues'])
@@ -80,7 +80,7 @@ def analyze_pockets_in_ppi_interface(obj_name, chain_a, chain_b,
             pocket['interface_residues'] = list(overlap)
             interface_pockets.append(pocket)
             
-            _info(f"  口袋 {pocket['id']}: 界面重叠度 {interface_overlap:.2%}",
+            _info(f"  口袋 {pocket['id']}: interface重叠degrees {interface_overlap:.2%}",
                   f"  Pocket {pocket['id']}: Interface overlap {interface_overlap:.2%}")
     
     if output_csv:
@@ -91,14 +91,14 @@ def analyze_pockets_in_ppi_interface(obj_name, chain_a, chain_b,
         visualize_pockets(interface_pockets, obj_name='interface_pockets',
                          color_by='druggability', show_spheres=True)
     
-    _info(f"\n在界面上发现 {len(interface_pockets)} 个口袋（共 {len(all_pockets)} 个）",
+    _info(f"\n在interface上发现 {len(interface_pockets)} 个口袋（共 {len(all_pockets)} 个）",
           f"\nFound {len(interface_pockets)} pockets at interface (out of {len(all_pockets)})")
     
     return interface_pockets
 
 
 def _export_interface_pockets_csv(pockets, output_csv):
-    """导出界面口袋 CSV"""
+    """Exportinterface口袋 CSV"""
     fieldnames = [
         'Pocket_ID', 'Volume_A3', 'Druggability_Score', 'Interface_Overlap',
         'Hydrophobicity', 'Net_Charge', 'Center_X', 'Center_Y', 'Center_Z'
@@ -129,15 +129,15 @@ def analyze_pockets_with_glue(obj_with_glue, obj_without_glue=None,
     """
     分析分子胶对口袋的影响
     
-    参数：
+    Parameters：
         obj_with_glue: 含分子胶的对象名
         obj_without_glue: 不含分子胶的对象名（可选）
         protein_a_chain, protein_b_chain: 两个蛋白链
-        output_dir: 输出目录
+        output_dir: 输出Directory
         visualize: 是否可视化
-        **pocket_kwargs: 传递给 detect_pockets 的参数
+        **pocket_kwargs: 传递给 detect_pockets 的Parameters
     
-    返回：(pockets_with, pockets_without, comparison)
+    Return：(pockets_with, pockets_without, comparison)
     """
     if not cmd:
         return None, None, None
@@ -206,15 +206,15 @@ def correlate_pockets_with_interactions(pockets, interaction_csv, output_csv=Non
     """
     关联口袋与相互作用分析
     
-    参数：
-        pockets: detect_pockets 返回的口袋列表
-        interaction_csv: 相互作用 CSV 文件
+    Parameters：
+        pockets: detect_pockets Return的口袋列表
+        interaction_csv: 相互作用 CSV File
         output_csv: 输出 CSV
     
-    返回：口袋-相互作用关联列表
+    Return：口袋-相互作用关联列表
     """
     if not os.path.exists(interaction_csv):
-        _info(f"错误：未找到相互作用文件 {interaction_csv}", f"Error: Interaction file not found")
+        _info(f"Error：未找到相互作用File {interaction_csv}", f"Error: Interaction file not found")
         return []
     
     interactions = []
@@ -282,15 +282,15 @@ def integrate_pockets_with_electrostatics(obj_name, pockets=None,
     """
     整合口袋检测与静电势分析
 
-    参数：
+    Parameters：
         obj_name: PyMOL 对象名
         pockets: 预先检测的口袋列表（可选，None 则自动检测）
-        output_csv: 输出 CSV 文件路径
+        output_csv: 输出 CSV FilePath
         visualize: 是否可视化
-        **pocket_kwargs: 传递给 detect_pockets 的参数
+        **pocket_kwargs: 传递给 detect_pockets 的Parameters
 
-    返回：
-        带有静电势信息的口袋列表
+    Return：
+        带有静电势Information的口袋列表
     """
     if not cmd:
         return None
@@ -303,7 +303,7 @@ def integrate_pockets_with_electrostatics(obj_name, pockets=None,
         _info("⚠️  未检测到口袋", "⚠️  No pockets detected")
         return []
 
-    _info(f"\n🔬 整合 {len(pockets)} 个口袋的静电势信息...",
+    _info(f"\n🔬 整合 {len(pockets)} 个口袋的静电势Information...",
           f"\n🔬 Integrating electrostatics for {len(pockets)} pockets...")
 
     # 为每个口袋计算静电势特征
@@ -359,7 +359,7 @@ def integrate_pockets_with_electrostatics(obj_name, pockets=None,
                     'Center_Y': f"{p['center'][1]:.2f}",
                     'Center_Z': f"{p['center'][2]:.2f}"
                 })
-        _info(f"✅ 结果已保存：{output_csv}", f"✅ Results saved: {output_csv}")
+        _info(f"✅ Results已Save：{output_csv}", f"✅ Results saved: {output_csv}")
 
     # 可视化
     if visualize:
@@ -373,16 +373,16 @@ def comprehensive_glue_pocket_analysis(obj_name, chain_a, chain_b,
                                        glue_selection=None,
                                        output_dir='glue_pocket_analysis'):
     """
-    分子胶口袋综合分析（一键式）
+    分子胶口袋综合分析（一Key式）
 
-    参数：
+    Parameters：
         obj_name: PyMOL 对象名
         chain_a: 蛋白 A 链（如 E3）
         chain_b: 蛋白 B 链（如底物）
-        glue_selection: 分子胶选择表达式（可选）
-        output_dir: 输出目录
+        glue_selection: 分子胶Select表达式（可选）
+        output_dir: 输出Directory
 
-    返回：综合分析结果字典
+    Return：综合分析Results字典
     """
     if not cmd:
         return None
@@ -405,15 +405,15 @@ def comprehensive_glue_pocket_analysis(obj_name, chain_a, chain_b,
     results['all_pockets'] = all_pockets
     _info(f"   检测到 {len(all_pockets)} 个口袋", f"   Detected {len(all_pockets)} pockets")
 
-    # 2. 界面口袋分析
-    _info("\n📍 步骤 2: 界面口袋分析...", "\n📍 Step 2: Interface pocket analysis...")
+    # 2. interface口袋分析
+    _info("\n📍 步骤 2: interface口袋分析...", "\n📍 Step 2: Interface pocket analysis...")
     interface_pockets = analyze_pockets_in_ppi_interface(
         obj_name, chain_a, chain_b,
         output_csv=os.path.join(output_dir, 'interface_pockets.csv'),
         visualize=False
     )
     results['interface_pockets'] = interface_pockets
-    _info(f"   界面口袋: {len(interface_pockets)} 个", f"   Interface pockets: {len(interface_pockets)}")
+    _info(f"   interface口袋: {len(interface_pockets)} 个", f"   Interface pockets: {len(interface_pockets)}")
 
     # 3. 静电势整合
     _info("\n📍 步骤 3: 静电势整合...", "\n📍 Step 3: Electrostatics integration...")
@@ -427,7 +427,7 @@ def comprehensive_glue_pocket_analysis(obj_name, chain_a, chain_b,
     # 4. 分子胶影响分析（如果提供）
     if glue_selection:
         _info("\n📍 步骤 4: 分子胶影响分析...", "\n📍 Step 4: Glue impact analysis...")
-        # 这里可以扩展更多分析
+        # 这里可以Extension更多分析
         results['glue_selection'] = glue_selection
 
     # 5. 可视化
@@ -435,7 +435,7 @@ def comprehensive_glue_pocket_analysis(obj_name, chain_a, chain_b,
     if interface_pockets:
         visualize_pockets(interface_pockets, obj_name='interface_pockets', color_by='druggability')
 
-    _info(f"\n✅ 分析完成！结果保存在：{output_dir}", f"\n✅ Analysis complete! Results saved to: {output_dir}")
+    _info(f"\n✅ 分析Completed！ResultsSave在：{output_dir}", f"\n✅ Analysis complete! Results saved to: {output_dir}")
 
     return results
 
@@ -444,16 +444,16 @@ def comprehensive_gmotif_pocket_analysis(obj_name, e3_chain, substrate_chain,
                                          glue_chain=None, 
                                          output_dir='gmotif_pocket_analysis'):
     """
-    G-motif 与口袋综合分析（一键式）
+    G-motif 与口袋综合分析（一Key式）
     
-    参数：
+    Parameters：
         obj_name: PyMOL 对象名
         e3_chain: E3 ligase 链
         substrate_chain: 底物链
         glue_chain: 分子胶链（可选）
-        output_dir: 输出目录
+        output_dir: 输出Directory
     
-    返回：综合分析结果字典
+    Return：综合分析Results字典
     """
     if not cmd:
         return None
@@ -485,7 +485,7 @@ def comprehensive_gmotif_pocket_analysis(obj_name, e3_chain, substrate_chain,
         best_gmotif = gmotif_results[0]
         gmotif_range = f"{best_gmotif['start_resi']}-{best_gmotif['end_resi']}"
     except Exception as e:
-        _info(f"错误：G-motif 识别失败：{e}", f"Error: G-motif detection failed: {e}")
+        _info(f"Error：G-motif 识别Failed：{e}", f"Error: G-motif detection failed: {e}")
         return results
     
     # 2. G-motif 周围口袋检测
@@ -512,9 +512,9 @@ def comprehensive_gmotif_pocket_analysis(obj_name, e3_chain, substrate_chain,
             )
             results['correlations'] = correlations
         except Exception as e:
-            _info(f"警告：G-motif-分子胶分析失败：{e}", f"Warning: G-motif-glue analysis failed: {e}")
+            _info(f"Warning：G-motif-分子胶分析Failed：{e}", f"Warning: G-motif-glue analysis failed: {e}")
     
-    # 4. 界面口袋分析
+    # 4. interface口袋分析
     interface_pockets = analyze_pockets_in_ppi_interface(
         obj_name, e3_chain, substrate_chain,
         output_csv=os.path.join(output_dir, 'interface_pockets.csv'),
@@ -531,13 +531,13 @@ def comprehensive_gmotif_pocket_analysis(obj_name, e3_chain, substrate_chain,
         cmd.select('gmotif_region', f'chain {substrate_chain} and resi {gmotif_range}')
         cmd.show('cartoon', 'gmotif_region')
         cmd.color('red', 'gmotif_region')
-    except Exception:  # PyMOL 操作可能失败
+    except Exception:  # PyMOL 操作可能Failed
         pass
     
-    _info(f"\n✅ 分析完成！结果保存在：{output_dir}", f"\n✅ Analysis complete! Results saved to: {output_dir}")
+    _info(f"\n✅ 分析Completed！ResultsSave在：{output_dir}", f"\n✅ Analysis complete! Results saved to: {output_dir}")
     
     return results
 
 
 if __name__ == '__main__':
-    print("GLINT Pocket-Glue Integration - 请在 PyMOL 中使用")
+    print("GLINT Pocket-Glue Integration - 请在 PyMOL 中using")

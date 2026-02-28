@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Ternary Complex Evaluation Tab
-三元复合物评估标签页 - 包含界面模块、配体模块、三元几何模块
+三元复合物评估Label页 - Package含interfaceModule、配体Module、三元几何Module
 """
 import os
 from typing import Optional, Dict, Any
@@ -17,7 +17,7 @@ from .common import CommonTab
 
 
 class TernaryEvaluationTab(CommonTab):
-    """三元复合物评估标签页 - 与Target Discovery并列"""
+    """三元复合物评估Label页 - 与Target Discovery并列"""
     
     def __init__(self, parent):
         super().__init__(parent)
@@ -25,7 +25,7 @@ class TernaryEvaluationTab(CommonTab):
         self.init_ui()
         
     def init_ui(self):
-        """初始化UI - 现代卡片式布局"""
+        """InitializeUI - 现代卡片式布局"""
         self.setObjectName("scroll_content")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
 
@@ -118,11 +118,11 @@ class TernaryEvaluationTab(CommonTab):
         btn_row.addStretch(1)
         layout.addLayout(btn_row)
 
-        # === 结果摘要卡片 ===
+        # === Results摘要卡片 ===
         summary_card = self._create_summary_card(is_dark)
         layout.addWidget(summary_card)
 
-        # === 详细结果区域 ===
+        # === 详细Results区域 ===
         result_card = self._create_result_card(is_dark)
         layout.addWidget(result_card, 1)
 
@@ -148,14 +148,14 @@ class TernaryEvaluationTab(CommonTab):
         """
 
     def _create_input_card(self, is_dark: bool) -> QFrame:
-        """创建输入卡片 - 两行清晰布局"""
+        """Create输入卡片 - 两行清晰布局"""
         card = QFrame()
         card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)
         layout.setSpacing(12)
         layout.setContentsMargins(16, 14, 16, 14)
 
-        # 第一行：PyMOL对象选择
+        # 第一行：PyMOL对象Select
         row1 = QHBoxLayout()
         row1.setSpacing(10)
 
@@ -192,7 +192,7 @@ class TernaryEvaluationTab(CommonTab):
         sep.setFixedHeight(1)
         layout.addWidget(sep)
 
-        # 第二行：链和配体设置
+        # 第二行：链和配体Settings
         row2 = QHBoxLayout()
         row2.setSpacing(20)
 
@@ -244,7 +244,7 @@ class TernaryEvaluationTab(CommonTab):
         return card
 
     def _do_refresh(self):
-        """刷新PyMOL对象列表"""
+        """RefreshPyMOL对象列表"""
         names = []
         try:
             from pymol import cmd
@@ -264,7 +264,7 @@ class TernaryEvaluationTab(CommonTab):
         self.log(f"Refreshed: {len(names)} objects")
 
     def _create_interface_card(self, is_dark: bool) -> QFrame:
-        """创建界面分析卡片"""
+        """Createinterface分析卡片"""
         card = QFrame()
         card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)
@@ -280,7 +280,7 @@ class TernaryEvaluationTab(CommonTab):
         desc.setStyleSheet("font-size: 11px; color: #94a3b8; margin-bottom: 6px;")
         layout.addWidget(desc)
 
-        # 参数区域
+        # Parameters区域
         params = QGridLayout()
         params.setSpacing(8)
 
@@ -316,7 +316,7 @@ class TernaryEvaluationTab(CommonTab):
         return card
 
     def _create_ligand_card(self, is_dark: bool) -> QFrame:
-        """创建配体属性卡片"""
+        """Create配体Property卡片"""
         card = QFrame()
         card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)
@@ -332,7 +332,7 @@ class TernaryEvaluationTab(CommonTab):
         desc.setStyleSheet("font-size: 11px; color: #94a3b8; margin-bottom: 6px;")
         layout.addWidget(desc)
 
-        # 属性网格
+        # Property网格
         self.lig_prop_labels = {}
         props = [("MW", "Da"), ("LogP", ""), ("TPSA", "Å²"), ("HBD", ""),
                  ("HBA", ""), ("RotB", ""), ("Fsp3", ""), ("Ring", "")]
@@ -367,7 +367,7 @@ class TernaryEvaluationTab(CommonTab):
         return card
 
     def _create_geometry_card(self, is_dark: bool) -> QFrame:
-        """创建几何分析卡片"""
+        """Create几何分析卡片"""
         card = QFrame()
         card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)
@@ -383,7 +383,7 @@ class TernaryEvaluationTab(CommonTab):
         desc.setStyleSheet("font-size: 11px; color: #94a3b8; margin-bottom: 6px;")
         layout.addWidget(desc)
 
-        # 几何参数网格
+        # 几何Parameters网格
         self.geom_labels = {}
         features = [
             ("COG", "Å", "COG Shift"), ("Angle", "°", "Angle"),
@@ -420,7 +420,7 @@ class TernaryEvaluationTab(CommonTab):
         return card
 
     def _create_summary_card(self, is_dark: bool) -> QFrame:
-        """创建结果摘要卡片"""
+        """CreateResults摘要卡片"""
         card = QFrame()
         card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)
@@ -467,7 +467,7 @@ class TernaryEvaluationTab(CommonTab):
         return card
 
     def _create_result_card(self, is_dark: bool) -> QFrame:
-        """创建详细结果卡片"""
+        """Create详细Results卡片"""
         card = QFrame()
         card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)
@@ -482,7 +482,7 @@ class TernaryEvaluationTab(CommonTab):
         header.addStretch(1)
         layout.addLayout(header)
 
-        # 结果文本区域
+        # Results文本区域
         self.parent_window.ternary_result_text = QTextEdit()
         self.parent_window.ternary_result_text.setReadOnly(True)
         self.parent_window.ternary_result_text.setMinimumHeight(180)
@@ -522,7 +522,7 @@ class TernaryEvaluationTab(CommonTab):
         return card
 
     def _get_pdb_path(self) -> Optional[str]:
-        """从PyMOL对象导出PDB文件"""
+        """从PyMOL对象ExportPDBFile"""
         obj = self.ternary_obj_combo.currentText().strip()
         if obj and obj != t("no_object"):
             try:
@@ -556,7 +556,7 @@ class TernaryEvaluationTab(CommonTab):
         self.parent_window.progress_bar.setRange(0, 0)
         
         from ..workers_ternary import TernaryEvaluationWorker
-        # 使用 ligand residue name 作为配体标识
+        # using ligand residue name 作为配体ID
         obj_name = self.ternary_obj_combo.currentText().strip()
         self.parent_window.ternary_thread = TernaryEvaluationWorker(
             pdb_path, e3, poi, lig_resn, None, None, obj_name
@@ -567,16 +567,16 @@ class TernaryEvaluationTab(CommonTab):
         self.parent_window.ternary_thread.start()
 
     def _on_finished(self, result: Dict[str, Any], out_csv: str):
-        """评估完成"""
+        """评估Completed"""
         self._last_result = result
         self.parent_window.progress_bar.setVisible(False)
         self.parent_window.progress_bar.setRange(0, 1)
         self.parent_window.ternary_run_all_btn.setEnabled(True)
 
-        # 更新结果显示
+        # UpdateResultsDisplay
         self.parent_window.ternary_result_text.setText(self._format_results(result))
 
-        # 更新摘要卡片
+        # Update摘要卡片
         summary_map = {
             "Total BSA": ("bsa_total", "Å²"),
             "MG-E3 BSA": ("bsa_mg_e3", "Å²"),
@@ -592,7 +592,7 @@ class TernaryEvaluationTab(CommonTab):
                 else:
                     self.summary_labels[name].setText(str(val))
 
-        # 更新配体属性标签
+        # Update配体PropertyLabel
         for key, lbl in self.lig_prop_labels.items():
             map_key = f"ligand_{key.lower()}"
             if key == "RotBonds":
@@ -600,7 +600,7 @@ class TernaryEvaluationTab(CommonTab):
             val = result.get(map_key, 0)
             lbl.setText(f"{val:.2f}" if isinstance(val, float) else str(val))
 
-        # 更新几何标签
+        # Update几何Label
         geom_map = {
             "COG Shift": "geom_cog_shift",
             "Angle": "geom_angle_deg",
@@ -616,21 +616,21 @@ class TernaryEvaluationTab(CommonTab):
         self.log("✅ Full evaluation complete")
 
     def _safe_get(self, result: Dict[str, Any], key: str, default: float = 0.0) -> float:
-        """安全获取字典值，处理 None 的情况"""
+        """安全获取字典Value，处理 None 的情况"""
         val = result.get(key, default)
         return default if val is None else val
     
     def _format_results(self, result: Dict[str, Any]) -> str:
-        """格式化结果 - 包含公式说明和中间计算值"""
+        """格式化Results - Package含公式说明和中间计算Value"""
         
-        # 获取各项数值
+        # 获取各项数Value
         bsa_total = self._safe_get(result, 'bsa_total')
         bsa_mg_e3 = self._safe_get(result, 'bsa_mg_e3')
         bsa_mg_poi = self._safe_get(result, 'bsa_mg_poi')
         bsa_e3_poi = self._safe_get(result, 'bsa_e3_poi')
         contacts = result.get('contact_count_45', 0) or 0
         
-        # 获取中间计算值
+        # 获取中间计算Value
         sa_e3_mg = self._safe_get(result, 'sa_e3_mg')
         sa_poi_mg = self._safe_get(result, 'sa_poi_mg')
         sa_ternary = self._safe_get(result, 'sa_ternary')
@@ -740,13 +740,13 @@ class TernaryEvaluationTab(CommonTab):
         return "\n".join(lines)
 
     def run_interface_only(self):
-        """仅运行界面计算"""
+        """仅运行interface计算"""
         self.log("Running interface calculation...")
         # 简化版：直接调用完整评估
         self.run_full_evaluation()
 
     def run_ligand_only(self):
-        """仅运行配体计算 - 从结构中提取配体信息"""
+        """仅运行配体计算 - 从结构中提取配体Information"""
         lig_resn = self.parent_window.ternary_lig_resn.text().strip()
         if not lig_resn:
             show_message_box(self, "Warning", "Please specify ligand residue name.", "warning")
@@ -761,11 +761,11 @@ class TernaryEvaluationTab(CommonTab):
             from pymol import cmd
             import tempfile
 
-            # 只导出配体部分到临时 PDB 文件
+            # 只Export配体部分到临时 PDB File
             fd, lig_pdb_path = tempfile.mkstemp(suffix=".pdb")
             os.close(fd)
 
-            # 选择并保存配体
+            # Select并Save配体
             lig_sel = f"{obj} and resn {lig_resn}"
             lig_count = cmd.count_atoms(lig_sel)
 
@@ -784,11 +784,11 @@ class TernaryEvaluationTab(CommonTab):
                 obConversion.SetInAndOutFormats("pdb", "smi")
                 mol = ob.OBMol()
                 obConversion.ReadFile(mol, lig_pdb_path)
-                smiles = obConversion.WriteString(mol).strip().split()[0]  # 只取第一个 SMILES
+                smiles = obConversion.WriteString(mol).strip().split()[0]  # 只取First SMILES
                 self.log(f"Extracted SMILES: {smiles[:50]}..." if len(smiles) > 50 else f"Extracted SMILES: {smiles}")
             except ImportError:
                 self.log("⚠️ OpenBabel not available, trying RDKit...")
-                # 尝试使用 RDKit 从 PDB 读取
+                # 尝试using RDKit 从 PDB 读取
                 try:
                     from rdkit import Chem
                     mol = Chem.MolFromPDBFile(lig_pdb_path, removeHs=False)
@@ -800,19 +800,19 @@ class TernaryEvaluationTab(CommonTab):
             except Exception as e:
                 self.log(f"⚠️ OpenBabel error: {e}")
             
-            # 清理临时文件
+            # 清理临时File
             try:
                 os.remove(lig_pdb_path)
-            except OSError:  # 临时文件删除可能失败
+            except OSError:  # 临时FileDelete可能Failed
                 pass
             
             if smiles:
-                # 计算配体属性
+                # 计算配体Property
                 from ...ternary_complex_evaluator import LigandCalculator
                 calc = LigandCalculator()
                 props = calc.calculate(smiles)
                 
-                # 更新 GUI 标签
+                # Update GUI Label
                 attr_map = {
                     "MW": "molecular_weight",
                     "LogP": "logp",
@@ -860,7 +860,7 @@ class TernaryEvaluationTab(CommonTab):
             lig_resn = self.parent_window.ternary_lig_resn.text().strip()
             
             cmd.show("cartoon", obj)
-            # 使用 PyMOL 标准颜色名称
+            # using PyMOL 标准颜色Name
             cmd.color("slate", f"{obj} and chain {e3}")      # 浅蓝色
             cmd.color("palegreen", f"{obj} and chain {poi}") # 浅绿色
             cmd.show("sticks", f"{obj} and resn {lig_resn}")
@@ -895,7 +895,7 @@ class TernaryEvaluationTab(CommonTab):
             self.on_error(str(e))
 
     def export_results(self):
-        """导出结果到CSV"""
+        """ExportResults到CSV"""
         if not self._last_result:
             show_message_box(self, "Warning", "No results to export.", "warning")
             return

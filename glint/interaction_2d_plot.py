@@ -5,11 +5,11 @@ interaction_2d_plot.py
 
 特性：
 - 基于 3D 坐标的精确原子/环映射
-- 使用 RDKit CoordGen 实现先进的 2D 布局
+- using RDKit CoordGen 实现先进的 2D 布局
 - 支持大环分子的优雅展示
 - 统一的配色方案 (Schrödinger 风格)
 - 精确的 Pi-相互作用环中心连接
-- 与 interaction_analyzer.py 的 3D 可视化完全一致的配色和类型定义
+- 与 interaction_analyzer.py 的 3D 可视化完全一致的配色和Type定义
 """
 
 import os
@@ -30,7 +30,7 @@ try:
     from rdkit import Chem
     from rdkit.Chem import AllChem, rdDepictor
     from rdkit.Chem.Draw import rdMolDraw2D
-    # 尝试导入 rdDetermineBonds 模块 (RDKit 2022.09+)，用于从 3D 坐标推断键级
+    # 尝试Import rdDetermineBonds Module (RDKit 2022.09+)，用于从 3D 坐标推断Key级
     try:
         from rdkit.Chem import rdDetermineBonds
         HAS_DETERMINE_BONDS = True
@@ -55,7 +55,7 @@ except ImportError:
     )
 
 # ============================================================================
-# 残基类型分类 (与 3D 视图一致)
+# 残基TypeCategory (与 3D 视图一致)
 # ============================================================================
 RESIDUE_TYPES = {
     'ALA': 'hydrophobic', 'VAL': 'hydrophobic', 'LEU': 'hydrophobic',
@@ -68,7 +68,7 @@ RESIDUE_TYPES = {
     'GLY': 'nonpolar',
 }
 
-# Discovery Studio 风格颜色方案 (残基气泡) - 使用统一配色
+# Discovery Studio 风格颜色方案 (残基气泡) - using统一配色
 DS_RESIDUE_STYLE = {
     'hydrophobic': {
         'facecolor': RESIDUE_COLORS_HEX['hydrophobic']['face'],
@@ -98,12 +98,12 @@ DS_RESIDUE_STYLE = {
 }
 
 # ============================================================================
-# 统一配色方案 (使用 color_scheme.py 中的定义)
-# Schrödinger 风格 - Hex 颜色值
+# 统一配色方案 (using color_scheme.py 中的定义)
+# Schrödinger 风格 - Hex 颜色Value
 # ============================================================================
 UNIFIED_INTERACTION_COLORS = INTERACTION_COLORS_HEX
 
-# 相互作用连线样式 (使用统一的 INTERACTION_LINE_STYLES)
+# 相互作用连线样式 (using统一的 INTERACTION_LINE_STYLES)
 INTERACTION_LINE_STYLE = INTERACTION_LINE_STYLES
 
 # ============================================================================
@@ -123,12 +123,12 @@ INTERACTION_TYPE_MAP = {
     'Disulfide Bond': 'other',
     'van der Waals': 'other',
     # Legacy Chinese mappings (backward compatibility)
-    '氢键': 'hbond',
+    '氢Key': 'hbond',
     '盐桥': 'salt',
     'π–π 堆积': 'pipi',
     'π–阳离子相互作用': 'pication',
     '疏水相互作用': 'hydrophobic',
-    '卤素键': 'halogen',
+    '卤素Key': 'halogen',
     '金属配位': 'metal',
     '水桥': 'water',
     '疏水接触': 'hydrophobic',
@@ -160,13 +160,13 @@ INTERACTION_TYPE_MAP = {
 
 def get_residue_style(resname):
     """
-    获取残基的显示样式
+    获取残基的Display样式
     
-    参数:
-        resname: 残基名称 (3字母代码)
+    Parameters:
+        resname: 残基Name (3字母代码)
     
-    返回:
-        (style_dict, res_type): 样式字典和残基类型
+    Return:
+        (style_dict, res_type): 样式字典和残基Type
     """
     resname = resname.upper()[:3]
     res_type = RESIDUE_TYPES.get(resname, 'polar')
@@ -175,15 +175,15 @@ def get_residue_style(resname):
 
 def normalize_interaction_type(itype):
     """
-    将相互作用类型标准化为内部类型名
+    将相互作用Type标准化为内部Type名
     
     支持中英文混合输入，与 3D 视图 (interaction_analyzer.py) 完全一致
     
-    参数:
-        itype: 相互作用类型字符串 (中文或英文)
+    Parameters:
+        itype: 相互作用Type字符串 (中文或英文)
     
-    返回:
-        str: 标准化的内部类型名 ('hbond', 'salt', 'pipi', 等)
+    Return:
+        str: 标准化的内部Type名 ('hbond', 'salt', 'pipi', 等)
     """
     if not itype:
         return 'other'
@@ -196,7 +196,7 @@ def normalize_interaction_type(itype):
     
     # Then try partial matching (by priority order)
     # Hydrogen bond
-    if 'hydrogen' in itype_lower or 'hbond' in itype_lower or 'h-bond' in itype_lower or '氢键' in itype:
+    if 'hydrogen' in itype_lower or 'hbond' in itype_lower or 'h-bond' in itype_lower or '氢Key' in itype:
         return 'hbond'
     # Salt bridge
     if 'salt' in itype_lower or '盐桥' in itype:
@@ -227,13 +227,13 @@ def get_interaction_line_style(itype):
     """
     获取相互作用的连线样式
     
-    与 3D 视图 (interaction_analyzer.py visualize_protein_ligand_3d) 使用相同的配色方案
+    与 3D 视图 (interaction_analyzer.py visualize_protein_ligand_3d) using相同的配色方案
     
-    参数:
-        itype: 相互作用类型字符串 (中文或英文)
+    Parameters:
+        itype: 相互作用Type字符串 (中文或英文)
     
-    返回:
-        dict: 包含 color, linewidth, linestyle, label 的样式字典
+    Return:
+        dict: Package含 color, linewidth, linestyle, label 的样式字典
     """
     normalized_type = normalize_interaction_type(itype)
     return INTERACTION_LINE_STYLE.get(normalized_type, INTERACTION_LINE_STYLE['other'])
@@ -249,8 +249,8 @@ def parse_residue_label(prot_res):
 def clean_pdb_block(pdb_block, ignore_connect=False):
     """
     纯文本方式清理 PDB 内容：
-    1. 保留 CONECT 记录 (关键！用于正确的键连接) - 除非 ignore_connect=True
-    2. 移除所有氢原子行 (基于原子名称判断)
+    1. 保留 CONECT 记录 (关Key！用于正确的Key连接) - 除非 ignore_connect=True
+    2. Remove所有氢原子行 (基于原子Name判断)
     """
     lines = pdb_block.split('\n')
     new_lines = []
@@ -258,9 +258,9 @@ def clean_pdb_block(pdb_block, ignore_connect=False):
     
     for line in lines:
         if line.startswith("ATOM") or line.startswith("HETATM"):
-            # PDB 原子名称在 12-16 列 (0-indexed: 12,13,14,15)
-            # 严格判定：原子符号在 76-78 列 (如果有)，或者基于名称推断
-            # 这里继续沿用名称判断，但增强逻辑
+            # PDB 原子Name在 12-16 列 (0-indexed: 12,13,14,15)
+            # 严格判定：原子符号在 76-78 列 (如果有)，或者基于Name推断
+            # 这里Continue沿用Name判断，但增强逻辑
             atom_name = line[12:16].strip()
             element = line[76:78].strip().upper()
             
@@ -268,7 +268,7 @@ def clean_pdb_block(pdb_block, ignore_connect=False):
             # 1. 优先检查元素符号
             if element == 'H':
                 is_h = True
-            # 2. 如果没有元素符号，检查名称
+            # 2. 如果没有元素符号，检查Name
             elif not element:
                 # 常见氢原子命名模式
                 if atom_name.startswith("H") and not (len(atom_name) > 1 and atom_name[1].islower() and atom_name[:2] not in ["He", "Hf", "Hg", "Ho", "Hs"]):
@@ -284,7 +284,7 @@ def clean_pdb_block(pdb_block, ignore_connect=False):
                 try:
                     serial = int(line[6:11].strip())
                     h_atom_serials.add(serial)
-                except (ValueError, TypeError):  # int() 转换可能失败
+                except (ValueError, TypeError):  # int() 转换可能Failed
                     pass
                 continue
         new_lines.append(line)
@@ -304,17 +304,17 @@ def clean_pdb_block(pdb_block, ignore_connect=False):
                     try:
                         main_atom = int(parts[1])
                         if main_atom in h_atom_serials:
-                            continue  # 跳过以氢原子为主的 CONECT
+                            continue  # Skip以氢原子为主的 CONECT
                         new_parts = ["CONECT", str(main_atom)]
                         for p in parts[2:]:
                             try:
                                 if int(p) not in h_atom_serials:
                                     new_parts.append(p)
-                            except (ValueError, TypeError):  # int() 转换可能失败
+                            except (ValueError, TypeError):  # int() 转换可能Failed
                                 pass
                         if len(new_parts) > 2:
                             final_lines.append(" ".join(new_parts))
-                    except (ValueError, IndexError):  # CONECT 记录解析可能失败
+                    except (ValueError, IndexError):  # CONECT 记录解析可能Failed
                         final_lines.append(line)
                 else:
                     final_lines.append(line)
@@ -327,32 +327,32 @@ def clean_pdb_block(pdb_block, ignore_connect=False):
 
 def try_load_mol_from_smiles(pdb_file, ligand_resname):
     """
-    尝试从 PDB 文件中提取配体的 SMILES 并用 RDKit 加载
+    尝试从 PDB File中提取配体的 SMILES 并用 RDKit Load
     这是处理复杂配体（如多肽）的备用方案
     """
     try:
         from rdkit import Chem
         from rdkit.Chem import AllChem
         
-        # 尝试使用 Open Babel 转换 (如果可用)
+        # 尝试using Open Babel 转换 (如果可用)
         import subprocess
         import tempfile
         import shutil
         
-        # 1) 在当前进程环境中定位 obabel
-        #    优先使用环境变量 OBABEL_BINARY，其次用 shutil.which('obabel')
+        # 1) 在当前进程环境中Locate obabel
+        #    优先using环境变量 OBABEL_BINARY，其次用 shutil.which('obabel')
         obabel_bin = os.environ.get("OBABEL_BINARY") or shutil.which("obabel")
         if not obabel_bin:
             print("[2D Diagram] SMILES fallback skipped: 'obabel' binary not found in PyMOL PATH.")
-            print("             如果已安装，请在 PyMOL 启动环境中设置 OBABEL_BINARY=/full/path/to/obabel")
+            print("             如果已安装，请在 PyMOL 启动环境中Settings OBABEL_BINARY=/full/path/to/obabel")
             return None
         
-        # 创建临时文件
+        # Create临时File
         with tempfile.NamedTemporaryFile(suffix='.smi', delete=False) as tmp:
             tmp_smi = tmp.name
         
         try:
-            # 使用 obabel 将 PDB 转为 SMILES
+            # using obabel 将 PDB 转为 SMILES
             cmd_args = [obabel_bin, pdb_file, "-O", tmp_smi, "-osmi"]
             print(f"[2D Diagram] Trying Open Babel: {' '.join(cmd_args)}")
             result = subprocess.run(
@@ -393,7 +393,7 @@ def try_load_mol_from_smiles(pdb_file, ligand_resname):
 
 def _parse_element_from_atom_name(atom_name):
     """
-    从 PDB 原子名解析元素类型。
+    从 PDB 原子名解析元素Type。
     
     PDB 原子名规则：
     - 常见单字母元素 + 数字：N1 → N, O2 → O, C3 → C, S1 → S
@@ -401,7 +401,7 @@ def _parse_element_from_atom_name(atom_name):
     - 纯元素名：N → N, O → O
     
     Returns:
-        元素符号（首字母大写），如果解析失败返回 None
+        元素符号（首字母大写），如果解析FailedReturn None
     """
     if not atom_name:
         return None
@@ -422,7 +422,7 @@ def _parse_element_from_atom_name(atom_name):
     # 单字母元素 + 可选数字/后缀
     first_char = name[0].upper()
     if first_char in ('C', 'N', 'O', 'S', 'P', 'F', 'H', 'I', 'B', 'K'):
-        # 确认第二个字符不是小写字母（否则可能是双字母元素）
+        # Confirm第二个字符不是小写字母（否则可能是双字母元素）
         if len(name) == 1 or not name[1].isalpha() or name[1].isupper():
             return first_char
     
@@ -439,12 +439,12 @@ def _parse_element_from_atom_name(atom_name):
 
 def _transfer_pdb_info(mol_src, mol_dst):
     """
-    尝试将原始分子的 PDB 原子名和坐标信息传递到 SMILES 重建的分子。
+    尝试将原始分子的 PDB 原子名和坐标Information传递到 SMILES 重建的分子。
     
     策略：
-    1. 如果原子数一致，按元素类型顺序逐一映射 PDBResidueInfo
-    2. 如果原子数不匹配，至少在分子上挂载一个 _pdb_atom_map 属性
-       供后续元素回退匹配使用
+    1. 如果原子数一致，按元素Type顺序逐一映射 PDBResidueInfo
+    2. 如果原子数不匹配，至少在分子上挂载一个 _pdb_atom_map Property
+       供后续元素回退匹配using
     """
     if mol_src is None or mol_dst is None:
         return
@@ -471,16 +471,16 @@ def _transfer_pdb_info(mol_src, mol_dst):
         
         src_pdb_atoms.append((atom.GetIdx(), aname, elem, pos[0], pos[1], pos[2]))
     
-    # 在目标分子上挂载映射信息（用于第三层回退匹配）
+    # 在目标分子上挂载映射Information（用于第三层回退匹配）
     mol_dst._pdb_atom_map = pdb_atom_map
     mol_dst._src_pdb_atoms = src_pdb_atoms
     
-    # 尝试按元素对应关系复制 PDBResidueInfo
+    # 尝试按元素对应关系Copy PDBResidueInfo
     n_src = mol_src.GetNumAtoms()
     n_dst = mol_dst.GetNumAtoms()
     
     if n_src == n_dst:
-        # 原子数一致 → 按元素匹配尝试逐一复制
+        # 原子数一致 → 按元素匹配尝试逐一Copy
         # 按元素分组建立映射
         src_by_elem = {}
         for atom in mol_src.GetAtoms():
@@ -492,14 +492,14 @@ def _transfer_pdb_info(mol_src, mol_dst):
             elem = atom.GetSymbol()
             dst_by_elem.setdefault(elem, []).append(atom.GetIdx())
         
-        # 检查每个元素的数量是否一致
+        # 检查每个元素的Count是否一致
         elem_match = all(
             len(src_by_elem.get(e, [])) == len(dst_by_elem.get(e, []))
             for e in set(list(src_by_elem.keys()) + list(dst_by_elem.keys()))
         )
         
         if elem_match:
-            # 按元素分组、按顺序对应复制 PDB 信息
+            # 按元素分组、按顺序对应Copy PDB Information
             copied = 0
             for elem in src_by_elem:
                 src_indices = src_by_elem[elem]
@@ -509,7 +509,7 @@ def _transfer_pdb_info(mol_src, mol_dst):
                     dst_atom = mol_dst.GetAtomWithIdx(di)
                     pdb_info = src_atom.GetPDBResidueInfo()
                     if pdb_info:
-                        # 深拷贝 PDB 信息到目标原子
+                        # 深拷贝 PDB Information到目标原子
                         new_info = Chem.AtomPDBResidueInfo()
                         new_info.SetName(pdb_info.GetName())
                         new_info.SetResidueName(pdb_info.GetResidueName())
@@ -520,46 +520,46 @@ def _transfer_pdb_info(mol_src, mol_dst):
                         copied += 1
             
             if copied > 0:
-                print(f"[2D Diagram] ✅ 成功复制 {copied} 个原子的 PDB 信息到 SMILES 分子")
+                print(f"[2D Diagram] ✅ SuccessCopy {copied} 个原子的 PDB Information到 SMILES 分子")
         else:
-            print(f"[2D Diagram] ⚠️ 原子元素组成不匹配，无法复制 PDB 信息（src={n_src}, dst={n_dst}）")
+            print(f"[2D Diagram] ⚠️ 原子元素组成不匹配，无法Copy PDB Information（src={n_src}, dst={n_dst}）")
     else:
-        print(f"[2D Diagram] ⚠️ 原子数不匹配（src={n_src}, dst={n_dst}），跳过 PDB 信息复制，保留 _pdb_atom_map 供回退匹配")
+        print(f"[2D Diagram] ⚠️ 原子数不匹配（src={n_src}, dst={n_dst}），Skip PDB InformationCopy，保留 _pdb_atom_map 供回退匹配")
 
 
 def determine_bond_orders_from_3d(mol, temp_pdb_path=None, ligand_resname=None):
     """
-    使用多种策略从 3D 坐标推断键级（单键/双键/芳香键）
+    using多种策略从 3D 坐标推断Key级（单Key/双Key/芳香Key）
 
     策略优先级：
     1. Open Babel SMILES 转换（最可靠）
     2. rdDetermineBonds 推断（RDKit 2022.09+）
-    3. 返回原始分子（回退）
+    3. Return原始分子（回退）
 
     Args:
         mol: RDKit 分子对象（必须有 3D 构象）
-        temp_pdb_path: 配体 PDB 文件路径（用于 Open Babel 转换）
-        ligand_resname: 配体残基名称（用于日志）
+        temp_pdb_path: 配体 PDB FilePath（用于 Open Babel 转换）
+        ligand_resname: 配体残基Name（用于日志）
 
     Returns:
-        修改后的分子对象（如果推断失败则返回原始分子）
+        Modify后的分子对象（如果推断Failed则Return原始分子）
     """
     if mol is None:
-        print("[2D Diagram] ⚠️ mol 为 None，跳过键级推断")
+        print("[2D Diagram] ⚠️ mol 为 None，SkipKey级推断")
         return mol
 
     # ============ 策略 1: Open Babel SMILES 转换 ============
-    # 这是最可靠的方法，因为 Open Babel 可以正确解析 PDB 并生成包含键级的 SMILES
+    # 这是最可靠的Method，因为 Open Babel 可以正确解析 PDB 并生成Package含Key级的 SMILES
     if temp_pdb_path and os.path.exists(temp_pdb_path):
-        print(f"[2D Diagram] 🔧 尝试使用 Open Babel 推断键级...")
-        print(f"[2D Diagram] PDB 文件: {temp_pdb_path}")
+        print(f"[2D Diagram] 🔧 尝试using Open Babel 推断Key级...")
+        print(f"[2D Diagram] PDB File: {temp_pdb_path}")
 
         import subprocess
         import tempfile
         import shutil
 
         obabel_bin = os.environ.get("OBABEL_BINARY") or shutil.which("obabel")
-        print(f"[2D Diagram] obabel 路径: {obabel_bin}")
+        print(f"[2D Diagram] obabel Path: {obabel_bin}")
 
         if obabel_bin:
             tmp_smi = None
@@ -570,19 +570,19 @@ def determine_bond_orders_from_3d(mol, temp_pdb_path=None, ligand_resname=None):
                 cmd_args = [obabel_bin, temp_pdb_path, "-O", tmp_smi, "-osmi"]
                 print(f"[2D Diagram] 执行命令: {' '.join(cmd_args)}")
 
-                # 使用 Popen 以获得更好的控制，避免卡住
+                # using Popen 以获得更好的控制，避免卡住
                 proc = subprocess.Popen(
                     cmd_args,
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                     text=True,
-                    # 关键：设置 stdin 为 DEVNULL，防止 obabel 等待输入
+                    # 关Key：Settings stdin 为 DEVNULL，防止 obabel 等待输入
                     stdin=subprocess.DEVNULL
                 )
 
                 try:
                     stdout, stderr = proc.communicate(timeout=30)
-                    print(f"[2D Diagram] obabel 返回码: {proc.returncode}")
+                    print(f"[2D Diagram] obabel Return码: {proc.returncode}")
                     if stderr:
                         print(f"[2D Diagram] obabel stderr: {stderr[:200]}")
                     if stdout:
@@ -593,7 +593,7 @@ def determine_bond_orders_from_3d(mol, temp_pdb_path=None, ligand_resname=None):
                     print("[2D Diagram] Open Babel 超时 (30s)")
                     if tmp_smi and os.path.exists(tmp_smi):
                         os.remove(tmp_smi)
-                    # 继续尝试其他策略
+                    # Continue尝试其他策略
                 else:
                     if proc.returncode == 0 and tmp_smi and os.path.exists(tmp_smi):
                         with open(tmp_smi, 'r') as f:
@@ -606,34 +606,34 @@ def determine_bond_orders_from_3d(mol, temp_pdb_path=None, ligand_resname=None):
                             mol_from_smiles = Chem.MolFromSmiles(smiles)
 
                             if mol_from_smiles:
-                                # 使用 SMILES 分子的键级，但保留原始分子的 3D 坐标
+                                # using SMILES 分子的Key级，但保留原始分子的 3D 坐标
                                 # 通过 AssignBondOrdersFromTemplate 实现
                                 try:
                                     from rdkit.Chem import AllChem
                                     # 将原始分子作为 3D 模板
                                     mol_with_orders = AllChem.AssignBondOrdersFromTemplate(mol_from_smiles, mol)
 
-                                    # 统计键类型
+                                    # 统计KeyType
                                     bond_types = {}
                                     for bond in mol_with_orders.GetBonds():
                                         bt = str(bond.GetBondType())
                                         bond_types[bt] = bond_types.get(bt, 0) + 1
 
-                                    print(f"[2D Diagram] ✅ Open Babel + AssignBondOrdersFromTemplate 成功: {bond_types}")
+                                    print(f"[2D Diagram] ✅ Open Babel + AssignBondOrdersFromTemplate Success: {bond_types}")
 
                                     if tmp_smi and os.path.exists(tmp_smi):
                                         os.remove(tmp_smi)
 
                                     return mol_with_orders
                                 except Exception as e:
-                                    print(f"[2D Diagram] AssignBondOrdersFromTemplate 失败: {e}")
-                                    # 回退：直接使用 SMILES 分子（会丢失 3D 坐标，但键级正确）
+                                    print(f"[2D Diagram] AssignBondOrdersFromTemplate Failed: {e}")
+                                    # 回退：直接using SMILES 分子（会丢失 3D 坐标，但Key级正确）
                                     # 🔧 修复：尝试将原始 mol 的 PDB 原子名和坐标映射到新分子
                                     try:
                                         AllChem.Compute2DCoords(mol_from_smiles)
 
-                                        # 尝试从原始分子复制 PDB 原子名到 SMILES 分子
-                                        # 这让后续的名称匹配策略仍然可用
+                                        # 尝试从原始分子Copy PDB 原子名到 SMILES 分子
+                                        # 这让后续的Name匹配策略仍然可用
                                         _transfer_pdb_info(mol, mol_from_smiles)
 
                                         bond_types = {}
@@ -641,33 +641,33 @@ def determine_bond_orders_from_3d(mol, temp_pdb_path=None, ligand_resname=None):
                                             bt = str(bond.GetBondType())
                                             bond_types[bt] = bond_types.get(bt, 0) + 1
 
-                                        print(f"[2D Diagram] ✅ 使用 Open Babel SMILES 分子（键级正确）: {bond_types}")
+                                        print(f"[2D Diagram] ✅ using Open Babel SMILES 分子（Key级正确）: {bond_types}")
 
                                         if tmp_smi and os.path.exists(tmp_smi):
                                             os.remove(tmp_smi)
 
                                         return mol_from_smiles
-                                    except Exception:  # RDKit/文件操作可能失败
+                                    except Exception:  # RDKit/File操作可能Failed
                                         pass
 
                     if tmp_smi and os.path.exists(tmp_smi):
                         os.remove(tmp_smi)
 
             except Exception as e:
-                print(f"[2D Diagram] Open Babel 失败: {e}")
+                print(f"[2D Diagram] Open Babel Failed: {e}")
                 import traceback
                 traceback.print_exc()
                 if tmp_smi and os.path.exists(tmp_smi):
                     try:
                         os.remove(tmp_smi)
-                    except OSError:  # 临时文件删除可能失败
+                    except OSError:  # 临时FileDelete可能Failed
                         pass
         else:
-            print("[2D Diagram] Open Babel 未找到，跳过此策略")
+            print("[2D Diagram] Open Babel 未找到，Skip此策略")
 
     # ============ 策略 2: rdDetermineBonds ============
     if HAS_DETERMINE_BONDS and mol.GetNumConformers() > 0:
-        print(f"[2D Diagram] 🔧 尝试使用 rdDetermineBonds 推断键级...")
+        print(f"[2D Diagram] 🔧 尝试using rdDetermineBonds 推断Key级...")
 
         charges_to_try = [0, -1, -2, 1, 2]
 
@@ -677,40 +677,40 @@ def determine_bond_orders_from_3d(mol, temp_pdb_path=None, ligand_resname=None):
                 rdDetermineBonds.DetermineBonds(rw_mol, charge=charge)
                 result_mol = rw_mol.GetMol()
 
-                # 检查结果是否合理（不应该有三键，除非配体确实有炔基）
+                # 检查Results是否合理（不应该有三Key，除非配体确实有炔基）
                 bond_types = {}
                 for bond in result_mol.GetBonds():
                     bt = str(bond.GetBondType())
                     bond_types[bt] = bond_types.get(bt, 0) + 1
 
-                # 如果有三键，可能是推断错误，跳过这个电荷值
+                # 如果有三Key，可能是推断Error，Skip这个电荷Value
                 if bond_types.get('TRIPLE', 0) > 0:
-                    print(f"[2D Diagram] ⚠️ charge={charge} 产生了 {bond_types.get('TRIPLE', 0)} 个三键，可能不正确")
+                    print(f"[2D Diagram] ⚠️ charge={charge} 产生了 {bond_types.get('TRIPLE', 0)} 个三Key，可能不正确")
                     continue
 
-                print(f"[2D Diagram] ✅ rdDetermineBonds 成功 (charge={charge}): {bond_types}")
+                print(f"[2D Diagram] ✅ rdDetermineBonds Success (charge={charge}): {bond_types}")
                 return result_mol
 
             except Exception as e:
                 if "does not match input" in str(e) or "valence" in str(e).lower():
                     continue
-                print(f"[2D Diagram] rdDetermineBonds 失败 (charge={charge}): {e}")
+                print(f"[2D Diagram] rdDetermineBonds Failed (charge={charge}): {e}")
 
     # ============ 策略 3: 回退 ============
-    print("[2D Diagram] ⚠️ 所有键级推断策略失败，使用原始分子")
+    print("[2D Diagram] ⚠️ 所有Key级推断策略Failed，using原始分子")
     return mol
 
 
 def rebuild_bonds_by_distance(mol):
     """
-    基于原子间距离重建分子键连接
-    用于修复 RDKit 自动推断键连接失败的情况
+    基于原子间距离重建分子Key连接
+    用于修复 RDKit 自动推断Key连接Failed的情况
     
-    使用标准共价键半径来判断原子间是否应该成键
+    using标准共价Key半径来判断原子间是否应该成Key
     """
     from rdkit import Chem
     
-    # 标准共价键半径 (Å)
+    # 标准共价Key半径 (Å)
     COVALENT_RADII = {
         6: 0.77,   # C
         7: 0.75,   # N
@@ -732,23 +732,23 @@ def rebuild_bonds_by_distance(mol):
     conf = mol.GetConformer()
     num_atoms = mol.GetNumAtoms()
     
-    # 创建新的可编辑分子
+    # Create新的可Edit分子
     emol = Chem.RWMol(Chem.Mol())
     
-    # 复制原子
+    # Copy原子
     atom_map = {}
     for i in range(num_atoms):
         atom = mol.GetAtomWithIdx(i)
         new_idx = emol.AddAtom(Chem.Atom(atom.GetAtomicNum()))
         atom_map[i] = new_idx
     
-    # 基于距离添加键
+    # 基于距离AddKey
     # 为了避免多肽折叠时不同片段之间“跨链连线成网”，我们增加一个
-    # 以 PDB 原子序号为基础的局部窗口约束：只允许在序号相差较小的
-    # 原子之间尝试成键（典型情况下这些原子在同一残基或相邻残基）。
+    # 以 PDB 原子Index为基础的局部窗口约束：只允许在Index相差较小的
+    # 原子之间尝试成Key（典型情况下这些原子在同一残基或相邻残基）。
     tolerance = 0.4  # 容差因子
     
-    # 预先提取 PDB 原子序号（如果存在），否则退回到 RDKit 索引
+    # 预先提取 PDB 原子Index（如果存在），否则退回到 RDKit 索引
     pdb_serials = []
     for i in range(num_atoms):
         atom = mol.GetAtomWithIdx(i)
@@ -766,7 +766,7 @@ def rebuild_bonds_by_distance(mol):
         r_i = COVALENT_RADII.get(mol.GetAtomWithIdx(i).GetAtomicNum(), DEFAULT_RADIUS)
         
         for j in range(i + 1, num_atoms):
-            # 关键约束：只在原子序号相差较小的局部范围内尝试成键，
+            # 关Key约束：只在原子Index相差较小的局部范围内尝试成Key，
             # 避免由于多肽折叠导致的远程近距离原子误连。
             if abs(pdb_serials[i] - pdb_serials[j]) > 6:
                 continue
@@ -777,15 +777,15 @@ def rebuild_bonds_by_distance(mol):
             # 计算距离
             dist = ((pos_i.x - pos_j.x)**2 + (pos_i.y - pos_j.y)**2 + (pos_i.z - pos_j.z)**2)**0.5
             
-            # 判断是否应该成键
+            # 判断是否应该成Key
             max_bond_dist = (r_i + r_j) * (1 + tolerance)
             if dist <= max_bond_dist:
                 try:
                     emol.AddBond(atom_map[i], atom_map[j], Chem.BondType.SINGLE)
-                except Exception:  # RDKit 添加键可能失败
+                except Exception:  # RDKit AddKey可能Failed
                     pass
     
-    # 添加构象
+    # Add构象
     new_conf = Chem.Conformer(emol.GetNumAtoms())
     for i in range(num_atoms):
         pos = conf.GetAtomPosition(i)
@@ -794,14 +794,14 @@ def rebuild_bonds_by_distance(mol):
     
     result_mol = emol.GetMol()
     
-    # 尝试推断键级
+    # 尝试推断Key级
     try:
         Chem.SanitizeMol(result_mol, Chem.SanitizeFlags.SANITIZE_FINDRADICALS |
                         Chem.SanitizeFlags.SANITIZE_SETAROMATICITY |
                         Chem.SanitizeFlags.SANITIZE_SETCONJUGATION |
                         Chem.SanitizeFlags.SANITIZE_SETHYBRIDIZATION |
                         Chem.SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
-    except Exception:  # RDKit SanitizeMol 可能失败
+    except Exception:  # RDKit SanitizeMol 可能Failed
         pass
     
     print(f"[2D Diagram] Rebuilt molecule: {result_mol.GetNumAtoms()} atoms, {result_mol.GetNumBonds()} bonds")
@@ -810,8 +810,8 @@ def rebuild_bonds_by_distance(mol):
 
 def check_bond_sanity(mol):
     """
-    检查分子键连接是否合理
-    返回 True 如果键连接看起来正常，False 如果可能有问题
+    检查分子Key连接是否合理
+    Return True 如果Key连接看起来正常，False 如果可能有问题
     """
     num_atoms = mol.GetNumAtoms()
     num_bonds = mol.GetNumBonds()
@@ -819,14 +819,14 @@ def check_bond_sanity(mol):
     if num_atoms == 0:
         return False
     
-    # 正常有机分子的键数应该接近原子数
+    # 正常有机分子的Key数应该接近原子数
     # 典型范围: bonds ≈ atoms * 0.8 ~ 1.3 (对于线性分子接近1.0，有环的分子稍高)
-    # 大分子（多肽等）如果出现 bonds/atoms 明显 > 1.2 往往就是“蜘蛛网”式错误连接
+    # 大分子（多肽等）如果出现 bonds/atoms 明显 > 1.2 往往就是“蜘蛛网”式Error连接
     bond_ratio = num_bonds / num_atoms if num_atoms > 0 else 0
     
     print(f"[2D Diagram] Bond sanity check: {num_bonds} bonds / {num_atoms} atoms = {bond_ratio:.2f}")
     
-    # 分级阈值：对大分子更严格
+    # 分级阈Value：对大分子更严格
     if num_atoms >= 150:
         ratio_threshold = 1.20
     elif num_atoms >= 80:
@@ -838,7 +838,7 @@ def check_bond_sanity(mol):
         print(f"[2D Diagram] ⚠️ Abnormal bond ratio: {bond_ratio:.2f} (bonds={num_bonds}, atoms={num_atoms}, threshold={ratio_threshold:.2f})")
         return False
     
-    # 检查是否有原子连接了太多键 (正常最多 4 个，特殊情况如 S, P 可能有 5-6 个)
+    # 检查是否有原子连接了太多Key (正常最多 4 个，特殊情况如 S, P 可能有 5-6 个)
     max_degree = 0
     high_degree_count = 0
     for atom in mol.GetAtoms():
@@ -848,7 +848,7 @@ def check_bond_sanity(mol):
         if degree > 4:
             high_degree_count += 1
     
-    # 如果有超过 10% 的原子连接度 > 4，说明有问题
+    # 如果有超过 10% 的原子连接degrees > 4，说明有问题
     if high_degree_count > num_atoms * 0.1:
         print(f"[2D Diagram] ⚠️ Too many high-degree atoms: {high_degree_count}/{num_atoms}")
         return False
@@ -867,8 +867,8 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     print(f"[2D Diagram] Ligand: {ligand_resname}")
     print(f"[2D Diagram] ========================================")
 
-    # 局部工具函数：从 RDKit 分子中提取 3D 坐标和环中心
-    # 必须在函数开始时定义，以便在所有代码路径中都可用
+    # 局部ToolFunction：从 RDKit 分子中提取 3D 坐标和环中心
+    # 必须在FunctionStart时定义，以便在所有代码Path中都可用
     def extract_3d_info(mol):
         coords = {}
         rings = []
@@ -894,7 +894,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
 
     # 1. 提取结构并清理氢原子
     mol_draw = None
-    saved_temp_pdb = None  # 初始化变量，避免后续引用错误
+    saved_temp_pdb = None  # Initialize变量，避免后续引用Error
     
     if obj_name:
         try:
@@ -909,24 +909,24 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
             
 
 
-            # 保存 temp_pdb 路径供后续使用
+            # Save temp_pdb Path供后续using
             saved_temp_pdb = temp_pdb
             
-            # 策略调整：优先使用标准加载 (自动去氢 + 圣化)
+            # 策略调整：优先using标准Load (自动去氢 + 圣化)
             try:
                 mol_draw = Chem.MolFromPDBFile(temp_pdb, removeHs=True, sanitize=True)
                 if mol_draw:
                     print(f"[2D Diagram] Standard load: {mol_draw.GetNumAtoms()} atoms, {mol_draw.GetNumBonds()} bonds")
 
-                    # 🔧 关键修复：推断正确的键级（双键、芳香键等）
-                    # PDB 格式不存储键级，需要通过 Open Babel 或 rdDetermineBonds 推断
+                    # 🔧 关Key修复：推断正确的Key级（双Key、芳香Key等）
+                    # PDB 格式不存储Key级，需要通过 Open Babel 或 rdDetermineBonds 推断
                     mol_draw = determine_bond_orders_from_3d(mol_draw, temp_pdb, ligand_resname)
 
             except Exception as e:
                 print(f"[2D Diagram] Standard load exception: {e}")
                 mol_draw = None
                 
-            # 如果标准加载失败，使用终极文本清洗加载
+            # 如果标准LoadFailed，using终极文本清洗Load
             if mol_draw is None:
                 print(f"[2D Diagram] Standard load failed, using Text-Based Cleaning...")
                 try:
@@ -934,33 +934,33 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                         raw_pdb = f.read()
                     
                     
-                    # 关键修复：不保留 CONECT 记录，让 RDKit 基于距离推断键
-                    # 因为 PyMOL 导出的 CONECT 记录可能不完整或有问题
+                    # 关Key修复：不保留 CONECT 记录，让 RDKit 基于距离推断Key
+                    # 因为 PyMOL Export的 CONECT 记录可能不完整或有问题
                     clean_pdb = clean_pdb_block(raw_pdb)
                     
-                    # 尝试方案1：使用清洗后的 PDB（保留 CONECT）
+                    # 尝试方案1：using清洗后的 PDB（保留 CONECT）
                     mol_draw = Chem.MolFromPDBBlock(clean_pdb, removeHs=True, sanitize=False)
                     
                     if mol_draw:
                         print(f"[2D Diagram] Text cleaning load (with CONECT): {mol_draw.GetNumAtoms()} atoms, {mol_draw.GetNumBonds()} bonds")
                         # 重新计算拓扑
                         mol_draw.UpdatePropertyCache(strict=False)
-                        # 尝试圣化以获得键级 (如果可能)
+                        # 尝试圣化以获得Key级 (如果可能)
                         try:
                             Chem.SanitizeMol(mol_draw, Chem.SanitizeFlags.SANITIZE_FINDRADICALS|
                                            Chem.SanitizeFlags.SANITIZE_SETAROMATICITY|
                                            Chem.SanitizeFlags.SANITIZE_SETCONJUGATION|
                                            Chem.SanitizeFlags.SANITIZE_SETHYBRIDIZATION|
                                            Chem.SanitizeFlags.SANITIZE_SYMMRINGS, catchErrors=True)
-                        except Exception: pass  # RDKit SanitizeMol 可能失败
+                        except Exception: pass  # RDKit SanitizeMol 可能Failed
 
-                        # 🔧 推断键级
+                        # 🔧 推断Key级
                         mol_draw = determine_bond_orders_from_3d(mol_draw, temp_pdb, ligand_resname)
                     else:
                         print(f"[2D Diagram] Text cleaning load failed, mol_draw is None")
                     
-                    # 蜘蛛网检测与修复：如果加载出的分子键太疯狂，优先尝试“丢弃 CONECT 重新加载”
-                    # 真正的“无键 3D 投影”只在后面的统一修复逻辑里触发，避免过早丢失所有键信息。
+                    # 蜘蛛网检测与修复：如果Load出的分子Key太疯狂，优先尝试“丢弃 CONECT 重新Load”
+                    # 真正的“无Key 3D 投影”只在后面的统一修复逻辑里触发，避免过早丢失所有KeyInformation。
                     if mol_draw and not check_bond_sanity(mol_draw):
                         print(f"[2D Diagram] ⚠️ Detected corrupted CONECT records (Spiderweb). Retrying without CONECT...")
                         clean_pdb_no_conect = clean_pdb_block(raw_pdb, ignore_connect=True)
@@ -983,7 +983,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                     import traceback
                     traceback.print_exc()
 
-            # 不要删除 temp_pdb，后面可能需要用于 SMILES 转换
+            # 不要Delete temp_pdb，后面可能需要用于 SMILES 转换
             # if os.path.exists(temp_pdb): os.remove(temp_pdb)
         except Exception as e:
             print(f"[2D Diagram] PyMOL Error: {e}")
@@ -991,7 +991,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     elif pdb_file and os.path.exists(pdb_file):
         print(f"[2D Diagram] Loading from PDB file: {pdb_file}")
         try:
-            # 首先从 PDB 文件中提取配体部分
+            # 首先从 PDB File中提取配体部分
             with open(pdb_file, 'r') as f:
                 raw_pdb = f.read()
             
@@ -1002,14 +1002,14 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
             
             for line in raw_pdb.split('\n'):
                 if line.startswith("HETATM") or line.startswith("ATOM"):
-                    # 残基名称在 17-20 列 (0-indexed: 17,18,19)
+                    # 残基Name在 17-20 列 (0-indexed: 17,18,19)
                     resname = line[17:20].strip()
                     if resname == ligand_resname:
                         ligand_lines.append(line)
                         try:
                             serial = int(line[6:11].strip())
                             ligand_serials.add(serial)
-                        except (ValueError, TypeError):  # int() 转换可能失败
+                        except (ValueError, TypeError):  # int() 转换可能Failed
                             pass
                 elif line.startswith("CONECT"):
                     conect_lines.append(line)
@@ -1018,7 +1018,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 print(f"[2D Diagram] No ligand '{ligand_resname}' found in PDB file")
                 mol_draw = None
             else:
-                # 过滤 CONECT 记录，只保留配体原子之间的连接
+                # Filter CONECT 记录，只保留配体原子之间的连接
                 filtered_conect = []
                 for line in conect_lines:
                     parts = line.split()
@@ -1031,18 +1031,18 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                                     try:
                                         if int(p) in ligand_serials:
                                             new_parts.append(p)
-                                    except (ValueError, TypeError):  # int() 转换可能失败
+                                    except (ValueError, TypeError):  # int() 转换可能Failed
                                         pass
                                 if len(new_parts) > 2:
                                     filtered_conect.append(" ".join(new_parts))
-                        except (ValueError, IndexError):  # CONECT 记录解析可能失败
+                        except (ValueError, IndexError):  # CONECT 记录解析可能Failed
                             pass
                 
                 # 构建配体 PDB 块
                 ligand_pdb = '\n'.join(ligand_lines + filtered_conect + ['END'])
                 print(f"[2D Diagram] Extracted ligand: {len(ligand_lines)} atoms, {len(filtered_conect)} CONECT records")
                 
-                # 保存临时文件供后续 SMILES 转换使用
+                # Save临时File供后续 SMILES 转换using
                 temp_ligand_pdb = tempfile.mktemp(suffix=".pdb")
                 with open(temp_ligand_pdb, 'w') as f:
                     f.write(ligand_pdb)
@@ -1051,7 +1051,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 # 清理氢原子
                 clean_pdb = clean_pdb_block(ligand_pdb)
                 
-                # 尝试加载
+                # 尝试Load
                 mol_draw = Chem.MolFromPDBBlock(clean_pdb, removeHs=True, sanitize=True)
                 if not mol_draw:
                     # 备用方案：不圣化
@@ -1059,11 +1059,11 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                     if mol_draw:
                         try:
                             Chem.SanitizeMol(mol_draw, catchErrors=True)
-                        except Exception: pass  # RDKit SanitizeMol 可能失败
+                        except Exception: pass  # RDKit SanitizeMol 可能Failed
 
                 if mol_draw:
                     print(f"[2D Diagram] Loaded ligand: {mol_draw.GetNumAtoms()} atoms, {mol_draw.GetNumBonds()} bonds")
-                    # 🔧 推断键级
+                    # 🔧 推断Key级
                     mol_draw = determine_bond_orders_from_3d(mol_draw, saved_temp_pdb, ligand_resname)
         except Exception as e:
             print(f"[2D Diagram] PDB Load Error: {e}")
@@ -1074,24 +1074,24 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         print(f"[2D Diagram] Failed to load molecule.")
         return None
 
-    # 检测大型多肽配体并给出警告
+    # 检测大型多肽配体并给出Warning
     num_atoms = mol_draw.GetNumAtoms()
     is_large_peptide = num_atoms > 50
     if is_large_peptide:
         print(f"[2D Diagram] ⚠️ 检测到大型多肽配体 ({num_atoms} 个原子)")
         print(f"[2D Diagram] ⚠️ 对于大型多肽，2D 相互作用图可能布局不佳")
-        print(f"[2D Diagram] ⚠️ 建议使用 3D 可视化查看相互作用")
+        print(f"[2D Diagram] ⚠️ 建议using 3D 可视化View相互作用")
 
-    # 再次确认清理 (三层保险：处理可能的残留)
+    # 再次Confirm清理 (三层保险：处理可能的残留)
     try:
-        # 强制移除所有氢原子 - 使用更彻底的方法
-        mol_draw = Chem.RemoveAllHs(mol_draw)  # 🔧 使用 RemoveAllHs 替代 RemoveHs，更彻底
+        # 强制Remove所有氢原子 - using更彻底的Method
+        mol_draw = Chem.RemoveAllHs(mol_draw)  # 🔧 using RemoveAllHs 替代 RemoveHs，更彻底
 
-        # 再次检查原子序数，手动移除任何残留的氢原子
+        # 再次检查原子序数，手动Remove任何残留的氢原子
         mw = Chem.RWMol(mol_draw)
         atoms_to_remove = [i for i in range(mw.GetNumAtoms()) if mw.GetAtomWithIdx(i).GetAtomicNum() <= 1]
         if atoms_to_remove:
-            print(f"[2D Diagram] 🔧 手动移除 {len(atoms_to_remove)} 个残留氢原子")
+            print(f"[2D Diagram] 🔧 手动Remove {len(atoms_to_remove)} 个残留氢原子")
             atoms_to_remove.sort(reverse=True)
             for i in atoms_to_remove:
                 mw.RemoveAtom(i)
@@ -1100,27 +1100,27 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         # 🔧 再次尝试 RemoveAllHs，确保完全清除
         try:
             mol_draw = Chem.RemoveAllHs(mol_draw)
-        except Exception:  # RDKit RemoveAllHs 可能失败
+        except Exception:  # RDKit RemoveAllHs 可能Failed
             pass
 
     except Exception as e:
         print(f"[2D Diagram] H Removal Error: {e}")
     
-    # 2. 提前提取 3D 坐标 (关键！必须在投影到 2D 之前完成)
+    # 2. 提前提取 3D 坐标 (关Key！必须在投影到 2D 之前Completed)
     atom_coords_3d = {}
     ring_centroids_3d = []
 
     # 初始提取
     atom_coords_3d, ring_centroids_3d = extract_3d_info(mol_draw)
     
-    # 检查键连接是否合理，如果有问题则使用 Open Babel SMILES 重建
-    # 但对于大型多肽配体（>50 原子），跳过 SMILES 重建，因为会丢失 3D 坐标导致布局变差
+    # 检查Key连接是否合理，如果有问题则using Open Babel SMILES 重建
+    # 但对于大型多肽配体（>50 原子），Skip SMILES 重建，因为会丢失 3D 坐标导致布局变差
     bond_sanity_ok = check_bond_sanity(mol_draw)
     
     if not bond_sanity_ok and not is_large_peptide:
         print(f"[2D Diagram] Attempting to fix bond connectivity using Open Babel...")
         
-        # 使用 Open Babel SMILES 重建分子 (主要方案)
+        # using Open Babel SMILES 重建分子 (主要方案)
         pdb_for_smiles = (
             saved_temp_pdb
             if 'saved_temp_pdb' in dir() and saved_temp_pdb and os.path.exists(saved_temp_pdb)
@@ -1129,11 +1129,11 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         mol_from_smiles = try_load_mol_from_smiles(pdb_for_smiles, ligand_resname)
         if mol_from_smiles and check_bond_sanity(mol_from_smiles):
             mol_draw = mol_from_smiles
-            # SMILES 重建的分子已经有 2D 坐标，更新 3D 坐标信息
+            # SMILES 重建的分子已经有 2D 坐标，Update 3D 坐标Information
             atom_coords_3d, ring_centroids_3d = extract_3d_info(mol_draw)
             print(f"[2D Diagram] ✅ Fixed using Open Babel SMILES reconstruction")
         else:
-            # 如果 SMILES 方法失败，尝试基于距离重建键
+            # 如果 SMILES MethodFailed，尝试基于距离重建Key
             if not check_bond_sanity(mol_draw):
                 num_atoms_for_rebuild = mol_draw.GetNumAtoms()
                 print(f"[2D Diagram] Trying distance-based bond inference on {num_atoms_for_rebuild} atoms...")
@@ -1145,18 +1145,18 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 else:
                     print(f"[2D Diagram] ⚠️ Bond connectivity issues persist, proceeding with current structure")
     elif not bond_sanity_ok and is_large_peptide:
-        print(f"[2D Diagram] ⚠️ 跳过 SMILES 重建（大型多肽配体），保留原始 3D 坐标以获得更好的 2D 布局")
+        print(f"[2D Diagram] ⚠️ Skip SMILES 重建（大型多肽配体），保留原始 3D 坐标以获得更好的 2D 布局")
     
-    # 清理临时文件
+    # 清理临时File
     if 'saved_temp_pdb' in dir() and saved_temp_pdb and os.path.exists(saved_temp_pdb):
         os.remove(saved_temp_pdb)
     
-    # 3. 解析相互作用并匹配 (与 3D 视图一致的置信度过滤)
+    # 3. 解析相互作用并匹配 (与 3D 视图一致的置信degreesFilter)
     interactions = []
-    interaction_types_found = set()  # 记录找到的相互作用类型，用于动态图例
+    interaction_types_found = set()  # 记录找到的相互作用Type，用于动态图例
     # 🔧 统计未匹配交互，用于最终报告
     unmatched_interactions = []  # [(lig_atom_name, itype)]
-    total_csv_interactions = 0   # CSV 中满足置信度的总交互数
+    total_csv_interactions = 0   # CSV 中满足置信degrees的总交互数
     try:
         with open(csv_path, "r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
@@ -1166,7 +1166,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                 try:
                     conf = float(conf_str)
                 except (ValueError, TypeError):
-                    conf = 1.0  # 没有置信度字段时默认视为 1.0
+                    conf = 1.0  # 没有置信degrees字段时默认视为 1.0
                 if conf < min_confidence:
                     continue
                 
@@ -1196,22 +1196,22 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                                 target_idx, target_type = best_rid, "ring"
                         
                         # 原子匹配 (如果环没匹配上或不是环)
-                        # 放宽阈值：从 0.3 Å 改为 1.5 Å，因为 RDKit 加载后原子可能有轻微偏移
+                        # 放宽阈Value：从 0.3 Å 改为 1.5 Å，因为 RDKit Load后原子可能有轻微shift
                         if target_idx is None:
                             best_aid, best_adist = None, float('inf')
                             for aid, ac in atom_coords_3d.items():
                                 d = ((ac[0]-lx)**2 + (ac[1]-ly)**2 + (ac[2]-lz)**2)**0.5
                                 if d < best_adist: best_adist, best_aid = d, aid
-                            # 使用更宽松的阈值（1.5 Å）以确保匹配成功
+                            # using更宽松的阈Value（1.5 Å）以确保匹配Success
                             if best_aid is not None and best_adist < 1.5:
                                 target_idx, target_type = best_aid, "atom"
                                 print(f"[2D DEBUG] Coordinate matched: {lig_atom_name} -> atom {target_idx} (dist={best_adist:.3f}Å)")
 
-                # 方案2：通过原子名称匹配（如果 CSV 中没有坐标列）
+                # 方案2：通过原子Name匹配（如果 CSV 中没有坐标列）
                 if target_idx is None and lig_atom_name:
                     # 特殊处理：Ring(...) 或 ring 表示环中心
                     if lig_atom_name.lower() == "ring" or lig_atom_name.lower().startswith("ring("):
-                        # 对于 π-π 堆积，选择第一个环
+                        # 对于 π-π 堆积，SelectFirst环
                         if ring_centroids_3d:
                             target_idx = ring_centroids_3d[0]["id"]
                             target_type = "ring"
@@ -1224,7 +1224,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                             target_type = "ring"
                             print(f"[2D DEBUG] Matched Cation to ring centroid {target_idx}")
                     else:
-                        # 通过 PDB 原子名称匹配 - 改进版：找到所有匹配的原子，选择离 3D 坐标最近的
+                        # 通过 PDB 原子Name匹配 - 改进版：找到所有匹配的原子，Select离 3D 坐标最近的
                         # 这样即使配体有多个同名原子（如多个 O），也能正确区分
                         matching_atoms = []
                         for aid in range(mol_draw.GetNumAtoms()):
@@ -1236,24 +1236,24 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                                     matching_atoms.append(aid)
 
                         if len(matching_atoms) == 1:
-                            # 只有一个匹配，直接使用
+                            # 只有一个匹配，直接using
                             target_idx = matching_atoms[0]
                             target_type = "atom"
                             print(f"[2D DEBUG] Name matched (unique): {lig_atom_name} -> atom {target_idx}")
                         elif len(matching_atoms) > 1:
-                            # 多个同名原子，无法区分（没有坐标信息）
-                            # 警告用户并使用第一个
+                            # 多个同名原子，无法区分（没有坐标Information）
+                            # Warning用户并usingFirst
                             print(f"[2D DEBUG] ⚠️ Multiple atoms named '{lig_atom_name}' found ({len(matching_atoms)} total)")
                             print(f"[2D DEBUG] ⚠️ Cannot distinguish without coordinates - using first match (atom {matching_atoms[0]})")
                             print(f"[2D DEBUG] ⚠️ For accurate mapping, re-run interaction analysis to generate CSV with coordinates")
                             target_idx = matching_atoms[0]
                             target_type = "atom"
                 
-                # 🔧 方案3：元素+名称模糊匹配（第三层回退）
-                # 当 SMILES 重建导致分子丢失 PDB 信息和 3D 坐标时，
-                # 通过解析 CSV 原子名中的元素类型，在 mol_draw 中查找相同元素的原子
+                # 🔧 方案3：元素+Name模糊匹配（第三层回退）
+                # 当 SMILES 重建导致分子丢失 PDB Information和 3D 坐标时，
+                # 通过解析 CSV 原子名中的元素Type，在 mol_draw 中Find相同元素的原子
                 if target_idx is None and lig_atom_name:
-                    # 跳过 Ring/Cation 等特殊名称（已在方案2中处理过）
+                    # Skip Ring/Cation 等特殊Name（已在方案2中处理过）
                     if not (lig_atom_name.lower().startswith("ring") or 
                             lig_atom_name.lower().startswith("cation")):
                         parsed_elem = _parse_element_from_atom_name(lig_atom_name)
@@ -1274,7 +1274,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                                 # 多个同元素原子 → 尝试用 3D 坐标选最近的
                                 matched_by_3d = False
                                 if lx is not None and ly is not None and lz is not None and atom_coords_3d:
-                                    # CSV 有坐标且分子有 3D 信息 → 选最近的同元素原子
+                                    # CSV 有坐标且分子有 3D Information → 选最近的同元素原子
                                     best_aid, best_adist = None, float('inf')
                                     for aid in same_elem_atoms:
                                         ac = atom_coords_3d.get(aid)
@@ -1294,7 +1294,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                                     # 找到原始分子中与 lig_atom_name 同名的原子索引
                                     for s_idx, s_name, s_elem, sx, sy, sz in src_atoms:
                                         if s_name == lig_atom_name and s_idx < len(same_elem_atoms):
-                                            # 使用原始索引在同元素列表中找对应位置
+                                            # using原始索引在同元素列表中找对应位置
                                             # 按元素在 mol_draw 中的出现顺序映射
                                             src_same_elem = [si for si, sn, se, *_ in src_atoms if se.upper() == parsed_elem.upper()]
                                             if s_idx in src_same_elem:
@@ -1307,20 +1307,20 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                                             break
                                 
                                 if not matched_by_3d:
-                                    # 无法进一步区分 → 使用第一个同元素原子
+                                    # 无法进一步区分 → usingFirst同元素原子
                                     target_idx = same_elem_atoms[0]
                                     target_type = "atom"
                                     print(f"[2D DEBUG] 元素回退匹配: {lig_atom_name} -> atom {target_idx} (element={parsed_elem}, first of {len(same_elem_atoms)})")
                             else:
-                                print(f"[2D DEBUG] 元素回退匹配失败: {lig_atom_name} (element={parsed_elem}) - 分子中无此元素原子")
+                                print(f"[2D DEBUG] 元素回退匹配Failed: {lig_atom_name} (element={parsed_elem}) - 分子中无此元素原子")
                 
                 # 🔧 未匹配交互的调试日志
                 if target_idx is None:
-                    print(f"[2D DEBUG] ⚠️ 未能匹配: {lig_atom_name} ({itype}) - 该相互作用将不会显示在2D图中")
+                    print(f"[2D DEBUG] ⚠️ 未能匹配: {lig_atom_name} ({itype}) - 该相互作用将不会Display在2D图中")
                     unmatched_interactions.append((lig_atom_name, itype))
 
                 if target_idx is not None:
-                    # 标准化相互作用类型 (与 3D 视图一致)
+                    # 标准化相互作用Type (与 3D 视图一致)
                     normalized_itype = normalize_interaction_type(itype)
 
                     # 🔧 特殊处理：Pi-Pi 和 Pi-Cation 应该连接到环中心
@@ -1339,7 +1339,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                             target_type = "ring"
                             print(f"   -> Upgraded {lig_atom_name} to Ring {target_idx} Center (pipi/pication)")
                         else:
-                            # 原子不在任何环中，但可能环检测失败
+                            # 原子不在任何环中，但可能环检测Failed
                             # 尝试找离这个原子最近的环中心
                             if ring_centroids_3d:
                                 atom_coord = atom_coords_3d.get(atom_idx)
@@ -1373,7 +1373,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
 
     # 🔧 输出未匹配交互的汇总统计
     if unmatched_interactions:
-        # 按交互类型分组统计
+        # 按交互Type分组统计
         unmatched_by_type = {}
         for name, itype in unmatched_interactions:
             norm_type = normalize_interaction_type(itype)
@@ -1381,9 +1381,9 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         type_summary = ", ".join(f"{count}个{t}" for t, count in unmatched_by_type.items())
         print(f"[2D Diagram] ⚠️ {len(unmatched_interactions)}/{total_csv_interactions} 个相互作用未能匹配到2D图（{type_summary}）")
     else:
-        print(f"[2D Diagram] ✅ 全部 {total_csv_interactions} 个相互作用已成功匹配")
+        print(f"[2D Diagram] ✅ 全部 {total_csv_interactions} 个相互作用已Success匹配")
 
-    # 4. 生成 2D 布局 (使用 RDKit CoordGen，带超时保护)
+    # 4. 生成 2D 布局 (using RDKit CoordGen，带超时保护)
     import threading as _threading
     
     def _compute_2d_layout(mol, result_holder):
@@ -1412,7 +1412,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         elif layout_result['error']:
             print(f"[2D Diagram] Layout error (CoordGen failed): {layout_result['error']}")
         
-        # Fallback：使用更简单的 AllChem.Compute2DCoords
+        # Fallback：using更简单的 AllChem.Compute2DCoords
         try:
             AllChem.Compute2DCoords(mol_draw)
             print("[2D Diagram] Fallback: AllChem.Compute2DCoords succeeded")
@@ -1424,17 +1424,17 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     conf_2d = mol_draw.GetConformer()
     pts = [conf_2d.GetAtomPosition(i) for i in range(mol_draw.GetNumAtoms())]
     phys_span = max([p.x for p in pts]) - min([p.x for p in pts]) if pts else 10.0
-    # 🔧 增加画布大小，为外围的残基标签预留足够空间
+    # 🔧 增加画布Size，为外围的残基Label预留足够空间
     # 原来：phys_span * 45.0 + 800，现在增加到 phys_span * 50.0 + 1000
     dw = int(max(1400, phys_span * 50.0 + 1000))
     dh = int(dw * 0.75)
     
     # 限制画布最大像素，防止内存爆炸
-    # 对于大型多肽配体，使用更小的画布
+    # 对于大型多肽配体，using更小的画布
     if is_large_peptide:
         max_width = 2000
         max_height = 1500
-        print(f"[2D Diagram] 大型多肽配体：限制画布大小为 {max_width}x{max_height}")
+        print(f"[2D Diagram] 大型多肽配体：限制画布Size为 {max_width}x{max_height}")
     else:
         max_width = 3000
         max_height = 2250
@@ -1445,40 +1445,40 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     try:
         drawer = rdMolDraw2D.MolDraw2DCairo(dw, dh)
         opts = drawer.drawOptions()
-        opts.padding = 0.20  # 适度的 padding
+        opts.padding = 0.20  # 适degrees的 padding
         opts.prepareMolsBeforeDrawing = True
         opts.bondLineWidth = 3.0
-        opts.addStereoAnnotation = False  # 不显示 R/S 标签
+        opts.addStereoAnnotation = False  # 不Display R/S Label
         opts.addAtomIndices = False
         opts.includeAtomTags = False
         opts.explicitMethyl = False
         # opts.addHBonds = False # Not supported in some RDKit versions
         opts.minFontSize = 10
-        # 🔧 关键修复：调整字体大小和原子标签显示
-        opts.maxFontSize = 14  # 限制最大字体大小
+        # 🔧 关Key修复：调整字体Size和原子LabelDisplay
+        opts.maxFontSize = 14  # 限制最大字体Size
         opts.annotationFontScale = 0.8  # 减小注释字体比例
-        # 🔧 尝试设置 addChiralHs（某些 RDKit 版本可能不支持）
+        # 🔧 尝试Settings addChiralHs（某些 RDKit Version可能不支持）
         try:
-            opts.addChiralHs = False  # 不显示手性中心的氢原子
+            opts.addChiralHs = False  # 不Display手性中心的氢原子
         except AttributeError:
-            pass  # 如果属性不存在，忽略
-        # 不使用 fixedBondLength，让 RDKit 自动计算更好的布局
+            pass  # 如果Property不存在，忽略
+        # 不using fixedBondLength，让 RDKit 自动计算更好的布局
 
-        # 🔧 不显示原子电荷和氢原子计数
-        opts.noAtomLabels = False  # 仍然显示原子符号
+        # 🔧 不Display原子电荷和氢原子计数
+        opts.noAtomLabels = False  # 仍然Display原子符号
 
-        # 🔧 关键修复：直接修改 mol_draw 的原子属性，而不是创建副本
-        # 这样可以确保绘图和坐标提取使用的是同一个分子对象
+        # 🔧 关Key修复：直接Modify mol_draw 的原子Property，而不是Create副本
+        # 这样可以确保绘图和坐标提取using的是同一个分子对象
         for atom in mol_draw.GetAtoms():
-            # 清除形式电荷（不显示 +/-）
+            # 清除形式电荷（不Display +/-）
             atom.SetFormalCharge(0)
-            # 清除显式氢原子计数，让 RDKit 只显示原子符号
+            # 清除显式氢原子计数，让 RDKit 只Display原子符号
             atom.SetNoImplicit(False)
             atom.SetNumExplicitHs(0)
-            # 清除手性标签（不显示 R/S）
+            # 清除手性Label（不Display R/S）
             atom.SetChiralTag(Chem.ChiralType.CHI_UNSPECIFIED)
 
-        # 🔧 直接使用修改后的 mol_draw 绘制
+        # 🔧 直接usingModify后的 mol_draw 绘制
         drawer.DrawMolecule(mol_draw)
         drawer.FinishDrawing()
     except Exception as e:
@@ -1494,13 +1494,13 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         if r_pts:
             px_rings[ri] = (sum(p[0] for p in r_pts)/len(r_pts), sum(p[1] for p in r_pts)/len(r_pts))
 
-    # 5. Matplotlib 组装 (使用 io.BytesIO 优化内存)
+    # 5. Matplotlib 组装 (using io.BytesIO 优化内存)
     import io
     
-    # 对于大型多肽配体，降低 DPI 以减少内存使用
+    # 对于大型多肽配体，降低 DPI 以减少内存using
     actual_dpi = 100 if is_large_peptide else dpi
     if is_large_peptide:
-        print(f"[2D Diagram] 大型多肽配体：降低 DPI 为 {actual_dpi} 以减少内存使用")
+        print(f"[2D Diagram] 大型多肽配体：降低 DPI 为 {actual_dpi} 以减少内存using")
     
     fig = plt.figure(figsize=(dw/100, dh/100), dpi=actual_dpi)
     ax = fig.add_subplot(111)
@@ -1514,7 +1514,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
         plt.close(fig)
         return None
     
-    # 🔧 增加画布边距，确保边缘的残基标签不会被裁剪
+    # 🔧 增加画布边距，确保边缘的残基Label不会被裁剪
     # 根据 badge_radius 动态计算边距（badge_radius 在后面定义为 30）
     canvas_margin = 100  # 预留足够的边距
     ax.set_xlim(-canvas_margin, dw + canvas_margin)
@@ -2130,7 +2130,7 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
             )
     
     if legend_handles:
-        # 🔧 优化图例位置，避免遮挡残基标签和分子结构
+        # 🔧 优化图例位置，避免遮挡残基Label和分子结构
         # 将图例放置在右上角外侧
         ax.legend(
             handles=legend_handles,
@@ -2139,15 +2139,15 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
             frameon=True,
             fontsize=8,
             fancybox=True,
-            framealpha=0.95,  # 提高不透明度，确保图例清晰可读
+            framealpha=0.95,  # 提高不透明degrees，确保图例清晰可读
             edgecolor='gray',
         )
 
     if not output_path:
         output_path = os.path.join(os.path.expanduser("~"), "Desktop", f"{ligand_resname}_2d.png")
     
-    # 🔧 修复：不使用 bbox_inches='tight'，避免裁剪边缘的残基标签
-    # 使用固定的 pad_inches 来保留足够的边距
+    # 🔧 修复：不using bbox_inches='tight'，避免裁剪边缘的残基Label
+    # using固定的 pad_inches 来保留足够的边距
     plt.savefig(output_path, dpi=dpi, bbox_inches=None, pad_inches=0.2)
     plt.close()
     print(f"[2D Diagram] ✅ Saved to {output_path}")

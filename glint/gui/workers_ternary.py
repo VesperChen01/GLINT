@@ -33,12 +33,12 @@ class TernaryEvaluationWorker(QThread):
             
             from ..ternary_complex_evaluator import TernaryComplexEvaluator
             
-            # 创建评估器（不传参数）
+            # Create评估器（不传Parameters）
             evaluator = TernaryComplexEvaluator()
             
             self.progress.emit("Evaluating ternary complex...")
             
-            # 使用evaluate方法进行完整评估
+            # usingevaluateMethod进行完整评估
             features = evaluator.evaluate(
                 pdb_path=self.pdb_path,
                 e3_chain=self.e3_chain,
@@ -51,7 +51,7 @@ class TernaryEvaluationWorker(QThread):
             # 转换为字典
             result = evaluator.to_dict(features)
             
-            # 保存CSV
+            # SaveCSV
             if self.out_csv:
                 import csv
                 with open(self.out_csv, 'w', newline='', encoding='utf-8') as f:

@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
 interaction_types.py
-相互作用数据结构定义
+相互作用Data Structures定义
 
-基于 PLIP 设计理念，使用 namedtuple 定义各类相互作用
+基于 PLIP 设计理念，using namedtuple 定义各Class相互作用
 """
 
 from __future__ import annotations
@@ -15,7 +15,7 @@ from typing import List, Dict, Any, Optional, Tuple
 # 相互作用 namedtuple 定义（参考 PLIP）
 # ============================================================================
 
-# 氢键
+# 氢Key
 HBond = namedtuple('HBond', [
     'donor_chain', 'donor_res', 'donor_resi', 'donor_atom',
     'acceptor_chain', 'acceptor_res', 'acceptor_resi', 'acceptor_atom',
@@ -57,7 +57,7 @@ MetalCoordination = namedtuple('MetalCoordination', [
     'distance', 'coordination_num'
 ])
 
-# 卤素键
+# 卤素Key
 HalogenBond = namedtuple('HalogenBond', [
     'donor_chain', 'donor_res', 'donor_resi', 'donor_atom', 'halogen_type',
     'acceptor_chain', 'acceptor_res', 'acceptor_resi', 'acceptor_atom',
@@ -74,24 +74,24 @@ WaterBridge = namedtuple('WaterBridge', [
 
 
 # ============================================================================
-# 相互作用结果类
+# 相互作用ResultsClass
 # ============================================================================
 
 class InteractionResult:
     """
-    相互作用检测结果容器
+    相互作用检测Results容器
     
-    参考 PLIP 设计，提供统一的结果管理接口
+    参考 PLIP 设计，提供统一的Results管理接口
     
     Attributes:
-        interaction_type (str): 相互作用类型 'PP'/'PL'/'PN'/'LL'
-        hydrogen_bonds (List[HBond]): 氢键列表
+        interaction_type (str): 相互作用Type 'PP'/'PL'/'PN'/'LL'
+        hydrogen_bonds (List[HBond]): 氢Key列表
         hydrophobic (List[Hydrophobic]): 疏水相互作用列表
         salt_bridges (List[SaltBridge]): 盐桥列表
         pi_stackings (List[PiStacking]): π-π堆积列表
         pi_cations (List[PiCation]): π-阳离子列表
         metal_coordinations (List[MetalCoordination]): 金属配位列表
-        halogen_bonds (List[HalogenBond]): 卤素键列表
+        halogen_bonds (List[HalogenBond]): 卤素Key列表
         water_bridges (List[WaterBridge]): 水桥列表
     """
     
@@ -114,7 +114,7 @@ class InteractionResult:
         转换为字典格式（向后兼容旧API）
         
         Returns:
-            dict: 包含所有相互作用的字典
+            dict: Package含所有相互作用的字典
         """
         return {
             'interaction_type': self.interaction_type,
@@ -134,7 +134,7 @@ class InteractionResult:
         
         Args:
             interactions: namedtuple 列表
-            interaction_type: 相互作用类型
+            interaction_type: 相互作用Type
         
         Returns:
             List[Dict]: 字典列表
@@ -152,10 +152,10 @@ class InteractionResult:
     
     def summary(self) -> Dict[str, Any]:
         """
-        返回统计摘要
+        Return统计摘要
         
         Returns:
-            dict: 包含各类相互作用数量的字典
+            dict: Package含各Class相互作用Count的字典
         """
         return {
             'interaction_type': self.interaction_type,
@@ -171,7 +171,7 @@ class InteractionResult:
         }
     
     def total_count(self) -> int:
-        """返回所有相互作用总数"""
+        """Return所有相互作用总数"""
         return sum([
             len(self.hydrogen_bonds),
             len(self.hydrophobic),
@@ -185,10 +185,10 @@ class InteractionResult:
     
     def get_all_interactions(self) -> List[Tuple[str, Any]]:
         """
-        获取所有相互作用（带类型标签）
+        获取所有相互作用（带TypeLabel）
         
         Returns:
-            List[Tuple[str, namedtuple]]: (类型名, 相互作用对象) 列表
+            List[Tuple[str, namedtuple]]: (Type名, 相互作用对象) 列表
         """
         all_interactions = []
         
@@ -213,13 +213,13 @@ class InteractionResult:
     
     def filter_by_distance(self, max_distance: float) -> 'InteractionResult':
         """
-        按距离过滤相互作用
+        按距离Filter相互作用
         
         Args:
             max_distance: 最大距离（Å）
         
         Returns:
-            InteractionResult: 新的结果对象
+            InteractionResult: 新的Results对象
         """
         filtered = InteractionResult(self.interaction_type)
         
@@ -235,18 +235,18 @@ class InteractionResult:
     
     def filter_by_residue(self, residue_key: Tuple[str, str, str]) -> 'InteractionResult':
         """
-        过滤包含特定残基的相互作用
+        FilterPackage含特定残基的相互作用
         
         Args:
             residue_key: (chain, resname, resi)
         
         Returns:
-            InteractionResult: 新的结果对象
+            InteractionResult: 新的Results对象
         """
         filtered = InteractionResult(self.interaction_type)
         chain, resname, resi = residue_key
         
-        # 氢键
+        # 氢Key
         for hb in self.hydrogen_bonds:
             if ((hb.donor_chain == chain and hb.donor_res == resname and hb.donor_resi == resi) or
                 (hb.acceptor_chain == chain and hb.acceptor_res == resname and hb.acceptor_resi == resi)):
@@ -258,7 +258,7 @@ class InteractionResult:
                 (h.chain2 == chain and h.res2 == resname and h.resi2 == resi)):
                 filtered.hydrophobic.append(h)
         
-        # ... 其他类型类似
+        # ... 其他TypeClass似
         
         return filtered
     
@@ -275,7 +275,7 @@ class InteractionResult:
 
 
 # ============================================================================
-# 辅助函数
+# 辅助Function
 # ============================================================================
 
 def format_residue_id(chain: str, resname: str, resi: str) -> str:
@@ -285,7 +285,7 @@ def format_residue_id(chain: str, resname: str, resi: str) -> str:
     Args:
         chain: 链ID
         resname: 残基名
-        resi: 残基编号
+        resi: 残基Number
     
     Returns:
         str: 格式化的残基ID，如 "A:ARG:123"
@@ -314,7 +314,7 @@ def interaction_to_csv_row(interaction_type: str, interaction) -> Dict[str, str]
     将相互作用转换为CSV行格式
     
     Args:
-        interaction_type: 相互作用类型
+        interaction_type: 相互作用Type
         interaction: 相互作用 namedtuple
     
     Returns:

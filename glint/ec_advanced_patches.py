@@ -1,18 +1,18 @@
 # -*- coding: utf-8 -*-
 """
 ec_advanced_patches.py
-高级 EC 分析补丁模块 - 解决 σ-hole、孤对电子、桥联水等方向性静电问题
+高级 EC 分析补丁Module - 解决 σ-hole、孤对电子、桥联水等方向性静电问题
 
 主要功能：
-1. SigmaHoleGenerator - 为卤素（Cl/Br/I）添加 σ-hole 虚拟正电点
-2. LonePairGenerator - 为羰基/胺添加孤对电子虚拟点
+1. SigmaHoleGenerator - 为卤素（Cl/Br/I）Add σ-hole 虚拟正电点
+2. LonePairGenerator - 为羰基/胺Add孤对电子虚拟点
 3. BridgingWaterFilter - 筛选结构性桥联水
-4. EnhancedChargeCalculator - 整合所有补丁的增强电荷计算器
+4. EnhancedChargeCalculator - 整合所有补丁的增强电荷Calculator
 
 跨平台兼容：
 - Windows / macOS / Linux
-- 纯 Python 实现，无外部二进制依赖
-- 可选依赖：RDKit（推荐）、OpenBabel（备选）
+- 纯 Python 实现，无外部二进制Dependencies
+- 可选Dependencies：RDKit（推荐）、OpenBabel（备选）
 
 Author: GLINT Team
 """
@@ -50,7 +50,7 @@ except ImportError:
 
 # ========== 常量定义 ==========
 
-# σ-hole 参数（基于文献值）
+# σ-hole Parameters（基于文献Value）
 # 参考: Clark et al., J. Mol. Model. 2007, 13, 291-296
 SIGMA_HOLE_PARAMS = {
     'Cl': {
@@ -73,12 +73,12 @@ SIGMA_HOLE_PARAMS = {
     },
 }
 
-# 孤对电子参数（基于 TIP5P 水模型思想）
+# 孤对电子Parameters（基于 TIP5P 水模型思想）
 LONE_PAIR_PARAMS = {
     'carbonyl_O': {
         'distance': 0.70,      # Å，LP 到 O 的距离
         'charge': -0.20,       # e，每个 LP 的电荷
-        'angle': 120.0,        # 度，两个 LP 之间的夹角
+        'angle': 120.0,        # degrees，两个 LP 之间的angle
         'oxygen_adjust': +0.40,  # 相应增加 O 的电荷
     },
     'ether_O': {
@@ -95,11 +95,11 @@ LONE_PAIR_PARAMS = {
     },
 }
 
-# 桥联水筛选参数
+# 桥联水筛选Parameters
 BRIDGING_WATER_PARAMS = {
-    'hbond_distance_max': 3.5,    # Å，氢键最大距离
-    'hbond_angle_min': 120.0,     # 度，氢键最小角度
-    'min_protein_contacts': 2,    # 最少蛋白接触数
+    'hbond_distance_max': 3.5,    # Å，氢Key最大距离
+    'hbond_angle_min': 120.0,     # degrees，氢Key最小角degrees
+    'min_protein_contacts': 2,    # 最少蛋白contact count
     'ligand_distance_max': 4.0,   # Å，到配体的最大距离（桥水）
 }
 
@@ -108,24 +108,24 @@ class SigmaHoleGenerator:
     """
     σ-hole 虚拟点生成器
     
-    在卤素（Cl/Br/I）的 C-X 键延长方向添加虚拟正电点，
-    模拟卤素键的方向性静电效应。
+    在卤素（Cl/Br/I）的 C-X Key延长方向Add虚拟正电点，
+    模拟卤素Key的方向性静电效应。
     
     原理：
-    - 卤素原子在 C-X 键方向有电子密度缺失（σ-hole）
-    - 这导致该方向呈现正电势，可与 Lewis 碱形成卤素键
+    - 卤素原子在 C-X Key方向有电子密degrees缺失（σ-hole）
+    - 这导致该方向呈现正电势，可与 Lewis 碱形成卤素Key
     - 标准点电荷模型无法表达这种各向异性
     
-    使用方法：
+    usingMethod：
         generator = SigmaHoleGenerator()
         virtual_points = generator.generate(mol)
-        # virtual_points 包含坐标、电荷、关联原子信息
+        # virtual_points Package含坐标、电荷、关联Atom information
     """
     
     def __init__(self, params: Dict = None):
         """
         Args:
-            params: 自定义 σ-hole 参数，默认使用 SIGMA_HOLE_PARAMS
+            params: 自定义 σ-hole Parameters，默认using SIGMA_HOLE_PARAMS
         """
         self.params = params or SIGMA_HOLE_PARAMS
     
@@ -138,12 +138,12 @@ class SigmaHoleGenerator:
             conformer_id: 构象 ID
             
         Returns:
-            字典包含：
+            字典Package含：
             - coords: 虚拟点坐标 (N, 3)
             - charges: 虚拟点电荷 (N,)
             - radii: 虚拟点半径 (N,)
             - parent_atoms: 关联的卤素原子索引
-            - halogen_charge_adjustments: 卤素电荷调整值
+            - halogen_charge_adjustments: 卤素电荷调整Value
         """
         if not RDKIT_AVAILABLE:
             print("[SigmaHoleGenerator] ⚠️ RDKit required")
@@ -161,12 +161,12 @@ class SigmaHoleGenerator:
         parent_atoms = []
         halogen_adjustments = {}
         
-        # 遍历所有键，找 C-X 键
+        # 遍历所有Key，找 C-X Key
         for bond in mol.GetBonds():
             atom1 = bond.GetBeginAtom()
             atom2 = bond.GetEndAtom()
             
-            # 检查是否为 C-X 键（X = Cl/Br/I）
+            # 检查是否为 C-X Key（X = Cl/Br/I）
             carbon, halogen = None, None
             
             if atom1.GetSymbol() == 'C' and atom2.GetSymbol() in self.params:
@@ -223,15 +223,15 @@ class SigmaHoleGenerator:
     def generate_from_coords(self, coords: np.ndarray, elements: List[str],
                             bonds: List[Tuple[int, int]]) -> Dict[str, Any]:
         """
-        从原始坐标生成 σ-hole 虚拟点（不依赖 RDKit）
+        从原始坐标生成 σ-hole 虚拟点（不Dependencies RDKit）
         
         Args:
             coords: 原子坐标 (N, 3)
             elements: 元素符号列表
-            bonds: 键连接列表 [(i, j), ...]
+            bonds: Key连接列表 [(i, j), ...]
             
         Returns:
-            同 generate() 方法
+            同 generate() Method
         """
         if not NUMPY_AVAILABLE:
             return self._empty_result()
@@ -285,7 +285,7 @@ class SigmaHoleGenerator:
         }
     
     def _empty_result(self) -> Dict[str, Any]:
-        """返回空结果"""
+        """Return空Results"""
         return {
             'coords': np.zeros((0, 3)) if NUMPY_AVAILABLE else [],
             'charges': np.zeros(0) if NUMPY_AVAILABLE else [],
@@ -300,15 +300,15 @@ class LonePairGenerator:
     """
     孤对电子虚拟点生成器
     
-    为羰基氧、醚氧、胺氮等添加孤对电子虚拟点，
-    模拟氢键受体的方向性。
+    为羰基氧、醚氧、胺氮等Add孤对电子虚拟点，
+    模拟氢Key受体的方向性。
     
     原理：
-    - 羰基 C=O 的氧有两个孤对电子，位于 C=O 键两侧
+    - 羰基 C=O 的氧有两个孤对电子，位于 C=O Key两侧
     - 标准点电荷只给 O 一个负电荷，无法表达方向性
-    - 添加 LP 虚拟点可改善氢键方向性预测
+    - Add LP 虚拟点可改善氢Key方向性预测
     
-    使用方法：
+    usingMethod：
         generator = LonePairGenerator()
         virtual_points = generator.generate(mol)
     """
@@ -316,7 +316,7 @@ class LonePairGenerator:
     def __init__(self, params: Dict = None):
         """
         Args:
-            params: 自定义孤对电子参数
+            params: 自定义孤对电子Parameters
         """
         self.params = params or LONE_PAIR_PARAMS
     
@@ -329,7 +329,7 @@ class LonePairGenerator:
             conformer_id: 构象 ID
             
         Returns:
-            字典包含虚拟点信息
+            字典Package含虚拟点Information
         """
         if not RDKIT_AVAILABLE:
             print("[LonePairGenerator] ⚠️ RDKit required")
@@ -409,7 +409,7 @@ class LonePairGenerator:
         """
         为羰基氧生成两个孤对电子虚拟点
         
-        LP1 和 LP2 位于 C=O 键两侧，与 C=O 键成 120° 角
+        LP1 和 LP2 位于 C=O Key两侧，与 C=O Key成 120° 角
         """
         o_pos = np.array(conf.GetAtomPosition(oxygen.GetIdx()))
         c_pos = np.array(conf.GetAtomPosition(carbon.GetIdx()))
@@ -419,7 +419,7 @@ class LonePairGenerator:
         co_vec = co_vec / np.linalg.norm(co_vec)
         
         # 找一个垂直于 C=O 的向量
-        # 使用羰基碳的另一个邻居来确定平面
+        # using羰基碳的另一个邻居来确定平面
         perp_vec = None
         for neighbor in carbon.GetNeighbors():
             if neighbor.GetIdx() != oxygen.GetIdx():
@@ -431,7 +431,7 @@ class LonePairGenerator:
                 break
         
         if perp_vec is None:
-            # 如果找不到邻居，使用任意垂直向量
+            # 如果找不到邻居，using任意垂直向量
             if abs(co_vec[0]) < 0.9:
                 perp_vec = np.cross(co_vec, np.array([1, 0, 0]))
             else:
@@ -439,7 +439,7 @@ class LonePairGenerator:
             perp_vec = perp_vec / np.linalg.norm(perp_vec)
         
         # 计算 LP 方向（与 C=O 成 120° 角）
-        angle_rad = math.radians(params['angle'] / 2)  # 每个 LP 与 C=O 反方向的夹角
+        angle_rad = math.radians(params['angle'] / 2)  # 每个 LP 与 C=O 反方向的angle
         
         # LP 基础方向（指向 C 的方向）
         lp_base = -co_vec
@@ -459,7 +459,7 @@ class LonePairGenerator:
         }
     
     def _rotate_vector(self, vec: np.ndarray, axis: np.ndarray, angle: float) -> np.ndarray:
-        """使用 Rodrigues 旋转公式绕轴旋转向量"""
+        """using Rodrigues 旋转公式绕轴旋转向量"""
         axis = axis / np.linalg.norm(axis)
         cos_a = math.cos(angle)
         sin_a = math.sin(angle)
@@ -471,7 +471,7 @@ class LonePairGenerator:
         return rotated / np.linalg.norm(rotated)
     
     def _empty_result(self) -> Dict[str, Any]:
-        """返回空结果"""
+        """Return空Results"""
         return {
             'coords': np.zeros((0, 3)) if NUMPY_AVAILABLE else [],
             'charges': np.zeros(0) if NUMPY_AVAILABLE else [],
@@ -487,15 +487,15 @@ class BridgingWaterFilter:
     桥联水筛选器
     
     从晶体结构中筛选出结构性重要的水分子：
-    1. 与蛋白形成多个氢键的水
+    1. 与蛋白形成多个氢Key的水
     2. 同时连接蛋白和配体的桥水
     
     原理：
     - 结构性水分子对结合亲和力有重要贡献
-    - 简单删除所有水会丢失这些信息
-    - 保留关键水分子可改善 EC 分析准确性
+    - 简单Delete所有水会丢失这些Information
+    - 保留关Key水分子可改善 EC 分析准确性
     
-    使用方法：
+    usingMethod：
         filter = BridgingWaterFilter()
         waters_to_keep = filter.filter_pdb('complex.pdb', 'LIG')
     """
@@ -503,30 +503,30 @@ class BridgingWaterFilter:
     def __init__(self, params: Dict = None):
         """
         Args:
-            params: 自定义筛选参数
+            params: 自定义筛选Parameters
         """
         self.params = params or BRIDGING_WATER_PARAMS
     
     def filter_pdb(self, pdb_file: str, ligand_resname: str = None) -> Dict[str, Any]:
         """
-        从 PDB 文件筛选桥联水
+        从 PDB File筛选桥联水
         
         Args:
-            pdb_file: PDB 文件路径
+            pdb_file: PDB FilePath
             ligand_resname: 配体残基名（用于识别桥水）
             
         Returns:
-            字典包含：
+            字典Package含：
             - waters_to_keep: 应保留的水分子列表 [(chain, resnum), ...]
             - bridging_waters: 桥水列表
             - protein_bound_waters: 蛋白结合水列表
-            - statistics: 统计信息
+            - statistics: 统计Information
         """
         if not NUMPY_AVAILABLE:
             print("[BridgingWaterFilter] ⚠️ NumPy required")
             return self._empty_result()
         
-        # 解析 PDB 文件
+        # 解析 PDB File
         protein_atoms = []
         ligand_atoms = []
         water_atoms = []
@@ -669,18 +669,18 @@ class BridgingWaterFilter:
                           keep_ligand: bool = True,
                           ligand_resname: str = None) -> bool:
         """
-        写入筛选后的 PDB 文件
+        写入筛选后的 PDB File
         
         Args:
-            input_pdb: 输入 PDB 文件
-            output_pdb: 输出 PDB 文件
+            input_pdb: 输入 PDB File
+            output_pdb: 输出 PDB File
             waters_to_keep: 要保留的水分子列表
             keep_all_protein: 是否保留所有蛋白原子
             keep_ligand: 是否保留配体
             ligand_resname: 配体残基名
             
         Returns:
-            是否成功
+            是否Success
         """
         waters_set = set(waters_to_keep)
         
@@ -727,7 +727,7 @@ class BridgingWaterFilter:
         }
     
     def _empty_result(self) -> Dict[str, Any]:
-        """返回空结果"""
+        """Return空Results"""
         return {
             'waters_to_keep': [],
             'bridging_waters': [],
@@ -743,32 +743,32 @@ class BridgingWaterFilter:
 
 class EnhancedChargeCalculator:
     """
-    增强电荷计算器
+    增强电荷Calculator
     
     整合所有高级补丁，提供统一的电荷计算接口：
     1. 基础 Gasteiger 电荷
     2. σ-hole 虚拟点
     3. 孤对电子虚拟点
     
-    使用方法：
+    usingMethod：
         calc = EnhancedChargeCalculator(use_sigma_holes=True, use_lone_pairs=True)
         result = calc.calculate(mol)
-        # result 包含原子电荷 + 虚拟点电荷
+        # result Package含原子电荷 + 虚拟点电荷
     """
     
     def __init__(self,
                  use_sigma_holes: bool = True,
-                 use_lone_pairs: bool = False,  # 默认关闭，因为实现较复杂
+                 use_lone_pairs: bool = False,  # 默认Close，因为实现较复杂
                  dielectric: float = 4.0,
                  sigma_hole_params: Dict = None,
                  lone_pair_params: Dict = None):
         """
         Args:
-            use_sigma_holes: 是否添加 σ-hole 虚拟点
-            use_lone_pairs: 是否添加孤对电子虚拟点
+            use_sigma_holes: 是否Add σ-hole 虚拟点
+            use_lone_pairs: 是否Add孤对电子虚拟点
             dielectric: 介电常数
-            sigma_hole_params: 自定义 σ-hole 参数
-            lone_pair_params: 自定义孤对电子参数
+            sigma_hole_params: 自定义 σ-hole Parameters
+            lone_pair_params: 自定义孤对电子Parameters
         """
         self.use_sigma_holes = use_sigma_holes
         self.use_lone_pairs = use_lone_pairs
@@ -786,7 +786,7 @@ class EnhancedChargeCalculator:
             conformer_id: 构象 ID
             
         Returns:
-            字典包含：
+            字典Package含：
             - atom_coords: 原子坐标 (N, 3)
             - atom_charges: 原子电荷 (N,)
             - atom_radii: 原子半径 (N,)
@@ -844,7 +844,7 @@ class EnhancedChargeCalculator:
         virtual_charges = []
         virtual_radii = []
         
-        # 添加 σ-hole 虚拟点
+        # Add σ-hole 虚拟点
         if self.use_sigma_holes and self.sigma_hole_gen:
             sigma_result = self.sigma_hole_gen.generate(mol, conformer_id)
             
@@ -857,7 +857,7 @@ class EnhancedChargeCalculator:
                 for atom_idx, adjustment in sigma_result['halogen_charge_adjustments'].items():
                     atom_charges[atom_idx] += adjustment
         
-        # 添加孤对电子虚拟点
+        # Add孤对电子虚拟点
         if self.use_lone_pairs and self.lone_pair_gen:
             lp_result = self.lone_pair_gen.generate(mol, conformer_id)
             
@@ -910,7 +910,7 @@ class EnhancedChargeCalculator:
     def calculate_potential(self, mol: 'Chem.Mol', points: np.ndarray,
                            conformer_id: int = 0) -> np.ndarray:
         """
-        计算增强静电势（包含虚拟点贡献）
+        计算增强静电势（Package含虚拟点贡献）
         
         Args:
             mol: RDKit 分子对象
@@ -918,7 +918,7 @@ class EnhancedChargeCalculator:
             conformer_id: 构象 ID
             
         Returns:
-            静电势值 (M,)
+            静电势Value (M,)
         """
         charge_result = self.calculate(mol, conformer_id)
         
@@ -939,7 +939,7 @@ class EnhancedChargeCalculator:
         return potentials
     
     def _empty_result(self) -> Dict[str, Any]:
-        """返回空结果"""
+        """Return空Results"""
         empty_array = np.zeros((0, 3)) if NUMPY_AVAILABLE else []
         empty_1d = np.zeros(0) if NUMPY_AVAILABLE else []
         
@@ -959,7 +959,7 @@ class EnhancedChargeCalculator:
         }
 
 
-# ========== PQR 文件工具 ==========
+# ========== PQR FileTool ==========
 
 def write_enhanced_pqr(output_file: str,
                        atom_coords: np.ndarray,
@@ -972,22 +972,22 @@ def write_enhanced_pqr(output_file: str,
                        virtual_radii: np.ndarray = None,
                        virtual_names: List[str] = None) -> bool:
     """
-    写入增强 PQR 文件（包含虚拟点）
+    写入增强 PQR File（Package含虚拟点）
     
     Args:
-        output_file: 输出文件路径
+        output_file: 输出FilePath
         atom_coords: 原子坐标
         atom_charges: 原子电荷
         atom_radii: 原子半径
-        atom_names: 原子名称
+        atom_names: 原子Name
         atom_elements: 元素符号
         virtual_coords: 虚拟点坐标
         virtual_charges: 虚拟点电荷
         virtual_radii: 虚拟点半径
-        virtual_names: 虚拟点名称
+        virtual_names: 虚拟点Name
         
     Returns:
-        是否成功
+        是否Success
     """
     try:
         with open(output_file, 'w') as f:
@@ -1034,23 +1034,23 @@ def write_enhanced_pqr(output_file: str,
         return False
 
 
-# ========== 便捷函数 ==========
+# ========== 便捷Function ==========
 
 def apply_all_patches(mol: 'Chem.Mol',
                       use_sigma_holes: bool = True,
                       use_lone_pairs: bool = False,
                       conformer_id: int = 0) -> Dict[str, Any]:
     """
-    应用所有高级补丁的便捷函数
+    Apply所有高级补丁的便捷Function
     
     Args:
         mol: RDKit 分子对象
-        use_sigma_holes: 是否添加 σ-hole
-        use_lone_pairs: 是否添加孤对电子
+        use_sigma_holes: 是否Add σ-hole
+        use_lone_pairs: 是否Add孤对电子
         conformer_id: 构象 ID
         
     Returns:
-        增强电荷计算结果
+        增强电荷计算Results
     """
     calc = EnhancedChargeCalculator(
         use_sigma_holes=use_sigma_holes,
@@ -1067,13 +1067,13 @@ def filter_and_prepare_complex(pdb_file: str,
     筛选桥联水并准备复合物结构
     
     Args:
-        pdb_file: 输入 PDB 文件
-        output_dir: 输出目录
+        pdb_file: 输入 PDB File
+        output_dir: 输出Directory
         ligand_resname: 配体残基名
         keep_bridging_waters: 是否保留桥联水
         
     Returns:
-        输出文件路径字典
+        输出FilePath字典
     """
     import os
     os.makedirs(output_dir, exist_ok=True)
@@ -1103,10 +1103,10 @@ def filter_and_prepare_complex(pdb_file: str,
     return result
 
 
-# ========== 模块信息 ==========
+# ========== ModuleInformation ==========
 
 def print_module_info():
-    """打印模块信息"""
+    """PrintModuleInformation"""
     print("="*60)
     print("GLINT EC Advanced Patches Module")
     print("="*60)

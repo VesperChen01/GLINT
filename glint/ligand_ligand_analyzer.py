@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
 ligand_ligand_analyzer.py
-小分子-小分子相互作用分析模块
+小分子-小分子相互作用分析Module
 
 功能：
 1. 分析两个选定的小分子（或任意原子集合）之间的相互作用
-2. 支持氢键、卤素键、金属配位（基于原子几何）
+2. 支持氢Key、卤素Key、金属配位（基于原子几何）
 3. 如果安装了 RDKit，支持 π-π 堆积、π-阳离子、疏水相互作用（基于拓扑）
-4. 生成可视化结果
+4. 生成可视化Results
 """
 
 from __future__ import print_function
@@ -18,7 +18,7 @@ import tempfile
 from collections import defaultdict
 from pymol import cmd
 
-# 复用 interaction_analyzer 的基础几何函数
+# 复用 interaction_analyzer 的基础几何Function
 from .interaction_analyzer import (
     parse_pdb_structure, distance, is_hbond_precise, is_halogen_bond,
     is_metal_coordination, calculate_confidence_score, centroid,
@@ -50,23 +50,23 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                                      visualize=True, show_hydrophobic=False,
                                      exclude_intramolecular=True):
     """
-    分析两个选择区域（通常是两个小分子）之间的相互作用
+    分析两个Select区域（通常是两个小分子）之间的相互作用
     
-    参数:
+    Parameters:
         obj_name: PyMOL对象名
-        sel1: 选择区域1 (PyMOL selection string, e.g. "resn LIG and chain A and resi 301")
-              支持使用 chain:resi 组合来精确指定分子，例如 "resn UNK and chain A and resi 301"
-        sel2: 选择区域2 (PyMOL selection string, e.g. "resn UNK and chain A and resi 302")
-              对于同名配体(如UNK)，建议使用 chain 和 resi 来区分不同分子
+        sel1: Select区域1 (PyMOL selection string, e.g. "resn LIG and chain A and resi 301")
+              支持using chain:resi 组合来精确指定分子，例如 "resn UNK and chain A and resi 301"
+        sel2: Select区域2 (PyMOL selection string, e.g. "resn UNK and chain A and resi 302")
+              对于同名配体(如UNK)，建议using chain 和 resi 来区分不同分子
         cutoff: 距离截断 (Å)
-        output_csv: 输出CSV路径
-        visualize: 是否自动在PyMOL中显示
-        show_hydrophobic: 是否显示疏水相互作用（默认False，只显示关键相互作用）
+        output_csv: 输出CSVPath
+        visualize: 是否自动在PyMOL中Display
+        show_hydrophobic: 是否Display疏水相互作用（默认False，只Display关Key相互作用）
         exclude_intramolecular: 是否排除分子内相互作用（默认True，只分析不同分子间的相互作用）
     """
     
-    # 1. 获取原子信息
-    # 我们使用 cmd.get_model 来获取选择区域的原子，这比 parse_pdb_structure 更灵活
+    # 1. 获取Atom information
+    # 我们using cmd.get_model 来获取Select区域的原子，这比 parse_pdb_structure 更灵活
     model1 = cmd.get_model(sel1)
     model2 = cmd.get_model(sel2)
     
@@ -77,7 +77,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
         print(f"[GLINT] ⚠️ Empty selection. Sel1: {len(atoms1)} atoms, Sel2: {len(atoms2)} atoms.")
         return []
 
-    # 识别每个选择区域包含的分子（使用 chain:resi 组合）
+    # 识别每个Select区域Package含的分子（using chain:resi 组合）
     molecules1 = set((a[0], a[2]) for a in atoms1)  # {(chain, resi), ...}
     molecules2 = set((a[0], a[2]) for a in atoms2)  # {(chain, resi), ...}
     
@@ -123,7 +123,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
             print(f"[GLINT] ⚠️ RDKit analysis failed: {e}. Falling back to geometric only.")
             
     # 3. 遍历原子对进行分析
-    # 优化：使用空间划分或简单距离预筛选
+    # 优化：using空间划分或简单距离预筛选
     
     # 提取 RDKit 特征 (如果可用)
     rings1 = rdkit_features1.get('rings', []) if rdkit_features1 else []
@@ -144,7 +144,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
             if d > cutoff:
                 continue
                 
-            # 3.1 氢键 (使用精确模式)
+            # 3.1 氢Key (using精确模式)
             # is_hbond_precise 需要 (chain, resn, resi, name, coord)
             is_hb, hb_dist, hb_angle = is_hbond_precise(a1, a2, all_atoms_dict)
             if not is_hb:
@@ -157,9 +157,9 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                     "Atom1": a1, "Atom2": a2, "Distance": hb_dist, "Confidence": conf,
                     "Details": f"Angle: {hb_dist:.1f}°"
                 })
-                continue # 也就是优先判定为氢键
+                continue # 也就是优先判定为氢Key
                 
-            # 3.2 卤素键
+            # 3.2 卤素Key
             is_hal, hal_dist, hal_angle = is_halogen_bond(a1, a2, d)
             if is_hal:
                 conf = calculate_confidence_score("Halogen Bond", hal_dist, hal_angle)
@@ -181,7 +181,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                 continue
                 
             # 3.4 弱极性相互作用 (Polar Contact) - Catch-all for non-ideal H-bonds
-            # 当未通过严格氢键判定，但距离较近的极性原子对
+            # 当未通过严格氢Key判定，但距离较近的极性原子对
             if d <= 3.6:
                 e1 = get_element_from_atom_name(a1[3])
                 e2 = get_element_from_atom_name(a2[3])
@@ -194,7 +194,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                     })
                     continue
 
-            # 3.5 疏水相互作用 (如果有 RDKit 支持且用户启用)
+            # 3.5 疏水相互作用 (如果有 RDKit 支持且用户Enable)
             if show_hydrophobic:
                 if rdkit_features1 and rdkit_features2:
                     if _is_hydrophobic_atom(a1, rdkit_features1) and _is_hydrophobic_atom(a2, rdkit_features2):
@@ -208,7 +208,7 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
                 elif not RDKIT_AVAILABLE:
                     elem1 = get_element_from_atom_name(a1[3])
                     elem2 = get_element_from_atom_name(a2[3])
-                    if elem1 == 'C' and elem2 == 'C' and d <= 3.6:  # 收紧阈值 3.8 -> 3.6
+                    if elem1 == 'C' and elem2 == 'C' and d <= 3.6:  # 收紧阈Value 3.8 -> 3.6
                         interactions.append({
                             "Type": "Hydrophobic",
                             "Atom1": a1, "Atom2": a2, "Distance": d, "Confidence": 0.5,
@@ -262,16 +262,16 @@ def analyze_ligand_ligand_interactions(obj_name, sel1, sel2, cutoff=4.5, output_
 
 def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False):
     """
-    在 PyMOL 中可视化结果
+    在 PyMOL 中可视化Results
     
-    参数:
+    Parameters:
         obj_name: PyMOL对象名
         interactions: 相互作用列表
-        show_hydrophobic: 是否显示疏水相互作用（默认False）
+        show_hydrophobic: 是否Display疏水相互作用（默认False）
     """
     cmd.delete(f"{obj_name}_LL_inter_*")
     
-    # 统计各类型相互作用
+    # 统计各Type相互作用
     interaction_counts = {}
     for inter in interactions:
         itype = inter['Type']
@@ -321,13 +321,13 @@ def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False
             # 绘制环中心连线（π–π 堆积等基于基团的相互作用）
             p1 = inter['Group1']['centroid']
             p2 = inter['Group2']['centroid']
-            # 创建伪原子
+            # Create伪原子
             cmd.pseudoatom("p1", pos=p1)
             cmd.pseudoatom("p2", pos=p2)
             cmd.distance(name, "p1", "p2")
             cmd.delete("p1")
             cmd.delete("p2")
-            # 使用统一配色（不再硬编码 magenta）
+            # using统一配色（不再硬编码 magenta）
             try:
                 cmd.color(color_name, name)
             except Exception:
@@ -337,7 +337,7 @@ def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False
             a1 = inter['Atom1']
             a2 = inter['Atom2']
             # selection syntax: chain and resi and name ...
-            # 为了精准，最好使用 ID (但 atom tuple 没有 id)。这里使用 chain/resi/name
+            # 为了精准，最好using ID (但 atom tuple 没有 id)。这里using chain/resi/name
             sel1 = f"chain {a1[0]} and resn {a1[1]} and resi {a1[2]} and name {a1[3]}"
             sel2 = f"chain {a2[0]} and resn {a2[1]} and resi {a2[2]} and name {a2[3]}"
             
@@ -345,7 +345,7 @@ def visualize_ligand_interactions(obj_name, interactions, show_hydrophobic=False
             
             try:
                 cmd.color(color_name, name)
-            except Exception:  # PyMOL 颜色设置可能失败
+            except Exception:  # PyMOL 颜色Settings可能Failed
                 cmd.color("gray50", name)
             
     print(f"[GLINT] Visualized {len(interactions)} interactions.")
@@ -384,10 +384,10 @@ def _save_csv(interactions, filepath):
 # --- RDKit Helpers ---
 
 def _analyze_with_rdkit(selection):
-    """使用 RDKit 分析选择区域的拓扑特征 (Ring, Aromaticity, Hydrophobicity)"""
-    # 1. 保存为 SDF/PDB
-    # 为了保留原子名称以便后续映射，PDB 比较好。但是 PDB 对小分子连接性支持有时不好。
-    # 尝试使用 SDF， PyMOL save 支持
+    """using RDKit 分析Select区域的拓扑特征 (Ring, Aromaticity, Hydrophobicity)"""
+    # 1. Save为 SDF/PDB
+    # 为了保留原子Name以便后续映射，PDB 比较好。但是 PDB 对小分子连接性支持有时不好。
+    # 尝试using SDF， PyMOL save 支持
     
     tmp_pdb = tempfile.mktemp(suffix=".pdb")
     cmd.save(tmp_pdb, selection)
@@ -398,7 +398,7 @@ def _analyze_with_rdkit(selection):
     if not mol:
         return None
         
-    # 2. 获取环信息
+    # 2. 获取环Information
     rings = []
     ri = mol.GetRingInfo()
     atom_rings = ri.AtomRings()
@@ -413,7 +413,7 @@ def _analyze_with_rdkit(selection):
         # 检查芳香性
         is_aromatic = all(mol.GetAtomWithIdx(i).GetIsAromatic() for i in ring_atom_indices)
         
-        # 计算质心和法向量
+        # Calculate center of mass和法向量
         coords = [conf.GetAtomPosition(i) for i in ring_atom_indices]
         coords_tuples = [(p.x, p.y, p.z) for p in coords]
         cen = centroid(coords_tuples)
@@ -454,9 +454,9 @@ def _analyze_with_rdkit(selection):
 
     # 建立 Atom Name -> Feature 映射
     # key: atom_name (assuming unique within the selection/residue context?)
-    # 实际上 PyMOL selection 可能包含多个 residues。 RDKit PDB parser creates one molecule.
-    # 我们需要一种方法将 RDKit atom index 映射回 atoms list 中的 entry。
-    # 使用 (chain, resn, resi, name) 匹配。
+    # 实际上 PyMOL selection 可能Package含多个 residues。 RDKit PDB parser creates one molecule.
+    # 我们需要一种Method将 RDKit atom index 映射回 atoms list 中的 entry。
+    # using (chain, resn, resi, name) 匹配。
     
     features = {
         "rings": rings,
@@ -466,12 +466,12 @@ def _analyze_with_rdkit(selection):
     return features
 
 def _is_hydrophobic_atom(atom_tuple, features):
-    """检查原子是否为疏水 (利用 RDKit 结果)"""
+    """检查原子是否为疏水 (利用 RDKit Results)"""
     # atom_tuple: (chain, resn, resi, name, coord)
     mol = features['mol']
     hyd_indices = features['hydrophobic_indices']
     
-    # 查找对应原子
+    # Find对应原子
     # 这是一个耗时操作，但在小分子场景下可接受
     tgt_name = atom_tuple[3]
     tgt_resi = atom_tuple[2]
@@ -489,8 +489,8 @@ def _is_hydrophobic_atom(atom_tuple, features):
     return False
 
 def _dummy_atom_from_ring(ring, atom_list):
-    """创建一个用于可视化的伪原子tuple，位于环中心"""
-    # 我们需要找到环中的一个真实原子作为 'Atom1' 的引用信息 (用于 Chain/Res info)
+    """Create一个用于可视化的伪原子tuple，位于环中心"""
+    # 我们需要找到环中的一个真实原子作为 'Atom1' 的引用Information (用于 Chain/Res info)
     # 然后坐标改为 centroid
     
     # Find reference atom

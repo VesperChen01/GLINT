@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """
-改进的 EC 分析模块
-添加了更好的错误处理、诊断信息和 fallback 机制
+改进的 EC 分析Module
+Add了更好的Error处理、诊断Information和 fallback 机制
 
 主要改进：
-1. 详细的依赖检查和诊断
+1. 详细的Dependencies检查和诊断
 2. 多层 fallback 机制
-3. 更好的错误消息和建议
-4. 性能监控和进度显示
+3. 更好的Error消息和建议
+4. 性能监控和进degreesDisplay
 5. 自动降级策略
 Author: GLINT Team
 """
@@ -19,10 +19,10 @@ import time
 import tempfile
 from typing import Dict, List, Tuple, Optional, Any
 
-# ========== 依赖检查 ==========
+# ========== Dependencies检查 ==========
 
 class DependencyChecker:
-    """依赖检查和诊断工具"""
+    """Dependencies检查和诊断Tool"""
     
     def __init__(self):
         self.status = {}
@@ -30,8 +30,8 @@ class DependencyChecker:
         self.errors = []
     
     def check_core_dependencies(self) -> bool:
-        """检查核心依赖"""
-        print("[EC] 检查核心依赖...")
+        """检查核心Dependencies"""
+        print("[EC] 检查核心Dependencies...")
         
         core_deps = {
             'numpy': 'NumPy',
@@ -54,8 +54,8 @@ class DependencyChecker:
         return all_available
     
     def check_ec_dependencies(self) -> Dict[str, bool]:
-        """检查 EC 专用依赖"""
-        print("[EC] 检查 EC 分析依赖...")
+        """检查 EC 专用Dependencies"""
+        print("[EC] 检查 EC 分析Dependencies...")
         
         ec_deps = {
             'pdb2pqr': 'PDB2PQR',
@@ -73,13 +73,13 @@ class DependencyChecker:
                 print(f"  ⚠️  {display_name} Python API 未安装")
                 results[import_name] = False
                 self.status[import_name] = False
-                self.warnings.append(f"{display_name} 可通过命令行工具使用")
+                self.warnings.append(f"{display_name} 可通过命令行Toolusing")
         
         return results
     
     def check_external_tools(self) -> Dict[str, bool]:
-        """检查外部命令行工具"""
-        print("[EC] 检查外部工具...")
+        """检查外部命令行Tool"""
+        print("[EC] 检查外部Tool...")
         
         import shutil
         
@@ -103,10 +103,10 @@ class DependencyChecker:
         return results
     
     def get_status_report(self) -> str:
-        """获取状态报告"""
+        """获取Status报告"""
         report = []
         report.append("\n" + "="*60)
-        report.append("EC 分析依赖状态报告")
+        report.append("EC 分析DependenciesStatus报告")
         report.append("="*60)
         
         for dep, available in self.status.items():
@@ -114,12 +114,12 @@ class DependencyChecker:
             report.append(f"  {dep}: {status_str}")
         
         if self.warnings:
-            report.append("\n⚠️  警告:")
+            report.append("\n⚠️  Warning:")
             for warning in self.warnings:
                 report.append(f"  - {warning}")
         
         if self.errors:
-            report.append("\n❌ 错误:")
+            report.append("\n❌ Error:")
             for error in self.errors:
                 report.append(f"  - {error}")
         
@@ -127,9 +127,9 @@ class DependencyChecker:
         return "\n".join(report)
     
     def print_installation_guide(self):
-        """打印安装指南"""
+        """Print安装指南"""
         print("\n" + "="*60)
-        print("EC 分析依赖安装指南")
+        print("EC 分析Dependencies安装指南")
         print("="*60)
         
         print("\n1. 安装 PDB2PQR:")
@@ -146,7 +146,7 @@ class DependencyChecker:
 
 
 class ECAnalysisManager:
-    """EC 分析管理器，处理 fallback 和错误恢复"""
+    """EC 分析管理器，处理 fallback 和Error恢复"""
     
     def __init__(self):
         self.checker = DependencyChecker()
@@ -157,40 +157,40 @@ class ECAnalysisManager:
         self.fallback_mode = False
     
     def initialize(self) -> bool:
-        """初始化 EC 分析环境"""
+        """Initialize EC 分析环境"""
         print("\n" + "="*60)
-        print("初始化 EC 分析环境")
+        print("Initialize EC 分析环境")
         print("="*60 + "\n")
         
-        # 检查核心依赖
+        # 检查核心Dependencies
         if not self.checker.check_core_dependencies():
-            print("\n❌ 核心依赖缺失，无法继续")
+            print("\n❌ 核心Dependencies缺失，无法Continue")
             print(self.checker.get_status_report())
             return False
         
-        # 检查 EC 依赖
+        # 检查 EC Dependencies
         ec_deps = self.checker.check_ec_dependencies()
         self.has_pdb2pqr = ec_deps.get('pdb2pqr', False)
         self.has_apbs = ec_deps.get('apbs', False)
         
-        # 检查外部工具
+        # 检查外部Tool
         ext_tools = self.checker.check_external_tools()
         self.has_pdb2pqr_cli = ext_tools.get('pdb2pqr', False)
         self.has_apbs_cli = ext_tools.get('apbs', False)
         
         # 判断是否需要 fallback
         if not (self.has_pdb2pqr or self.has_pdb2pqr_cli):
-            print("\n⚠️  PDB2PQR 不可用，将使用简化的 PQR 转换")
+            print("\n⚠️  PDB2PQR 不可用，将using简化的 PQR 转换")
             self.fallback_mode = True
         
         if not (self.has_apbs or self.has_apbs_cli):
-            print("\n⚠️  APBS 不可用，将使用 Coulomb 近似计算静电势")
+            print("\n⚠️  APBS 不可用，将using Coulomb 近似计算静电势")
             self.fallback_mode = True
         
         print(self.checker.get_status_report())
         
         if self.fallback_mode:
-            print("💡 已启用 Fallback 模式")
+            print("💡 已Enable Fallback 模式")
             print("   功能将受到限制，但基本 EC 分析仍可进行")
         
         return True
@@ -207,7 +207,7 @@ class ECAnalysisManager:
     
     def run_ec_analysis(self, obj_name: str, ligand_resname: str,
                        output_dir: str = None, **kwargs) -> Optional[Dict[str, Any]]:
-        """运行 EC 分析，带有完整的错误处理"""
+        """运行 EC 分析，带有完整的Error处理"""
         
         if not self.initialize():
             return None
@@ -216,7 +216,7 @@ class ECAnalysisManager:
             from glint.ligand_ec_calculator import calculate_ligand_ec
             
             print("\n" + "="*60)
-            print("开始 EC 分析")
+            print("Start EC 分析")
             print("="*60 + "\n")
             
             result = calculate_ligand_ec(
@@ -227,22 +227,22 @@ class ECAnalysisManager:
             )
             
             if result:
-                print("\n✅ EC 分析完成")
+                print("\n✅ EC 分析Completed")
                 return result
             else:
-                print("\n❌ EC 分析失败")
+                print("\n❌ EC 分析Failed")
                 return None
         
         except Exception as e:
             print(f"\n❌ EC 分析出错: {e}")
             print("\n建议:")
-            print("  1. 检查依赖: python3 ec_dependency_checker.py")
-            print("  2. 安装缺失的工具: bash install_ec_dependencies.sh")
-            print("  3. 查看详细日志")
+            print("  1. 检查Dependencies: python3 ec_dependency_checker.py")
+            print("  2. 安装缺失的Tool: bash install_ec_dependencies.sh")
+            print("  3. View详细日志")
             return None
 
 
-# ========== 快速诊断函数 ==========
+# ========== 快速诊断Function ==========
 
 def quick_diagnose() -> bool:
     """快速诊断 EC 分析环境"""
@@ -251,15 +251,15 @@ def quick_diagnose() -> bool:
 
 
 def print_help():
-    """打印帮助信息"""
+    """PrintHelpInformation"""
     print("""
-GLINT EC 分析 - 快速开始指南
+GLINT EC 分析 - 快速Start指南
 ================================
 
-1. 检查依赖:
+1. 检查Dependencies:
    python3 -c "from glint.ec_analysis_improved import quick_diagnose; quick_diagnose()"
 
-2. 安装缺失的依赖:
+2. 安装缺失的Dependencies:
    bash install_ec_dependencies.sh
 
 3. 在 PyMOL 中运行 EC 分析:
@@ -277,10 +277,10 @@ A: 运行 pip3 install pdb2pqr
 Q: APBS 未找到
 A: 运行 pip3 install apbs 或 brew install brewsci/bio/apbs
 
-Q: 分析失败
-A: 运行诊断工具检查依赖状态
+Q: 分析Failed
+A: 运行诊断Tool检查DependenciesStatus
 
-更多信息: https://github.com/VesperChen01/GLINT
+更多Information: https://github.com/VesperChen01/GLINT
     """)
 
 

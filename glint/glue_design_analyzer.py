@@ -102,16 +102,16 @@ def detect_clashes_at_interface(aligned_obj, aligned_chain, aligned_gloop_range,
     """
     检测新底物 G-loop 与 CRBN 的碰撞（clashes）和接触
     
-    参数:
+    Parameters:
         aligned_obj: 对齐后的新底物
         aligned_chain: G-loop 链
         aligned_gloop_range: G-loop 范围
         crbn_obj: CRBN 对象（通常与模板同一对象）
         crbn_chain: CRBN 链
-        clash_threshold: 碰撞阈值（Å）默认 2.0
-        contact_threshold: 接触阈值（Å）默认 4.5
+        clash_threshold: 碰撞阈Value（Å）默认 2.0
+        contact_threshold: 接触阈Value（Å）默认 4.5
     
-    返回:
+    Return:
         dict: {
             'clashes': [{'gloop_res': str, 'crbn_res': str, 'distance': float}, ...],
             'contacts': [...],
@@ -151,7 +151,7 @@ def detect_clashes_at_interface(aligned_obj, aligned_chain, aligned_gloop_range,
         for c_atom in crbn_atoms:
             dist = np.linalg.norm(g_atom['coord'] - c_atom['coord'])
             
-            # 排除氢键 backbone atoms 的正常接触
+            # 排除氢Key backbone atoms 的正常接触
             is_backbone_pair = (
                 g_atom['name'] in ('N', 'CA', 'C', 'O') and
                 c_atom['name'] in ('N', 'CA', 'C', 'O')
@@ -176,7 +176,7 @@ def detect_clashes_at_interface(aligned_obj, aligned_chain, aligned_gloop_range,
     
     has_severe_clashes = any(c['distance'] < 1.5 for c in clashes)
     
-    # 打印结果
+    # PrintResults
     print(f"\n{'='*70}")
     print(f"碰撞检测 (Clash Detection)")
     print(f"{'='*70}")
@@ -189,7 +189,7 @@ def detect_clashes_at_interface(aligned_obj, aligned_chain, aligned_gloop_range,
         if len(clashes) > 10:
             print(f"  ... 还有 {len(clashes)-10} 个碰撞")
     
-    print(f"\n接触数: {len(contacts)} ({clash_threshold}-{contact_threshold} Å)")
+    print(f"\ncontact count: {len(contacts)} ({clash_threshold}-{contact_threshold} Å)")
     
     if has_severe_clashes:
         print(f"\n❌ 严重碰撞 (< 1.5 Å): 结构不可行")
@@ -218,11 +218,11 @@ def identify_exit_vectors(ligand_obj, ligand_resname,
     识别分子胶上的 exit vectors（可用于 PROTAC linker 连接的位点）
     
     策略:
-    1. 找到配体上远离 CRBN 和 G-loop 核心界面的原子
-    2. 检查这些原子周围的溶剂暴露度
+    1. 找到配体上远离 CRBN 和 G-loop 核心interface的原子
+    2. 检查这些原子周围的溶剂暴露degrees
     3. 推荐最适合连接 linker 的位置
     
-    参数:
+    Parameters:
         ligand_obj: 配体对象名
         ligand_resname: 配体残基名（如 CC9, LEN）
         crbn_obj: CRBN 对象
@@ -232,7 +232,7 @@ def identify_exit_vectors(ligand_obj, ligand_resname,
         gloop_range: G-loop 范围
         solvent_radius: 溶剂暴露检测半径（Å）
     
-    返回:
+    Return:
         list: [{'atom_name': str, 'score': float, 'reason': str}, ...]
     """
     # 获取配体原子
@@ -259,7 +259,7 @@ def identify_exit_vectors(ligand_obj, ligand_resname,
         coord = np.array([atom.coord[0], atom.coord[1], atom.coord[2]])
         aname = atom.name.strip()
         
-        # 跳过核心结合原子（如 phthalimide/glutarimide 的羰基 O）
+        # Skip核心结合原子（如 phthalimide/glutarimide 的羰基 O）
         if aname in ('O1', 'O2', 'O3', 'O4', 'N1'):  # 常见 IMiD 核心原子
             continue
         
@@ -268,7 +268,7 @@ def identify_exit_vectors(ligand_obj, ligand_resname,
         min_dist_gloop = min([np.linalg.norm(coord - g) for g in gloop_coords])
         
         # 评分标准：
-        # 1. 远离核心界面 (+)
+        # 1. 远离核心interface (+)
         # 2. 溶剂暴露 (+)
         # 3. 是否为末端/支链原子 (+)
         
@@ -297,7 +297,7 @@ def identify_exit_vectors(ligand_obj, ligand_resname,
             score += 2.0
             reasons.append("溶剂暴露")
         
-        # 元素类型（C > N > O，避免破坏极性相互作用）
+        # 元素Type（C > N > O，避免破坏极性相互作用）
         elem = atom.elem.strip().upper()
         if elem == 'C':
             score += 1.0
@@ -313,10 +313,10 @@ def identify_exit_vectors(ligand_obj, ligand_resname,
                 'reasons': ', '.join(reasons)
             })
     
-    # 排序
+    # Sort
     candidates.sort(key=lambda x: x['score'], reverse=True)
     
-    # 打印结果
+    # PrintResults
     print(f"\n{'='*70}")
     print(f"Exit Vector 识别 (Exit Vector Identification)")
     print(f"{'='*70}")
@@ -347,14 +347,14 @@ def analyze_electrostatic_environment(obj_name, gloop_chain, gloop_range,
     
     用途: 指导分子胶上的化学修饰（带电 vs 疏水）
     
-    参数:
+    Parameters:
         obj_name: 对象名
         gloop_chain: G-loop 链
         gloop_range: G-loop 范围
         crbn_chain: CRBN 链
         sampling_radius: 采样半径（Å）
     
-    返回:
+    Return:
         dict: {
             'net_charge': int,
             'charged_residues': {'positive': [...], 'negative': [...]},
@@ -399,7 +399,7 @@ def analyze_electrostatic_environment(obj_name, gloop_chain, gloop_range,
         residues[res_key] = 1
         total_count += 1
         
-        # 分类
+        # Category
         if resn in ('ARG', 'LYS', 'HIS'):
             charged_pos.append(res_key)
         elif resn in ('ASP', 'GLU'):
@@ -420,7 +420,7 @@ def analyze_electrostatic_environment(obj_name, gloop_chain, gloop_range,
     else:
         recommendation = "环境中性/混合：平衡疏水和亲水取代"
     
-    # 打印结果
+    # PrintResults
     print(f"\n{'='*70}")
     print(f"静电环境分析 (Electrostatic Environment Analysis)")
     print(f"{'='*70}")
@@ -460,12 +460,12 @@ def comprehensive_glue_design_analysis(
     步骤:
     1. G-loop 对齐
     2. 碰撞检测
-    3. G-motif 几何和 CRBN 氢键验证
+    3. G-motif 几何和 CRBN 氢Key验证
     4. Exit vector 识别
     5. 静电环境分析
     6. 生成设计报告
     
-    参数:
+    Parameters:
         template_obj: 模板 ternary complex (如 6H0G)
         template_crbn_chain: 模板 CRBN 链
         template_gloop_chain: 模板 G-loop 链
@@ -473,11 +473,11 @@ def comprehensive_glue_design_analysis(
         target_obj: 目标蛋白
         target_chain: 目标 G-loop 链
         target_gloop_range: 目标 G-loop 范围
-        ligand_resname: 配体名称
-        output_report: 报告输出路径（默认自动生成）
+        ligand_resname: 配体Name
+        output_report: 报告输出Path（默认自动生成）
     
-    返回:
-        dict: 完整分析结果
+    Return:
+        dict: 完整分析Results
     """
     print("\n" + "🔬"*35)
     print("分子胶设计分析 - 综合工作流")
@@ -519,7 +519,7 @@ def comprehensive_glue_design_analysis(
         )
         results['crbn_hbonds'] = hb_result
     except Exception as e:
-        print(f"⚠️ G-motif 验证失败: {e}")
+        print(f"⚠️ G-motif 验证Failed: {e}")
         results['geometry'] = None
         results['crbn_hbonds'] = None
     
@@ -565,7 +565,7 @@ def comprehensive_glue_design_analysis(
         f.write("2. 碰撞分析\n")
         f.write("-"*80 + "\n")
         f.write(f"碰撞数: {clash_result['clash_count']}\n")
-        f.write(f"接触数: {clash_result['contact_count']}\n")
+        f.write(f"contact count: {clash_result['contact_count']}\n")
         f.write(f"严重碰撞: {'❌ 是' if clash_result['has_severe_clashes'] else '✅ 否'}\n")
         if clash_result['clashes']:
             f.write("\n主要碰撞:\n")
@@ -578,9 +578,9 @@ def comprehensive_glue_design_analysis(
             f.write("3. G-motif 验证\n")
             f.write("-"*80 + "\n")
             geom = results['geometry']
-            f.write(f"G-loop 类型: {geom.get('gloop_type', 'Unknown')} (Gly @ 位置 {geom.get('gly_position', '?')})\n")
-            f.write(f"甘氨酸确认: {'✅' if geom.get('gly_confirmed', False) else '❌'}\n")
-            f.write(f"α-turn 氢键: {'✅' if geom['has_alpha_turn_hbond'] else '❌'} ({geom['alpha_turn_distance']} Å)\n")
+            f.write(f"G-loop Type: {geom.get('gloop_type', 'Unknown')} (Gly @ 位置 {geom.get('gly_position', '?')})\n")
+            f.write(f"甘氨酸Confirm: {'✅' if geom.get('gly_confirmed', False) else '❌'}\n")
+            f.write(f"α-turn 氢Key: {'✅' if geom['has_alpha_turn_hbond'] else '❌'} ({geom['alpha_turn_distance']} Å)\n")
             f.write(f"  {geom.get('alpha_turn_description', '')}\n")
             f.write(f"RMSD vs {geom.get('template_used', 'template')}: {geom.get('rmsd_to_template', 'N/A')} Å\n")
             f.write(f"有效几何: {'✅' if geom['is_valid_geometry'] else '❌'}\n\n")
@@ -603,7 +603,7 @@ def comprehensive_glue_design_analysis(
             f.write(f"\n💡 建议: {electro_result['recommendation']}\n\n")
         
         f.write("="*80 + "\n")
-        f.write("分析完成\n")
+        f.write("分析Completed\n")
         f.write("="*80 + "\n")
     
     print(f"\n✅ 报告已生成: {output_report}\n")
@@ -612,9 +612,9 @@ def comprehensive_glue_design_analysis(
     return results
 
 
-# ====== 导出到命名空间 ======
+# ====== Export到命名空间 ======
 if __name__ == "__main__":
-    print("分子胶设计分析模块已加载")
+    print("分子胶设计分析Module已Load")
     print("主要功能:")
     print("  - align_gloop_for_modeling()")
     print("  - detect_clashes_at_interface()")

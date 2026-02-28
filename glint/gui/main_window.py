@@ -30,7 +30,7 @@ from .tabs.ternary_evaluation import TernaryEvaluationTab
 # Import worker classes if needed for type hinting or global usage
 from .workers import AnalysisWorker, GMotifWorker
 
-# 导航栏页面索引常量（消除魔法数字）
+# Navigation bar page index constants（Eliminate magic numbers）
 NAV_INDEX_README = 5
 NAV_INDEX_CONTACT = 6
 
@@ -59,7 +59,7 @@ class HeroHeader(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedHeight(220)
-        # 使用通用的 _get_asset_path 替代重复的 _get_welcome_bg_path
+        # using通用的 _get_asset_path 替代重复的 _get_welcome_bg_path
         self.bg_path = _get_asset_path("welcome_bg.png")
         
     def paintEvent(self, event):
@@ -215,7 +215,7 @@ class GLINTDialog(QDialog):
             logo_layout.addWidget(logo_lbl)
         layout.addWidget(logo_frame)
         
-        # 顶部间距区域（主题切换已移除，仅保留布局）
+        # 顶部间距区域（主题切换已Remove，仅保留布局）
         header = QWidget()
         h_layout = QHBoxLayout(header)
         h_layout.addStretch()
@@ -291,7 +291,7 @@ class GLINTDialog(QDialog):
                 names = cmd.get_names("objects")
             else:
                 names = cmd.get_object_list()
-        except Exception:  # PyMOL API 调用可能失败
+        except Exception:  # PyMOL API 调用可能Failed
             names = []
             
         if not names: names = [t("no_object")]
@@ -324,7 +324,7 @@ class GLINTDialog(QDialog):
         self.log(f"Refreshed {len(names)} objects")
 
     def update_enablement(self):
-        """占位方法：按需启用/禁用 UI 控件。当前无需实现，子类可覆写。"""
+        """占位Method：按需Enable/Disable UI 控件。当前无需实现，子Class可覆写。"""
         pass
 
     def toggle_theme(self):
@@ -854,14 +854,14 @@ class GLINTDialog(QDialog):
         title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
         header_layout.addWidget(title_lbl)
 
-        # Meta Info Row: 版本号 Badge + 描述 (同行显示)
+        # Meta Info Row: Version号 Badge + Description (同行Display)
         meta_row = QWidget()
         meta_layout = QHBoxLayout(meta_row)
         meta_layout.setSpacing(12)
         meta_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
         meta_layout.setContentsMargins(0, 0, 0, 0)
 
-        # 版本号 Badge (蓝色描边/背景)
+        # Version号 Badge (蓝色描边/背景)
         version_badge = QLabel("v1.0.0")
         version_badge.setStyleSheet("""
             QLabel {
@@ -876,7 +876,7 @@ class GLINTDialog(QDialog):
         """)
         meta_layout.addWidget(version_badge)
 
-        # 描述文案
+        # Description文案
         desc_lbl = QLabel("Professional Toolkit for Molecular Glue Interface Analysis and Rational Design")
         desc_lbl.setStyleSheet("font-size: 14px; color: #64748b;")
         meta_layout.addWidget(desc_lbl)

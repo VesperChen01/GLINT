@@ -2,12 +2,12 @@
 """
 GLINT Pocket Visualizer
 =========================
-口袋可视化模块
+口袋可视化Module
 
 功能：
 - PyMOL CGO 对象生成
 - 按性质着色（体积、疏水性、可成药性、静电势）
-- 球体、网格、表面多种显示模式
+- 球体、网格、表面多种Display模式
 - 与相互作用网络联动
 - 与 APBS 静电势叠加
 """
@@ -23,18 +23,18 @@ except ImportError:
     COLOR = SPHERE = CYLINDER = BEGIN = END = TRIANGLES = NORMAL = VERTEX = None
 
 
-# 从包级别导入统一的中文检测函数，避免重复定义
+# 从Package级别Import统一的中文检测Function，避免重复定义
 from . import _zh
 
 
 def _info(cn, en):
-    """双语信息输出"""
+    """双语Information输出"""
     print(cn if _zh() else en)
 
 
 def _get_color_gradient(value, vmin, vmax, colormap='blue_white_red'):
     """
-    根据数值返回颜色
+    根据数ValueReturn颜色
     
     colormap:
         'blue_white_red': 蓝-白-红（负-中-正）
@@ -92,22 +92,22 @@ def visualize_pockets(pockets, obj_name='pockets', color_by='volume',
     """
     可视化口袋
     
-    参数：
-        pockets: detect_pockets 返回的口袋列表
+    Parameters：
+        pockets: detect_pockets Return的口袋列表
         obj_name: PyMOL 对象名前缀
         color_by: 着色依据 ('volume', 'hydrophobicity', 'druggability', 'charge', 'depth')
-        show_spheres: 显示球体（口袋中心）
-        show_surface: 显示表面
-        show_mesh: 显示网格
+        show_spheres: Display球体（口袋中心）
+        show_surface: Display表面
+        show_mesh: Display网格
         sphere_radius: 球体半径倍数
-        transparency: 透明度
+        transparency: 透明degrees
     """
     if not cmd:
-        _info("错误：需要 PyMOL 环境", "Error: PyMOL required")
+        _info("Error：需要 PyMOL 环境", "Error: PyMOL required")
         return
     
     if len(pockets) == 0:
-        _info("没有口袋可显示", "No pockets to visualize")
+        _info("没有口袋可Display", "No pockets to visualize")
         return
     
     # 确定颜色范围
@@ -135,14 +135,14 @@ def visualize_pockets(pockets, obj_name='pockets', color_by='volume',
     _info(f"可视化 {len(pockets)} 个口袋（按 {color_by} 着色）",
           f"Visualizing {len(pockets)} pockets (colored by {color_by})")
     
-    # 显示球体（口袋中心）
+    # Display球体（口袋中心）
     if show_spheres:
         for i, pocket in enumerate(pockets):
             color = _get_color_gradient(values[i], vmin, vmax, colormap)
             center = pocket['center']
             radius = sphere_radius * (pocket['volume'] / 100.0) ** (1/3)
             
-            # 创建 CGO 球体
+            # Create CGO 球体
             cgo_obj = [
                 COLOR, color[0], color[1], color[2],
                 SPHERE, center[0], center[1], center[2], radius
@@ -152,7 +152,7 @@ def visualize_pockets(pockets, obj_name='pockets', color_by='volume',
             cmd.load_cgo(cgo_obj, pocket_obj_name)
             cmd.set('cgo_transparency', transparency, pocket_obj_name)
     
-    # 显示网格点
+    # Display网格点
     if show_mesh:
         for i, pocket in enumerate(pockets):
             color = _get_color_gradient(values[i], vmin, vmax, colormap)
@@ -164,11 +164,11 @@ def visualize_pockets(pockets, obj_name='pockets', color_by='volume',
                 grid_coords = grid_coords[indices]
             
             # 转换为实际坐标（从 pocket_detector 获取 origin 和 spacing）
-            # 这里简化：直接使用 center 附近的点
+            # 这里简化：直接using center 附近的点
             cgo_obj = [COLOR, color[0], color[1], color[2]]
             
-            for coord in grid_coords[:200]:  # 限制数量
-                # 这里需要从 detector 传入 origin 和 spacing，暂时跳过精确实现
+            for coord in grid_coords[:200]:  # 限制Count
+                # 这里需要从 detector 传入 origin 和 spacing，暂时Skip精确实现
                 pass
             
             if len(cgo_obj) > 3:
@@ -186,7 +186,7 @@ def visualize_pockets(pockets, obj_name='pockets', color_by='volume',
             pocket_sel_name = f"{obj_name}_residues_{pocket['id']}"
             cmd.select(pocket_sel_name, selection)
             
-            # 显示为 sticks
+            # Display为 sticks
             cmd.show('sticks', pocket_sel_name)
             
             # 按口袋着色
@@ -194,11 +194,11 @@ def visualize_pockets(pockets, obj_name='pockets', color_by='volume',
             cmd.set_color(f'pocket_color_{pocket["id"]}', list(color))
             cmd.color(f'pocket_color_{pocket["id"]}', pocket_sel_name)
     
-    _info(f"可视化完成：{obj_name}_*", f"Visualization complete: {obj_name}_*")
+    _info(f"可视化Completed：{obj_name}_*", f"Visualization complete: {obj_name}_*")
 
 
 def show_pocket_labels(pockets, obj_name='pocket_labels'):
-    """显示口袋标签"""
+    """Display口袋Label"""
     if not cmd:
         return
     
@@ -206,7 +206,7 @@ def show_pocket_labels(pockets, obj_name='pocket_labels'):
         center = pocket['center']
         label_text = f"P{pocket['id']}\\nV:{pocket['volume']:.0f}\\nD:{pocket['druggability_score']:.2f}"
         
-        # 创建伪原子用于标签
+        # Create伪原子用于Label
         pseudo_name = f"{obj_name}_{pocket['id']}"
         cmd.pseudoatom(pseudo_name, pos=center)
         cmd.label(pseudo_name, f'"{label_text}"')
@@ -215,10 +215,10 @@ def show_pocket_labels(pockets, obj_name='pocket_labels'):
 def visualize_pocket_comparison(comparison, pockets_a, pockets_b, 
                                 obj_a_name='obj_a', obj_b_name='obj_b'):
     """
-    可视化口袋对比结果
+    可视化口袋对比Results
     
-    参数：
-        comparison: compare_pockets 返回的对比结果
+    Parameters：
+        comparison: compare_pockets Return的对比Results
         pockets_a, pockets_b: 两组口袋
         obj_a_name, obj_b_name: 对象名
     """
@@ -239,7 +239,7 @@ def visualize_pocket_comparison(comparison, pockets_a, pockets_b,
             pocket_a = next(p for p in pockets_a if p['id'] == comp['pocket_a_id'])
             pocket_b = next(p for p in pockets_b if p['id'] == comp['pocket_b_id'])
             
-            # 根据体积变化选择颜色
+            # 根据体积变化Select颜色
             if comp['delta_volume'] > 10:
                 color = COLOR_EXPANDED
             elif comp['delta_volume'] < -10:
@@ -273,27 +273,27 @@ def visualize_pocket_comparison(comparison, pockets_a, pockets_b,
             ]
             cmd.load_cgo(cgo_obj, f"pocket_lost_{comp['pocket_a_id']}")
     
-    _info("对比可视化完成", "Comparison visualization complete")
+    _info("对比可视化Completed", "Comparison visualization complete")
 
 
 def overlay_pocket_electrostatics(pocket, apbs_map_file=None, obj_name='protein'):
     """
-    将口袋与 APBS 静电势叠加显示
+    将口袋与 APBS 静电势叠加Display
     
-    参数：
+    Parameters：
         pocket: 单个口袋字典
-        apbs_map_file: APBS 输出的 .dx 文件
+        apbs_map_file: APBS 输出的 .dx File
         obj_name: 蛋白对象名
     """
     if not cmd:
         return
     
     if apbs_map_file and os.path.exists(apbs_map_file):
-        # 加载静电势图
+        # Load静电势图
         map_name = f"pocket_{pocket['id']}_electro"
         cmd.load(apbs_map_file, map_name)
         
-        # 在口袋位置显示等势面
+        # 在口袋位置Display等势面
         center = pocket['center']
         cmd.isomesh(f"{map_name}_pos", map_name, 1.0, 
                    f"({center[0]},{center[1]},{center[2]})", carve=5.0)
@@ -306,16 +306,16 @@ def overlay_pocket_electrostatics(pocket, apbs_map_file=None, obj_name='protein'
         _info(f"已叠加口袋 {pocket['id']} 的静电势", 
               f"Overlayed electrostatics for pocket {pocket['id']}")
     else:
-        _info("未找到 APBS 地图文件", "APBS map file not found")
+        _info("未找到 APBS 地图File", "APBS map file not found")
 
 
 def highlight_pocket_interactions(pocket, interaction_csv=None):
     """
     高亮口袋内的相互作用
     
-    参数：
+    Parameters：
         pocket: 单个口袋字典
-        interaction_csv: 相互作用 CSV 文件
+        interaction_csv: 相互作用 CSV File
     """
     if not cmd:
         return
@@ -346,32 +346,32 @@ def highlight_pocket_interactions(pocket, interaction_csv=None):
                     interactions_in_pocket.append(row)
         
         if len(interactions_in_pocket) > 0:
-            _info(f"口袋 {pocket['id']} 包含 {len(interactions_in_pocket)} 个相互作用",
+            _info(f"口袋 {pocket['id']} Package含 {len(interactions_in_pocket)} 个相互作用",
                   f"Pocket {pocket['id']} contains {len(interactions_in_pocket)} interactions")
             
-            # TODO: 可视化这些相互作用（虚线、标签等）
+            # TODO: 可视化这些相互作用（虚线、Label等）
     
     return pocket_residues
 
 
 def create_pocket_surface(pocket, obj_name='pocket_surface', grid_data=None):
     """
-    创建口袋表面（marching cubes）
+    Create口袋表面（marching cubes）
     
-    参数：
+    Parameters：
         pocket: 单个口袋字典
         obj_name: 对象名
         grid_data: (grid, origin) 元组（从 detector 传入）
     """
-    # 需要实现 marching cubes 算法或使用 PyMOL 的内置功能
-    # 这里简化：使用球体近似
+    # 需要实现 marching cubes 算法或using PyMOL 的内置功能
+    # 这里简化：using球体近似
     if not cmd:
         return
     
     center = pocket['center']
     radius = (3 * pocket['volume'] / (4 * np.pi)) ** (1/3)
     
-    # 创建球形表面
+    # Create球形表面
     cmd.pseudoatom(obj_name, pos=center, vdw=radius)
     cmd.show('surface', obj_name)
     cmd.set('transparency', 0.5, obj_name)
@@ -380,9 +380,9 @@ def create_pocket_surface(pocket, obj_name='pocket_surface', grid_data=None):
 def visualize_pockets_with_interactions(pockets, interaction_csv, 
                                         obj_name='pocket_int'):
     """
-    联合显示口袋与相互作用
+    联合Display口袋与相互作用
     
-    参数：
+    Parameters：
         pockets: 口袋列表
         interaction_csv: 相互作用 CSV
         obj_name: 对象名前缀
@@ -400,11 +400,11 @@ def visualize_pockets_with_interactions(pockets, interaction_csv,
 
 def export_pocket_to_pdb(pocket, output_pdb, grid_data=None):
     """
-    将口袋导出为 PDB 伪原子（方便其他软件分析）
+    将口袋Export为 PDB 伪原子（方便其他软件分析）
     
-    参数：
+    Parameters：
         pocket: 单个口袋字典
-        output_pdb: 输出 PDB 文件
+        output_pdb: 输出 PDB File
         grid_data: (grid, origin) 元组
     """
     with open(output_pdb, 'w') as f:
@@ -428,16 +428,16 @@ def export_pocket_to_pdb(pocket, output_pdb, grid_data=None):
             
             for i, coord in enumerate(grid_coords, start=2):
                 # 需要转换为实际坐标
-                # 这里简化：使用相对坐标
+                # 这里简化：using相对坐标
                 f.write(f"HETATM{i:5d}  DOT POC A   1    "
                         f"{coord[0]:8.3f}{coord[1]:8.3f}{coord[2]:8.3f}"
                         f"  1.00  0.00           H\n")
         
         f.write("END\n")
     
-    _info(f"口袋已导出到 {output_pdb}", f"Pocket exported to {output_pdb}")
+    _info(f"口袋已Export到 {output_pdb}", f"Pocket exported to {output_pdb}")
 
 
 if __name__ == '__main__':
-    print("GLINT Pocket Visualizer - 请在 PyMOL 中使用")
+    print("GLINT Pocket Visualizer - 请在 PyMOL 中using")
     print("示例：visualize_pockets(pockets, color_by='druggability')")

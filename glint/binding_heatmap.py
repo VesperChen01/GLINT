@@ -1,10 +1,10 @@
 # -*- coding: utf-8 -*-
 """
 binding_heatmap.py
-GLINT插件的批量结合能热图生成模块
+GLINTPlugin的批量结合能热图生成Module
 
 功能:
-- 自动扫描多个 *_scores.csv 文件
+- 自动扫描多个 *_scores.csv File
 - 合并数据生成受体-配体结合能矩阵
 - 生成蓝色渐变热图
 """
@@ -20,21 +20,21 @@ import seaborn as sns
 
 def load_binding_csv(csv_path):
     """
-    加载单个结合能CSV文件
+    Load单个结合能CSVFile
     
     自动识别列名（支持多种格式）:
-    - Ligand/Compound/Name → 配体名称
+    - Ligand/Compound/Name → 配体Name
     - BindingEnergy/Score/Energy/Affinity → 结合能
     
-    参数:
-        csv_path: CSV文件路径
+    Parameters:
+        csv_path: CSVFilePath
     
-    返回:
-        DataFrame: 包含 Ligand, BindingEnergy 两列
+    Return:
+        DataFrame: Package含 Ligand, BindingEnergy 两列
     """
     df = pd.read_csv(csv_path)
     
-    # 自动识别列名（不区分大小写）
+    # 自动识别列名（不区分Size写）
     cols_lower = [c.lower() for c in df.columns]
     lig_col, val_col = None, None
     
@@ -44,7 +44,7 @@ def load_binding_csv(csv_path):
         if 'binding' in c or 'score' in c or 'energy' in c or 'affinity' in c:
             val_col = df.columns[i]
     
-    # 如果没找到，使用前两列
+    # 如果没找到，using前两列
     if lig_col is None:
         lig_col = df.columns[0]
     if val_col is None:
@@ -66,12 +66,12 @@ def generate_binding_heatmap(input_folder, output_path=None, pattern="*_scores.c
     """
     批量生成结合能热图
     
-    参数:
-        input_folder: 包含多个 CSV 文件的目录
-        output_path: 输出PNG路径（可选，默认自动生成）
-        pattern: 文件匹配模式（默认 *_scores.csv）
+    Parameters:
+        input_folder: Package含多个 CSV File的Directory
+        output_path: 输出PNGPath（可选，默认自动生成）
+        pattern: File匹配模式（默认 *_scores.csv）
     
-    返回:
+    Return:
         dict: {
             'success': bool,
             'output_path': str,
@@ -81,7 +81,7 @@ def generate_binding_heatmap(input_folder, output_path=None, pattern="*_scores.c
         }
     """
     try:
-        # 1. 扫描CSV文件
+        # 1. 扫描CSVFile
         import glob
         files = glob.glob(os.path.join(input_folder, pattern))
         
@@ -95,10 +95,10 @@ def generate_binding_heatmap(input_folder, output_path=None, pattern="*_scores.c
         for f in files:
             print(f"  - {os.path.basename(f)}")
         
-        # 2. 加载并合并所有CSV
+        # 2. Load并合并所有CSV
         merged = None
         for fpath in files:
-            # 受体名称：从文件名提取（去掉 _scores.csv）
+            # 受体Name：从File名提取（去掉 _scores.csv）
             fname = os.path.basename(fpath)
             receptor = os.path.splitext(fname)[0].replace("_scores", "")
             
@@ -113,7 +113,7 @@ def generate_binding_heatmap(input_folder, output_path=None, pattern="*_scores.c
         # 3. 准备矩阵
         matrix = merged.set_index("Ligand").sort_index()
         
-        # 按平均结合能排序（最强结合在上）
+        # 按平均结合能Sort（最强结合在上）
         matrix = matrix.reindex(matrix.mean(axis=1).sort_values(ascending=True).index)
         
         # 4. 生成热图
@@ -122,7 +122,7 @@ def generate_binding_heatmap(input_folder, output_path=None, pattern="*_scores.c
         ax = sns.heatmap(
             matrix,
             cmap="Blues",              # 蓝色渐变
-            annot=True,                # 显示数值
+            annot=True,                # Display数Value
             fmt=".2f",                 # 保留2位小数
             linewidths=1.0,
             linecolor="white",
@@ -145,7 +145,7 @@ def generate_binding_heatmap(input_folder, output_path=None, pattern="*_scores.c
         
         plt.tight_layout()
         
-        # 5. 保存
+        # 5. Save
         if output_path is None:
             output_path = os.path.join(input_folder, "binding_energy_heatmap.png")
         
@@ -173,13 +173,13 @@ def generate_binding_heatmap(input_folder, output_path=None, pattern="*_scores.c
 
 def generate_heatmap_from_files(csv_files, output_path=None):
     """
-    从指定的CSV文件列表生成热图
+    从指定的CSVFile列表生成热图
     
-    参数:
-        csv_files: CSV文件路径列表
-        output_path: 输出PNG路径（可选）
+    Parameters:
+        csv_files: CSVFilePath列表
+        output_path: 输出PNGPath（可选）
     
-    返回:
+    Return:
         dict: 同 generate_binding_heatmap
     """
     try:
@@ -188,7 +188,7 @@ def generate_heatmap_from_files(csv_files, output_path=None):
         
         print(f"[binding_heatmap] Loading {len(csv_files)} score files...")
         
-        # 加载并合并
+        # Load并合并
         merged = None
         for fpath in csv_files:
             fname = os.path.basename(fpath)
@@ -235,7 +235,7 @@ def generate_heatmap_from_files(csv_files, output_path=None):
         
         plt.tight_layout()
         
-        # 保存
+        # Save
         if output_path is None:
             output_dir = os.path.dirname(csv_files[0]) if csv_files else os.getcwd()
             output_path = os.path.join(output_dir, "binding_energy_heatmap.png")

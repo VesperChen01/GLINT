@@ -1,12 +1,12 @@
 # -*- coding: utf-8 -*-
 """
 ligand_ec_calculator_optimized.py
-优化版本的 EC 计算器 - 添加进度显示和性能优化
+优化Version的 EC Calculator - Add进degreesDisplay和性能优化
 
 主要优化：
-1. 向量化 Coulomb 势能计算（使用 NumPy 广播）
-2. 使用 KDTree 加速表面采样中的距离计算
-3. 添加详细的进度显示和时间统计
+1. 向量化 Coulomb 势能计算（using NumPy 广播）
+2. using KDTree 加速表面采样中的距离计算
+3. Add详细的进degreesDisplay和Time统计
 4. 多线程支持（可选）
 5. 缓存机制
 
@@ -60,10 +60,10 @@ except ImportError:
     PYMOL_AVAILABLE = False
 
 
-# ========== 进度显示工具 ==========
+# ========== 进degreesDisplayTool ==========
 
 class ProgressTracker:
-    """跟踪和显示计算进度"""
+    """跟踪和Display计算进degrees"""
     
     def __init__(self, total_steps: int = 100, name: str = "Processing"):
         self.total_steps = total_steps
@@ -74,7 +74,7 @@ class ProgressTracker:
         self.last_update_time = self.start_time
     
     def update(self, step: int = None, message: str = ""):
-        """更新进度"""
+        """Update进degrees"""
         if step is not None:
             self.current_step = step
         else:
@@ -83,13 +83,13 @@ class ProgressTracker:
         current_time = time.time()
         elapsed = current_time - self.start_time
         
-        # 计算进度百分比
+        # 计算进degrees百分比
         if self.total_steps > 0:
             progress = min(100, int(100 * self.current_step / self.total_steps))
         else:
             progress = 0
         
-        # 估计剩余时间
+        # 估计剩余Time
         if self.current_step > 0 and elapsed > 0:
             avg_time_per_step = elapsed / self.current_step
             remaining_steps = self.total_steps - self.current_step
@@ -98,7 +98,7 @@ class ProgressTracker:
         else:
             eta_str = "calculating..."
         
-        # 每秒最多更新一次显示
+        # 每秒最多Update一次Display
         if current_time - self.last_update_time >= 1.0 or self.current_step == self.total_steps:
             bar_length = 40
             filled = int(bar_length * progress / 100)
@@ -111,14 +111,14 @@ class ProgressTracker:
             self.last_update_time = current_time
     
     def finish(self, message: str = ""):
-        """完成进度显示"""
+        """Completed进degreesDisplay"""
         elapsed = time.time() - self.start_time
         elapsed_str = self._format_time(elapsed)
         print(f"\n[{self.name}] ✅ Completed in {elapsed_str} {message}")
     
     @staticmethod
     def _format_time(seconds: float) -> str:
-        """格式化时间"""
+        """格式化Time"""
         if seconds < 60:
             return f"{seconds:.1f}s"
         elif seconds < 3600:
@@ -133,8 +133,8 @@ class ProgressTracker:
 
 class OptimizedGasteigerChargeCalculator:
     """
-    优化版本的 Gasteiger 电荷计算器
-    使用向量化操作加速 Coulomb 势能计算
+    优化Version的 Gasteiger 电荷Calculator
+    using向量化操作加速 Coulomb 势能计算
     """
     
     def __init__(self, dielectric: float = 4.0):
@@ -156,9 +156,9 @@ class OptimizedGasteigerChargeCalculator:
     def calculate_potential_vectorized(self, mol: 'Chem.Mol', points: np.ndarray,
                                        conformer_id: int = 0, progress_callback=None) -> np.ndarray:
         """
-        向量化计算 Coulomb 势能 - 快速版本
+        向量化计算 Coulomb 势能 - 快速Version
         
-        使用 NumPy 广播避免 Python 循环
+        using NumPy 广播避免 Python 循环
         φ(r) = Σ q_i / (ε * |r - r_i|)
         """
         if not NUMPY_AVAILABLE:
@@ -178,7 +178,7 @@ class OptimizedGasteigerChargeCalculator:
         # 向量化计算距离和势能
         # points: (n_points, 3)
         # coords: (n_atoms, 3)
-        # 使用广播计算所有距离
+        # using广播计算所有距离
         
         n_points = len(points)
         n_atoms = len(coords)
@@ -192,7 +192,7 @@ class OptimizedGasteigerChargeCalculator:
             chunk_points = points[chunk_start:chunk_end]  # (chunk_size, 3)
             
             # 计算距离矩阵: (chunk_size, n_atoms)
-            # 使用广播: chunk_points[:, None, :] - coords[None, :, :]
+            # using广播: chunk_points[:, None, :] - coords[None, :, :]
             diff = chunk_points[:, np.newaxis, :] - coords[np.newaxis, :, :]  # (chunk_size, n_atoms, 3)
             distances = np.linalg.norm(diff, axis=2)  # (chunk_size, n_atoms)
             
@@ -216,8 +216,8 @@ class OptimizedGasteigerChargeCalculator:
 
 class OptimizedLigandSurfaceSampler:
     """
-    优化版本的配体表面采样器
-    使用 KDTree 加速距离计算
+    优化Version的配体表面采样器
+    using KDTree 加速距离计算
     """
     
     VDW_RADII = {
@@ -234,8 +234,8 @@ class OptimizedLigandSurfaceSampler:
     def sample_molecule(self, mol: 'Chem.Mol', conformer_id: int = 0,
                        progress_callback=None) -> Tuple[np.ndarray, np.ndarray]:
         """
-        生成表面点 - 优化版本
-        使用 KDTree 加速内部点过滤
+        生成表面点 - 优化Version
+        using KDTree 加速内部点Filter
         """
         if not RDKIT_AVAILABLE:
             raise RuntimeError("RDKit required for surface sampling")
@@ -270,7 +270,7 @@ class OptimizedLigandSurfaceSampler:
             points, normals = self._sample_sphere(atom['pos'], atom['radius'])
             
             if tree is not None:
-                # 使用 KDTree 快速过滤内部点
+                # using KDTree 快速Filter内部点
                 valid_mask = np.ones(len(points), dtype=bool)
                 
                 # 查询每个点到所有原子的距离
@@ -284,7 +284,7 @@ class OptimizedLigandSurfaceSampler:
                                 valid_mask[j] = False
                                 break
             else:
-                # 回退到原始方法
+                # 回退到原始Method
                 valid_mask = np.ones(len(points), dtype=bool)
                 for other_atom in atoms:
                     if np.allclose(atom['pos'], other_atom['pos']):
@@ -333,14 +333,14 @@ class OptimizedLigandSurfaceSampler:
 # ========== 性能统计 ==========
 
 class PerformanceStats:
-    """记录性能统计信息"""
+    """记录性能统计Information"""
     
     def __init__(self):
         self.stats = {}
         self.start_times = {}
     
     def start(self, name: str):
-        """开始计时"""
+        """Start计时"""
         self.start_times[name] = time.time()
     
     def end(self, name: str):
@@ -351,7 +351,7 @@ class PerformanceStats:
             del self.start_times[name]
     
     def print_summary(self):
-        """打印性能摘要"""
+        """Print性能摘要"""
         print("\n" + "="*60)
         print("Performance Statistics")
         print("="*60)
@@ -367,7 +367,7 @@ class PerformanceStats:
         print("="*60)
 
 
-# ========== 导出优化后的函数 ==========
+# ========== Export优化后的Function ==========
 
 def calculate_ligand_ec_optimized(obj_name: str = None, ligand_resname: str = None,
                                   protein_chains: List[str] = None,
@@ -378,10 +378,10 @@ def calculate_ligand_ec_optimized(obj_name: str = None, ligand_resname: str = No
                                   pdb_file: str = None,
                                   show_progress: bool = True) -> Optional[Dict[str, Any]]:
     """
-    优化版本的 EC 计算 - 带进度显示
+    优化Version的 EC 计算 - 带进degreesDisplay
     
     Args:
-        show_progress: 是否显示详细进度信息
+        show_progress: 是否Display详细进degreesInformation
     """
     
     if not NUMPY_AVAILABLE or not RDKIT_AVAILABLE:
@@ -392,7 +392,7 @@ def calculate_ligand_ec_optimized(obj_name: str = None, ligand_resname: str = No
     perf = PerformanceStats()
     perf.start("total")
     
-    # 创建输出目录
+    # Create输出Directory
     if output_dir is None:
         output_dir = tempfile.mkdtemp(prefix='glint_ec_')
     else:
@@ -425,7 +425,7 @@ def calculate_ligand_ec_optimized(obj_name: str = None, ligand_resname: str = No
     
     perf.start("coulomb_calculation")
     
-    # 这里应该调用优化后的计算器
+    # 这里应该调用优化后的Calculator
     # charge_calc = OptimizedGasteigerChargeCalculator()
     # phi_ligand = charge_calc.calculate_potential_vectorized(ligand_mol, surface_points)
     
@@ -434,7 +434,7 @@ def calculate_ligand_ec_optimized(obj_name: str = None, ligand_resname: str = No
     if show_progress:
         progress.finish()
     
-    # 打印性能统计
+    # Print性能统计
     if show_progress:
         perf.print_summary()
     

@@ -199,16 +199,16 @@ class BatchAnalyzer:
             "results": results
         }
         
-        # 导出 CSV
+        # Export CSV
         if output_csv:
             self._export_gmotif_csv(results, output_csv)
         
-        # 打印汇总
+        # Print汇总
         print(f"\n{'='*60}")
         print(f"📊 G-motif 检测汇总")
         print(f"{'='*60}")
         print(f"总结构数: {len(pdb_sources)}")
-        print(f"成功分析: {summary['successful']}")
+        print(f"Success分析: {summary['successful']}")
         print(f"总 G-motif 数: {total_hits}")
         print(f"{'='*60}\n")
         
@@ -220,23 +220,23 @@ class BatchAnalyzer:
                           interface_distance: float = 4.5,
                           output_csv: Optional[str] = None) -> Dict[str, Any]:
         """
-        批量 PPI 界面分析
+        批量 PPI interface分析
         
-        参数:
-            pdb_sources: PDB 文件路径或 PDB ID 列表
+        Parameters:
+            pdb_sources: PDB FilePath或 PDB ID 列表
             chain_pairs: 链对列表 [(['A'], ['B']), (['C'], ['D']), ...]
-                        如果只有一个元组，则应用于所有结构
-            interface_distance: 界面距离阈值
-            output_csv: 输出 CSV 路径
+                        如果只有一个元组，则Apply于所有结构
+            interface_distance: interface距离阈Value
+            output_csv: 输出 CSV Path
             
-        返回:
-            汇总结果字典
+        Return:
+            汇总Results字典
         """
         print(f"\n{'='*60}")
-        print(f"🔬 批量 PPI 界面分析")
+        print(f"🔬 批量 PPI interface分析")
         print(f"{'='*60}")
         print(f"输入: {len(pdb_sources)} 个结构")
-        print(f"参数: 界面距离≤{interface_distance}Å")
+        print(f"Parameters: interface距离≤{interface_distance}Å")
         print(f"{'='*60}\n")
         
         try:
@@ -245,23 +245,23 @@ class BatchAnalyzer:
             try:
                 from ppi_analyzer import analyze_protein_protein_interface
             except ImportError:
-                print("❌ PPI 分析模块不可用")
+                print("❌ PPI 分析Module不可用")
                 return {"success": False, "error": "Module not available"}
         
         results = []
         
-        # 如果只提供一个链对，应用于所有结构
+        # 如果只提供一个链对，Apply于所有结构
         if len(chain_pairs) == 1:
             chain_pairs = chain_pairs * len(pdb_sources)
         elif len(chain_pairs) != len(pdb_sources):
-            print("⚠️ 链对数量与结构数量不匹配，使用第一个链对")
+            print("⚠️ 链对Count与结构Count不匹配，usingFirst链对")
             chain_pairs = [chain_pairs[0]] * len(pdb_sources)
         
         for i, (source, (chains1, chains2)) in enumerate(zip(pdb_sources, chain_pairs), 1):
             print(f"[{i}/{len(pdb_sources)}] 分析: {source}")
             print(f"  链对: {chains1} vs {chains2}")
             
-            # 加载结构
+            # Load结构
             if os.path.exists(source):
                 obj_name = self._load_pdb(source)
             elif len(source) == 4 and source.isalnum():
@@ -305,8 +305,8 @@ class BatchAnalyzer:
                         "bsa": ppi_result.get("bsa"),
                         "is_strong_interface": ppi_result.get("is_strong_interface", False)
                     })
-                    print(f"  ✅ 接触数: {ppi_result.get('interface_contacts', 0)}, "
-                          f"强度: {ppi_result.get('interface_strength', 0):.1f}")
+                    print(f"  ✅ contact count: {ppi_result.get('interface_contacts', 0)}, "
+                          f"强degrees: {ppi_result.get('interface_strength', 0):.1f}")
                 else:
                     results.append({
                         "source": source,
@@ -316,7 +316,7 @@ class BatchAnalyzer:
                     })
                     
             except Exception as e:
-                print(f"  ❌ 分析失败: {e}")
+                print(f"  ❌ 分析Failed: {e}")
                 results.append({
                     "source": source,
                     "obj_name": obj_name,
@@ -340,19 +340,19 @@ class BatchAnalyzer:
             "results": results
         }
         
-        # 导出 CSV
+        # Export CSV
         if output_csv:
             self._export_ppi_csv(results, output_csv)
         
-        # 打印汇总
+        # Print汇总
         print(f"\n{'='*60}")
         print(f"📊 PPI 分析汇总")
         print(f"{'='*60}")
         print(f"总结构数: {len(pdb_sources)}")
-        print(f"成功分析: {summary['successful']}")
-        print(f"平均接触数: {summary['avg_contacts']:.1f}")
-        print(f"平均强度: {summary['avg_strength']:.1f}")
-        print(f"强界面数: {summary['strong_interfaces']}")
+        print(f"Success分析: {summary['successful']}")
+        print(f"平均contact count: {summary['avg_contacts']:.1f}")
+        print(f"平均强degrees: {summary['avg_strength']:.1f}")
+        print(f"强interface数: {summary['strong_interfaces']}")
         print(f"{'='*60}\n")
         
         return summary
@@ -365,20 +365,20 @@ class BatchAnalyzer:
         """
         批量口袋检测
         
-        参数:
-            pdb_sources: PDB 文件路径或 PDB ID 列表
+        Parameters:
+            pdb_sources: PDB FilePath或 PDB ID 列表
             min_volume: 最小口袋体积
-            min_depth: 最小口袋深度
-            output_csv: 输出 CSV 路径
+            min_depth: 最小口袋深degrees
+            output_csv: 输出 CSV Path
             
-        返回:
-            汇总结果字典
+        Return:
+            汇总Results字典
         """
         print(f"\n{'='*60}")
         print(f"🔬 批量口袋检测")
         print(f"{'='*60}")
         print(f"输入: {len(pdb_sources)} 个结构")
-        print(f"参数: 体积≥{min_volume}ų, 深度≥{min_depth}Å")
+        print(f"Parameters: 体积≥{min_volume}ų, 深degrees≥{min_depth}Å")
         print(f"{'='*60}\n")
         
         try:
@@ -387,7 +387,7 @@ class BatchAnalyzer:
             try:
                 from pocket_detector import detect_pockets
             except ImportError:
-                print("❌ 口袋检测模块不可用")
+                print("❌ 口袋检测Module不可用")
                 return {"success": False, "error": "Module not available"}
         
         results = []
@@ -396,7 +396,7 @@ class BatchAnalyzer:
         for i, source in enumerate(pdb_sources, 1):
             print(f"[{i}/{len(pdb_sources)}] 分析: {source}")
             
-            # 加载结构
+            # Load结构
             if os.path.exists(source):
                 obj_name = self._load_pdb(source)
             elif len(source) == 4 and source.isalnum():
@@ -431,7 +431,7 @@ class BatchAnalyzer:
                 pocket_count = len(pockets) if pockets else 0
                 total_pockets += pocket_count
                 
-                # 简化口袋信息
+                # 简化口袋Information
                 pocket_summary = []
                 for p in (pockets or []):
                     pocket_summary.append({
@@ -452,7 +452,7 @@ class BatchAnalyzer:
                 print(f"  ✅ 发现 {pocket_count} 个口袋")
                 
             except Exception as e:
-                print(f"  ❌ 分析失败: {e}")
+                print(f"  ❌ 分析Failed: {e}")
                 results.append({
                     "source": source,
                     "obj_name": obj_name,
@@ -475,16 +475,16 @@ class BatchAnalyzer:
             "results": results
         }
         
-        # 导出 CSV
+        # Export CSV
         if output_csv:
             self._export_pocket_csv(results, output_csv)
         
-        # 打印汇总
+        # Print汇总
         print(f"\n{'='*60}")
         print(f"📊 口袋检测汇总")
         print(f"{'='*60}")
         print(f"总结构数: {len(pdb_sources)}")
-        print(f"成功分析: {summary['successful']}")
+        print(f"Success分析: {summary['successful']}")
         print(f"总口袋数: {total_pockets}")
         print(f"{'='*60}\n")
         
@@ -498,20 +498,20 @@ class BatchAnalyzer:
         """
         批量蛋白-配体相互作用分析
         
-        参数:
-            pdb_sources: PDB 文件路径或 PDB ID 列表
+        Parameters:
+            pdb_sources: PDB FilePath或 PDB ID 列表
             ligand_resnames: 配体残基名列表（None 则自动检测）
-            distance_cutoff: 距离阈值
-            output_csv: 输出 CSV 路径
+            distance_cutoff: 距离阈Value
+            output_csv: 输出 CSV Path
             
-        返回:
-            汇总结果字典
+        Return:
+            汇总Results字典
         """
         print(f"\n{'='*60}")
         print(f"🔬 批量蛋白-配体相互作用分析")
         print(f"{'='*60}")
         print(f"输入: {len(pdb_sources)} 个结构")
-        print(f"参数: 距离≤{distance_cutoff}Å")
+        print(f"Parameters: 距离≤{distance_cutoff}Å")
         print(f"{'='*60}\n")
         
         try:
@@ -520,18 +520,18 @@ class BatchAnalyzer:
             try:
                 from interaction_analyzer import analyze_protein_ligand_interactions
             except ImportError:
-                print("❌ 相互作用分析模块不可用")
+                print("❌ 相互作用分析Module不可用")
                 return {"success": False, "error": "Module not available"}
         
         results = []
         
-        # 处理配体名称列表
+        # 处理配体Name列表
         if ligand_resnames is None:
             ligand_resnames = [None] * len(pdb_sources)
         elif len(ligand_resnames) == 1:
             ligand_resnames = ligand_resnames * len(pdb_sources)
         elif len(ligand_resnames) != len(pdb_sources):
-            print("⚠️ 配体名称数量与结构数量不匹配，使用自动检测")
+            print("⚠️ 配体NameCount与结构Count不匹配，using自动检测")
             ligand_resnames = [None] * len(pdb_sources)
         
         for i, (source, lig_name) in enumerate(zip(pdb_sources, ligand_resnames), 1):
@@ -539,7 +539,7 @@ class BatchAnalyzer:
             if lig_name:
                 print(f"  配体: {lig_name}")
             
-            # 加载结构
+            # Load结构
             if os.path.exists(source):
                 obj_name = self._load_pdb(source)
             elif len(source) == 4 and source.isalnum():
@@ -572,7 +572,7 @@ class BatchAnalyzer:
                 if ia_result:
                     interactions = ia_result.get("interactions", [])
                     
-                    # 统计相互作用类型
+                    # 统计相互作用Type
                     type_counts = {}
                     for inter in interactions:
                         itype = inter.get("type", "Unknown")
@@ -597,7 +597,7 @@ class BatchAnalyzer:
                     })
                     
             except Exception as e:
-                print(f"  ❌ 分析失败: {e}")
+                print(f"  ❌ 分析Failed: {e}")
                 results.append({
                     "source": source,
                     "obj_name": obj_name,
@@ -619,16 +619,16 @@ class BatchAnalyzer:
             "results": results
         }
         
-        # 导出 CSV
+        # Export CSV
         if output_csv:
             self._export_interaction_csv(results, output_csv)
         
-        # 打印汇总
+        # Print汇总
         print(f"\n{'='*60}")
         print(f"📊 相互作用分析汇总")
         print(f"{'='*60}")
         print(f"总结构数: {len(pdb_sources)}")
-        print(f"成功分析: {summary['successful']}")
+        print(f"Success分析: {summary['successful']}")
         print(f"平均相互作用数: {summary['avg_interactions']:.1f}")
         print(f"{'='*60}\n")
         
@@ -640,16 +640,16 @@ class BatchAnalyzer:
                                      ligand_resnames: Optional[List[str]] = None,
                                      output_dir: Optional[str] = None) -> Dict[str, Any]:
         """
-        综合批量分析 - 运行所有分析类型
+        综合批量分析 - 运行所有分析Type
         
-        参数:
-            pdb_sources: PDB 文件路径或 PDB ID 列表
+        Parameters:
+            pdb_sources: PDB FilePath或 PDB ID 列表
             chain_pairs: PPI 分析的链对列表
-            ligand_resnames: 配体名称列表
-            output_dir: 输出目录
+            ligand_resnames: 配体Name列表
+            output_dir: 输出Directory
             
-        返回:
-            所有分析结果的汇总
+        Return:
+            所有分析Results的汇总
         """
         if output_dir:
             self.output_dir = Path(output_dir)
@@ -661,7 +661,7 @@ class BatchAnalyzer:
         print(f"GLINT 综合批量分析")
         print(f"{'🔬'*30}")
         print(f"输入: {len(pdb_sources)} 个结构")
-        print(f"输出目录: {self.output_dir}")
+        print(f"输出Directory: {self.output_dir}")
         print(f"{'🔬'*30}\n")
         
         all_results = {
@@ -683,7 +683,7 @@ class BatchAnalyzer:
         # 2. PPI 分析（如果提供了链对）
         if chain_pairs:
             print("\n" + "="*60)
-            print("📍 步骤 2/4: PPI 界面分析")
+            print("📍 步骤 2/4: PPI interface分析")
             print("="*60)
             ppi_csv = self.output_dir / f"ppi_{timestamp}.csv"
             ppi_results = self.batch_ppi_analysis(
@@ -691,7 +691,7 @@ class BatchAnalyzer:
             )
             all_results["analyses"]["ppi"] = ppi_results
         else:
-            print("\n⏭️ 跳过 PPI 分析（未提供链对）")
+            print("\n⏭️ Skip PPI 分析（未提供链对）")
         
         # 3. 口袋检测
         print("\n" + "="*60)
@@ -713,24 +713,24 @@ class BatchAnalyzer:
         )
         all_results["analyses"]["interactions"] = interaction_results
         
-        # 保存汇总 JSON
+        # Save汇总 JSON
         summary_json = self.output_dir / f"batch_summary_{timestamp}.json"
         with open(summary_json, 'w', encoding='utf-8') as f:
             json.dump(all_results, f, indent=2, ensure_ascii=False, default=str)
         
         print(f"\n{'🔬'*30}")
-        print(f"✅ 综合批量分析完成")
+        print(f"✅ 综合批量分析Completed")
         print(f"{'🔬'*30}")
-        print(f"结果保存至: {self.output_dir}")
-        print(f"汇总文件: {summary_json.name}")
+        print(f"ResultsSave至: {self.output_dir}")
+        print(f"汇总File: {summary_json.name}")
         print(f"{'🔬'*30}\n")
         
         return all_results
     
-    # ==================== CSV 导出方法 ====================
+    # ==================== CSV ExportMethod ====================
     
     def _export_gmotif_csv(self, results: List[Dict], output_csv: str):
-        """导出 G-motif 结果到 CSV"""
+        """Export G-motif Results到 CSV"""
         with open(output_csv, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -761,10 +761,10 @@ class BatchAnalyzer:
                         "", "", "", "", ""
                     ])
         
-        print(f"📄 G-motif 结果已保存: {output_csv}")
+        print(f"📄 G-motif Results已Save: {output_csv}")
     
     def _export_ppi_csv(self, results: List[Dict], output_csv: str):
-        """导出 PPI 结果到 CSV"""
+        """Export PPI Results到 CSV"""
         with open(output_csv, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -785,10 +785,10 @@ class BatchAnalyzer:
                     "Yes" if r.get("is_strong_interface") else "No"
                 ])
         
-        print(f"📄 PPI 结果已保存: {output_csv}")
+        print(f"📄 PPI Results已Save: {output_csv}")
     
     def _export_pocket_csv(self, results: List[Dict], output_csv: str):
-        """导出口袋检测结果到 CSV"""
+        """Export口袋检测Results到 CSV"""
         with open(output_csv, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -818,10 +818,10 @@ class BatchAnalyzer:
                         "", "", "", ""
                     ])
         
-        print(f"📄 口袋检测结果已保存: {output_csv}")
+        print(f"📄 口袋检测Results已Save: {output_csv}")
     
     def _export_interaction_csv(self, results: List[Dict], output_csv: str):
-        """导出相互作用结果到 CSV"""
+        """Export相互作用Results到 CSV"""
         with open(output_csv, 'w', newline='', encoding='utf-8-sig') as f:
             writer = csv.writer(f)
             writer.writerow([
@@ -845,7 +845,7 @@ class BatchAnalyzer:
                     type_counts.get("Pi-Cation", 0)
                 ])
         
-        print(f"📄 相互作用结果已保存: {output_csv}")
+        print(f"📄 相互作用Results已Save: {output_csv}")
 
 
 # ==================== PyMOL 命令封装 ====================

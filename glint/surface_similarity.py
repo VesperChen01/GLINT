@@ -913,7 +913,7 @@ class FeatureExtractor:
             eigenvalues = np.linalg.eigvalsh(H)
             
             return float(eigenvalues[1]), float(eigenvalues[0])  # k1 >= k2
-        except (np.linalg.LinAlgError, ValueError):  # 线性代数计算可能失败
+        except (np.linalg.LinAlgError, ValueError):  # 线性代数计算可能Failed
             return 0.0, 0.0
     
     def _compute_coulomb_electrostatics(self, mesh: SurfaceMesh) -> np.ndarray:
@@ -1773,7 +1773,7 @@ class SurfaceSimilarityAnalyzer:
                         if count > 0:
                             print(f"💡 Selection '{selection}' interpreted as 'chain {chain}' ({count} atoms)")
                             return f"chain {chain}"
-                    except Exception:  # PyMOL count_atoms 可能失败
+                    except Exception:  # PyMOL count_atoms 可能Failed
                         pass
             else:
                 # Multiple chains
@@ -1785,7 +1785,7 @@ class SurfaceSimilarityAnalyzer:
                         if count > 0:
                             print(f"💡 Selection '{selection}' interpreted as '({combined})' ({count} atoms)")
                             return f"({combined})"
-                    except Exception:  # PyMOL count_atoms 可能失败
+                    except Exception:  # PyMOL count_atoms 可能Failed
                         pass
 
         # Return original selection if no conversion needed
@@ -1862,7 +1862,7 @@ class SurfaceSimilarityAnalyzer:
                                 'resi': line[22:27].strip(),
                                 'name': line[12:16].strip()
                             })
-                        except (ValueError, IndexError):  # PDB 行解析可能失败
+                        except (ValueError, IndexError):  # PDB 行解析可能Failed
                             continue
         
         return atoms

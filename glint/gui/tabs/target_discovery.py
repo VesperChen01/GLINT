@@ -39,7 +39,7 @@ class TargetDiscoveryTab(CommonTab):
         self.init_ui()
         
     def init_ui(self):
-        """初始化UI - 现代卡片式布局"""
+        """InitializeUI - 现代卡片式布局"""
         self.setObjectName("scroll_content")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.parent_window._target_scroll_content = self
@@ -208,7 +208,7 @@ class TargetDiscoveryTab(CommonTab):
 
         surf_layout.addLayout(surf_grid)
 
-        # Buttons - 使用 Ternary Evaluation 风格
+        # Buttons - using Ternary Evaluation 风格
         surf_btn_row = QHBoxLayout()
         surf_btn_row.setSpacing(10)
 
@@ -342,7 +342,7 @@ class TargetDiscoveryTab(CommonTab):
 
         sim_layout.addLayout(sim_grid)
 
-        # Buttons - 使用 Ternary Evaluation 风格
+        # Buttons - using Ternary Evaluation 风格
         sim_btn_row = QHBoxLayout()
         sim_btn_row.setSpacing(10)
 
@@ -715,7 +715,7 @@ class TargetDiscoveryTab(CommonTab):
         # Get pH value (APBS is always used)
         try:
             ph = float(self.parent_window.surf_ph.text().strip() or "7.4")
-        except (ValueError, TypeError):  # float() 转换可能失败
+        except (ValueError, TypeError):  # float() 转换可能Failed
             ph = 7.4
             
         self.parent_window.surf_btn.setEnabled(False)
@@ -810,7 +810,7 @@ class TargetDiscoveryTab(CommonTab):
             # Get pH value (APBS is always used)
             try:
                 ph = float(self.parent_window.surf_ph.text().strip() or "7.4")
-            except (ValueError, TypeError):  # float() 转换可能失败
+            except (ValueError, TypeError):  # float() 转换可能Failed
                 ph = 7.4
             
             # Get color mode: 0=potential, 1=hydrophobicity
@@ -893,7 +893,7 @@ class TargetDiscoveryTab(CommonTab):
         
         try:
             patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
-        except (ValueError, TypeError):  # float() 转换可能失败
+        except (ValueError, TypeError):  # float() 转换可能Failed
             patch_radius = 12.0
         
         self.parent_window.sim_analyze_btn.setEnabled(False)
@@ -947,12 +947,12 @@ class TargetDiscoveryTab(CommonTab):
         
         try:
             patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
-        except (ValueError, TypeError):  # float() 转换可能失败
+        except (ValueError, TypeError):  # float() 转换可能Failed
             patch_radius = 12.0
         
         try:
             interface_dist = float(self.parent_window.sim_interface_dist.text().strip() or "4.0")
-        except (ValueError, TypeError):  # float() 转换可能失败
+        except (ValueError, TypeError):  # float() 转换可能Failed
             interface_dist = 4.0
         
         self.parent_window.sim_compare_btn.setEnabled(False)
@@ -1153,7 +1153,7 @@ class TargetDiscoveryTab(CommonTab):
         """
 
     def _create_card(self, title: str, is_dark: bool) -> QFrame:
-        """创建带标题的卡片"""
+        """Create带标题的卡片"""
         card = QFrame()
         card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)

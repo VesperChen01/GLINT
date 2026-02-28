@@ -68,7 +68,7 @@ EXTERNAL_TOOLS = {
         "install_info": {
             "macOS": "pip install apbs 或 brew install brewsci/bio/apbs",
             "Linux": "pip install apbs 或 apt install apbs",
-            "Windows": "pip install apbs 或从 https://www.poissonboltzmann.org/ 下载",
+            "Windows": "pip install apbs 或从 https://www.poissonboltzmann.org/ Download",
         },
         "search_paths": {
             "macOS": ["/usr/local/bin/apbs", "/opt/homebrew/bin/apbs", "~/bin/apbs"],
@@ -236,16 +236,16 @@ class EnvironmentChecker:
     
     def _find_command_path(self, cmd: str) -> Optional[str]:
         """
-        查找命令的完整路径，支持用户目录下的工具
+        Find命令的完整Path，支持用户Directory下的Tool
         
-        GUI 应用（如 PyMOL.app）可能不继承终端的 shell PATH，
-        因此需要额外搜索用户常用路径。
+        GUI Apply（如 PyMOL.app）可能不继承终端的 shell PATH，
+        因此需要额外Search用户常用Path。
         
         Args:
-            cmd: 命令名称
+            cmd: 命令Name
             
         Returns:
-            str: 命令路径，未找到返回 None
+            str: 命令Path，未找到Return None
         """
         import shutil
         
@@ -260,7 +260,7 @@ class EnvironmentChecker:
             if os.path.exists(conda_path):
                 return conda_path
         
-        # 3. 用户常用路径
+        # 3. 用户常用Path
         home = os.path.expanduser('~')
         user_paths = [
             os.path.join(home, 'bin', cmd),
@@ -269,7 +269,7 @@ class EnvironmentChecker:
             f'/usr/local/bin/{cmd}',
         ]
         
-        # 4. 平台特定路径
+        # 4. 平台特定Path
         if sys.platform == 'darwin':  # macOS
             user_paths.extend([
                 f'/opt/homebrew/bin/{cmd}',  # Apple Silicon Homebrew
@@ -317,26 +317,26 @@ class EnvironmentChecker:
     
     def check_all_dependencies(self) -> Dict[str, bool]:
         """
-        检查所有依赖项
+        检查所有Dependencies项
 
         Returns:
-            Dict[str, bool]: {依赖名: 是否已安装}
+            Dict[str, bool]: {Dependencies名: 是否已安装}
         """
-        self.log("\n📦 检查 Python 包:")
+        self.log("\n📦 检查 Python Package:")
 
         status = {}
         all_ok = True
 
-        # 必需包
+        # 必需Package
         for import_name, display_name, _ in REQUIRED_PACKAGES:
             available = self.check_package(import_name, display_name)
             status[display_name] = available
             if not available:
                 all_ok = False
 
-        # 命令行工具（如果有必需的）
+        # 命令行Tool（如果有必需的）
         if REQUIRED_COMMANDS:
-            self.log("\n🛠️  检查命令行工具:")
+            self.log("\n🛠️  检查命令行Tool:")
             for cmd, name in REQUIRED_COMMANDS:
                 available = self.check_command(cmd, name)
                 status[name] = available
@@ -344,10 +344,10 @@ class EnvironmentChecker:
                     all_ok = False
 
         if all_ok:
-            self.log("\n✅ 所有依赖已安装")
+            self.log("\n✅ 所有Dependencies已安装")
         else:
             missing = [k for k, v in status.items() if not v]
-            self.log(f"\n⚠️  缺失依赖: {', '.join(missing)}")
+            self.log(f"\n⚠️  缺失Dependencies: {', '.join(missing)}")
 
         return status
     
@@ -364,12 +364,12 @@ class EnvironmentChecker:
         
         errors = []
         
-        # 测试 PyQt5 - 使用子进程避免崩溃 (非常重要，在 macOS 上尤其如此)
+        # 测试 PyQt5 - using子进程避免崩溃 (非常重要，在 macOS 上尤其如此)
         try:
             import subprocess
             import os
             
-            # [macOS Fix] 设置环境变量以避免某些 Qt 绘图引起的崩溃
+            # [macOS Fix] Settings环境变量以避免某些 Qt 绘图引起的崩溃
             env = os.environ.copy()
             if sys.platform == "darwin":
                 env["QT_MAC_WANTS_LAYER"] = "1"
@@ -416,8 +416,8 @@ class EnvironmentChecker:
                 mw = Descriptors.MolWt(mol)
                 self.log(f"  ✓ RDKit 化学计算 (乙醇 MW={mw:.2f})")
             else:
-                errors.append("RDKit: 无法创建分子")
-                self.log("  ✗ RDKit: 无法创建分子")
+                errors.append("RDKit: 无法Create分子")
+                self.log("  ✗ RDKit: 无法Create分子")
         except Exception as e:
             errors.append(f"RDKit: {e}")
             self.log(f"  ✗ RDKit: {e}")
@@ -445,22 +445,22 @@ class EnvironmentChecker:
             self.log(f"  ✗ Pillow: {e}")
         
         if errors:
-            self.log(f"\n⚠️  部分功能测试失败")
+            self.log(f"\n⚠️  部分功能测试Failed")
             return False
         else:
             self.log(f"\n✅ 所有 GUI 功能测试通过")
             return True
     
-    # ========== 可选依赖检测与安装 ==========
+    # ========== 可选Dependencies检测与安装 ==========
     
     def check_optional_packages(self) -> Dict[str, bool]:
         """
-        检查可选 Python 包
+        检查可选 Python Package
         
         Returns:
-            Dict[str, bool]: {包名: 是否已安装}
+            Dict[str, bool]: {Package名: 是否已安装}
         """
-        self.log("\n📦 检查可选 Python 包:")
+        self.log("\n📦 检查可选 Python Package:")
         status = {}
         
         for import_name, display_name, _, description in OPTIONAL_PACKAGES:
@@ -476,12 +476,12 @@ class EnvironmentChecker:
     
     def check_external_tools(self) -> Dict[str, Dict]:
         """
-        检查外部工具（MSMS, APBS, PDB2PQR 等）
+        检查外部Tool（MSMS, APBS, PDB2PQR 等）
         
         Returns:
-            Dict[str, Dict]: {工具名: {available: bool, path: str, python_api: bool, install_info: str}}
+            Dict[str, Dict]: {Tool名: {available: bool, path: str, python_api: bool, install_info: str}}
         """
-        self.log("\n🔧 检查外部工具:")
+        self.log("\n🔧 检查外部Tool:")
         
         if not self.os_type:
             self.detect_os()
@@ -502,7 +502,7 @@ class EnvironmentChecker:
                 except ImportError:
                     pass
             
-            # 查找命令行工具路径
+            # Find命令行ToolPath
             tool_path = self._find_external_tool(tool_name, tool_info)
             
             if python_api_available or tool_path:
@@ -523,7 +523,7 @@ class EnvironmentChecker:
             else:
                 install_info = tool_info["install_info"].get(self.os_type, "请参考官方文档安装")
                 self.log(f"  ✗ {display_name} (未找到) - {description}")
-                self.log(f"      安装方法: {install_info}")
+                self.log(f"      安装Method: {install_info}")
                 results[tool_name] = {
                     "available": False,
                     "path": None,
@@ -536,14 +536,14 @@ class EnvironmentChecker:
     
     def _find_external_tool(self, tool_name: str, tool_info: Dict) -> Optional[str]:
         """
-        查找外部工具路径
+        Find外部ToolPath
         
         Args:
-            tool_name: 工具名称
-            tool_info: 工具配置信息
+            tool_name: ToolName
+            tool_info: ToolConfigurationInformation
             
         Returns:
-            str: 工具路径，未找到返回 None
+            str: ToolPath，未找到Return None
         """
         import shutil
         
@@ -552,7 +552,7 @@ class EnvironmentChecker:
         if path:
             return path
         
-        # 2. 平台特定搜索路径
+        # 2. 平台特定SearchPath
         if self.os_type and self.os_type in tool_info.get("search_paths", {}):
             for search_path in tool_info["search_paths"][self.os_type]:
                 expanded_path = os.path.expanduser(search_path)
@@ -569,18 +569,18 @@ class EnvironmentChecker:
     
     def setup_surface_analysis(self) -> bool:
         """
-        一键设置表面分析环境
+        一KeySettings表面分析环境
         
-        包括：
+        Package括：
         1. 安装 Open3D
         2. 安装 scikit-image
         3. 检查 MSMS/APBS（提供安装指南）
         
         Returns:
-            bool: 是否全部成功
+            bool: 是否全部Success
         """
         self.log("\n" + "=" * 60)
-        self.log("🔧 设置表面分析环境 (MaSIF-style)")
+        self.log("🔧 Settings表面分析环境 (MaSIF-style)")
         self.log("=" * 60)
         
         success = True
@@ -592,9 +592,9 @@ class EnvironmentChecker:
         except ImportError:
             self.log("  安装 Open3D...")
             if self._install_pip_package("open3d"):
-                self.log("  ✅ Open3D 安装成功")
+                self.log("  ✅ Open3D 安装Success")
             else:
-                self.log("  ⚠️ Open3D 安装失败，将使用内置回退方案")
+                self.log("  ⚠️ Open3D 安装Failed，将using内置回退方案")
                 success = False
         
         # 2. 安装 scikit-image
@@ -604,41 +604,41 @@ class EnvironmentChecker:
         except ImportError:
             self.log("  安装 scikit-image...")
             if self._install_pip_package("scikit-image"):
-                self.log("  ✅ scikit-image 安装成功")
+                self.log("  ✅ scikit-image 安装Success")
             else:
-                self.log("  ⚠️ scikit-image 安装失败，将使用简化算法")
+                self.log("  ⚠️ scikit-image 安装Failed，将using简化算法")
         
-        # 3. 检查外部工具
-        self.log("\n  检查外部工具...")
+        # 3. 检查外部Tool
+        self.log("\n  检查外部Tool...")
         tools = self.check_external_tools()
         
         msms_available = tools.get("msms", {}).get("available", False)
         apbs_available = tools.get("apbs", {}).get("available", False)
         
         if not msms_available:
-            self.log("\n  💡 MSMS 未安装，表面生成将使用 Open3D 或内置方法")
+            self.log("\n  💡 MSMS 未安装，表面生成将using Open3D 或内置Method")
             self.log(f"     推荐安装: {tools.get('msms', {}).get('install_info', '参考官方文档')}")
         
         if not apbs_available:
-            self.log("\n  💡 APBS 未安装，静电势将使用 Coulomb 近似")
+            self.log("\n  💡 APBS 未安装，静电势将using Coulomb 近似")
             self.log(f"     推荐安装: {tools.get('apbs', {}).get('install_info', '参考官方文档')}")
         
         if success:
-            self.log("\n✅ 表面分析环境设置完成")
+            self.log("\n✅ 表面分析环境SettingsCompleted")
         else:
-            self.log("\n⚠️ 表面分析可用（基础模式），完整功能需要手动配置")
+            self.log("\n⚠️ 表面分析可用（基础模式），完整功能需要手动Configuration")
         
         return success
     
     def install_optional_package(self, package_name: str) -> bool:
         """
-        安装可选包
+        安装可选Package
         
         Args:
-            package_name: 包的显示名称
+            package_name: Package的DisplayName
             
         Returns:
-            bool: 是否安装成功
+            bool: 是否安装Success
         """
         pip_name = None
         for _, display_name, pip, _ in OPTIONAL_PACKAGES:
@@ -647,19 +647,19 @@ class EnvironmentChecker:
                 break
         
         if not pip_name:
-            self.log(f"  ✗ 未知的可选包: {package_name}")
+            self.log(f"  ✗ 未知的可选Package: {package_name}")
             return False
         
         return self._install_pip_package(pip_name)
     
     def install_all_optional_packages(self) -> Dict[str, bool]:
         """
-        安装所有可选包
+        安装所有可选Package
         
         Returns:
-            Dict[str, bool]: {包名: 是否安装成功}
+            Dict[str, bool]: {Package名: 是否安装Success}
         """
-        self.log("\n📦 安装可选 Python 包...")
+        self.log("\n📦 安装可选 Python Package...")
         results = {}
         
         for import_name, display_name, pip_name, description in OPTIONAL_PACKAGES:
@@ -670,88 +670,88 @@ class EnvironmentChecker:
             except ImportError:
                 self.log(f"  安装 {display_name} ({description})...")
                 if self._install_pip_package(pip_name):
-                    self.log(f"  ✅ {display_name} 安装成功")
+                    self.log(f"  ✅ {display_name} 安装Success")
                     results[display_name] = True
                 else:
-                    self.log(f"  ✗ {display_name} 安装失败")
+                    self.log(f"  ✗ {display_name} 安装Failed")
                     results[display_name] = False
         
         return results
     
-    # ========== HMM 文件管理 ==========
+    # ========== HMM File管理 ==========
     
     def get_hmm_data_dir(self) -> str:
         """
-        获取 HMM 数据目录路径（延迟创建，带权限错误处理）
+        获取 HMM 数据DirectoryPath（延迟Create，带权限Error处理）
         
         Returns:
-            str: 数据目录路径，如果无法创建则返回临时目录
+            str: 数据DirectoryPath，如果无法Create则Return临时Directory
         """
-        # 优先使用插件目录下的 data 文件夹
+        # 优先usingPluginDirectory下的 data File夹
         plugin_dir = os.path.dirname(os.path.abspath(__file__))
         data_dir = os.path.join(plugin_dir, "data")
         
-        # 尝试创建插件目录下的 data 文件夹
+        # 尝试CreatePluginDirectory下的 data File夹
         if not os.path.exists(data_dir):
             try:
                 os.makedirs(data_dir, exist_ok=True)
                 return data_dir
             except PermissionError as e:
-                self.log(f"  ⚠️ 无法创建插件数据目录 {data_dir}: 权限不足")
+                self.log(f"  ⚠️ 无法CreatePlugin数据Directory {data_dir}: 权限不足")
             except OSError as e:
-                self.log(f"  ⚠️ 无法创建插件数据目录 {data_dir}: {e}")
+                self.log(f"  ⚠️ 无法CreatePlugin数据Directory {data_dir}: {e}")
         else:
             return data_dir
         
-        # 回退到用户目录 ~/.glint/data
+        # 回退到用户Directory ~/.glint/data
         user_data_dir = os.path.join(os.path.expanduser("~"), ".glint", "data")
         try:
             os.makedirs(user_data_dir, exist_ok=True)
             return user_data_dir
         except PermissionError as e:
-            self.log(f"  ⚠️ 无法创建用户数据目录 {user_data_dir}: 权限不足")
+            self.log(f"  ⚠️ 无法Create用户数据Directory {user_data_dir}: 权限不足")
         except OSError as e:
-            self.log(f"  ⚠️ 无法创建用户数据目录 {user_data_dir}: {e}")
+            self.log(f"  ⚠️ 无法Create用户数据Directory {user_data_dir}: {e}")
         
-        # 最后回退到临时目录
+        # 最后回退到临时Directory
         import tempfile
         temp_data_dir = os.path.join(tempfile.gettempdir(), "glint_data")
         try:
             os.makedirs(temp_data_dir, exist_ok=True)
-            self.log(f"  ℹ️ 使用临时数据目录: {temp_data_dir}")
+            self.log(f"  ℹ️ using临时数据Directory: {temp_data_dir}")
             return temp_data_dir
         except Exception as e:
-            self.log(f"  ❌ 无法创建任何数据目录: {e}")
-            # 返回临时目录路径，即使创建失败也让调用者处理
+            self.log(f"  ❌ 无法Create任何数据Directory: {e}")
+            # Return临时DirectoryPath，即使CreateFailed也让调用者处理
             return temp_data_dir
     
     def setup_ec_analysis(self) -> bool:
         """
-        一键设置电性互补性（EC）分析环境
+        一KeySettings电性互补性（EC）分析环境
         
-        包括：
+        Package括：
         1. 安装 PDB2PQR (Python API)
         2. 检查/安装 APBS
         3. 确保 NumPy, SciPy, RDKit 可用
         
         Returns:
-            bool: 是否全部成功
+            bool: 是否全部Success
         """
         self.log("\n" + "=" * 60)
-        self.log("🔧 设置电性互补性（EC）分析环境")
+        self.log("🔧 Settings电性互补性（EC）分析环境")
         self.log("=" * 60)
         
         success = True
         
-        # 1. 检查核心依赖
-        self.log("\n  检查核心依赖...")
+        # 1. 检查核心Dependencies
+        self.log("\n  检查核心Dependencies...")
         core_deps = [("numpy", "NumPy"), ("scipy", "SciPy"), ("rdkit", "RDKit")]
         for import_name, display_name in core_deps:
             try:
                 __import__(import_name)
                 self.log(f"  ✓ {display_name} 已安装")
             except ImportError:
-                self.log(f"  ✗ {display_name} 未安装 - EC分析需要此依赖")
+                self.log(f"  ✗ {display_name} 未安装 - EC分析需要此Dependencies")
                 success = False
         
         # 2. 安装 PDB2PQR
@@ -762,9 +762,9 @@ class EnvironmentChecker:
         except ImportError:
             self.log("  安装 PDB2PQR...")
             if self._install_pip_package("pdb2pqr"):
-                self.log("  ✅ PDB2PQR 安装成功")
+                self.log("  ✅ PDB2PQR 安装Success")
             else:
-                self.log("  ⚠️ PDB2PQR 安装失败，将使用简化的PQR转换")
+                self.log("  ⚠️ PDB2PQR 安装Failed，将using简化的PQR转换")
         
         # 3. 检查 APBS
         self.log("\n  检查 APBS...")
@@ -778,7 +778,7 @@ class EnvironmentChecker:
         except ImportError:
             self.log("  ✗ APBS Python API 未安装")
         
-        # 检查命令行工具
+        # 检查命令行Tool
         import shutil
         apbs_path = shutil.which('apbs')
         if apbs_path:
@@ -790,11 +790,11 @@ class EnvironmentChecker:
         if not apbs_available:
             self.log("\n  ⚠️ APBS 未安装，尝试自动安装...")
             if self._install_pip_package("apbs"):
-                self.log("  ✅ APBS (pip) 安装成功")
+                self.log("  ✅ APBS (pip) 安装Success")
                 apbs_available = True
             else:
-                self.log("  ⚠️ APBS pip 安装失败，EC分析将无法运行")
-                self.log("     推荐安装方法:")
+                self.log("  ⚠️ APBS pip 安装Failed，EC分析将无法运行")
+                self.log("     推荐安装Method:")
                 if self.os_type == "macOS":
                     self.log("     - pip install apbs")
                     self.log("     - 或 brew install brewsci/bio/apbs")
@@ -803,19 +803,19 @@ class EnvironmentChecker:
                     self.log("     - 或 apt install apbs")
                 else:
                     self.log("     - pip install apbs")
-                    self.log("     - 或从 https://www.poissonboltzmann.org/ 下载")
+                    self.log("     - 或从 https://www.poissonboltzmann.org/ Download")
             success = False
         
         # 4. 总结
         if success:
-            self.log("\n✅ EC分析环境设置完成")
-            self.log("   可以使用以下功能:")
+            self.log("\n✅ EC分析环境SettingsCompleted")
+            self.log("   可以using以下功能:")
             self.log("   - calculate_ligand_ec: 蛋白-配体EC分析")
             self.log("   - analyze_ternary_ec: 三元复合物（分子胶）EC分析")
             self.log("   - compare_ligand_ec: 多配体EC比较（SAR分析）")
             self.log("   - calculate_ec_hotspots: EC热点识别")
         else:
-            self.log("\n⚠️ EC分析环境部分可用，完整功能需要手动配置")
+            self.log("\n⚠️ EC分析环境部分可用，完整功能需要手动Configuration")
         
         return success
     
@@ -823,10 +823,10 @@ class EnvironmentChecker:
     
     def get_conda_install_url(self) -> str:
         """
-        获取 Miniconda 下载链接
+        获取 Miniconda Download链接
         
         Returns:
-            str: 下载 URL
+            str: Download URL
         """
         if not self.os_type or not self.os_arch:
             self.detect_os()
@@ -852,20 +852,20 @@ class EnvironmentChecker:
     
     def auto_install_conda_env(self) -> bool:
         """
-        自动创建 conda 环境
+        自动Create conda 环境
         
         Returns:
-            bool: True 如果成功
+            bool: True 如果Success
         """
         if not self.check_conda():
-            self.log("✗ 无法自动创建环境: Conda 未安装")
+            self.log("✗ 无法自动Create环境: Conda 未安装")
             return False
         
         if self.check_conda_env(ENV_NAME):
-            self.log(f"✓ 环境 '{ENV_NAME}' 已存在，跳过创建")
+            self.log(f"✓ 环境 '{ENV_NAME}' 已存在，SkipCreate")
             return True
         
-        self.log(f"\n🔧 正在创建 Conda 环境 '{ENV_NAME}'...")
+        self.log(f"\n🔧 正在Create Conda 环境 '{ENV_NAME}'...")
         
         try:
             result = subprocess.run(
@@ -876,64 +876,64 @@ class EnvironmentChecker:
             )
             
             if result.returncode == 0:
-                self.log(f"✅ 环境 '{ENV_NAME}' 创建成功")
+                self.log(f"✅ 环境 '{ENV_NAME}' CreateSuccess")
                 return True
             else:
-                self.log(f"✗ 环境创建失败: {result.stderr}")
+                self.log(f"✗ 环境CreateFailed: {result.stderr}")
                 return False
         except subprocess.TimeoutExpired:
-            self.log("✗ 环境创建超时")
+            self.log("✗ 环境Create超时")
             return False
         except Exception as e:
-            self.log(f"✗ 环境创建出错: {e}")
+            self.log(f"✗ 环境Create出错: {e}")
             return False
     def _install_pip_package(self, package_name: str) -> bool:
         """
-        通过 pip 安装包 (fallback)
+        通过 pip 安装Package (fallback)
         """
         try:
-            # 使用当前 python 环境的 pip
+            # using当前 python 环境的 pip
             cmd = [sys.executable, "-m", "pip", "install", package_name, "--quiet", "--disable-pip-version-check"]
             self.log(f"  执行 pip: {' '.join(cmd)}")
             subprocess.check_call(cmd)
             return True
         except Exception as e:
-            self.log(f"  ✗ Pip 安装失败: {e}")
+            self.log(f"  ✗ Pip 安装Failed: {e}")
             return False
 
     def auto_install_dependencies(self) -> Dict[str, bool]:
         """
-        自动安装缺失的依赖
+        自动安装缺失的Dependencies
         
         Returns:
-            Dict[str, bool]: {依赖名: 是否安装成功}
+            Dict[str, bool]: {Dependencies名: 是否安装Success}
         """
         use_conda = self.check_conda()
         if not use_conda:
-             self.log("⚠️ Conda 未安装，将尝试使用 pip 安装")
+             self.log("⚠️ Conda 未安装，将尝试using pip 安装")
 
         status = self.check_all_dependencies()
         missing = [name for name, avail in status.items() if not avail]
 
         if not missing:
-            self.log("✅ 所有依赖已安装，无需操作")
+            self.log("✅ 所有Dependencies已安装，无需操作")
             return status
 
-        self.log(f"\\n📦 开始自动安装缺失的依赖...")
+        self.log(f"\\n📦 Start自动安装缺失的Dependencies...")
 
         install_results = {}
 
-        # 批量安装 Python 包
+        # 批量安装 Python Package
         py_packages = missing
         if py_packages:
-            self.log(f"\\n  安装 Python 包: {', '.join(py_packages)}")
+            self.log(f"\\n  安装 Python Package: {', '.join(py_packages)}")
 
-            # 尝试 Conda 安装（仅限真正有 Conda 包的 Python 库，不包含 Vina）
+            # 尝试 Conda 安装（仅限真正有 Conda Package的 Python Library，不Package含 Vina）
             if use_conda:
                 packages_to_install = []
                 for import_name, display_name, pip_name in REQUIRED_PACKAGES:
                     if display_name in py_packages:
-                        # Meeko 在 conda-forge 上有包，但 Vina 仅通过 pip 提供
+                        # Meeko 在 conda-forge 上有Package，但 Vina 仅通过 pip 提供
                         if display_name == "Meeko":
                             packages_to_install.append("meeko")
                         else:
@@ -949,23 +949,23 @@ class EnvironmentChecker:
                         if result.returncode == 0:
                             for pkg in py_packages:
                                 install_results[pkg] = True
-                                self.log(f"  ✅ {pkg} 安装成功 (Conda)")
+                                self.log(f"  ✅ {pkg} 安装Success (Conda)")
                         else:
-                            self.log(f"  ⚠️ Conda 安装失败，尝试 Pip...")
+                            self.log(f"  ⚠️ Conda 安装Failed，尝试 Pip...")
                     except Exception as e:
                         self.log(f"  ⚠️ Conda 出错 ({e})，尝试 Pip...")
 
-            # 无论 Conda 成功与否，对所有缺失包再尝试一次 pip（避免架构差异问题）
+            # 无论 Conda Success与否，对所有缺失Package再尝试一次 pip（避免架构差异问题）
             for pkg in py_packages:
                 pip_name = next((p[2] for p in REQUIRED_PACKAGES if p[1] == pkg), None)
                 if not pip_name:
                     continue
                 if self._install_pip_package(pip_name):
                     install_results[pkg] = True
-                    self.log(f"  ✅ {pkg} 安装成功 (Pip)")
+                    self.log(f"  ✅ {pkg} 安装Success (Pip)")
                 else:
                     install_results[pkg] = False
-                    self.log(f"  ✗ {pkg} 安装失败")
+                    self.log(f"  ✗ {pkg} 安装Failed")
             else:
                 # No Conda, use Pip directly
                 for pkg in py_packages:
@@ -973,31 +973,31 @@ class EnvironmentChecker:
                     if pip_name:
                         if self._install_pip_package(pip_name):
                             install_results[pkg] = True
-                            self.log(f"  ✅ {pkg} 安装成功 (Pip)")
+                            self.log(f"  ✅ {pkg} 安装Success (Pip)")
                         else:
                             install_results[pkg] = False
-                            self.log(f"  ✗ {pkg} 安装失败")
+                            self.log(f"  ✗ {pkg} 安装Failed")
 
         # 总结
         success_count = sum(1 for v in install_results.values() if v)
         total_count = len(install_results)
         
         if success_count == total_count:
-            self.log(f"\\n✅ 所有依赖安装完成 ({success_count}/{total_count})")
+            self.log(f"\\n✅ 所有Dependencies安装Completed ({success_count}/{total_count})")
         else:
-            self.log(f"\\n⚠️  部分依赖安装失败 ({success_count}/{total_count})")
+            self.log(f"\\n⚠️  部分Dependencies安装Failed ({success_count}/{total_count})")
         
         return install_results
     
     def _install_conda_package(self, package_name: str) -> bool:
         """
-        安装单个 conda 包
+        安装单个 conda Package
         
         Args:
-            package_name: 包名
+            package_name: Package名
             
         Returns:
-            bool: True 如果成功
+            bool: True 如果Success
         """
         try:
             result = subprocess.run(
@@ -1007,7 +1007,7 @@ class EnvironmentChecker:
                 timeout=300
             )
             return result.returncode == 0
-        except (OSError, subprocess.SubprocessError):  # 子进程调用可能失败
+        except (OSError, subprocess.SubprocessError):  # 子进程调用可能Failed
             return False
     
     def get_install_instructions(self) -> Dict[str, str]:
@@ -1027,24 +1027,24 @@ class EnvironmentChecker:
             instructions["conda"] = f"""
 📥 安装 Miniconda:
 
-1. 下载: {self.get_conda_install_url()}
+1. Download: {self.get_conda_install_url()}
 2. 安装后运行: source ~/.zshrc  (或 ~/.bashrc)
 3. 验证: conda --version
 """
         
-        # 环境创建
+        # 环境Create
         if not self.check_conda_env():
             instructions["environment"] = f"""
-🔧 创建 Conda 环境:
+🔧 Create Conda 环境:
 
 conda create -n {ENV_NAME} python={PYTHON_VERSION} -y
 conda activate {ENV_NAME}
 """
         
-        # 依赖安装
+        # Dependencies安装
         if missing_packages:
             instructions["dependencies"] = f"""
-📦 安装所有依赖（Vina 可选，推荐用 pip 安装）:
+📦 安装所有Dependencies（Vina 可选，推荐用 pip 安装）:
 
 # 核心栈（不含 Vina）
 conda install -c conda-forge rdkit scipy matplotlib pillow \\
@@ -1055,19 +1055,19 @@ pip install vina meeko
 
 """
         
-        # 使用说明
+        # using说明
         instructions["usage"] = f"""
-✅ 使用方法:
+✅ usingMethod:
 
 1. 激活环境:
    conda activate {ENV_NAME}
 
 2. 启动 PyMOL (在激活的环境中)
 
-3. 加载插件:
+3. LoadPlugin:
    run /path/to/glint/__init__.py
 
-4. 打开 GUI:
+4. Open GUI:
    molstruct_gui
 """
         
@@ -1080,14 +1080,14 @@ pip install vina meeko
         运行完整的环境检查
         
         Returns:
-            Dict: 检查结果摘要
+            Dict: 检查Results摘要
         """
         self.log("=" * 60)
         self.log("⚡ GLINT 环境检查")
         self.log("=" * 60)
         
         # 1. 检测操作系统
-        self.log("\n🖥️  系统信息:")
+        self.log("\n🖥️  系统Information:")
         os_type, os_arch = self.detect_os()
         
         # 2. 检查 Conda
@@ -1101,24 +1101,24 @@ pip install vina meeko
         else:
             has_env = False
         
-        # 4. 检查所有依赖
+        # 4. 检查所有Dependencies
         dep_status = self.check_all_dependencies()
         
-        # 5. 自动安装（如果启用）
+        # 5. 自动安装（如果Enable）
         if self.auto_install and has_conda:
             self.log("\n" + "=" * 60)
             self.log("🚀 自动安装模式")
             self.log("=" * 60)
             
-            # 创建环境（如果不存在）
+            # Create环境（如果不存在）
             if not has_env:
                 has_env = self.auto_install_conda_env()
             
-            # 安装依赖
+            # 安装Dependencies
             install_results = self.auto_install_dependencies()
             
-            # 重新检查依赖状态
-            self.log("\n🔍 重新检查依赖状态...")
+            # 重新检查DependenciesStatus
+            self.log("\n🔍 重新检查DependenciesStatus...")
             dep_status = self.check_all_dependencies()
         
         # 6. 测试 GUI 功能
@@ -1130,12 +1130,12 @@ pip install vina meeko
         all_ok = has_conda and has_env and all(dep_status.values()) and gui_ok
         
         if all_ok:
-            self.log("✅ 环境配置完美！所有功能可用")
+            self.log("✅ 环境Configuration完美！所有功能可用")
         else:
             if self.auto_install:
-                self.log("⚠️  部分依赖安装失败或需要手动配置")
+                self.log("⚠️  部分Dependencies安装Failed或需要手动Configuration")
             else:
-                self.log("⚠️  环境需要配置")
+                self.log("⚠️  环境需要Configuration")
             instructions = self.get_install_instructions()
             for key, text in instructions.items():
                 self.log(f"\n{text}")
@@ -1153,18 +1153,18 @@ pip install vina meeko
         }
 
 
-# ========== 便捷函数 ==========
+# ========== 便捷Function ==========
 
 def check_environment(log_callback=None, auto_install=False) -> Dict[str, any]:
     """
-    检查环境（便捷函数）
+    检查环境（便捷Function）
     
     Args:
-        log_callback: 日志回调函数
-        auto_install: 是否自动安装缺失的依赖
+        log_callback: 日志回调Function
+        auto_install: 是否自动安装缺失的Dependencies
         
     Returns:
-        Dict: 检查结果
+        Dict: 检查Results
     """
     checker = EnvironmentChecker(log_callback, auto_install=auto_install)
     return checker.run_full_check()
@@ -1172,10 +1172,10 @@ def check_environment(log_callback=None, auto_install=False) -> Dict[str, any]:
 
 def get_dependency_status() -> Dict[str, bool]:
     """
-    获取依赖状态（便捷函数）
+    获取DependenciesStatus（便捷Function）
     
     Returns:
-        Dict[str, bool]: {依赖名: 是否可用}
+        Dict[str, bool]: {Dependencies名: 是否可用}
     """
     checker = EnvironmentChecker(log_callback=None)
     return checker.check_all_dependencies()
@@ -1183,18 +1183,18 @@ def get_dependency_status() -> Dict[str, bool]:
 
 def setup_surface_analysis(log_callback=None) -> bool:
     """
-    一键设置表面分析环境（便捷函数）
+    一KeySettings表面分析环境（便捷Function）
     
-    包括：
+    Package括：
     1. 安装 Open3D
     2. 安装 scikit-image
     3. 检查 MSMS/APBS
     
     Args:
-        log_callback: 日志回调函数
+        log_callback: 日志回调Function
         
     Returns:
-        bool: 是否全部成功
+        bool: 是否全部Success
     """
     checker = EnvironmentChecker(log_callback=log_callback)
     return checker.setup_surface_analysis()
@@ -1202,18 +1202,18 @@ def setup_surface_analysis(log_callback=None) -> bool:
 
 def setup_ec_analysis(log_callback=None) -> bool:
     """
-    一键设置电性互补性（EC）分析环境（便捷函数）
+    一KeySettings电性互补性（EC）分析环境（便捷Function）
     
-    包括：
+    Package括：
     1. 安装 PDB2PQR (Python API)
     2. 检查/安装 APBS
     3. 确保 NumPy, SciPy, RDKit 可用
     
     Args:
-        log_callback: 日志回调函数
+        log_callback: 日志回调Function
         
     Returns:
-        bool: 是否全部成功
+        bool: 是否全部Success
     """
     checker = EnvironmentChecker(log_callback=log_callback)
     return checker.setup_ec_analysis()
@@ -1221,19 +1221,19 @@ def setup_ec_analysis(log_callback=None) -> bool:
 
 def check_ec_analysis_deps(log_callback=None) -> Dict[str, bool]:
     """
-    检查EC分析依赖状态（便捷函数）
+    检查EC分析DependenciesStatus（便捷Function）
     
     Args:
-        log_callback: 日志回调函数
+        log_callback: 日志回调Function
         
     Returns:
-        Dict[str, bool]: {依赖名: 是否可用}
+        Dict[str, bool]: {Dependencies名: 是否可用}
     """
     checker = EnvironmentChecker(log_callback=log_callback)
     
     status = {}
     
-    # 核心 Python 包
+    # 核心 Python Package
     core_packages = [
         ("numpy", "NumPy"),
         ("scipy", "SciPy"),
@@ -1247,7 +1247,7 @@ def check_ec_analysis_deps(log_callback=None) -> Dict[str, bool]:
         except ImportError:
             status[display_name] = False
     
-    # EC 专用包
+    # EC 专用Package
     ec_packages = [
         ("pdb2pqr", "PDB2PQR"),
         ("apbs", "APBS Python"),
@@ -1260,7 +1260,7 @@ def check_ec_analysis_deps(log_callback=None) -> Dict[str, bool]:
         except ImportError:
             status[display_name] = False
     
-    # 外部工具（命令行）
+    # 外部Tool（命令行）
     tools = checker.check_external_tools()
     for tool_name in ["apbs", "pdb2pqr"]:
         tool_info = tools.get(tool_name, {})
@@ -1272,19 +1272,19 @@ def check_ec_analysis_deps(log_callback=None) -> Dict[str, bool]:
 
 def check_surface_analysis_deps(log_callback=None) -> Dict[str, bool]:
     """
-    检查表面分析依赖状态（便捷函数）
+    检查表面分析DependenciesStatus（便捷Function）
     
     Args:
-        log_callback: 日志回调函数
+        log_callback: 日志回调Function
         
     Returns:
-        Dict[str, bool]: {依赖名: 是否可用}
+        Dict[str, bool]: {Dependencies名: 是否可用}
     """
     checker = EnvironmentChecker(log_callback=log_callback)
     
     status = {}
     
-    # Python 包
+    # Python Package
     for import_name, display_name, _, _ in OPTIONAL_PACKAGES:
         if display_name in ["Open3D", "scikit-image", "trimesh"]:
             try:
@@ -1293,7 +1293,7 @@ def check_surface_analysis_deps(log_callback=None) -> Dict[str, bool]:
             except ImportError:
                 status[display_name] = False
     
-    # 外部工具
+    # 外部Tool
     tools = checker.check_external_tools()
     for tool_name, tool_info in tools.items():
         status[tool_info.get("display_name", tool_name)] = tool_info.get("available", False)
@@ -1307,11 +1307,11 @@ if __name__ == "__main__":
     # 命令行模式
     import argparse
     
-    parser = argparse.ArgumentParser(description="GLINT 环境检查和自动配置工具")
+    parser = argparse.ArgumentParser(description="GLINT 环境检查和自动ConfigurationTool")
     parser.add_argument(
         "--auto-install",
         action="store_true",
-        help="自动安装缺失的依赖（需要 Conda）"
+        help="自动安装缺失的Dependencies（需要 Conda）"
     )
     
     args = parser.parse_args()
@@ -1343,19 +1343,19 @@ def is_first_run() -> bool:
 
 def mark_initialized():
     """
-    标记已初始化（带权限错误处理）
+    标记已Initialize（带权限Error处理）
     
-    尝试在用户主目录创建初始化标记文件。
-    如果失败（权限问题等），静默忽略，不影响插件正常使用。
+    尝试在用户主DirectoryCreateInitialize标记File。
+    如果Failed（权限问题等），静默忽略，不影响Plugin正常using。
     """
     try:
-        # 确保父目录存在
+        # 确保父Directory存在
         marker_dir = os.path.dirname(_FIRST_RUN_MARKER)
         if marker_dir and not os.path.exists(marker_dir):
             try:
                 os.makedirs(marker_dir, exist_ok=True)
             except (PermissionError, OSError):
-                # 无法创建目录，静默忽略
+                # 无法CreateDirectory，静默忽略
                 return
         
         with open(_FIRST_RUN_MARKER, 'w') as f:
@@ -1364,19 +1364,19 @@ def mark_initialized():
         # 权限不足，静默忽略
         pass
     except OSError as e:
-        # 其他 OS 错误，静默忽略
+        # 其他 OS Error，静默忽略
         pass
     except Exception:
-        # 任何其他错误，静默忽略
+        # 任何其他Error，静默忽略
         pass
 
 
 def _quick_check_deps(skip_pyqt=True) -> Tuple[bool, List[str]]:
     """
-    快速检查依赖（不输出日志）
+    快速检查Dependencies（不输出日志）
 
     Args:
-        skip_pyqt: 是否跳过 PyQt5 检查（避免导入时崩溃）
+        skip_pyqt: 是否Skip PyQt5 检查（避免Import时崩溃）
 
     Returns:
         (all_ok, missing_list)
@@ -1384,7 +1384,7 @@ def _quick_check_deps(skip_pyqt=True) -> Tuple[bool, List[str]]:
     import shutil
     missing = []
 
-    # 检查必需的 Python 包（跳过 PyQt5 以避免崩溃）
+    # 检查必需的 Python Package（Skip PyQt5 以避免崩溃）
     for import_name, display_name, _ in REQUIRED_PACKAGES:
         if skip_pyqt and import_name == "PyQt5":
             continue
@@ -1393,7 +1393,7 @@ def _quick_check_deps(skip_pyqt=True) -> Tuple[bool, List[str]]:
         except ImportError:
             missing.append(display_name)
 
-    # 检查命令行工具（目前为空）
+    # 检查命令行Tool（目前为空）
     for cmd, name in REQUIRED_COMMANDS:
         if not shutil.which(cmd):
             missing.append(name)
@@ -1402,7 +1402,7 @@ def _quick_check_deps(skip_pyqt=True) -> Tuple[bool, List[str]]:
 
 
 def _print_setup_guide(missing: List[str]):
-    """打印完整的环境设置指南"""
+    """Print完整的环境Settings指南"""
     print("\n" + "=" * 60)
     print("🚨 GLINT - Environment Setup Required")
     print("=" * 60)
@@ -1428,7 +1428,7 @@ def _print_setup_guide(missing: List[str]):
 
 
 def _print_missing_deps_hint(missing: List[str]):
-    """打印缺失依赖的简短提示"""
+    """Print缺失Dependencies的简短提示"""
     print("\n" + "=" * 60)
     print("⚠️  GLINT - Missing Dependencies")
     print("=" * 60)
@@ -1436,7 +1436,7 @@ def _print_missing_deps_hint(missing: List[str]):
     if missing:
         print(f"\n❌ Missing: {', '.join(missing)}")
 
-    # 构建包名映射
+    # 构建Package名映射
     pkg_map = {p[1]: p[2] for p in REQUIRED_PACKAGES}
 
     conda_names = [pkg_map.get(m, m.lower()) for m in missing]
@@ -1450,32 +1450,32 @@ def _print_missing_deps_hint(missing: List[str]):
 
 def ensure_dependencies(silent=False) -> bool:
     """
-    检查并确保所有依赖可用。
+    检查并确保所有Dependencies可用。
 
     Args:
-        silent: 如果为 True，则不输出任何信息
+        silent: 如果为 True，则不输出任何Information
 
     Returns:
-        bool: True 如果所有依赖都可用
+        bool: True 如果所有Dependencies都可用
     """
-    # 快速检查依赖
+    # 快速检查Dependencies
     all_ok, missing = _quick_check_deps()
 
     if all_ok:
-        # 所有依赖都存在，标记已初始化
+        # 所有Dependencies都存在，标记已Initialize
         mark_initialized()
         return True
 
-    # 依赖缺失
+    # Dependencies缺失
     if silent:
         return False
 
     # 检查是否是第一次运行
     if is_first_run():
-        # 第一次运行，显示完整设置指南
+        # 第一次运行，Display完整Settings指南
         _print_setup_guide(missing)
     else:
-        # 非第一次运行，显示简短提示
+        # 非第一次运行，Display简短提示
         _print_missing_deps_hint(missing)
 
     return False

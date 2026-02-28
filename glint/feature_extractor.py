@@ -14,7 +14,7 @@ from collections import defaultdict
 
 
 # ============================================================================
-# 辅助函数（从 interaction_analyzer.py 复用）
+# 辅助Function（从 interaction_analyzer.py 复用）
 # ============================================================================
 
 def get_element_from_atom_name(atom_name: str) -> str:
@@ -65,7 +65,7 @@ class MolecularFeatureExtractor:
     一次遍历提取所有化学特征并缓存，避免重复计算
     
     支持的特征：
-    - 氢键供体/受体
+    - 氢Key供体/受体
     - 疏水原子
     - 芳香环
     - 带电基团（正/负）
@@ -78,7 +78,7 @@ class MolecularFeatureExtractor:
     
     def __init__(self, atoms: List[Tuple]):
         """
-        初始化特征提取器
+        Initialize特征提取器
         
         Args:
             atoms: 原子列表 [(chain, resn, resi, atom_name, (x,y,z)), ...]
@@ -106,14 +106,14 @@ class MolecularFeatureExtractor:
     
     @property
     def hbond_donors(self) -> List[Tuple]:
-        """氢键供体原子（缓存）"""
+        """氢Key供体原子（缓存）"""
         if self._hbond_donors is None:
             self._hbond_donors = self._extract_hbond_donors()
         return self._hbond_donors
     
     @property
     def hbond_acceptors(self) -> List[Tuple]:
-        """氢键受体原子（缓存）"""
+        """氢Key受体原子（缓存）"""
         if self._hbond_acceptors is None:
             self._hbond_acceptors = self._extract_hbond_acceptors()
         return self._hbond_acceptors
@@ -154,7 +154,7 @@ class MolecularFeatureExtractor:
         return self._halogen_atoms
     
     # ========================================================================
-    # 内部提取方法
+    # 内部提取Method
     # ========================================================================
     
     def _group_by_residue(self) -> Dict[Tuple[str, str, str], List[Tuple]]:
@@ -167,7 +167,7 @@ class MolecularFeatureExtractor:
     
     def _extract_hbond_donors(self) -> List[Tuple]:
         """
-        提取氢键供体
+        提取氢Key供体
         
         标准：N, O, S 原子（可能连接氢）
         """
@@ -183,7 +183,7 @@ class MolecularFeatureExtractor:
     
     def _extract_hbond_acceptors(self) -> List[Tuple]:
         """
-        提取氢键受体
+        提取氢Key受体
         
         标准：N, O, S, F, Cl 原子（有孤对电子）
         """
@@ -226,7 +226,7 @@ class MolecularFeatureExtractor:
         """
         提取芳香环
         
-        返回格式：
+        Return格式：
         [{
             'residue': (chain, resn, resi),
             'coords': [(x,y,z), ...],
@@ -287,13 +287,13 @@ class MolecularFeatureExtractor:
         """
         提取带电基团
         
-        基于生理 pH (~7.4) 下的 pKa 值判断残基离子化状态：
+        基于生理 pH (~7.4) 下的 pKa Value判断残基离子化Status：
         - ARG (pKa ~12.5), LYS (pKa ~10.5): 始终带正电
         - HIP/HSP（双质子化 HIS）: 带正电
         - HIS (pKa ~6.0): 中性，不计入正电基团
         - ASP (pKa ~3.7), GLU (pKa ~4.1): 始终带负电
         
-        返回格式：
+        Return格式：
         [{'residue': (chain, resn, resi), 'charge': '+' or '-',
           'center': (x,y,z), 'atoms': [(x,y,z), ...]}, ...]
         """
@@ -317,7 +317,7 @@ class MolecularFeatureExtractor:
             
             if resn in all_positive:
                 # 正电荷中心
-                # 根据残基类型选择正确的带电原子集合
+                # 根据残基TypeSelect正确的带电原子集合
                 if resn in protonated_his_residues:
                     target_atoms = positive_atoms_his
                 else:
@@ -411,7 +411,7 @@ class MolecularFeatureExtractor:
     def find_neighbors(self, query_coord: Tuple[float, float, float], 
                        max_distance: float) -> List[Tuple]:
         """
-        查找邻近原子（使用空间索引加速）
+        Find邻近原子（using空间索引加速）
         
         Args:
             query_coord: 查询坐标
@@ -421,11 +421,11 @@ class MolecularFeatureExtractor:
             List[Tuple]: 邻近原子列表
         """
         if hasattr(self, 'use_kdtree') and self.use_kdtree:
-            # 使用 KD-Tree
+            # using KD-Tree
             indices = self.kdtree.query_ball_point(query_coord, max_distance)
             return [self.atoms[i] for i in indices]
         else:
-            # 暴力搜索
+            # 暴力Search
             neighbors = []
             for atom in self.atoms:
                 if distance(query_coord, atom[4]) <= max_distance:
@@ -433,7 +433,7 @@ class MolecularFeatureExtractor:
             return neighbors
     
     # ========================================================================
-    # 实用方法
+    # 实用Method
     # ========================================================================
     
     def get_residue_atoms(self, chain: str, resn: str, resi: str) -> List[Tuple]:
@@ -443,7 +443,7 @@ class MolecularFeatureExtractor:
         Args:
             chain: 链ID
             resn: 残基名
-            resi: 残基编号
+            resi: 残基Number
         
         Returns:
             List[Tuple]: 原子列表
@@ -454,16 +454,16 @@ class MolecularFeatureExtractor:
     def get_atom_by_name(self, chain: str, resn: str, resi: str, 
                          atom_name: str) -> Optional[Tuple]:
         """
-        按名称查找特定原子
+        按NameFind特定原子
         
         Args:
             chain: 链ID
             resn: 残基名
-            resi: 残基编号
+            resi: 残基Number
             atom_name: 原子名
         
         Returns:
-            Tuple or None: 原子信息
+            Tuple or None: Atom information
         """
         res_atoms = self.get_residue_atoms(chain, resn, resi)
         atom_name_upper = atom_name.strip().upper()
@@ -476,10 +476,10 @@ class MolecularFeatureExtractor:
     
     def summary(self) -> Dict[str, int]:
         """
-        返回特征统计摘要
+        Return特征统计摘要
         
         Returns:
-            dict: 各类特征数量
+            dict: 各Class特征Count
         """
         return {
             'total_atoms': len(self.atoms),

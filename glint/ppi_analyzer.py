@@ -1,21 +1,21 @@
 # -*- coding: utf-8 -*-
 """
 ppi_analyzer.py
-蛋白-蛋白界面(PPI)分析模块 - 分子胶(Molecular Glue)特异功能
+蛋白-蛋白interface(PPI)分析Module - 分子胶(Molecular Glue)特异功能
 
 核心功能:
 1. analyze_protein_protein_interface - 检测两个蛋白质之间的直接相互作用
 2. identify_neo_epitope - 识别分子胶诱导的新表位(neo-substrate epitope)
 3. calculate_interface_bsa - 计算埋藏表面积(Buried Surface Area)
-4. calculate_interface_score - 界面强度评分
+4. calculate_interface_score - interface强degrees评分
 
-典型应用场景:
+典型Apply场景:
 - 分子胶(Molecular Glue)机制验证
 - PROTAC vs Glue 区分
-- 三元复合物界面稳定性分析
+- 三元复合物interface稳定性分析
 
-使用示例:
-    # 分析蛋白-蛋白界面
+using示例:
+    # 分析蛋白-蛋白interface
     ppi_result = analyze_protein_protein_interface('complex', ['A'], ['B'])
     
     # 识别Neo-表位
@@ -32,7 +32,7 @@ import os
 from collections import defaultdict
 from pymol import cmd
 
-# 导入依赖模块
+# ImportDependenciesModule
 try:
     from .interaction_analyzer import (
         parse_pdb_structure, parse_pdb_file, distance,
@@ -74,11 +74,11 @@ except ImportError:
         VisualizationSettings,
     )
 
-# ========== PPI 参数 ==========
+# ========== PPI Parameters ==========
 PPI_PARAMS = {
-    "interface_distance": 4.5,      # Å, 界面残基判定距离
-    "strong_interface_bsa": 800.0,  # Å², 强界面阈值
-    "min_interface_contacts": 3,    # 最小界面接触数
+    "interface_distance": 4.5,      # Å, interface残基判定距离
+    "strong_interface_bsa": 800.0,  # Å², 强interface阈Value
+    "min_interface_contacts": 3,    # 最小interfacecontact count
     "neo_epitope_distance": 5.0,    # Å, Neo-表位检测距离
 }
 
@@ -99,31 +99,31 @@ def analyze_protein_protein_interface(obj_name=None,
     """
     检测两个蛋白质之间的直接相互作用（分子胶机制的核心特征）
 
-    这是区分 PROTAC 和分子胶的关键功能：
+    这是区分 PROTAC 和分子胶的关Key功能：
     - PROTAC: 通常无/弱 蛋白-蛋白接触
-    - 分子胶: 强 蛋白-蛋白直接接触（Glue诱导的界面）
+    - 分子胶: 强 蛋白-蛋白直接接触（Glue诱导的interface）
 
-    参数:
-        obj_name: PyMOL对象名称
+    Parameters:
+        obj_name: PyMOL对象Name
         protein1_chains: 蛋白质1的链ID列表（例如 ["A"] - E3 ligase）
         protein2_chains: 蛋白质2的链ID列表（例如 ["B"] - Substrate）
-        interface_distance: 界面残基判定距离（埃）
-        output_csv: 输出CSV文件路径
-        pdb_file: PDB文件路径（可选）
-        visualize: 是否在PyMOL中可视化界面（默认True）
-        protein1_color: 蛋白质1的显示颜色（默认cyan）
-        protein2_color: 蛋白质2的显示颜色（默认magenta）
-        display_mode: 显示模式 - "surface_interaction" (表面+相互作用) 或 "cartoon_interaction" (卡通+相互作用)
-        show_labels: 是否显示距离标签 (默认True)
+        interface_distance: interface残基判定距离（埃）
+        output_csv: 输出CSVFilePath
+        pdb_file: PDBFilePath（可选）
+        visualize: 是否在PyMOL中可视化interface（默认True）
+        protein1_color: 蛋白质1的Display颜色（默认cyan）
+        protein2_color: 蛋白质2的Display颜色（默认magenta）
+        display_mode: Display模式 - "surface_interaction" (表面+相互作用) 或 "cartoon_interaction" (卡通+相互作用)
+        show_labels: 是否Display距离Label (默认True)
     
-    返回:
+    Return:
         dict: {
             "interface_residues": [(chain1, resn1, resi1, chain2, resn2, resi2, min_dist), ...],
-            "interface_interactions": [...],  # 氢键/盐桥/疏水
-            "interface_contacts": int,  # 接触对数量
-            "interface_strength": float,  # 界面强度评分 [0-10]
+            "interface_interactions": [...],  # 氢Key/盐桥/疏水
+            "interface_contacts": int,  # 接触对Count
+            "interface_strength": float,  # interface强degrees评分 [0-10]
             "bsa": float,  # 埋藏表面积（如果可计算）
-            "is_strong_interface": bool  # 是否为强界面
+            "is_strong_interface": bool  # 是否为强interface
         }
     """
     # 输入验证
@@ -131,7 +131,7 @@ def analyze_protein_protein_interface(obj_name=None,
         print("[analyze_protein_protein_interface] ⚠️ Must specify both protein1_chains and protein2_chains")
         return None
     
-    # 获取原子信息
+    # 获取Atom information
     if pdb_file:
         atoms = parse_pdb_file(pdb_file)
         if not atoms:
@@ -173,7 +173,7 @@ def analyze_protein_protein_interface(obj_name=None,
     print(f"[PPI] Protein 1: {len(protein1_residues)} residues")
     print(f"[PPI] Protein 2: {len(protein2_residues)} residues")
     
-    # 检测界面残基对
+    # 检测interface残基对
     interface_residues = []
     interface_atom_pairs = []  # 用于详细相互作用分析
     
@@ -190,7 +190,7 @@ def analyze_protein_protein_interface(obj_name=None,
                         min_dist = d
                         closest_atoms = (atom1, atom2)
             
-            # 如果在界面距离内，记录
+            # 如果在interface距离内，记录
             if min_dist <= interface_distance:
                 interface_residues.append({
                     "chain1": res1_key[0],
@@ -205,7 +205,7 @@ def analyze_protein_protein_interface(obj_name=None,
     
     print(f"[PPI] ✅ Found {len(interface_residues)} interface residue pairs")
     
-    # 分析界面相互作用类型
+    # 分析interface相互作用Type
     interface_interactions = _analyze_interface_interactions(interface_atom_pairs, chain_residues)
     
     # 计算埋藏表面积（如果对象存在于PyMOL中）
@@ -221,14 +221,14 @@ def analyze_protein_protein_interface(obj_name=None,
         except Exception as e:
             print(f"[PPI] BSA calculation failed: {e}")
     
-    # 计算界面强度评分
+    # 计算interface强degrees评分
     interface_strength = _calculate_interface_strength(
         len(interface_residues),
         interface_interactions,
         bsa
     )
     
-    # 判定是否为强界面
+    # 判定是否为强interface
     is_strong_interface = False
     if bsa and bsa > PPI_PARAMS["strong_interface_bsa"]:
         is_strong_interface = True
@@ -250,21 +250,21 @@ def analyze_protein_protein_interface(obj_name=None,
         "protein2_chains": protein2_chains
     }
     
-    # 打印摘要
+    # Print摘要
     print("\n" + "=" * 60)
-    print("蛋白-蛋白界面分析结果 (PPI Analysis)")
+    print("蛋白-蛋白interface分析Results (PPI Analysis)")
     print("=" * 60)
-    print(f"界面接触对数: {len(interface_residues)}")
-    print(f"界面强度评分: {interface_strength:.2f} / 10")
+    print(f"interface接触对数: {len(interface_residues)}")
+    print(f"interface强degrees评分: {interface_strength:.2f} / 10")
     if bsa:
         print(f"埋藏表面积(BSA): {bsa:.1f} Ų")
-    print(f"界面类型: {'✨ 强界面 (Strong Interface)' if is_strong_interface else '⚠️ 弱界面 (Weak Interface)'}")
-    print(f"\n相互作用类型统计:")
+    print(f"interfaceType: {'✨ 强interface (Strong Interface)' if is_strong_interface else '⚠️ 弱interface (Weak Interface)'}")
+    print(f"\n相互作用Type统计:")
     for inter_type, count in _count_interaction_types(interface_interactions).items():
         print(f"  {inter_type}: {count}")
     print("=" * 60)
     
-    # 在PyMOL中可视化界面（如果启用）
+    # 在PyMOL中可视化interface（如果Enable）
     try:
         objs = cmd.get_names("objects")
     except AttributeError:
@@ -272,7 +272,7 @@ def analyze_protein_protein_interface(obj_name=None,
 
     if visualize and obj_name and obj_name in objs:
         try:
-            # 统一可视化参数入口：支持 dataclass 配置，同时兼容旧参数
+            # 统一可视化Parameters入口：支持 dataclass Configuration，同时兼容旧Parameters
             if viz_settings is None:
                 viz_settings = VisualizationSettings(
                     protein1_color=protein1_color,
@@ -284,26 +284,26 @@ def analyze_protein_protein_interface(obj_name=None,
                 )
             visualize_ppi_interface(obj_name, result, viz_settings=viz_settings)
         except Exception as e:
-            print(f"[PPI] 可视化失败: {e}")
+            print(f"[PPI] 可视化Failed: {e}")
     
     return result
 
 
 def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
     """
-    分析界面残基对之间的详细相互作用类型(使用精确原子级标准)
+    分析interface残基对之间的详细相互作用Type(using精确原子级标准)
     
-    检测八种非共价键:
-    1. 氢键 (Hydrogen Bond)
+    检测八种非共价Key:
+    1. 氢Key (Hydrogen Bond)
     2. 盐桥 (Salt Bridge)
     3. 疏水相互作用 (Hydrophobic Interaction)
     4. π–π 堆积 (Pi-Pi Stacking)
     5. π–阳离子相互作用 (Cation-Pi Interaction)
-    6. 卤素键 (Halogen Bond)
+    6. 卤素Key (Halogen Bond)
     7. 金属配位 (Metal Coordination)
     8. 水桥 (Water Bridge)
     
-    返回: list of dict，每个dict包含详细的相互作用信息
+    Return: list of dict，每个dictPackage含详细的相互作用Information
     """
     interactions = []
     
@@ -385,7 +385,7 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
         is_ionic, ionic_dist = is_ionic_precise(res1_name, res1_atoms, res2_name, res2_atoms)
         if is_ionic:
             # Find the closest charged atoms
-            # 使用模块级常量：HIS 在 pH 7.4 下为中性，仅 HIP/HSP 带正电
+            # usingModule级常量：HIS 在 pH 7.4 下为中性，仅 HIP/HSP 带正电
             positive = ALL_POSITIVE_RESIDUES
             negative = ALWAYS_NEGATIVE_RESIDUES
             
@@ -430,7 +430,7 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
             })
             continue  # Salt bridge excludes H-bond/hydrophobic
         
-        # 4. 遍历所有原子对进行氢键和疏水检测
+        # 4. 遍历所有原子对进行氢Key和疏水检测
         hbond_found = False
         hydrophobic_found = False
         
@@ -441,7 +441,7 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
                 if d > INTERACTION_PARAMS["hydrophobic"]["other_max"] and d > INTERACTION_PARAMS["hbond"]["max_DA_dist"]:
                     continue
 
-                # 4a. 精确氢键检测
+                # 4a. 精确氢Key检测
                 if not hbond_found:
                     is_hb, _, _ = is_hbond_precise(atom1, atom2, all_atoms_by_residue)
                     if not is_hb:
@@ -459,7 +459,7 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
                             "resid2": res2_id,
                             "chain1": res1_chain,
                             "chain2": res2_chain,
-                            "atom1_name": atom1[3],  # 保存原子名
+                            "atom1_name": atom1[3],  # Save原子名
                             "atom2_name": atom2[3]
                         })
                         hbond_found = True
@@ -478,7 +478,7 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
                         "resid2": res2_id,
                         "chain1": res1_chain,
                         "chain2": res2_chain,
-                        "atom1_name": atom1[3],  # 保存原子名
+                        "atom1_name": atom1[3],  # Save原子名
                         "atom2_name": atom2[3]
                     })
                     hydrophobic_found = True
@@ -489,16 +489,16 @@ def _analyze_interface_interactions(interface_atom_pairs, all_atoms_by_residue):
 
 def _calculate_interface_strength(contact_count, interactions, bsa):
     """
-    计算界面强度评分 [0-10]
+    计算interface强degrees评分 [0-10]
     
     考虑因素:
-    - 接触对数量
-    - 相互作用类型和数量
+    - 接触对Count
+    - 相互作用Type和Count
     - 埋藏表面积
     """
     score = 0.0
     
-    # 接触数贡献 (0-4分)
+    # contact count贡献 (0-4分)
     score += min(4.0, contact_count / 5.0)
     
     # 相互作用质量贡献 (0-4分)
@@ -516,7 +516,7 @@ def _calculate_interface_strength(contact_count, interactions, bsa):
 
 
 def _count_interaction_types(interactions):
-    """统计相互作用类型"""
+    """统计相互作用Type"""
     counts = defaultdict(int)
     for inter in interactions:
         counts[inter["type"]] += 1
@@ -524,22 +524,22 @@ def _count_interaction_types(interactions):
 
 
 def _export_ppi_csv(csv_path, interface_residues, interactions, bsa, strength):
-    """导出PPI分析结果到CSV"""
+    """ExportPPI分析Results到CSV"""
     try:
         with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             
-            # 摘要信息
-            writer.writerow(["=== 蛋白-蛋白界面分析 (PPI Analysis) ==="])
+            # 摘要Information
+            writer.writerow(["=== 蛋白-蛋白interface分析 (PPI Analysis) ==="])
             writer.writerow([])
-            writer.writerow(["界面接触对数", len(interface_residues)])
-            writer.writerow(["界面强度评分", strength])
+            writer.writerow(["interface接触对数", len(interface_residues)])
+            writer.writerow(["interface强degrees评分", strength])
             if bsa:
                 writer.writerow(["埋藏表面积(BSA)", f"{bsa:.1f} Ų"])
             writer.writerow([])
             
-            # 界面残基对
-            writer.writerow(["=== 界面残基对 ==="])
+            # interface残基对
+            writer.writerow(["=== interface残基对 ==="])
             writer.writerow(["Chain1", "Residue1", "Chain2", "Residue2", "Distance(Å)"])
             for res in interface_residues:
                 writer.writerow([
@@ -552,7 +552,7 @@ def _export_ppi_csv(csv_path, interface_residues, interactions, bsa, strength):
             writer.writerow([])
             
             # 详细相互作用
-            writer.writerow(["=== 界面相互作用 ==="])
+            writer.writerow(["=== interface相互作用 ==="])
             writer.writerow(["Type", "Atom1", "Atom2", "Distance(Å)"])
             for inter in interactions:
                 writer.writerow([
@@ -576,24 +576,24 @@ def visualize_ppi_interface(obj_name, ppi_result,
                             show_hydrophobic=False,
                             viz_settings=None):
     """
-    在PyMOL中可视化蛋白-蛋白界面 (增强版)
+    在PyMOL中可视化蛋白-蛋白interface (增强版)
 
-    参数:
-        obj_name: PyMOL对象名称
-        ppi_result: analyze_protein_protein_interface()的返回结果
-        viz_settings: 统一可视化配置对象，若提供则优先使用
+    Parameters:
+        obj_name: PyMOL对象Name
+        ppi_result: analyze_protein_protein_interface()的ReturnResults
+        viz_settings: 统一可视化Configuration对象，若提供则优先using
 
-    五种非共价键配色方案:
-        - 氢键: 蓝色 (blue)
+    五种非共价Key配色方案:
+        - 氢Key: 蓝色 (blue)
         - 盐桥: 红色 (red)
         - 疏水相互作用: 绿色 (green)
         - π–π 堆积: 黄色 (yellow)
         - π–阳离子相互作用: 紫色 (purple)
-        - 卤素键: 橙色 (orange)
+        - 卤素Key: 橙色 (orange)
         - 金属配位: 紫红色 (magenta)
         - 水桥: 青色 (cyan)
     """
-    # 统一配置入口：优先使用 VisualizationSettings，保持旧参数向后兼容
+    # 统一Configuration入口：优先using VisualizationSettings，保持旧Parameters向后兼容
     settings = viz_settings or VisualizationSettings(
         protein1_color=protein1_color,
         protein2_color=protein2_color,
@@ -601,8 +601,8 @@ def visualize_ppi_interface(obj_name, ppi_result,
         clear_old=clear_old,
         display_mode=display_mode,
         show_hydrophobic=show_hydrophobic,
-        label_size=16,  # 统一使用 16
-        label_font_id=5,  # 统一使用 font_id=5
+        label_size=16,  # 统一using 16
+        label_font_id=5,  # 统一using font_id=5
     )
     protein1_color = settings.protein1_color
     protein2_color = settings.protein2_color
@@ -624,7 +624,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
     except Exception as e:
         print(f"[visualize_ppi_interface] Warning: Failed to register colors: {e}")
 
-    # 使用统一的相互作用配色（扩展到 8 种类型）
+    # using统一的相互作用配色（Extension到 8 种Type）
     INTERACTION_COLORS = {
         "Hydrogen Bond": {"color": PYMOL_COLOR_NAMES['hbond'], "width": 2.0, "gap": 0.3},
         "Salt Bridge": {"color": PYMOL_COLOR_NAMES['salt'], "width": 2.5, "gap": 0.25},
@@ -667,7 +667,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
     print(f"[visualize_ppi_interface] Visualizing {len(interface_interactions)} interactions...")
     print(f"[visualize_ppi_interface] Display mode: {display_mode}")
 
-    # ========== 设置白色背景 + 出版级统一渲染参数 ==========
+    # ========== Settings白色背景 + 出版级统一渲染Parameters ==========
     apply_publication_pymol_style(
         cmd,
         background=settings.background,
@@ -676,7 +676,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
     )
     print(f"[visualize_ppi_interface] 背景颜色: {settings.background}")
 
-    # ========== 设置蛋白显示模式 ==========
+    # ========== Settings蛋白Display模式 ==========
     if display_mode == "surface_interaction":
         # 模式1: 深色胶状表面 + 橙色配体 (Science Cover 风格)
         cmd.hide("everything", obj_name)
@@ -685,7 +685,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         cmd.set_color("chain_color_1", [0.45, 0.62, 0.78])  # 深蓝
         cmd.set_color("chain_color_2", [0.60, 0.76, 0.68])  # 深湖绿
         
-        # 蛋白质：仅显示表面（胶状效果）
+        # 蛋白质：仅Display表面（胶状效果）
         protein_sel = f"{obj_name} and polymer.protein"
         cmd.show("surface", protein_sel)
         cmd.set("transparency", 0.36, protein_sel)
@@ -700,19 +700,19 @@ def visualize_ppi_interface(obj_name, ppi_result,
         if len(protein2_chains) >= 1:
             cmd.color("chain_color_2", f"{obj_name} and chain {protein2_chains[0]}")
         
-        # 配体：按原子类型着色（CPK标准）
+        # 配体：按原子Type着色（CPK标准）
         ligand_sel = f"{obj_name} and organic"
         if cmd.count_atoms(ligand_sel) > 0:
             cmd.show("sticks", ligand_sel)
             cmd.set("stick_radius", 0.28, ligand_sel)
-            # 使用标准CPK原子着色
+            # using标准CPK原子着色
             cmd.util.cbag(ligand_sel)  # C=cyan, N=blue, O=red, S=yellow, etc.
             
-            # 只显示极性氢
+            # 只Display极性氢
             cmd.hide("sticks", f"{ligand_sel} and elem H")
             cmd.show("sticks", f"{ligand_sel} and elem H and (neighbor elem N+O+S)")
         
-        # 深度光照 + 边缘光（与 interaction_analyzer.py 完全一致）
+        # 深degrees光照 + 边缘光（与 interaction_analyzer.py 完全一致）
         cmd.set("antialias", 2)
         cmd.set("ambient", 0.52)
         cmd.set("direct", 0.58)
@@ -726,7 +726,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         cmd.set("ray_opaque_background", "off")
         
         cmd.rebuild()
-        print("[visualize_ppi_interface] 显示模式: 深色胶状表面 + 橙色配体")
+        print("[visualize_ppi_interface] Display模式: 深色胶状表面 + 橙色配体")
             
     elif display_mode == "cartoon_interaction":
         # 模式2: 卡通 + 深色配色 + 橙色配体
@@ -736,7 +736,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         cmd.set_color("chain_color_1", [0.45, 0.62, 0.78])  # 深蓝
         cmd.set_color("chain_color_2", [0.60, 0.76, 0.68])  # 深湖绿
         
-        # 蛋白质：显示卡通
+        # 蛋白质：Display卡通
         protein_sel = f"{obj_name} and polymer.protein"
         cmd.show("cartoon", protein_sel)
         cmd.set("cartoon_fancy_helices", 1)
@@ -751,19 +751,19 @@ def visualize_ppi_interface(obj_name, ppi_result,
         if len(protein2_chains) >= 1:
             cmd.color("chain_color_2", f"{obj_name} and chain {protein2_chains[0]}")
         
-        # 配体：按原子类型着色（CPK标准）
+        # 配体：按原子Type着色（CPK标准）
         ligand_sel = f"{obj_name} and organic"
         if cmd.count_atoms(ligand_sel) > 0:
             cmd.show("sticks", ligand_sel)
             cmd.set("stick_radius", 0.28, ligand_sel)
-            # 使用标准CPK原子着色
+            # using标准CPK原子着色
             cmd.util.cbag(ligand_sel)  # C=cyan, N=blue, O=red, S=yellow, etc.
             
-            # 只显示极性氢
+            # 只Display极性氢
             cmd.hide("sticks", f"{ligand_sel} and elem H")
             cmd.show("sticks", f"{ligand_sel} and elem H and (neighbor elem N+O+S)")
         
-        # 深度光照（与 interaction_analyzer.py 完全一致）
+        # 深degrees光照（与 interaction_analyzer.py 完全一致）
         cmd.set("antialias", 2)
         cmd.set("ambient", 0.52)
         cmd.set("direct", 0.58)
@@ -777,7 +777,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         cmd.set("ray_opaque_background", "off")
         
         cmd.rebuild()
-        print("[visualize_ppi_interface] 显示模式: 卡通 + 深色配色 + 橙色配体")
+        print("[visualize_ppi_interface] Display模式: 卡通 + 深色配色 + 橙色配体")
             
     else:
         # 默认模式: 深色胶状表面 + 橙色配体
@@ -787,7 +787,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         cmd.set_color("chain_color_1", [0.45, 0.62, 0.78])  # 深蓝
         cmd.set_color("chain_color_2", [0.60, 0.76, 0.68])  # 深湖绿
         
-        # 蛋白质：仅显示表面（胶状效果）
+        # 蛋白质：仅Display表面（胶状效果）
         protein_sel = f"{obj_name} and polymer.protein"
         cmd.show("surface", protein_sel)
         cmd.set("transparency", 0.36, protein_sel)
@@ -802,19 +802,19 @@ def visualize_ppi_interface(obj_name, ppi_result,
         if len(protein2_chains) >= 1:
             cmd.color("chain_color_2", f"{obj_name} and chain {protein2_chains[0]}")
         
-        # 配体：按原子类型着色（CPK标准）
+        # 配体：按原子Type着色（CPK标准）
         ligand_sel = f"{obj_name} and organic"
         if cmd.count_atoms(ligand_sel) > 0:
             cmd.show("sticks", ligand_sel)
             cmd.set("stick_radius", 0.28, ligand_sel)
-            # 使用标准CPK原子着色
+            # using标准CPK原子着色
             cmd.util.cbag(ligand_sel)  # C=cyan, N=blue, O=red, S=yellow, etc.
             
-            # 只显示极性氢
+            # 只Display极性氢
             cmd.hide("sticks", f"{ligand_sel} and elem H")
             cmd.show("sticks", f"{ligand_sel} and elem H and (neighbor elem N+O+S)")
         
-        # 深度光照 + 边缘光（与 interaction_analyzer.py 完全一致）
+        # 深degrees光照 + 边缘光（与 interaction_analyzer.py 完全一致）
         cmd.set("antialias", 2)
         cmd.set("ambient", 0.52)
         cmd.set("direct", 0.58)
@@ -828,7 +828,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         cmd.set("ray_opaque_background", "off")
         
         cmd.rebuild()
-        print(f"[visualize_ppi_interface] 未知模式 '{display_mode}', 使用默认: 深色胶状表面 + 橙色配体")
+        print(f"[visualize_ppi_interface] 未知模式 '{display_mode}', using默认: 深色胶状表面 + 橙色配体")
     
     # ========== 收集参与相互作用的残基 ==========
     interacting_residues = {}  # {(chain, resid): [interaction_types]}
@@ -845,16 +845,16 @@ def visualize_ppi_interface(obj_name, ppi_result,
         interacting_residues[res1_key]["types"].append(interaction["type"])
         interacting_residues[res2_key]["types"].append(interaction["type"])
     
-    # ========== 高亮成键氨基酸 (显示为sticks) ==========
+    # ========== 高亮成Key氨基酸 (Display为sticks) ==========
     for (chain, resid), info in interacting_residues.items():
         sel_name = f"ppi_res_{chain}_{resid}"
         cmd.select(sel_name, f"{obj_name} and chain {chain} and resi {resid}")
         cmd.show("sticks", sel_name)
         
-        # 按元素着色（C/N/O/S等），不使用相互作用颜色
+        # 按元素着色（C/N/O/S等），不using相互作用颜色
         cmd.util.cnc(sel_name)  # Carbon: cyan/magenta (by chain), N/O/S by element
         
-        # 只在CA原子上添加残基标签
+        # 只在CA原子上Add残基Label
         if show_labels:
             ca_sel = f"{obj_name} and chain {chain} and resi {resid} and name CA"
             aa_code = AA_3TO1.get(info["resname"].upper(), info["resname"][0].upper())
@@ -862,10 +862,10 @@ def visualize_ppi_interface(obj_name, ppi_result,
             cmd.label(ca_sel, f"'{label_text}'")
             cmd.set("label_color", "black", ca_sel)
             cmd.set("label_size", settings.label_size, ca_sel)
-            cmd.show("labels", ca_sel)  # 显式显示标签
+            cmd.show("labels", ca_sel)  # 显式DisplayLabel
     
     # ========== 绘制相互作用虚线 ==========
-    interaction_counts = {}  # 统计每种相互作用的数量
+    interaction_counts = {}  # 统计每种相互作用的Count
     
     # Type to PyMOL object name map (PyMOL doesn't support special chars in names)
     TYPE_NAME_MAP = {
@@ -1050,14 +1050,14 @@ def visualize_ppi_interface(obj_name, ppi_result,
                 try:
                     dist_value = cmd.get_distance(distance_name)
                     print(f"[DEBUG]   ✓ Distance value: {dist_value:.2f} Å")
-                except Exception:  # PyMOL get_distance 可能失败
+                except Exception:  # PyMOL get_distance 可能Failed
                     print(f"[DEBUG]   ⚠ Cannot get distance value")
             else:
                 print(f"[DEBUG]   ✗ Object NOT in object list! Available objects: {len(all_objs)}")
                 print(f"[DEBUG]   ✗ This means cmd.distance() failed silently")
                 continue
             
-            # 使用统一虚线样式函数，确保 PPI 与蛋白-配体可视化风格一致
+            # using统一虚线样式Function，确保 PPI 与蛋白-配体可视化风格一致
             apply_interaction_dash_style(
                 cmd,
                 distance_name,
@@ -1069,11 +1069,11 @@ def visualize_ppi_interface(obj_name, ppi_result,
                 hide_labels=not show_labels,
             )
             
-            # 显式显示虚线对象
+            # 显式Display虚线对象
             cmd.show("dashes", distance_name)
             print(f"[DEBUG]   ✓ Dashes shown for {distance_name}")
 
-            # 距离标签单独控制：仅在需要时显示并统一为黑色，使用统一的标签大小
+            # 距离Label单独控制：仅在需要时Display并统一为黑色，using统一的LabelSize
             if show_labels:
                 cmd.set("label_size", settings.label_size, distance_name)
                 cmd.set("label_color", "black", distance_name)
@@ -1123,25 +1123,25 @@ def visualize_ppi_interface(obj_name, ppi_result,
 
     print("=" * 60)
     
-    # ========== 缩放到界面区域 ==========
+    # ========== 缩放到interface区域 ==========
     interface_selections = [f"ppi_res_{chain}_{resid}" 
                            for (chain, resid) in interacting_residues.keys()]
     if interface_selections:
         try:
             cmd.zoom(" or ".join(interface_selections), buffer=10.0, complete=1)
-        except Exception:  # PyMOL zoom 可能失败
+        except Exception:  # PyMOL zoom 可能Failed
             pass
     
-    # 刷新视图
+    # Refresh视图
     cmd.refresh()
     cmd.rebuild()
     
     total_residues = len(interacting_residues)
     total_interactions = len(interface_interactions)
-    print(f"\n[visualize_ppi_interface] ✅ 可视化完成:")
+    print(f"\n[visualize_ppi_interface] ✅ 可视化Completed:")
     print(f"  - 参与相互作用的残基: {total_residues}")
     print(f"  - 总相互作用数: {total_interactions}")
-    print(f"  - 显示模式: {display_mode}")
+    print(f"  - Display模式: {display_mode}")
     print(f"  - 蛋白1 ({', '.join(protein1_chains)}): {protein1_color}")
     print(f"  - 蛋白2 ({', '.join(protein2_chains)}): {protein2_color}")
 
@@ -1151,18 +1151,18 @@ def calculate_interface_bsa(obj_name, chain1, chain2):
     """
     计算两个链之间的埋藏表面积 (Buried Surface Area)
     
-    使用PyMOL内置的get_area()函数，通过创建独立对象来正确计算SASA。
+    usingPyMOL内置的get_area()Function，通过Create独立对象来正确计算SASA。
     BSA = SA_chain1 + SA_chain2 - SA_complex
     
     注意: PyMOL的get_area()在整个对象上下文中评估可及性，
-    因此必须为每个组分创建独立的临时对象来获得正确的孤立SASA。
+    因此必须为每个组分Create独立的临时对象来获得正确的孤立SASA。
     
-    参数:
-        obj_name: PyMOL对象名称
+    Parameters:
+        obj_name: PyMOL对象Name
         chain1: 第一条链ID
         chain2: 第二条链ID
     
-    返回:
+    Return:
         float: 埋藏表面积 (Å²)
     """
     try:
@@ -1183,15 +1183,15 @@ def calculate_interface_bsa(obj_name, chain1, chain2):
     old_dot_density = None
     
     try:
-        # 保存当前设置
+        # Save当前Settings
         old_dot_solvent = cmd.get("dot_solvent")
         old_dot_density = cmd.get("dot_density")
         
-        # 设置SASA计算参数（dot_solvent=1 使用溶剂可及表面积）
+        # SettingsSASA计算Parameters（dot_solvent=1 using溶剂可及表面积）
         cmd.set("dot_solvent", 1)
         cmd.set("dot_density", 3)
         
-        # 创建独立的临时对象（必须隔离，否则get_area会在原对象上下文中计算）
+        # Create独立的临时对象（必须隔离，否则get_area会在原对象上下文中计算）
         cmd.create(obj_c1, f"{obj_name} and chain {chain1}")
         cmd.create(obj_c2, f"{obj_name} and chain {chain2}")
         cmd.create(obj_complex, f"{obj_name} and (chain {chain1} or chain {chain2})")
@@ -1206,7 +1206,7 @@ def calculate_interface_bsa(obj_name, chain1, chain2):
         cmd.delete(obj_c2)
         cmd.delete(obj_complex)
         
-        # 恢复设置
+        # 恢复Settings
         cmd.set("dot_solvent", old_dot_solvent)
         cmd.set("dot_density", old_dot_density)
         
@@ -1223,7 +1223,7 @@ def calculate_interface_bsa(obj_name, chain1, chain2):
                 cmd.delete(obj)
             except Exception:
                 pass
-        # 恢复设置
+        # 恢复Settings
         if old_dot_solvent is not None:
             try:
                 cmd.set("dot_solvent", old_dot_solvent)
@@ -1246,7 +1246,7 @@ def identify_neo_epitope(obj_name=None,
     """
     识别分子胶诱导的新表位 (Neo-Substrate Epitope)
     
-    这是分子胶机制的关键特征：
+    这是分子胶机制的关Key特征：
     - Neo-表位是指只有在Glue存在时，才与E3 ligase接触的底物残基
     - 区别于天然底物（无需Glue即可结合）
     
@@ -1255,25 +1255,25 @@ def identify_neo_epitope(obj_name=None,
     2. 找到同时与 Glue + E3 接触的 Substrate 残基
     3. 计算这些残基的几何位置（是否在"桥接"位置）
     
-    参数:
-        obj_name: PyMOL对象名称
+    Parameters:
+        obj_name: PyMOL对象Name
         e3_ligase_chains: E3 ligase的链ID列表（例如 ["A"] - CRBN）
         substrate_chains: 底物的链ID列表（例如 ["B"]）
-        glue_resname: 分子胶的残基名称（例如 "CC885"）
-        distance_threshold: 接触距离阈值（埃）
-        output_csv: 输出CSV文件路径
-        pdb_file: PDB文件路径（可选）
+        glue_resname: 分子胶的残基Name（例如 "CC885"）
+        distance_threshold: 接触距离阈Value（埃）
+        output_csv: 输出CSVFilePath
+        pdb_file: PDBFilePath（可选）
         visualize: 是否在PyMOL中可视化（默认True）
         neo_color: Neo-表位残基的颜色（默认yellow）
         glue_color: 分子胶的颜色（默认orange）
     
-    返回:
+    Return:
         dict: {
             "neo_substrate_residues": [...],  # Neo-表位残基
             "bridging_glue_atoms": [...],  # 桥接Glue原子
             "neo_epitope_count": int,
             "is_molecular_glue": bool,  # 是否符合分子胶特征
-            "confidence": float  # 置信度 [0-1]
+            "confidence": float  # 置信degrees [0-1]
         }
     """
     # 输入验证
@@ -1281,7 +1281,7 @@ def identify_neo_epitope(obj_name=None,
         print("[identify_neo_epitope] ⚠️ Must specify e3_ligase_chains, substrate_chains, and glue_resname")
         return None
     
-    # 获取原子信息
+    # 获取Atom information
     if pdb_file:
         atoms = parse_pdb_file(pdb_file)
     else:
@@ -1374,7 +1374,7 @@ def identify_neo_epitope(obj_name=None,
                 "is_neo_epitope": True  # 标记为Neo-表位
             })
     
-    # Step 3: 计算置信度
+    # Step 3: 计算置信degrees
     confidence = 0.0
     if len(bridging_glue_atoms) >= 2:
         confidence += 0.4
@@ -1405,22 +1405,22 @@ def identify_neo_epitope(obj_name=None,
         "glue_resname": glue_resname
     }
     
-    # 打印摘要
+    # Print摘要
     print("\n" + "=" * 60)
-    print("Neo-表位识别结果 (Neo-Epitope Analysis)")
+    print("Neo-表位识别Results (Neo-Epitope Analysis)")
     print("=" * 60)
     print(f"桥接Glue原子数: {len(bridging_glue_atoms)}")
     print(f"Neo-表位残基数: {len(neo_substrate_residues)}")
-    print(f"置信度: {confidence:.2f}")
+    print(f"置信degrees: {confidence:.2f}")
     print(f"分子胶判定: {'✨ 是 (Molecular Glue)' if is_molecular_glue else '⚠️ 否 (Not Glue / PROTAC)'}")
     
     if neo_substrate_residues:
         print(f"\nNeo-表位残基:")
-        for res in neo_substrate_residues[:10]:  # 显示前10个
+        for res in neo_substrate_residues[:10]:  # Display前10个
             print(f"  {res['chain']}:{res['resname']} {res['resid']} (Glue: {res['distance_to_glue']}Å, E3: {res['distance_to_e3']}Å)")
     print("=" * 60)
     
-    # 在PyMOL中可视化Neo-表位（如果启用）
+    # 在PyMOL中可视化Neo-表位（如果Enable）
     try:
         objs = cmd.get_names("objects")
     except AttributeError:
@@ -1430,22 +1430,22 @@ def identify_neo_epitope(obj_name=None,
         try:
             visualize_neo_epitope(obj_name, result, neo_color, glue_color)
         except Exception as e:
-            print(f"[Neo-Epitope] 可视化失败: {e}")
+            print(f"[Neo-Epitope] 可视化Failed: {e}")
     
     return result
 
 
 def _export_neo_epitope_csv(csv_path, neo_residues, bridging_atoms_count, is_glue, confidence):
-    """导出Neo-表位分析结果到CSV"""
+    """ExportNeo-表位分析Results到CSV"""
     try:
         with open(csv_path, "w", newline="", encoding="utf-8-sig") as f:
             writer = csv.writer(f)
             
-            writer.writerow(["=== Neo-表位识别结果 (Neo-Epitope Analysis) ==="])
+            writer.writerow(["=== Neo-表位识别Results (Neo-Epitope Analysis) ==="])
             writer.writerow([])
             writer.writerow(["桥接Glue原子数", bridging_atoms_count])
             writer.writerow(["Neo-表位残基数", len(neo_residues)])
-            writer.writerow(["置信度", confidence])
+            writer.writerow(["置信degrees", confidence])
             writer.writerow(["分子胶判定", "是" if is_glue else "否"])
             writer.writerow([])
             
@@ -1466,11 +1466,11 @@ def _export_neo_epitope_csv(csv_path, neo_residues, bridging_atoms_count, is_glu
 
 def visualize_neo_epitope(obj_name, neo_result, neo_color="yellow", glue_color="orange", clear_old=True):
     """
-    在PyMOL中可视化Neo-表位分析结果
+    在PyMOL中可视化Neo-表位分析Results
     
-    参数:
-        obj_name: PyMOL对象名称
-        neo_result: identify_neo_epitope()的返回结果
+    Parameters:
+        obj_name: PyMOL对象Name
+        neo_result: identify_neo_epitope()的ReturnResults
         neo_color: Neo-表位残基的颜色
         glue_color: 分子胶的颜色
         clear_old: 是否清除旧的高亮
@@ -1541,7 +1541,7 @@ def visualize_neo_epitope(obj_name, neo_result, neo_color="yellow", glue_color="
     visualized_selections = []
     for chain in sorted(neo_by_chain.keys()):
         residues = neo_by_chain[chain]
-        # Neo-表位使用指定颜色,不按chain区分
+        # Neo-表位using指定颜色,不按chain区分
         
         for resid, resname in sorted(residues.items()):
             sel_name = f"neo_{chain}_{resid}"
@@ -1552,7 +1552,7 @@ def visualize_neo_epitope(obj_name, neo_result, neo_color="yellow", glue_color="
             cmd.color(neo_color, sel_name)
             visualized_selections.append(sel_name)
             
-            # 添加标签(使用单字母大写氨基酸代码)
+            # AddLabel(using单字母大写氨基酸代码)
             label_name = f"neo_label_{chain}_{resid}"
             ca_sel = f"{sel_expr} and name CA"
             try:
@@ -1564,7 +1564,7 @@ def visualize_neo_epitope(obj_name, neo_result, neo_color="yellow", glue_color="
                     cmd.pseudoatom(label_name, pos=coords, label=label_text)
                     cmd.set("label_size", 16, label_name)
                     cmd.set("label_color", neo_color, label_name)
-            except Exception:  # PyMOL 标签创建可能失败
+            except Exception:  # PyMOL LabelCreate可能Failed
                 pass
     
     # 可视化分子胶
@@ -1577,7 +1577,7 @@ def visualize_neo_epitope(obj_name, neo_result, neo_color="yellow", glue_color="
         cmd.set("sphere_scale", 0.3, "neo_glue")
         visualized_selections.append("neo_glue")
     
-    # 显示蛋白链的cartoon,按chain着色
+    # Display蛋白链的cartoon,按chain着色
     for chain in all_chains:
         chain_color = chain_color_map[chain]
         cmd.show("cartoon", f"{obj_name} and chain {chain}")
@@ -1587,7 +1587,7 @@ def visualize_neo_epitope(obj_name, neo_result, neo_color="yellow", glue_color="
     if visualized_selections:
         cmd.zoom(" or ".join(visualized_selections), buffer=8.0, complete=1)
     
-    # 刷新视图
+    # Refresh视图
     cmd.refresh()
     cmd.rebuild()
     
@@ -1602,7 +1602,7 @@ def visualize_neo_epitope(obj_name, neo_result, neo_color="yellow", glue_color="
 # ========== PyMOL命令封装 ==========
 def ppi_analyze(obj_name, protein1_chains, protein2_chains, out_csv=None):
     """
-    PyMOL命令: 分析蛋白-蛋白界面
+    PyMOL命令: 分析蛋白-蛋白interface
     
     用法:
         ppi_analyze complex, [A], [B]
@@ -1634,5 +1634,5 @@ def neo_epitope_find(obj_name, e3_chains, substrate_chains, glue_name, out_csv=N
 
 
 if __name__ == "__main__":
-    print("[ppi_analyzer] 这是一个PyMOL插件模块,请在PyMOL中加载使用")
+    print("[ppi_analyzer] 这是一个PyMOLPluginModule,请在PyMOL中Loadusing")
     print("[ppi_analyzer] 命令: ppi_analyze, neo_epitope_find")

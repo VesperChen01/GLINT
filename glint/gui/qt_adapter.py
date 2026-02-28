@@ -95,7 +95,7 @@ if not current_binding:
         if v.startswith('3'):
             # PyMOL 3.x prefers Qt6
             BINDING_ORDER = ['PySide6', 'PyQt6', 'PyQt5', 'PySide2']
-    except Exception:  # PyMOL 版本检测可能失败
+    except Exception:  # PyMOL Version检测可能Failed
         pass
 
     for binding in BINDING_ORDER:

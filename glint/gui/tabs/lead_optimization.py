@@ -19,20 +19,20 @@ from .common import CommonTab
 class _Diagram2DWorker(QThread):
     """后台线程：生成 2D 相互作用图，避免阻塞 Qt 主线程。
 
-    注意：PyMOL cmd 不是线程安全的，因此所有 PyMOL 操作必须在主线程中完成。
-    本 Worker 通过 pdb_file（主线程预先导出的临时 PDB 文件）获取配体数据，
+    注意：PyMOL cmd 不是线程安全的，因此所有 PyMOL 操作必须在主线程中Completed。
+    本 Worker 通过 pdb_file（主线程预先Export的临时 PDB File）获取配体数据，
     避免在后台线程中调用 PyMOL，防止 Qt 事件循环死锁。
 
     超时保护：总超时 90 秒，防止 RDKit/matplotlib 在复杂分子上无限期运行。
 
     Signals:
-        finished(str): 生成成功时发射，携带输出文件路径
-        error(str): 生成失败时发射，携带错误信息
+        finished(str): 生成Success时发射，携带输出FilePath
+        error(str): 生成Failed时发射，携带ErrorInformation
     """
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    # 总超时时间（秒）
+    # 总超时Time（秒）
     TOTAL_TIMEOUT = 90
 
     def __init__(self, csv_path: str, ligand_resname: str,
@@ -40,7 +40,7 @@ class _Diagram2DWorker(QThread):
         super().__init__()
         self.csv_path = csv_path
         self.ligand_resname = ligand_resname
-        self.pdb_file = pdb_file          # 主线程预导出的配体 PDB 文件路径
+        self.pdb_file = pdb_file          # 主线程预Export的配体 PDB FilePath
         self.output_path = output_path
         self.min_confidence = min_confidence
         self._timed_out = False
@@ -54,7 +54,7 @@ class _Diagram2DWorker(QThread):
         def _generate():
             """实际的图表生成逻辑，在子线程中运行。"""
             try:
-                # 确保 matplotlib 使用非交互式后端
+                # 确保 matplotlib using非交互式后端
                 import matplotlib
                 matplotlib.use('Agg')
 
@@ -63,7 +63,7 @@ class _Diagram2DWorker(QThread):
                 except ImportError:
                     from interaction_2d_plot import generate_2d_interaction_diagram
 
-                # 使用 pdb_file 而非 obj_name，确保后台线程不调用 PyMOL
+                # using pdb_file 而非 obj_name，确保后台线程不调用 PyMOL
                 final_path = generate_2d_interaction_diagram(
                     csv_path=self.csv_path,
                     ligand_resname=self.ligand_resname,
@@ -90,7 +90,7 @@ class _Diagram2DWorker(QThread):
             self.error.emit(
                 f"图表生成超时 ({self.TOTAL_TIMEOUT}s)。\n"
                 "可能原因：配体结构过于复杂或 Open Babel 未响应。\n"
-                "请尝试简化配体或确认 Open Babel 已正确安装。"
+                "请尝试简化配体或Confirm Open Babel 已正确安装。"
             )
         elif result_holder['error']:
             self.error.emit(result_holder['error'])
@@ -99,7 +99,7 @@ class _Diagram2DWorker(QThread):
         else:
             self.error.emit("Failed to generate diagram. See log for details.")
 
-        # 清理主线程预导出的临时 PDB 文件
+        # 清理主线程预Export的临时 PDB File
         try:
             if self.pdb_file and os.path.exists(self.pdb_file):
                 os.remove(self.pdb_file)
@@ -119,7 +119,7 @@ class LeadOptimizationTab(CommonTab):
         self.init_ui()
 
     def init_ui(self):
-        """初始化UI - 现代卡片式布局"""
+        """InitializeUI - 现代卡片式布局"""
         self.setObjectName("scroll_content")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.parent_window._lead_scroll_content = self
@@ -390,7 +390,7 @@ class LeadOptimizationTab(CommonTab):
         ec_grid.addWidget(QLabel("Analysis Mode:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.ec_mode_combo = QComboBox(); self.parent_window.ec_mode_combo.setMinimumHeight(32)
         self.parent_window.ec_mode_combo.addItems(["Protein-Ligand EC", "Ternary Complex EC (Molecular Glue)"])
-        self.parent_window.ec_mode_combo.setCurrentIndex(1)  # 默认选择三元复合物分析
+        self.parent_window.ec_mode_combo.setCurrentIndex(1)  # 默认Select三元复合物分析
         self.parent_window.ec_mode_combo.currentIndexChanged.connect(self._on_ec_mode_changed)
         ec_grid.addWidget(self.parent_window.ec_mode_combo, 1, 1)
         
@@ -424,7 +424,7 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.ec_contact_cutoff.setPlaceholderText("Å - residues within this distance")
         self.parent_window.ec_contact_cutoff.setToolTip(
             "仅提取配体/Glue 周围指定距离内的蛋白残基进行 EC 计算。\n"
-            "较小值 = 更快但可能遗漏远程贡献\n"
+            "较小Value = 更快但可能遗漏远程贡献\n"
             "推荐: 8-12 Å"
         )
         ec_grid.addWidget(self.parent_window.ec_contact_cutoff, 4, 1)
@@ -485,7 +485,7 @@ class LeadOptimizationTab(CommonTab):
         layout.insertWidget(1, grp_ec)
         layout.insertLayout(2, ec_btn_row)
         
-        # 默认显示三元复合物模式的字段
+        # 默认Display三元复合物模式的字段
         self._on_ec_mode_changed(1)
         
         
@@ -524,7 +524,7 @@ class LeadOptimizationTab(CommonTab):
             interface_dist = float(self.parent_window.ppi_interface_dist.text())
             output_csv = self.parent_window.ppi_csv.text().strip() or None
 
-            # 构建统一可视化配置（PPI）
+            # 构建统一可视化Configuration（PPI）
             display_mode_idx = self.parent_window.ppi_display_mode.currentIndex()
             if display_mode_idx == 0:
                 display_mode = "surface_interaction"
@@ -597,7 +597,7 @@ class LeadOptimizationTab(CommonTab):
             min_conf_str = self.parent_window.pl_min_confidence.currentText().split()[0]
             try:
                 min_confidence = float(min_conf_str)
-            except (ValueError, TypeError):  # float() 转换可能失败
+            except (ValueError, TypeError):  # float() 转换可能Failed
                 min_confidence = 0.0
 
             self.log(f"Starting Protein-Ligand analysis for {obj_name}...")
@@ -645,7 +645,7 @@ class LeadOptimizationTab(CommonTab):
                         if result.get("ligand_residues"):
                             actual_ligand = result["ligand_residues"][0].get("resname", ligand_name)
 
-                        # 构建统一可视化配置（蛋白-配体）
+                        # 构建统一可视化Configuration（蛋白-配体）
                         pl_viz_settings = VisualizationSettings(
                             show_hydrophobic=show_hydrophobic,
                             show_distance_labels=show_distance_labels,
@@ -754,7 +754,7 @@ class LeadOptimizationTab(CommonTab):
             from pymol import cmd as pymol_cmd
             temp_pdb = tempfile.mktemp(suffix=".pdb")
 
-            # 获取配体选择（尝试精确选择第一个配体分子）
+            # 获取配体Select（尝试精确SelectFirst配体分子）
             sel = f"{obj_name} and resn {ligand_name}"
             space = {'c': [], 'r': []}
             pymol_cmd.iterate(
@@ -769,7 +769,7 @@ class LeadOptimizationTab(CommonTab):
             pymol_cmd.save(temp_pdb, sel)
             self.log(f"Extracted ligand PDB: {temp_pdb}")
 
-            # 禁用按钮并显示生成中状态，防止重复点击
+            # Disable按钮并Display生成中Status，防止重复点击
             btn = self.parent_window.pl_2d_btn
             btn_original_text = btn.text()
             btn.setEnabled(False)
@@ -784,7 +784,7 @@ class LeadOptimizationTab(CommonTab):
                 min_confidence=min_confidence
             )
 
-            # 成功回调：恢复按钮、显示结果、打开文件
+            # Success回调：恢复按钮、DisplayResults、OpenFile
             def _on_finished(final_path: str):
                 btn.setText(btn_original_text)
                 btn.setEnabled(True)
@@ -800,10 +800,10 @@ class LeadOptimizationTab(CommonTab):
                         os.startfile(final_path)
                     else:                                   # linux variants
                         subprocess.call(('xdg-open', final_path))
-                except OSError:  # 文件打开/子进程调用可能失败
+                except OSError:  # FileOpen/子进程调用可能Failed
                     pass
 
-            # 失败回调：恢复按钮、显示错误
+            # Failed回调：恢复按钮、DisplayError
             def _on_error(err_msg: str):
                 btn.setText(btn_original_text)
                 btn.setEnabled(True)
@@ -1029,11 +1029,11 @@ class LeadOptimizationTab(CommonTab):
                     ec_score = result.get('ec_score', 0)
                     ec_stats = result.get('ec_statistics', {})
 
-                    # Coulomb 回退警告：检查后端是否因 APBS 不可用而使用了近似计算
+                    # Coulomb 回退Warning：检查后端是否因 APBS 不可用而using了近似计算
                     if result.get('coulomb_fallback'):
                         fallback_reason = result.get('coulomb_fallback_reason', 'APBS 不可用')
                         self.log(f"⚠️ 注意：{fallback_reason}")
-                        self.log(f"⚠️ 结果精度可能较低，建议安装 APBS 以获得更准确的结果。")
+                        self.log(f"⚠️ Results精degrees可能较低，建议安装 APBS 以获得更准确的Results。")
 
                     self.log(f"EC Analysis Complete:")
                     self.log(f"  EC Score: {ec_score:.4f}")
@@ -1050,13 +1050,13 @@ class LeadOptimizationTab(CommonTab):
 
                     self.log(f"  Interpretation: {interpretation}")
 
-                    # EC 颜色含义说明：帮助用户理解可视化中的颜色含义
+                    # EC 颜色含义说明：Help用户理解可视化中的颜色含义
                     self.log("EC Color Interpretation:")
                     self.log("  🟢 Green (EC > 0): Complementary - Favorable binding")
                     self.log("  ⚪ White (EC ≈ 0): Neutral")
                     self.log("  🔴 Red (EC < 0): Clash - Unfavorable")
 
-                    # 构建弹窗文本，包含 Coulomb 回退警告（如有）
+                    # 构建弹窗文本，Package含 Coulomb 回退Warning（如有）
                     msg_text = (
                         f"EC Score: {ec_score:.4f}\n"
                         f"EC Mean: {ec_stats.get('ec_mean', 0):.4f}\n"
@@ -1065,7 +1065,7 @@ class LeadOptimizationTab(CommonTab):
                         f"Output: {result.get('output_dir', 'N/A')}"
                     )
                     if result.get('coulomb_fallback'):
-                        msg_text += f"\n\n⚠️ {result.get('coulomb_fallback_reason', 'APBS 不可用，已使用 Coulomb 近似')}"
+                        msg_text += f"\n\n⚠️ {result.get('coulomb_fallback_reason', 'APBS 不可用，已using Coulomb 近似')}"
 
                     show_message_box(self, "EC Analysis Complete", msg_text)
                 else:
@@ -1114,11 +1114,11 @@ class LeadOptimizationTab(CommonTab):
                     pos_frac_combined = overlap_data.get('pos_frac_combined', 0)
                     n_overlap = overlap_data.get('n_points', 0)
 
-                    # Coulomb 回退警告：检查后端是否因 APBS 不可用而使用了近似计算
+                    # Coulomb 回退Warning：检查后端是否因 APBS 不可用而using了近似计算
                     if result.get('coulomb_fallback'):
                         fallback_reason = result.get('coulomb_fallback_reason', 'APBS 不可用')
                         self.log(f"⚠️ 注意：{fallback_reason}")
-                        self.log(f"⚠️ 结果精度可能较低，建议安装 APBS 以获得更准确的结果。")
+                        self.log(f"⚠️ Results精degrees可能较低，建议安装 APBS 以获得更准确的Results。")
 
                     self.log(f"Ternary EC Analysis Complete:")
                     self.log(f"  Bridging Zone ({n_overlap} points):")
@@ -1142,7 +1142,7 @@ class LeadOptimizationTab(CommonTab):
                     self.log("  ⚪ White (EC ≈ 0): Neutral")
                     self.log("  🔴 Red (EC < 0): Clash - Unfavorable")
 
-                    # 构建弹窗文本，包含 Coulomb 回退警告（如有）
+                    # 构建弹窗文本，Package含 Coulomb 回退Warning（如有）
                     msg_text = (
                         f"Bridging Zone Analysis ({n_overlap} points):\n\n"
                         f"Positive EC (A-Glue): {pos_frac_a*100:.1f}%\n"
@@ -1152,7 +1152,7 @@ class LeadOptimizationTab(CommonTab):
                         f"Output: {result.get('output_dir', 'N/A')}"
                     )
                     if result.get('coulomb_fallback'):
-                        msg_text += f"\n\n⚠️ {result.get('coulomb_fallback_reason', 'APBS 不可用，已使用 Coulomb 近似')}"
+                        msg_text += f"\n\n⚠️ {result.get('coulomb_fallback_reason', 'APBS 不可用，已using Coulomb 近似')}"
 
                     show_message_box(self, "Ternary EC Analysis Complete", msg_text)
                 else:

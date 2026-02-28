@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """
-GLINT 蛋白突变分析模块
-支持多种突变方法和 ΔΔG 计算策略
+GLINT 蛋白突变分析Module
+支持多种突变Method和 ΔΔG 计算策略
 """
 
 import os
@@ -34,7 +34,7 @@ AA_3TO1 = {
 AA_1TO3 = {v: k for k, v in AA_3TO1.items()}
 
 
-# ==================== 工具检测 ====================
+# ==================== Tool检测 ====================
 
 def _which(exe: str) -> Optional[str]:
     path = os.environ.get("FOLDX") if exe.lower() == "foldx" else None
@@ -53,7 +53,7 @@ def _which(exe: str) -> Optional[str]:
 
 
 def _detect_foldx() -> Optional[str]:
-    """检测 FoldX 可执行文件"""
+    """检测 FoldX 可执行File"""
     return _which("foldx")
 
 
@@ -68,7 +68,7 @@ def _parse_mutation_string(mut_str: str) -> Tuple[str, str, str]:
     - "A123A"
     - "A:123A"
     
-    返回：(chain, resi, target_aa_3letter)
+    Return：(chain, resi, target_aa_3letter)
     """
     mut_str = mut_str.strip()
     
@@ -118,16 +118,16 @@ def _parse_mutation_string(mut_str: str) -> Tuple[str, str, str]:
 
 def _pymol_mutate(obj_name: str, chain: str, resi: str, target_aa: str) -> bool:
     """
-    使用 PyMOL 执行单点突变
+    using PyMOL 执行单点突变
     
-    参数：
+    Parameters：
         obj_name: PyMOL 对象名
         chain: 链 ID
         resi: 残基号
         target_aa: 目标氨基酸（三字母代码）
     
-    返回：
-        True 如果成功
+    Return：
+        True 如果Success
     """
     if not cmd:
         print("❌ PyMOL 不可用")
@@ -140,7 +140,7 @@ def _pymol_mutate(obj_name: str, chain: str, resi: str, target_aa: str) -> bool:
         
         target_aa = target_aa.upper()
         
-        # 选择要突变的残基
+        # Select要突变的残基
         selection = f"{obj_name} and chain {chain} and resi {resi}"
         
         # 检查残基是否存在
@@ -148,19 +148,19 @@ def _pymol_mutate(obj_name: str, chain: str, resi: str, target_aa: str) -> bool:
             print(f"❌ 未找到残基: chain {chain} resi {resi}")
             return False
         
-        # 使用 PyMOL 的 wizard 进行突变
-        # 注意：这是一个简化版本，实际可能需要更复杂的处理
+        # using PyMOL 的 wizard 进行突变
+        # 注意：这是一个简化Version，实际可能需要更复杂的处理
         cmd.wizard("mutagenesis")
         cmd.get_wizard().set_mode(target_aa)
         cmd.get_wizard().do_select(selection)
         cmd.get_wizard().apply()
         cmd.set_wizard()
         
-        print(f"✅ 突变成功: chain {chain} resi {resi} → {target_aa}")
+        print(f"✅ 突变Success: chain {chain} resi {resi} → {target_aa}")
         return True
         
     except Exception as e:
-        print(f"❌ PyMOL 突变失败: {e}")
+        print(f"❌ PyMOL 突变Failed: {e}")
         import traceback
         traceback.print_exc()
         return False
@@ -173,14 +173,14 @@ def minimize_energy(obj_name: str, selection: str = "all", cycles: int = 100,
     """
     能量最小化
     
-    参数：
+    Parameters：
         obj_name: PyMOL 对象名
-        selection: 选择表达式
+        selection: Select表达式
         cycles: 迭代次数
         method: 'pymol' 或 'rosetta'
     
-    返回：
-        最小化后的对象名，失败返回 None
+    Return：
+        最小化后的对象名，FailedReturn None
     """
     if not cmd:
         print("❌ PyMOL 不可用")
@@ -188,20 +188,20 @@ def minimize_energy(obj_name: str, selection: str = "all", cycles: int = 100,
     
     if method == "pymol":
         try:
-            # 创建副本
+            # Create副本
             min_obj = f"{obj_name}_minimized"
             cmd.create(min_obj, obj_name)
             
-            # 使用 PyMOL sculpting
+            # using PyMOL sculpting
             cmd.sculpt_activate(min_obj)
             cmd.sculpt_iterate(min_obj, cycles=cycles)
             cmd.sculpt_deactivate(min_obj)
             
-            print(f"✅ PyMOL 能量最小化完成: {cycles} 次迭代")
+            print(f"✅ PyMOL 能量最小化Completed: {cycles} 次迭代")
             return min_obj
             
         except Exception as e:
-            print(f"❌ 能量最小化失败: {e}")
+            print(f"❌ 能量最小化Failed: {e}")
             return None
     
     elif method == "rosetta":
@@ -209,34 +209,34 @@ def minimize_energy(obj_name: str, selection: str = "all", cycles: int = 100,
         return None
     
     else:
-        print(f"❌ 未知的最小化方法: {method}")
+        print(f"❌ 未知的最小化Method: {method}")
         return None
 
 
-# ==================== 主要接口函数 ====================
+# ==================== 主要接口Function ====================
 
 def perform_mutation(obj_name: str, mutations: List[Tuple[str, str, str]],
                     method: str = "pymol") -> Optional[str]:
     """
     执行突变
     
-    参数：
+    Parameters：
         obj_name: PyMOL 对象名
         mutations: 突变列表 [(chain, resi, target_aa), ...]
         method: 'pymol' 或 'foldx'
     
-    返回：
-        突变后的对象名，失败返回 None
+    Return：
+        突变后的对象名，FailedReturn None
     
-    方法说明：
-        - pymol: 使用 PyMOL 内置 mutagenesis wizard（快速，无需外部工具）
-        - foldx: 使用 FoldX BuildModel（更准确，需要安装 FoldX）
+    Method说明：
+        - pymol: using PyMOL 内置 mutagenesis wizard（快速，无需外部Tool）
+        - foldx: using FoldX BuildModel（更准确，需要安装 FoldX）
     """
     if not cmd:
         print("❌ PyMOL 不可用")
         return None
     
-    # 创建突变对象
+    # Create突变对象
     mut_obj = f"{obj_name}_mut"
     cmd.create(mut_obj, obj_name)
     
@@ -247,30 +247,30 @@ def perform_mutation(obj_name: str, mutations: List[Tuple[str, str, str]],
                 success_count += 1
         
         if success_count == 0:
-            print("❌ 所有突变均失败")
+            print("❌ 所有突变均Failed")
             cmd.delete(mut_obj)
             return None
         
-        print(f"✅ 完成 {success_count}/{len(mutations)} 个突变")
+        print(f"✅ Completed {success_count}/{len(mutations)} 个突变")
         return mut_obj
     
     elif method == "foldx":
         if not _detect_foldx():
             print("❌ FoldX 未检测到")
-            print("💡 安装方法：")
-            print("   1. 下载 FoldX: https://foldxsuite.crg.eu/")
-            print("   2. 设置环境变量: export FOLDX=/path/to/foldx")
+            print("💡 安装Method：")
+            print("   1. Download FoldX: https://foldxsuite.crg.eu/")
+            print("   2. Settings环境变量: export FOLDX=/path/to/foldx")
             cmd.delete(mut_obj)
             return None
         
-        print("⚠️ FoldX 突变功能请使用 ddg_heatmap 命令")
+        print("⚠️ FoldX 突变功能请using ddg_heatmap 命令")
         print("💡 示例: ddg_heatmap('CRBN_sel', 'POI_sel')")
         cmd.delete(mut_obj)
         return None
     
     else:
-        print(f"❌ 未知的突变方法: {method}")
-        print("💡 可用方法: pymol, foldx")
+        print(f"❌ 未知的突变Method: {method}")
+        print("💡 可用Method: pymol, foldx")
         cmd.delete(mut_obj)
         return None
 
@@ -280,44 +280,44 @@ def calculate_mutation_ddg(wt_obj: str, mut_obj: str, partner_sel: Optional[str]
     """
     计算突变的 ΔΔG
     
-    参数：
+    Parameters：
         wt_obj: 野生型对象名
         mut_obj: 突变型对象名
-        partner_sel: 结合伴侣选择（可选）
+        partner_sel: 结合伴侣Select（可选）
         method: 'foldx'（目前仅支持 FoldX）
     
-    返回：
-        结果字典 {'ddg': float, 'method': str, 'details': dict}
+    Return：
+        Results字典 {'ddg': float, 'method': str, 'details': dict}
     
-    方法说明：
+    Method说明：
         - foldx: FoldX BuildModel（推荐，需要安装 FoldX）
     
     FoldX 输入：
-        - PDB 文件：野生型和突变型结构
-        - 突变文件：格式为 <chain><resi><icode><WT><Mut>
+        - PDB File：野生型和突变型结构
+        - 突变File：格式为 <chain><resi><icode><WT><Mut>
     
     FoldX 输出：
         - DifferencesBetweenMutantAndWildType_fxout.csv
-        - 包含 Total Energy (ΔΔG) 值，单位 kcal/mol
+        - Package含 Total Energy (ΔΔG) Value，单位 kcal/mol
     """
     if not cmd:
         print("❌ PyMOL 不可用")
         return None
     
     if method != "foldx":
-        print(f"❌ 未知的方法: {method}")
-        print("💡 目前仅支持 FoldX 方法")
+        print(f"❌ 未知的Method: {method}")
+        print("💡 目前仅支持 FoldX Method")
         return None
     
     if not _detect_foldx():
         print("❌ FoldX 未检测到")
-        print("💡 安装方法：")
-        print("   1. 下载 FoldX: https://foldxsuite.crg.eu/")
-        print("   2. 设置环境变量: export FOLDX=/path/to/foldx")
-        print("   或将 FoldX 可执行文件添加到 PATH")
+        print("💡 安装Method：")
+        print("   1. Download FoldX: https://foldxsuite.crg.eu/")
+        print("   2. Settings环境变量: export FOLDX=/path/to/foldx")
+        print("   或将 FoldX 可执行FileAdd到 PATH")
         return None
     
-    print("💡 提示：请使用 ddg_heatmap 命令进行完整的 ΔΔG 分析")
+    print("💡 提示：请using ddg_heatmap 命令进行完整的 ΔΔG 分析")
     print("   示例: ddg_heatmap('CRBN_sel', 'POI_sel')")
     return None
 
@@ -329,22 +329,22 @@ def analyze_mutation_effects(obj_name: str, mutations: List[Tuple[str, str, str]
     """
     完整的突变分析流程
     
-    参数：
+    Parameters：
         obj_name: PyMOL 对象名
         mutations: 突变列表
-        partner_sel: 结合伴侣选择
-        output_csv: 输出 CSV 路径
-        method: ΔΔG 计算方法
+        partner_sel: 结合伴侣Select
+        output_csv: 输出 CSV Path
+        method: ΔΔG 计算Method
     
-    返回：
-        分析结果字典
+    Return：
+        分析Results字典
     """
     if not cmd:
         print("❌ PyMOL 不可用")
         return None
     
     print(f"\n{'='*60}")
-    print(f"🧬 开始突变分析: {obj_name}")
+    print(f"🧬 Start突变分析: {obj_name}")
     print(f"{'='*60}\n")
     
     # 1. 执行突变
@@ -357,13 +357,13 @@ def analyze_mutation_effects(obj_name: str, mutations: List[Tuple[str, str, str]
     print("\n步骤 2/3: 能量最小化...")
     min_obj = minimize_energy(mut_obj, cycles=100)
     if not min_obj:
-        min_obj = mut_obj  # 如果最小化失败，使用未最小化的对象
+        min_obj = mut_obj  # 如果最小化Failed，using未最小化的对象
     
     # 3. 计算 ΔΔG
     print("\n步骤 3/3: 计算 ΔΔG...")
     ddg_result = calculate_mutation_ddg(obj_name, min_obj, partner_sel, method)
     
-    # 汇总结果
+    # 汇总Results
     results = {
         'wt_obj': obj_name,
         'mut_obj': mut_obj,
@@ -372,7 +372,7 @@ def analyze_mutation_effects(obj_name: str, mutations: List[Tuple[str, str, str]
         'ddg_result': ddg_result,
     }
     
-    # 导出 CSV
+    # Export CSV
     if output_csv and ddg_result:
         try:
             import csv
@@ -383,12 +383,12 @@ def analyze_mutation_effects(obj_name: str, mutations: List[Tuple[str, str, str]
                     writer.writerow([chain, resi, target_aa, 
                                    ddg_result.get('ddg', 'N/A'),
                                    ddg_result.get('method', 'N/A')])
-            print(f"\\n✅ 结果已保存到: {output_csv}")
+            print(f"\\n✅ Results已Save到: {output_csv}")
         except Exception as e:
-            print(f"⚠️ CSV 导出失败: {e}")
+            print(f"⚠️ CSV ExportFailed: {e}")
     
     print(f"\\n{'='*60}")
-    print(f"✅ 突变分析完成")
+    print(f"✅ 突变分析Completed")
     print(f"{'='*60}\\n")
     
     return results
@@ -469,16 +469,16 @@ def _foldx_alanine_scan(foldx_bin: str, pdb_path: str, poi_sel: str) -> Dict[Tup
 
 def ddg_heatmap(CRBN_sel: str, POI_sel: str, name: str = "ddg"):
     """
-    使用 FoldX 计算 ΔΔG 并在 POI 上显示热图
+    using FoldX 计算 ΔΔG 并在 POI 上Display热图
     
-    参数：
-        CRBN_sel: CRBN（E3连接酶）选择表达式
-        POI_sel: POI（目标蛋白）选择表达式
-        name: 颜色渐变名称（默认 'ddg'）
+    Parameters：
+        CRBN_sel: CRBN（E3连接酶）Select表达式
+        POI_sel: POI（目标蛋白）Select表达式
+        name: 颜色渐变Name（默认 'ddg'）
     
     FoldX 输入：
-        - PDB 文件：CRBN + POI 复合物结构
-        - 突变文件：界面残基的丙氨酸扫描突变列表
+        - PDB File：CRBN + POI 复合物结构
+        - 突变File：interface残基的丙氨酸扫描突变列表
           格式：<chain><resi><icode><WT>A（每行一个突变）
     
     FoldX 输出：
@@ -486,7 +486,7 @@ def ddg_heatmap(CRBN_sel: str, POI_sel: str, name: str = "ddg"):
         - 字段：Mutation, Total Energy (ΔΔG, kcal/mol)
     
     可视化输出：
-        - POI 表面按 ΔΔG 值着色（蓝-白-红渐变）
+        - POI 表面按 ΔΔG Value着色（蓝-白-红渐变）
         - 蓝色：稳定化突变（负 ΔΔG）
         - 红色：去稳定化突变（正 ΔΔG）
     
@@ -500,30 +500,30 @@ def ddg_heatmap(CRBN_sel: str, POI_sel: str, name: str = "ddg"):
     fx = _detect_foldx()
     if not fx:
         print("[ddg_heatmap] ❌ FoldX not found in PATH or $FOLDX")
-        print("[ddg_heatmap] 💡 安装方法：")
-        print("   1. 下载 FoldX: https://foldxsuite.crg.eu/")
-        print("   2. 设置环境变量: export FOLDX=/path/to/foldx")
-        print("   或将 FoldX 可执行文件添加到 PATH")
+        print("[ddg_heatmap] 💡 安装Method：")
+        print("   1. Download FoldX: https://foldxsuite.crg.eu/")
+        print("   2. Settings环境变量: export FOLDX=/path/to/foldx")
+        print("   或将 FoldX 可执行FileAdd到 PATH")
         return
     
     print(f"[ddg_heatmap] ✅ Using FoldX at: {fx}")
     
-    # 准备 PDB 文件并运行 FoldX
+    # 准备 PDB File并运行 FoldX
     pdb_path, _ = _prep_complex_tmp(crbn, poi)
     ddg = _foldx_alanine_scan(fx, pdb_path, poi)
     
     if not ddg:
         cmd.feedback("pop", "all", "actions")
         print("[ddg_heatmap] ❌ No ΔΔG values computed. Check selections.")
-        print("[ddg_heatmap] 💡 确保选择的残基在界面区域（5Å 内）")
+        print("[ddg_heatmap] 💡 确保Select的残基在interface区域（5Å 内）")
         return
     
-    # 设置 B 因子并着色
+    # Settings B 因子并着色
     set_b_factors(poi, ddg)
     color_by_b(poi, palette="blue_white_red", ramp_name=f"{name}_ramp")
     cmd.show("surface", poi)
     
-    print(f"[ddg_heatmap] ✅ 完成！共计算 {len(ddg)} 个残基的 ΔΔG 值")
+    print(f"[ddg_heatmap] ✅ Completed！共计算 {len(ddg)} 个残基的 ΔΔG Value")
 
 # ==================== PyMOL 命令注册 ====================
 
