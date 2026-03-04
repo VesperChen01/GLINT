@@ -790,6 +790,30 @@ class SurfaceAnalyzer:
         # PyMOL Wiki: set surface_ramp_above_mode
         cmd.set('surface_ramp_above_mode', 1)
         
+        # === Advanced rendering settings ===
+        # Depth and lighting
+        cmd.set('depth_cue', 0)
+        cmd.set('ambient', 0.3)
+        cmd.set('direct', 0.7)
+        cmd.set('light_count', 3)
+        
+        # Cartoon style for protein backbone
+        cmd.set_color('color1', [220, 223, 228])
+        cmd.set_color('color2', [144, 148, 159])
+        cmd.set('cartoon_color', 'color1', self.obj_name)
+        cmd.set('cartoon_highlight_color', 'color2', self.obj_name)
+        cmd.set('cartoon_oval_length', 1, self.obj_name)
+        cmd.set('cartoon_oval_width', 0.2, self.obj_name)
+        cmd.set('cartoon_transparency', 0.3, self.obj_name)
+        
+        # Shadow and specular highlights
+        cmd.set('ray_shadow', 'off')
+        cmd.set('specular', 'on')
+        cmd.set('specular_intensity', 0.6)
+        cmd.set('shininess', 80)
+        cmd.set('reflect', 0.25)
+
+        
         # Set surface quality for smooth rendering
         cmd.set('surface_quality', 1, surface_obj)
         
