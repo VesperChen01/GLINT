@@ -192,9 +192,13 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.ppi_display_mode.addItems(["Surface + Interaction", "Cartoon + Interaction"])
         ppi_grid.addWidget(self.parent_window.ppi_display_mode, 3, 1)
         
-        self.parent_window.ppi_show_labels = QCheckBox("Show Distance Labels")
-        self.parent_window.ppi_show_labels.setChecked(True)
-        ppi_grid.addWidget(self.parent_window.ppi_show_labels, 3, 3)
+        self.parent_window.ppi_show_residue_labels = QCheckBox("Show Residue Labels")
+        self.parent_window.ppi_show_residue_labels.setChecked(True)
+        ppi_grid.addWidget(self.parent_window.ppi_show_residue_labels, 3, 2)
+        
+        self.parent_window.ppi_show_distance_labels = QCheckBox("Show Distance Labels")
+        self.parent_window.ppi_show_distance_labels.setChecked(False)
+        ppi_grid.addWidget(self.parent_window.ppi_show_distance_labels, 3, 3)
 
 
         self.parent_window.ppi_show_hydrophobic = QCheckBox("Show Hydrophobic Interactions")
@@ -530,12 +534,12 @@ class LeadOptimizationTab(CommonTab):
                 display_mode = "surface_interaction"
             else:
                 display_mode = "cartoon_interaction"
-            show_labels = self.parent_window.ppi_show_labels.isChecked()
-            show_hydrophobic = self.parent_window.ppi_show_hydrophobic.isChecked()
+            show_residue_labels = self.parent_window.ppi_show_residue_labels.isChecked()
+            show_distance_labels = self.parent_window.ppi_show_distance_labels.isChecked()
             ppi_viz_settings = VisualizationSettings(
                 display_mode=display_mode,
-                show_labels=show_labels,
-                show_hydrophobic=show_hydrophobic,
+                show_labels=show_residue_labels,
+                show_distance_labels=show_distance_labels,
                 label_size=14,
             )
 

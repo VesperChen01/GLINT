@@ -93,6 +93,7 @@ def analyze_protein_protein_interface(obj_name=None,
                                       protein1_color="cyan",
                                       protein2_color="magenta",
                                       show_labels=True,
+                                      show_distance_labels=False,
                                       display_mode="surface_interaction",
                                       show_hydrophobic=False,
                                       viz_settings=None):
@@ -113,8 +114,9 @@ def analyze_protein_protein_interface(obj_name=None,
         visualize: 是否在PyMOL中可视化interface（默认True）
         protein1_color: 蛋白质1的Display颜色（默认cyan）
         protein2_color: 蛋白质2的Display颜色（默认magenta）
-        display_mode: Display模式 - "surface_interaction" (表面+相互作用) 或 "cartoon_interaction" (卡通+相互作用)
-        show_labels: 是否Display距离Label (默认True)
+        display_mode: Display mode - "surface_interaction" (表面+相互作用) 或 "cartoon_interaction" (卡通+相互作用)
+        show_labels: Whether to display residue labels (default True)
+        show_distance_labels: Whether to display distance labels (default False)
     
     Return:
         dict: {
@@ -278,6 +280,7 @@ def analyze_protein_protein_interface(obj_name=None,
                     protein1_color=protein1_color,
                     protein2_color=protein2_color,
                     show_labels=show_labels,
+                    show_distance_labels=show_distance_labels,
                     show_hydrophobic=show_hydrophobic,
                     display_mode=display_mode,
                     label_size=14,
@@ -571,6 +574,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
                             protein1_color="cyan",
                             protein2_color="magenta",
                             show_labels=True,
+                            show_distance_labels=False,
                             clear_old=True,
                             display_mode="surface_interaction",
                             show_hydrophobic=False,
@@ -598,6 +602,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         protein1_color=protein1_color,
         protein2_color=protein2_color,
         show_labels=show_labels,
+        show_distance_labels=show_distance_labels,
         clear_old=clear_old,
         display_mode=display_mode,
         show_hydrophobic=show_hydrophobic,
@@ -610,6 +615,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
     clear_old = settings.clear_old
     display_mode = settings.display_mode
     show_hydrophobic = settings.show_hydrophobic
+    show_distance_labels = settings.show_distance_labels
     # 三字母到单字母氨基酸代码转换
     AA_3TO1 = {
         'ALA': 'A', 'CYS': 'C', 'ASP': 'D', 'GLU': 'E', 'PHE': 'F',
@@ -676,7 +682,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
     )
     print(f"[visualize_ppi_interface] 背景颜色: {settings.background}")
 
-    # ========== Settings蛋白Display模式 ==========
+    # ========== Settings蛋白Display mode ==========
     if display_mode == "surface_interaction":
         # 模式1: 深色胶状表面 + 橙色配体 (Science Cover 风格)
         cmd.hide("everything", obj_name)
@@ -726,7 +732,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         cmd.set("ray_opaque_background", "off")
         
         cmd.rebuild()
-        print("[visualize_ppi_interface] Display模式: 深色胶状表面 + 橙色配体")
+        print("[visualize_ppi_interface] Display mode: Dark gel surface + orange ligand")
             
     elif display_mode == "cartoon_interaction":
         # 模式2: 卡通 + 深色配色 + 橙色配体
@@ -777,7 +783,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         cmd.set("ray_opaque_background", "off")
         
         cmd.rebuild()
-        print("[visualize_ppi_interface] Display模式: 卡通 + 深色配色 + 橙色配体")
+        print("[visualize_ppi_interface] Display mode: Cartoon + dark colors + orange ligand")
             
     else:
         # 默认模式: 深色胶状表面 + 橙色配体
@@ -830,7 +836,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
         cmd.rebuild()
         print(f"[visualize_ppi_interface] 未知模式 '{display_mode}', using默认: 深色胶状表面 + 橙色配体")
     
-    # ========== 收集参与相互作用的残基 ==========
+    # ========== 收集Interacting residues ==========
     interacting_residues = {}  # {(chain, resid): [interaction_types]}
     
     for interaction in interface_interactions:
@@ -1074,7 +1080,7 @@ def visualize_ppi_interface(obj_name, ppi_result,
             print(f"[DEBUG]   ✓ Dashes shown for {distance_name}")
 
             # 距离Label单独控制：仅在需要时Display并统一为黑色，using统一的LabelSize
-            if show_labels:
+            if show_distance_labels:
                 cmd.set("label_size", settings.label_size, distance_name)
                 cmd.set("label_color", "black", distance_name)
                 cmd.show("labels", distance_name)
@@ -1138,12 +1144,12 @@ def visualize_ppi_interface(obj_name, ppi_result,
     
     total_residues = len(interacting_residues)
     total_interactions = len(interface_interactions)
-    print(f"\n[visualize_ppi_interface] ✅ 可视化Completed:")
-    print(f"  - 参与相互作用的残基: {total_residues}")
-    print(f"  - 总相互作用数: {total_interactions}")
-    print(f"  - Display模式: {display_mode}")
-    print(f"  - 蛋白1 ({', '.join(protein1_chains)}): {protein1_color}")
-    print(f"  - 蛋白2 ({', '.join(protein2_chains)}): {protein2_color}")
+    print(f"\n[visualize_ppi_interface] ✅ Visualization Completed:")
+    print(f"  - Interacting residues: {total_residues}")
+    print(f"  - Total interactions: {total_interactions}")
+    print(f"  - Display mode: {display_mode}")
+    print(f"  - Protein 1 ({', '.join(protein1_chains)}): {protein1_color}")
+    print(f"  - Protein 2 ({', '.join(protein2_chains)}): {protein2_color}")
 
 
 
