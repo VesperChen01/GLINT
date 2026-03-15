@@ -1,0 +1,8 @@
+# 忽略 FoldX 可执行文件
+foldx*
+!foldx/.gitkeep
+
+# 保留文档和配置
+!README.md
+!.gitignore
+

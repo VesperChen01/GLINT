@@ -1148,8 +1148,8 @@ def visualize_ppi_interface(obj_name, ppi_result,
     print(f"  - Interacting residues: {total_residues}")
     print(f"  - Total interactions: {total_interactions}")
     print(f"  - Display mode: {display_mode}")
-    print(f"  - Protein 1 ({', '.join(protein1_chains)}): {protein1_color}")
-    print(f"  - Protein 2 ({', '.join(protein2_chains)}): {protein2_color}")
+    print(f"  - Protein 1 ({', '.join(protein1_chains)}): {settings.protein1_color}")
+    print(f"  - Protein 2 ({', '.join(protein2_chains)}): {settings.protein2_color}")
 
 
 

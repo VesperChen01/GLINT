@@ -690,10 +690,7 @@ class GLINTDialog(QDialog):
             <p>Model ternary complexes with protein-protein docking.</p>
             <table>
                 <tr><th>Mode</th><th>Description</th></tr>
-                <tr><td>Blind (Random AIR)</td><td>No restraints, random sampling</td></tr>
-                <tr><td>Blind (Centroid)</td><td>Center-of-mass guided</td></tr>
-                <tr><td>Blind (Surface)</td><td>Surface-based sampling</td></tr>
-                <tr><td>Pocket-constrained</td><td>Residue-based AIR restraints</td></tr>
+                <tr><td>Pocket-constrained</td><td>Residue-based AIR restraints (requires active residues)</td></tr>
             </table>
         </div>
         

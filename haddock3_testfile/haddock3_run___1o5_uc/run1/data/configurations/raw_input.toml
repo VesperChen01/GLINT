@@ -1,0 +1,21 @@
+run_dir = "/Users/vesper/Desktop/git/GLINT/haddock3_testfile/haddock3_run___1o5_uc/run1"
+
+molecules = [
+    "/Users/vesper/Desktop/git/GLINT/haddock3_testfile/4CI1_-_prepared.pdb",
+    "/Users/vesper/Desktop/git/GLINT/haddock3_testfile/7Y3M_-_prepared.pdb"
+]
+
+[topoaa]
+
+[rigidbody]
+sampling = 60
+ambig_fname = "ambig.tbl"
+tolerance = 20
+
+[flexref]
+ambig_fname = "ambig.tbl"
+tolerance = 20
+
+[emref]
+ambig_fname = "ambig.tbl"
+tolerance = 20

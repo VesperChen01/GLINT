@@ -1,0 +1,92 @@
+assign (resi 351 and segid A)
+(
+  (resi 411 and segid A) or
+  (resi 412 and segid A) or
+  (resi 413 and segid A) or
+  (resi 414 and segid A) or
+  (resi 415 and segid A) or
+  (resi 416 and segid A) or
+  (resi 417 and segid A) or
+  (resi 418 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 357 and segid A)
+(
+  (resi 411 and segid A) or
+  (resi 412 and segid A) or
+  (resi 413 and segid A) or
+  (resi 414 and segid A) or
+  (resi 415 and segid A) or
+  (resi 416 and segid A) or
+  (resi 417 and segid A) or
+  (resi 418 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 400 and segid A)
+(
+  (resi 411 and segid A) or
+  (resi 412 and segid A) or
+  (resi 413 and segid A) or
+  (resi 414 and segid A) or
+  (resi 415 and segid A) or
+  (resi 416 and segid A) or
+  (resi 417 and segid A) or
+  (resi 418 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 411 and segid A)
+(
+  (resi 351 and segid A) or
+  (resi 357 and segid A) or
+  (resi 400 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 412 and segid A)
+(
+  (resi 351 and segid A) or
+  (resi 357 and segid A) or
+  (resi 400 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 413 and segid A)
+(
+  (resi 351 and segid A) or
+  (resi 357 and segid A) or
+  (resi 400 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 414 and segid A)
+(
+  (resi 351 and segid A) or
+  (resi 357 and segid A) or
+  (resi 400 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 415 and segid A)
+(
+  (resi 351 and segid A) or
+  (resi 357 and segid A) or
+  (resi 400 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 416 and segid A)
+(
+  (resi 351 and segid A) or
+  (resi 357 and segid A) or
+  (resi 400 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 417 and segid A)
+(
+  (resi 351 and segid A) or
+  (resi 357 and segid A) or
+  (resi 400 and segid A)
+) 2.0 2.0 0.0
+
+assign (resi 418 and segid A)
+(
+  (resi 351 and segid A) or
+  (resi 357 and segid A) or
+  (resi 400 and segid A)
+) 2.0 2.0 0.0
+

@@ -6,8 +6,7 @@ HADDOCK3 Integration Module
 - 生成一个最小Configuration（topoaa -> rigidbody），执行 `haddock3 <config>`
 - 收集 rigidbody 阶段生成的若干 PDB，合并为多模型 PDB 以便一次性载入 PyMOL
 
-注意：当前Version未将 rsite/lsite 转换为 HADDOCK 约束（.tbl）。
-后续可通过 haddock3-cfg / haddock-restraints Extension。
+仅支持约束对接模式（air_from_residues），需提供受体和配体的残基列表。
 """
 from __future__ import annotations
 
@@ -16,8 +15,13 @@ import sys
 import shutil
 import subprocess
 import tempfile
+import gzip
+import logging
+import csv
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+
+logger = logging.getLogger(__name__)
 
 
 def _validate_haddock_path(path: str) -> bool:
@@ -204,33 +208,27 @@ class Haddock3Runner:
         return ap1, ap2
 
     def _prepare_restraints(self, out_dir: Path, receptor_pdb: str, ligand_pdb: str,
-                            rsite: Optional[str], lsite: Optional[str], mode: str,
-                            expand_passive: bool) -> Optional[Path]:
-        """按模式准备约束File，Return ambig.tbl Path或 None。"""
-        if mode == 'air_from_residues':
-            ap1, ap2 = self._write_act_pass_files(out_dir, receptor_pdb, ligand_pdb, rsite, lsite, expand_passive)
-            # 优先using官方 CLI 生成 AMBIG
-            cli = self._which_restraints_cli()
-            if cli:
-                # 获取默认链ID（从 rsite/lsite 解析）
-                r_ranges = self._parse_resid_ranges(rsite or '')
-                l_ranges = self._parse_resid_ranges(lsite or '')
-                r_chain = r_ranges[0][0] if r_ranges else 'A'
-                l_chain = l_ranges[0][0] if l_ranges else 'B'
-                ambig = out_dir / 'ambig.tbl'
-                cmd = [cli, 'active_passive_to_ambig', str(ap1), str(ap2), '--segid-one', r_chain, '--segid-two', l_chain]
-                try:
-                    with open(ambig, 'w') as fout:
-                        subprocess.run(cmd, stdout=fout, stderr=subprocess.STDOUT, text=True, check=True)
-                    return ambig
-                except Exception:
-                    # 回退到简易 AMBIG 生成
-                    return self._write_simple_ambig(out_dir, rsite, lsite)
-            else:
+                            rsite: Optional[str], lsite: Optional[str],
+                            expand_passive: bool) -> Path:
+        """准备约束文件，返回 ambig.tbl 路径。"""
+        ap1, ap2 = self._write_act_pass_files(out_dir, receptor_pdb, ligand_pdb, rsite, lsite, expand_passive)
+        # 优先使用官方 CLI 生成 AMBIG
+        cli = self._which_restraints_cli()
+        if cli:
+            r_ranges = self._parse_resid_ranges(rsite or '')
+            l_ranges = self._parse_resid_ranges(lsite or '')
+            r_chain = r_ranges[0][0] if r_ranges else 'A'
+            l_chain = l_ranges[0][0] if l_ranges else 'B'
+            ambig = out_dir / 'ambig.tbl'
+            cmd = [cli, 'active_passive_to_ambig', str(ap1), str(ap2), '--segid-one', r_chain, '--segid-two', l_chain]
+            try:
+                with open(ambig, 'w') as fout:
+                    subprocess.run(cmd, stdout=fout, stderr=subprocess.STDOUT, text=True, check=True)
+                return ambig
+            except Exception:
                 return self._write_simple_ambig(out_dir, rsite, lsite)
         else:
-            # 盲对接模式：不写 ambig，依靠 cmrest/ranair/surfrest
-            return None
+            return self._write_simple_ambig(out_dir, rsite, lsite)
 
     @staticmethod
     def _write_simple_ambig(out_dir: Path, rsite: Optional[str], lsite: Optional[str]) -> Path:
@@ -255,20 +253,31 @@ class Haddock3Runner:
         ambig = out_dir / 'ambig.tbl'
         with open(ambig, 'w') as f:
             for i in r_list:
+                f.write(f"assign (resi {i} and segid {r_chain})\n")
+                f.write("(\n")
+                clauses = []
                 for j in l_list:
-                    # 采用 CA-CA 简化约束，目标上限 8Å（示例），CNS 三元为：target lower-upper
-                    f.write(f"assign (segid {r_chain} and resi {i} and name CA) (segid {l_chain} and resi {j} and name CA) 8.0 0.0 0.0\n")
+                    clauses.append(f"  (resi {j} and segid {l_chain})")
+                f.write(" or\n".join(clauses) + "\n")
+                f.write(") 2.0 2.0 0.0\n\n")
+
+            for j in l_list:
+                f.write(f"assign (resi {j} and segid {l_chain})\n")
+                f.write("(\n")
+                clauses = []
+                for i in r_list:
+                    clauses.append(f"  (resi {i} and segid {r_chain})")
+                f.write(" or\n".join(clauses) + "\n")
+                f.write(") 2.0 2.0 0.0\n\n")
         return ambig
 
     @staticmethod
     def _make_config_text(run_dir: str, receptor_pdb: str, ligand_pdb: str, ncores: Optional[int], rigidbody_sampling: int,
-                          mode: str,
-                          ambig_fname: Optional[str]) -> str:
+                          ambig_fname: str) -> str:
         """
-        生成最小可用Configuration。遵循 HADDOCK3 文档格式：
+        生成最小可用 HADDOCK3 配置文件。
         - 全局: run_dir, molecules, (可选) ncores
-        - 步骤: [topoaa], [rigidbody]（指定 sampling）
-        参考: docs “Workflow configuration files”。
+        - 步骤: [topoaa], [rigidbody]（指定 sampling + ambig 约束）
         """
         lines: List[str] = []
         lines.append(f'run_dir = "{run_dir}"')
@@ -280,39 +289,71 @@ class Haddock3Runner:
         if ncores and ncores > 0:
             lines.append('')
             lines.append(f'ncores = {int(ncores)}')
-        # steps
         lines.append('')
         lines.append('[topoaa]')
-        # 保守using默认Parameters，避免在不同体系上过拟合
         lines.append('')
         lines.append('[rigidbody]')
         lines.append(f'sampling = {int(rigidbody_sampling)}')
-        # 约束/模式Select：至少提供一种约束，避免 guardrail 报错
-        if ambig_fname:
-            lines.append(f'ambig_fname = "{ambig_fname}"')
-        if mode == 'blind_cm':
-            lines.append('cmrest = true')
-        elif mode == 'blind_ranair':
-            lines.append('ranair = true')
-        elif mode == 'blind_surf':
-            lines.append('surfrest = true')
-        # 可在后续Extension: randremoval, npart, flexref, caprieval 等
+        lines.append(f'ambig_fname = "{ambig_fname}"')
+        lines.append('tolerance = 20')
+        lines.append('')
+        lines.append('[flexref]')
+        lines.append(f'ambig_fname = "{ambig_fname}"')
+        lines.append('tolerance = 20')
+        lines.append('')
+        lines.append('[emref]')
+        lines.append(f'ambig_fname = "{ambig_fname}"')
+        lines.append('tolerance = 20')
         return "\n".join(lines) + "\n"
 
     @staticmethod
     def _gather_pdbs(run_dir: Path, max_models: int = 10) -> List[Path]:
-        """在 run Directory下Find rigidbody 产物 PDB，Return最多 max_models 个Path。"""
-        candidates: List[Path] = []
-        for root, _dirs, files in os.walk(run_dir):
-            for fn in files:
-                if fn.lower().endswith('.pdb'):
+        """在 run Directory下按优先级搜索对接产物 PDB：emref > flexref > rigidbody"""
+        extract_dir = run_dir / '.glint_extracted'
+        
+        # 按优先级定义搜索阶段
+        search_stages = ['emref', 'flexref', 'rigidbody']
+        
+        for stage in search_stages:
+            candidates: List[Path] = []
+            
+            for root, _dirs, files in os.walk(run_dir):
+                for fn in files:
                     p = Path(root) / fn
-                    # Filter常见的中间File（策略保守，仅排除明显非模型）
-                    if 'rigidbody' in str(p.parent):
+                    
+                    # 只搜索当前阶段的文件
+                    if stage not in str(p.parent):
+                        continue
+                    
+                    # 处理 .pdb.gz 文件
+                    if fn.lower().endswith('.pdb.gz'):
+                        try:
+                            # 创建解压目录
+                            extract_dir.mkdir(parents=True, exist_ok=True)
+                            # 解压文件
+                            extracted_name = fn[:-3]  # 移除 .gz 后缀
+                            extracted_path = extract_dir / extracted_name
+                            with gzip.open(p, 'rb') as f_in:
+                                with open(extracted_path, 'wb') as f_out:
+                                    f_out.write(f_in.read())
+                            candidates.append(extracted_path)
+                            logger.debug(f'Extracted {fn} from {stage} to {extracted_path}')
+                        except Exception as e:
+                            logger.warning(f'Failed to extract {fn}: {e}')
+                    # 处理普通 .pdb 文件
+                    elif fn.lower().endswith('.pdb'):
                         candidates.append(p)
-        # Sort策略：按FileSize&File名自然序综合Sort，尽量把体积更大的模型靠前
-        candidates.sort(key=lambda p: (-(p.stat().st_size), str(p)))
-        return candidates[:max_models]
+            
+            # 如果当前阶段找到了结果，立即返回
+            if candidates:
+                logger.info(f'Found {len(candidates)} PDB files in {stage} stage')
+                # Sort策略：按FileSize&File名自然序综合Sort，尽量把体积更大的模型靠前
+                candidates.sort(key=lambda p: (-(p.stat().st_size), str(p)))
+                return candidates[:max_models]
+        
+        # 所有阶段都没找到
+        logger.warning('No PDB files found in any stage (emref/flexref/rigidbody)')
+        return []
 
     @staticmethod
     def _merge_models(pdb_paths: List[Path], out_path: Path) -> None:
@@ -331,6 +372,41 @@ class Haddock3Runner:
         with open(out_path, 'a') as fout:
             fout.write('END\n')
 
+    @staticmethod
+    def _extract_scores(run_dir: Path) -> Optional[List[Dict]]:
+        """
+        从 run_dir 提取评分数据。
+        搜索优先级：emref > flexref > rigidbody
+        返回评分列表，每个元素为 {'model': str, 'score': float, 'haddock_score': float, ...}
+        """
+        search_stages = ['emref', 'flexref', 'rigidbody']
+        
+        for stage in search_stages:
+            # 查找评分文件
+            for root, _dirs, files in os.walk(run_dir):
+                if stage not in str(root):
+                    continue
+                
+                # 查找 capri_ss.tsv 或 capri_clt.tsv
+                for score_file in ['capri_ss.tsv', 'capri_clt.tsv']:
+                    score_path = Path(root) / score_file
+                    if score_path.exists():
+                        try:
+                            scores = []
+                            with open(score_path, 'r') as f:
+                                reader = csv.DictReader(f, delimiter='\t')
+                                for row in reader:
+                                    scores.append(dict(row))
+                            
+                            if scores:
+                                logger.info(f'Extracted {len(scores)} scores from {stage}/{score_file}')
+                                return scores
+                        except Exception as e:
+                            logger.warning(f'Failed to parse {score_path}: {e}')
+        
+        logger.warning('No score files found in any stage')
+        return None
+
     def run_docking(
         self,
         receptor_pdb: str,
@@ -340,7 +416,6 @@ class Haddock3Runner:
         lsite: Optional[str] = None,
         n_models: int = 10,
         rigidbody_sampling: int = 60,
-        mode: str = 'blind_ranair',
         expand_passive: bool = True,
     ) -> Dict:
         """
@@ -353,7 +428,6 @@ class Haddock3Runner:
             rsite/lsite: 站位残基（限制口袋模式下用于生成 AIR）
             n_models: 合并输出的模型Count（默认 10，均衡）
             rigidbody_sampling: 刚体采样Count（默认 60，均衡；越大越久）
-            mode: 'blind_ranair'|'blind_cm'|'blind_surf'|'air_from_residues'
             expand_passive: 在基于残基 AIR 模式下，是否自动Extension被动残基（6.5Å）
         Return:
             dict: {'success': bool, 'output_dir': str, 'models_pdb': str, 'run_dir': str}
@@ -410,23 +484,18 @@ class Haddock3Runner:
         # 约束File（可选）
         ambig_path: Optional[Path] = None
         try:
-            ambig_path = self._prepare_restraints(out_dir, receptor_pdb, ligand_pdb, rsite, lsite, mode, expand_passive)
+            ambig_path = self._prepare_restraints(out_dir, receptor_pdb, ligand_pdb, rsite, lsite, expand_passive)
         except Exception as e:
             return {'success': False, 'error': f'生成约束Failed: {e}'}
 
-        # 若是盲对接，经验上需要增大采样
-        if mode.startswith('blind_') and rigidbody_sampling < 200:
-            rigidbody_sampling = 300
-
-        # 生成Configuration
+        # 生成配置
         cfg_text = self._make_config_text(
             run_dir=str(run_dir),
             receptor_pdb=receptor_pdb,
             ligand_pdb=ligand_pdb,
             ncores=self.ncores,
             rigidbody_sampling=rigidbody_sampling,
-            mode=mode,
-            ambig_fname=(str(ambig_path) if ambig_path else None),
+            ambig_fname="ambig.tbl",
         )
         cfg_path.write_text(cfg_text)
 
@@ -484,13 +553,39 @@ class Haddock3Runner:
         except Exception as e:
             return {'success': False, 'error': f'合并模型Failed: {e}'}
 
+        # 提取评分并生成 CSV
+        scores_csv_path = None
+        top_scores = None
+        try:
+            scores = self._extract_scores(run_dir)
+            if scores:
+                # 生成 CSV 文件
+                scores_csv_path = out_dir / 'scores.csv'
+                with open(scores_csv_path, 'w', newline='') as csvfile:
+                    if scores:
+                        fieldnames = scores[0].keys()
+                        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+                        writer.writeheader()
+                        writer.writerows(scores)
+                
+                # 提取前 n_models 个评分
+                top_scores = scores[:min(len(scores), n_models)]
+                logger.info(f'Exported {len(scores)} scores to {scores_csv_path}')
+        except Exception as e:
+            logger.warning(f'Failed to extract or export scores: {e}')
+
         result = {
             'success': True,
             'output_dir': str(out_dir),
             'run_dir': str(run_dir),
             'models_pdb': str(merged),
-            'log_tail': (log.splitlines()[-50:] if isinstance(log, str) else None)
         }
+        
+        if scores_csv_path:
+            result['scores_csv'] = str(scores_csv_path)
+        if top_scores:
+            result['scores'] = top_scores
         if path_fallback_warning:
             result['warning'] = path_fallback_warning
+
         return result

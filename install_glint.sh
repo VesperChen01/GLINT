@@ -6,7 +6,7 @@ set -e
 
 # 配置
 ENV_NAME="glint"
-PYTHON_VERSION="3.10"
+PYTHON_VERSION="3.11"
 INSTALL_DIR="$HOME/.pymol/startup/glint"
 DESKTOP_APP="$HOME/Desktop/GLINT.app"
 
@@ -19,6 +19,31 @@ NC='\033[0m' # No Color
 
 echo -e "${BLUE}🧬 GLINT 安装脚本${NC}"
 echo "================================"
+
+# 0. 检测系统环境与架构
+echo -e "\n${BLUE}[0/6]${NC} 检测系统环境与架构..."
+OS_TYPE=$(uname -s)
+ARCH_TYPE=$(uname -m)
+
+echo "   操作系统: $OS_TYPE"
+echo "   系统架构: $ARCH_TYPE"
+
+if [ "$OS_TYPE" = "Darwin" ]; then
+    if [ "$ARCH_TYPE" = "arm64" ]; then
+        echo -e "${GREEN}✅ 检测到 Apple Silicon (M1/M2/M3) 架构${NC}"
+        HOMEBREW_PREFIX="/opt/homebrew"
+    else
+        echo -e "${GREEN}✅ 检测到 Intel Mac 架构${NC}"
+        HOMEBREW_PREFIX="/usr/local"
+    fi
+    
+    # 将 Homebrew 加入 PATH 以便后续查找 brew
+    if [ -d "$HOMEBREW_PREFIX/bin" ]; then
+        export PATH="$HOMEBREW_PREFIX/bin:$PATH"
+        echo -e "${GREEN}✅ 配置 Homebrew 路径: $HOMEBREW_PREFIX/bin${NC}"
+    fi
+fi
+
 
 # 1. 检查 Conda
 echo -e "\n${BLUE}[1/6]${NC} 检查 Conda 环境..."
@@ -131,7 +156,7 @@ CONDA_PACKAGES=(
     "scipy"
     "matplotlib"
     "pillow"
-    "numpy=1.26.4" # 指定兼容 PyMOL 的版本
+    "numpy<2.0.0" # 防止 numpy v2 不兼容旧包
     "pandas"
     "seaborn"
     "pyqt"
@@ -144,7 +169,7 @@ CONDA_PACKAGES=(
 
 # 临时禁用 InsecureRequestWarning
 export PYTHONWARNINGS="ignore::urllib3.exceptions.InsecureRequestWarning"
-conda install -n "$ENV_NAME" -c conda-forge "${CONDA_PACKAGES[@]}" -y
+conda install -n "$ENV_NAME" -c conda-forge "${CONDA_PACKAGES[@]}" python=$PYTHON_VERSION -y
 unset PYTHONWARNINGS # 安装完成后取消设置
 
 # 表面分析依赖（通过 pip 安装，因为 open3d 在 conda 上不稳定）
@@ -155,18 +180,114 @@ conda run -n "$ENV_NAME" python -m pip install open3d scikit-image --quiet --dis
 
 echo -e "${GREEN}✅ 依赖包安装完成${NC}"
 
-# 4b. 检查并安装 GCC (HADDOCK3/CNS 依赖)
-echo -e "\n${BLUE}[4b]${NC} 检查 GCC 依赖..."
-if ! brew list gcc &> /dev/null; then
-    echo "   安装 GCC (HADDOCK3 需要)..."
-    echo "   ${YELLOW}这可能需要 5-10 分钟，请耐心等待...${NC}"
-    if brew install gcc; then
-        echo -e "${GREEN}✅ GCC 安装成功${NC}"
+# 4a. 检测 macOS 架构并配置 Homebrew 路径
+echo -e "\n${BLUE}[4a]${NC} 检测 macOS 架构并配置 Homebrew 路径..."
+MACOS_OS_TYPE=$(uname -s)
+MACOS_ARCH_TYPE=$(uname -m)
+HOMEBREW_PREFIX="/usr/local"
+HOMEBREW_BIN=""
+HOMEBREW_SBIN=""
+BREW_CMD=""
+
+echo "   检测到的系统: $MACOS_OS_TYPE"
+echo "   检测到的架构: $MACOS_ARCH_TYPE"
+
+if [ "$MACOS_OS_TYPE" = "Darwin" ]; then
+    if [ "$MACOS_ARCH_TYPE" = "arm64" ]; then
+        HOMEBREW_PREFIX="/opt/homebrew"
+        echo -e "${GREEN}✅ 检测到 Apple Silicon macOS 架构${NC}"
+    elif [ "$MACOS_ARCH_TYPE" = "x86_64" ]; then
+        HOMEBREW_PREFIX="/usr/local"
+        echo -e "${GREEN}✅ 检测到 Intel macOS 架构${NC}"
     else
-        echo -e "${YELLOW}⚠️  GCC 安装失败，HADDOCK3 可能无法正常工作${NC}"
+        HOMEBREW_PREFIX="/usr/local"
+        echo -e "${YELLOW}⚠️  未识别的 macOS 架构: $MACOS_ARCH_TYPE，默认使用 Homebrew 前缀: $HOMEBREW_PREFIX${NC}"
     fi
 else
-    echo -e "${GREEN}✅ GCC 已安装${NC}"
+    HOMEBREW_PREFIX="/usr/local"
+    echo -e "${YELLOW}⚠️  当前系统不是 macOS，默认使用 Homebrew 前缀: $HOMEBREW_PREFIX${NC}"
+fi
+
+HOMEBREW_BIN="$HOMEBREW_PREFIX/bin"
+HOMEBREW_SBIN="$HOMEBREW_PREFIX/sbin"
+export HOMEBREW_BIN
+export HOMEBREW_SBIN
+export PATH="$HOMEBREW_BIN:$HOMEBREW_SBIN:$PATH"
+
+echo "   Homebrew 前缀: $HOMEBREW_PREFIX"
+echo "   Homebrew bin 路径: $HOMEBREW_BIN"
+echo "   Homebrew sbin 路径: $HOMEBREW_SBIN"
+
+if [ -x "$HOMEBREW_BIN/brew" ]; then
+    BREW_CMD="$HOMEBREW_BIN/brew"
+elif command -v brew &> /dev/null; then
+    BREW_CMD=$(command -v brew)
+else
+    BREW_CMD=""
+fi
+
+if [ -n "$BREW_CMD" ]; then
+    echo -e "${GREEN}✅ brew 命令路径: $BREW_CMD${NC}"
+else
+    echo -e "${YELLOW}⚠️  未找到 brew 命令${NC}"
+fi
+
+# 4b. 检查并安装 GCC (HADDOCK3/CNS 依赖)
+echo -e "\n${BLUE}[4b]${NC} 检查 GCC 依赖..."
+if [ -z "$BREW_CMD" ]; then
+    echo -e "${YELLOW}⚠️  未找到 Homebrew，跳过 GCC 自动安装，HADDOCK3/CNS 可能无法正常工作${NC}"
+else
+    if ! "$BREW_CMD" list gcc &> /dev/null; then
+        echo "   安装 GCC (HADDOCK3 需要)..."
+        echo "   ${YELLOW}这可能需要 5-10 分钟，请耐心等待...${NC}"
+        if "$BREW_CMD" install gcc; then
+            echo -e "${GREEN}✅ GCC 安装成功${NC}"
+        else
+            echo -e "${YELLOW}⚠️  GCC 安装失败，HADDOCK3 可能无法正常工作${NC}"
+        fi
+    else
+        echo -e "${GREEN}✅ GCC 已安装${NC}"
+    fi
+fi
+
+echo "   当前架构使用的 GCC bin 目录: $HOMEBREW_BIN"
+GCC_BIN_DIR="$HOMEBREW_BIN"
+LATEST_GCC=$(ls "$GCC_BIN_DIR"/gcc-[0-9]* 2>/dev/null | sort -V | tail -n 1)
+
+export CPPFLAGS="-I$HOMEBREW_PREFIX/include ${CPPFLAGS:-}"
+export LDFLAGS="-L$HOMEBREW_PREFIX/lib ${LDFLAGS:-}"
+
+if [ -n "$LATEST_GCC" ] && [ -x "$LATEST_GCC" ]; then
+    GCC_VERSION_SUFFIX=$(basename "$LATEST_GCC")
+    GCC_VERSION_SUFFIX="${GCC_VERSION_SUFFIX#gcc-}"
+
+    export CC="$LATEST_GCC"
+
+    if [ -x "$GCC_BIN_DIR/g++-$GCC_VERSION_SUFFIX" ]; then
+        export CXX="$GCC_BIN_DIR/g++-$GCC_VERSION_SUFFIX"
+    else
+        unset CXX
+    fi
+
+    if [ -x "$GCC_BIN_DIR/gfortran-$GCC_VERSION_SUFFIX" ]; then
+        export FC="$GCC_BIN_DIR/gfortran-$GCC_VERSION_SUFFIX"
+    else
+        unset FC
+    fi
+
+    echo -e "${GREEN}✅ 已找到版本化 GCC: $LATEST_GCC${NC}"
+    echo "   CC=$CC"
+    echo "   CXX=${CXX:-未设置}"
+    echo "   FC=${FC:-未设置}"
+    echo "   CPPFLAGS=$CPPFLAGS"
+    echo "   LDFLAGS=$LDFLAGS"
+else
+    echo -e "${YELLOW}⚠️  未找到版本化 gcc 可执行文件: $GCC_BIN_DIR/gcc-[0-9]*${NC}"
+    echo "   CC=${CC:-未设置}"
+    echo "   CXX=${CXX:-未设置}"
+    echo "   FC=${FC:-未设置}"
+    echo "   CPPFLAGS=$CPPFLAGS"
+    echo "   LDFLAGS=$LDFLAGS"
 fi
 
 # 4c. 使用 pip 安装 HADDOCK3（蛋白-蛋白对接引擎）
@@ -174,6 +295,30 @@ echo -e "\n${BLUE}[4c]${NC} 安装 HADDOCK3..."
 echo "   ${YELLOW}使用 pip 安装 HADDOCK3...${NC}"
 if conda run -n "$ENV_NAME" python -m pip install -U haddock3 --quiet --disable-pip-version-check; then
     echo -e "${GREEN}✅ HADDOCK3 (pip) 安装成功${NC}"
+    
+    # 修复并验证 haddock3 权限
+    HADDOCK3_DIR=""
+    CONDA_BIN_DIR="$(conda info --base)/envs/$ENV_NAME/bin"
+    if [ "$OS_TYPE" = "Darwin" ] && [ -n "$HOMEBREW_PREFIX" ] && ls "$HOMEBREW_PREFIX/bin/haddock3"* &> /dev/null; then
+        HADDOCK3_DIR="$HOMEBREW_PREFIX/bin"
+    elif [ -d "$CONDA_BIN_DIR" ] && ls "$CONDA_BIN_DIR/haddock3"* &> /dev/null; then
+        HADDOCK3_DIR="$CONDA_BIN_DIR"
+    fi
+
+    if [ -n "$HADDOCK3_DIR" ]; then
+        find "$HADDOCK3_DIR" -maxdepth 1 -name "haddock3*" -type f -exec chmod +x {} \;
+        echo -e "${GREEN}✅ 已修复可执行权限: $HADDOCK3_DIR/haddock3*${NC}"
+    else
+        echo -e "${YELLOW}⚠️  未找到 haddock3 可执行文件，稍后可能需要手动赋予权限${NC}"
+    fi
+    
+    # 验证 haddock3 命令
+    if conda run -n "$ENV_NAME" haddock3 -h &> /dev/null; then
+        echo -e "${GREEN}✅ haddock3 命令验证通过${NC}"
+    else
+        echo -e "${YELLOW}⚠️  haddock3 命令不可用，请检查安装环境${NC}"
+    fi
+
 else
     echo -e "${YELLOW}⚠️  HADDOCK3 安装失败，蛋白-蛋白对接功能将不可用${NC}"
     echo "   可稍后手动执行: conda run -n $ENV_NAME python -m pip install -U haddock3"
@@ -455,5 +600,3 @@ fi
 echo ""
 echo -e "${BLUE}📝 注意: 项目已从 GlueTK 重命名为 GLINT${NC}"
 echo ""
-
-
