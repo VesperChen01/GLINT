@@ -606,3 +606,42 @@ class HitIdentificationTab(CommonTab):
             else:
                 # Single ligand docking
                 output_pdbqt = os.path.join(temp_dir, "output.pdbqt")
+
+                self.log("📦 Single ligand docking...")
+
+                cmd_list = [
+                    "vina",
+                    "--receptor", receptor_pdbqt,
+                    "--ligand", ligand_path,
+                    "--out", output_pdbqt,
+                    "--center_x", str(center_x),
+                    "--center_y", str(center_y),
+                    "--center_z", str(center_z),
+                    "--size_x", str(size_x),
+                    "--size_y", str(size_y),
+                    "--size_z", str(size_z),
+                    "--exhaustiveness", str(exhaustiveness),
+                    "--num_modes", str(num_modes)
+                ]
+
+                result = subprocess.run(cmd_list, capture_output=True, text=True)
+
+                if result.returncode == 0 and os.path.exists(output_pdbqt):
+                    affinity = self._parse_vina_affinity(result.stdout)
+                    obj_name = "vina_result"
+                    cmd.load(output_pdbqt, obj_name)
+                    self.log(f"✅ Docking completed: Affinity {affinity} kcal/mol → {obj_name}")
+                else:
+                    error_msg = result.stderr.strip() or result.stdout.strip() or "Unknown error"
+                    self.log(f"❌ Docking failed: {error_msg}")
+
+        except Exception as e:
+            show_message_box(self, "Error", f"Vina docking failed: {str(e)}", "critical")
+            self.log(f"❌ Vina docking failed: {str(e)}")
+        finally:
+            try:
+                import shutil as _shutil
+                if 'temp_dir' in locals() and temp_dir and os.path.exists(temp_dir):
+                    _shutil.rmtree(temp_dir)
+            except Exception as e:
+                self.log(f"⚠️ Failed to clean temp dir: {str(e)}")
