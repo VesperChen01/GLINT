@@ -605,4 +605,4 @@ class HitIdentificationTab(CommonTab):
                 
             else:
                 # Single ligand docking
-                output_pdbqt = os.path.join(temp_dir, "output.pdbq
+                output_pdbqt = os.path.join(temp_dir, "output.pdbqt")
