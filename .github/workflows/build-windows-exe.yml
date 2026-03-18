@@ -44,7 +44,7 @@ jobs:
 
       - name: Generate logo.ico from logo.png
         run: |
-          python -c "from PIL import Image; img = Image.open(r'windows_installer/glint/assets/logo.png'); img.save(r'windows_installer/glint/assets/logo.ico', format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)]); print('logo.ico generated successfully')"
+          python -c "from PIL import Image; p_in=r'windows_installer/glint/assets/logo.png'; p_out=r'windows_installer/glint/assets/logo.ico'; img=Image.open(p_in).convert('RGBA'); w,h=img.size; target=256; min_side=min(w,h); resized=min_side<target; scale=(target/min_side) if resized else 1; new_w=int(round(w*scale)); new_h=int(round(h*scale)); img=img.resize((new_w,new_h), Image.LANCZOS) if resized else img; print(f'logo.png original size: {w}x{h}'); print(f'logo.png final size: {img.size[0]}x{img.size[1]} (resized={resized})'); img.save(p_out, format='ICO', sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)]); print('logo.ico generated successfully')"
         shell: pwsh
 
       - name: Build EXE with PyInstaller
