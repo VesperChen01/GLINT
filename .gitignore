@@ -14,12 +14,13 @@ __pycache__/
 *.app/
 dist/
 build/
-*.spec
 
-## Installer directories
+## Installer directories (排除构建产物，保留源文件)
 macos_installer/
-windows_installer/
 linux_installer/
+windows_installer/dist/
+windows_installer/build/
+windows_installer/__pycache__/
 
 ## Downloaded structure files (root directory)
 /*.cif
