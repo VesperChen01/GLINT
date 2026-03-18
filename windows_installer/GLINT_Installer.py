@@ -70,8 +70,8 @@ class InstallerApp:
     def __init__(self, root):
         self.root = root
         self.root.title("GLINT Installer")
-        self.root.geometry("750x780")
-        self.root.minsize(700, 750)
+        self.root.geometry("800x900")
+        self.root.minsize(750, 850)
         self.root.resizable(True, True)
 
         # Configure better fonts and styling
@@ -238,7 +238,7 @@ class InstallerApp:
         self.path_entry = ttk.Entry(path_row, textvariable=self.install_path,
                                     width=60, font=self.normal_font)
         self.path_entry.pack(side=tk.LEFT, fill=tk.X, expand=True)
-        ttk.Button(path_row, text="Browse...", command=self._browse_path).pack(side=tk.RIGHT, padx=(10, 0))
+        ttk.Button(path_row, text="Browse...", command=self._browse_path, width=10).pack(side=tk.RIGHT, padx=(10, 0))
 
         path_note = ttk.Label(path_frame,
                              text="📌 GLINT will be installed here. PyMOL loads plugins from ~/.pymol/startup/",
@@ -253,6 +253,16 @@ class InstallerApp:
                        variable=self.install_deps).pack(anchor=tk.W, pady=3)
         ttk.Checkbutton(opts_frame, text="Create desktop shortcut",
                        variable=self.create_shortcut).pack(anchor=tk.W, pady=3)
+
+        # Button section (pack before progress so buttons are always visible)
+        btn_frame = ttk.Frame(main)
+        btn_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 0))
+
+        self.install_btn = ttk.Button(btn_frame, text="🚀 Install GLINT",
+                                      command=self._start_install, width=20)
+        self.install_btn.pack(side=tk.RIGHT, padx=(10, 0))
+
+        ttk.Button(btn_frame, text="Cancel", command=self.root.quit, width=12).pack(side=tk.RIGHT)
 
         # Progress section
         progress_frame = ttk.LabelFrame(main, text=" Progress ", padding=12)
@@ -273,16 +283,6 @@ class InstallerApp:
         self.log_text.configure(yscrollcommand=scrollbar.set)
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-
-        # Button section
-        btn_frame = ttk.Frame(main)
-        btn_frame.pack(fill=tk.X, pady=(5, 0))
-
-        self.install_btn = ttk.Button(btn_frame, text="🚀 Install GLINT",
-                                      command=self._start_install, width=20)
-        self.install_btn.pack(side=tk.RIGHT, padx=(10, 0))
-
-        ttk.Button(btn_frame, text="Cancel", command=self.root.quit, width=12).pack(side=tk.RIGHT)
 
     def _install_apbs_binary(self):
         """下载并安装 APBS 1.5 预编译二进制文件到 conda 环境"""
