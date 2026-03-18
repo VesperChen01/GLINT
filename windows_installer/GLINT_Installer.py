@@ -32,12 +32,13 @@ DEFAULT_INSTALL_PATH = os.path.join(os.path.expanduser("~"), ".pymol", "startup"
 CONDA_PACKAGES = [
     "rdkit", "scipy", "matplotlib", "pillow", "numpy=1.26.4",  # 指定 numpy 版本以兼容 PyMOL
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
-    "meeko", "vina", "scikit-image",
+    "meeko", "scikit-image",
     "pdb2pqr",
 ]
 
 # Pip 包 (open3d 在 conda 上不稳定, haddock3 因 haddocking channel 不可用改用 pip)
-PIP_PACKAGES = ["requests", "open3d", "haddock3"]
+# vina: conda-forge 当前无 win-64 构建，因此改用 pip 安装
+PIP_PACKAGES = ["requests", "open3d", "haddock3", "vina"]
 
 # APBS 1.5 预编译二进制文件下载地址
 APBS_DOWNLOAD_URLS = {
@@ -386,12 +387,46 @@ class InstallerApp:
             return False
 
     def _log(self, msg):
-        """写入日志"""
-        self.log_text.configure(state=tk.NORMAL)
-        self.log_text.insert(tk.END, msg + "\n")
-        self.log_text.see(tk.END)
-        self.log_text.configure(state=tk.DISABLED)
-        self.root.update()
+        """线程安全的日志输出，通过 root.after 调度到主线程"""
+        def _write():
+            self.log_text.configure(state=tk.NORMAL)
+            self.log_text.insert(tk.END, msg + "\n")
+            self.log_text.see(tk.END)
+            self.log_text.configure(state=tk.DISABLED)
+        try:
+            self.root.after(0, _write)
+        except Exception:
+            pass
+
+
+    def _run_cmd_stream(self, cmd, timeout=3600):
+        """流式执行命令，逐行输出到 GUI 日志区域，返回 returncode"""
+        import time
+        proc = subprocess.Popen(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+        )
+        start = time.time()
+        try:
+            for line in proc.stdout:
+                stripped = line.rstrip('\n\r')
+                if stripped:
+                    self._log(f"    {stripped}")
+                if time.time() - start > timeout:
+                    proc.kill()
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+            proc.wait()
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            raise
+        finally:
+            if proc.stdout:
+                proc.stdout.close()
+        return proc.returncode
 
     def _browse_path(self):
         """浏览安装路径"""
@@ -535,12 +570,11 @@ class InstallerApp:
 
             if not self.env_ok:
                 self._log(f"  Creating environment at {self.env_path}...")
-                result = subprocess.run(
+                returncode = self._run_cmd_stream(
                     [self.conda_exe, "create", "-p", self.env_path, f"python={PYTHON_VERSION}", "-y"],
-                    capture_output=True, text=True, timeout=600
+                    timeout=600
                 )
-                if result.returncode != 0:
-                    self._log(f"  Error: {result.stderr}")
+                if returncode != 0:
                     raise Exception("Failed to create conda environment")
                 self._log("  ✅ Environment created")
             else:
@@ -565,14 +599,12 @@ class InstallerApp:
                     "-y"
                 ] + CONDA_PACKAGES
 
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=3600)
+                returncode = self._run_cmd_stream(cmd, timeout=3600)
 
-                if result.returncode == 0:
+                if returncode == 0:
                     self._log("  ✅ Conda packages installed")
                 else:
-                    self._log(f"  ⚠️ Some packages may have failed")
-                    if result.stderr:
-                        self._log(f"  {result.stderr[:500]}")
+                    self._log("  ⚠️ Some packages may have failed")
 
                 self.progress["value"] = 50
 
@@ -581,11 +613,11 @@ class InstallerApp:
                     self._log("\n  Installing pip packages...")
                     pip_cmd = [
                         self.conda_exe, "run", "-p", self.env_path,
-                        "python", "-m", "pip", "install", "--quiet"
+                        "python", "-m", "pip", "install"
                     ] + PIP_PACKAGES
 
-                    pip_result = subprocess.run(pip_cmd, capture_output=True, text=True, timeout=600)
-                    if pip_result.returncode == 0:
+                    pip_rc = self._run_cmd_stream(pip_cmd, timeout=600)
+                    if pip_rc == 0:
                         self._log("  ✅ Pip packages installed")
                     else:
                         self._log("  ⚠️ Some pip packages may have failed")
