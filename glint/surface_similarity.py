@@ -33,6 +33,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 import numpy as np
 from scipy.spatial import cKDTree
+from glint.path_utils import find_executable
+
 
 # Import ligand features module for small molecule support
 try:
