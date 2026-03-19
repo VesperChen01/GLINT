@@ -645,3 +645,121 @@ class HitIdentificationTab(CommonTab):
                     _shutil.rmtree(temp_dir)
             except Exception as e:
                 self.log(f"⚠️ Failed to clean temp dir: {str(e)}")
+
+    def load_vina_result(self):
+        """Load Vina docking result"""
+        try:
+            from pymol import cmd
+
+            file_path, _ = QFileDialog.getOpenFileName(
+                self,
+                "Select Vina Result",
+                "",
+                "Vina Results (*.pdbqt *.pdb);;All Files (*)"
+            )
+
+            if not file_path:
+                return
+
+            if not os.path.exists(file_path):
+                show_message_box(self, "Error", f"File not found: {file_path}", "warning")
+                return
+
+            obj_name = os.path.splitext(os.path.basename(file_path))[0] or "vina_result"
+            cmd.load(file_path, obj_name)
+            self.log(f"✓ Loaded Vina result: {file_path} → {obj_name}")
+        except Exception as e:
+            show_message_box(self, "Error", f"Failed to load Vina result: {str(e)}", "critical")
+            self.log(f"❌ Failed to load Vina result: {str(e)}")
+
+
+    def _parse_vina_affinity(self, output: str) -> Optional[float]:
+        """Parse affinity from Vina output"""
+        if not output:
+            return None
+
+        for line in output.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split()
+            if len(parts) >= 2 and parts[0].isdigit() and parts[0] == "1":
+                try:
+                    return float(parts[1])
+                except ValueError:
+                    continue
+
+        self.log("未能从 Vina 输出解析出亲和力数值")
+
+    def _parse_mutation_list(self, mutation_text: str):
+        """Parse mutation list like A50G,A51V into tuples"""
+        import re
+
+        raw = mutation_text.replace(";", ",")
+        items = [item.strip() for item in raw.split(",") if item.strip()]
+        if not items:
+            raise ValueError("突变列表为空，请输入如 A50G,A51V")
+
+        mutations = []
+        pattern = re.compile(r"^([A-Za-z])(\d+)([A-Za-z]{1,3})$")
+        for item in items:
+            match = pattern.match(item)
+            if not match:
+                raise ValueError(f"突变格式错误：{item}（示例：A50G）")
+            chain, resi, target = match.groups()
+            mutations.append((chain.upper(), resi, target.upper()))
+        return mutations
+
+    def run_mutation_analysis(self):
+        """Run mutation analysis using mutation_analyzer"""
+        try:
+            from pymol import cmd
+            from ...mutation_analyzer import analyze_mutation_effects
+        except Exception as e:
+            show_message_box(self, "Error", f"Mutation analyzer not available: {str(e)}", "critical")
+            self.log(f"❌ Mutation analyzer not available: {str(e)}")
+            return
+
+        obj_name = self.parent_window.mutation_structure_combo.currentText().strip()
+        mutation_text = self.parent_window.mutation_list.text().strip()
+
+        if not obj_name:
+            show_message_box(self, "Warning", "请选择要分析的结构对象", "warning")
+            return
+
+        if not mutation_text:
+            show_message_box(self, "Warning", "请输入突变列表（如 A50G,A51V）", "warning")
+            return
+
+        try:
+            if obj_name not in cmd.get_names("objects"):
+                show_message_box(self, "Warning", f"结构对象不存在：{obj_name}", "warning")
+                return
+        except Exception as e:
+            show_message_box(self, "Error", f"无法获取对象列表：{str(e)}", "critical")
+            return
+
+        try:
+            mutations = self._parse_mutation_list(mutation_text)
+        except ValueError as e:
+            show_message_box(self, "Warning", str(e), "warning")
+            return
+
+        self.log(f"🧬 Starting mutation analysis: {obj_name}")
+        self.log(f"   Mutations: {', '.join([f'{c}{r}{a}' for c, r, a in mutations])}")
+
+        results = analyze_mutation_effects(obj_name, mutations, partner_sel=None, output_csv=None, method="auto")
+        if not results:
+            show_message_box(self, "Mutation Analysis", "突变分析失败，请检查日志输出", "warning")
+            self.log("❌ Mutation analysis failed")
+            return
+
+        ddg_result = results.get("ddg_result") if isinstance(results, dict) else None
+        if isinstance(ddg_result, dict) and ddg_result.get("ddg") is not None:
+            self.log(f"✅ ΔΔG: {ddg_result.get('ddg'):.3f} kcal/mol")
+        else:
+            self.log("⚠️ ΔΔG 结果不可用或未计算")
+
+        show_message_box(self, "Mutation Analysis", "突变分析完成，详情请查看日志", "info")
+
+        return None
