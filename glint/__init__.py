@@ -11,6 +11,8 @@ from __future__ import print_function
 import locale
 import os
 import sys
+from glint.path_utils import get_conda_search_roots, get_conda_site_packages_patterns
+
 
 # Fix relative import: ensure package path is correct when executed via `run` command
 _this_dir = os.path.dirname(os.path.abspath(__file__))
@@ -53,14 +55,7 @@ def _inject_conda_site_packages():
         if _conda_base:
             _conda_base = os.path.dirname(os.path.dirname(_conda_base))
         if not _conda_base:
-            # Common macOS conda locations
-            for _candidate in [
-                os.path.expanduser('~/miniconda3'),
-                os.path.expanduser('~/miniforge3'),
-                os.path.expanduser('~/anaconda3'),
-                '/opt/homebrew/Caskroom/miniconda/base',
-                os.path.expanduser('~/opt/miniconda3'),
-            ]:
+            for _candidate in get_conda_search_roots():
                 if os.path.isdir(_candidate):
                     _conda_base = _candidate
                     _log(f"Found conda base: {_conda_base}")
@@ -75,10 +70,7 @@ def _inject_conda_site_packages():
         _log("No conda prefix found, skipping injection")
         return
     
-    _patterns = [
-        os.path.join(_prefix, 'lib', 'python*', 'site-packages'),
-        os.path.join(_prefix, 'lib', 'site-packages'),
-    ]
+    _patterns = get_conda_site_packages_patterns(_prefix)
     for _pat in _patterns:
         for _sp in _glob.glob(_pat):
             if _sp not in sys.path:

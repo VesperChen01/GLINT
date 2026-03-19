@@ -14,6 +14,7 @@ import glob
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Callable
 from pymol import cmd
+from glint.path_utils import find_executable
 
 # Version标记 - 用于Confirm代码是否被正确Load
 _VINA_MODULE_VERSION = "2026-01-03-v2"
@@ -22,32 +23,8 @@ print(f"[vina_integration] ModuleVersion: {_VINA_MODULE_VERSION}")
 
 def find_vina_executable():
     """自动Find Vina 可执行File"""
-    vina = shutil.which('vina') or shutil.which('vina.exe')
-    if vina:
-        return vina
-
-    if 'CONDA_PREFIX' in os.environ:
-        conda_vina = os.path.join(os.environ['CONDA_PREFIX'], 'bin', 'vina')
-        if os.path.exists(conda_vina):
-            return conda_vina
-
-    # 3. 遍历常见 conda 安装Path回退（与 find_obabel_executable 保持一致）
+    # 其他常见Path
     home = os.path.expanduser('~')
-    for env_name in ["glint", "base"]:
-        for base in [
-            f"{home}/miniconda3",
-            f"{home}/anaconda3",
-            f"{home}/opt/miniconda3",
-            "/opt/miniconda3",
-            "/opt/anaconda3",
-            "/opt/homebrew/Caskroom/miniconda/base",
-            "/usr/local/Caskroom/miniconda/base",
-        ]:
-            vina_path = f"{base}/envs/{env_name}/bin/vina"
-            if os.path.exists(vina_path):
-                return vina_path
-
-    # 4. 其他常见Path
     user_paths = [
         os.path.join(home, 'bin', 'vina'),
         os.path.join(home, '.local', 'bin', 'vina'),
@@ -55,52 +32,44 @@ def find_vina_executable():
         '/opt/homebrew/bin/vina',
     ]
 
-    for path in user_paths:
-        if '*' in path:
-            matches = glob.glob(path)
-            if matches:
-                return matches[0]
-        elif os.path.exists(path):
-            return path
-    return None
+    return find_executable('vina', extra_paths=user_paths)
 
 
 def find_obabel_executable():
     """Find Open Babel 可执行File"""
-    if os.environ.get("OBABEL_BINARY"):
-        return os.environ.get("OBABEL_BINARY")
-
-    obabel = shutil.which("obabel") or shutil.which("obabel.exe")
-    if obabel:
-        return obabel
-
-    conda_prefix = os.environ.get("CONDA_PREFIX")
-    if conda_prefix:
-        conda_obabel = os.path.join(conda_prefix, "bin", "obabel")
-        if os.path.exists(conda_obabel):
-            return conda_obabel
-
-    home = os.path.expanduser("~")
-    for env_name in ["glint", "base"]:
-        for base in [f"{home}/miniconda3", f"{home}/anaconda3", "/opt/homebrew/Caskroom/miniconda/base"]:
-            obabel_path = f"{base}/envs/{env_name}/bin/obabel"
-            if os.path.exists(obabel_path):
-                return obabel_path
-    return None
+    return find_executable("obabel", env_var="OBABEL_BINARY")
 
 
 def find_mgltools_scripts():
     """Find MGLTools 脚本Path"""
-    possible_paths = ['/usr/local/MGLTools', '/opt/mgltools', os.path.join(os.path.expanduser('~'), 'MGLTools')]
+    home = os.path.expanduser('~')
+    possible_paths = [os.path.join(home, 'MGLTools')]
+
+    if sys.platform.startswith('win'):
+        program_files = os.environ.get('ProgramFiles')
+        program_files_x86 = os.environ.get('ProgramFiles(x86)')
+        if program_files:
+            possible_paths.append(os.path.join(program_files, 'MGLTools'))
+        if program_files_x86:
+            possible_paths.append(os.path.join(program_files_x86, 'MGLTools'))
+        possible_paths.append(os.path.join('C:\\', 'MGLTools'))
+    else:
+        possible_paths.extend([
+            os.path.join(os.sep, 'usr', 'local', 'MGLTools'),
+            os.path.join(os.sep, 'opt', 'mgltools'),
+        ])
+
     if 'MGLTOOLS_HOME' in os.environ:
         possible_paths.insert(0, os.environ['MGLTOOLS_HOME'])
+
+    pythonsh_name = 'pythonsh.exe' if sys.platform.startswith('win') else 'pythonsh'
 
     for base_path in possible_paths:
         prepare_ligand = os.path.join(base_path, 'MGLToolsPckgs', 'AutoDockTools', 'Utilities24', 'prepare_ligand4.py')
         prepare_receptor = os.path.join(base_path, 'MGLToolsPckgs', 'AutoDockTools', 'Utilities24', 'prepare_receptor4.py')
         if os.path.exists(prepare_ligand) and os.path.exists(prepare_receptor):
             return {'prepare_ligand': prepare_ligand, 'prepare_receptor': prepare_receptor,
-                    'python': os.path.join(base_path, 'bin', 'pythonsh')}
+                    'python': os.path.join(base_path, 'bin', pythonsh_name)}
     return None
 
 
