@@ -646,6 +646,80 @@ class HitIdentificationTab(CommonTab):
             except Exception as e:
                 self.log(f"⚠️ Failed to clean temp dir: {str(e)}")
 
+
+    def run_hdock(self):
+        """Run HADDOCK3 docking"""
+        try:
+            from pymol import cmd
+            import tempfile
+            from glint.haddock3_integration import Haddock3Runner, check_haddock3_available
+
+            availability = check_haddock3_available()
+            if not availability.get("available"):
+                via = availability.get("via", "unknown")
+                version = availability.get("version", "unknown")
+                show_message_box(
+                    self,
+                    "HADDOCK3 不可用",
+                    f"HADDOCK3 未检测到或不可用 (via={via}, version={version})",
+                    "warning",
+                )
+                self.log(f"❌ HADDOCK3 not available: via={via}, version={version}")
+                return
+
+            receptor_obj = self.parent_window.hdock_receptor_combo.currentText().strip()
+            ligand_obj = self.parent_window.hdock_ligand_combo.currentText().strip()
+            active_receptor = self.parent_window.hdock_active_receptor.text().strip()
+            passive_receptor = self.parent_window.hdock_passive_receptor.text().strip()
+            active_ligand = self.parent_window.hdock_active_ligand.text().strip()
+            passive_ligand = self.parent_window.hdock_passive_ligand.text().strip()
+
+            if not receptor_obj or not ligand_obj:
+                show_message_box(self, "Error", "Please select receptor and ligand objects", "warning")
+                return
+
+            self.log("🚀 Starting HADDOCK3 docking...")
+            self.log(f"   Receptor: {receptor_obj}")
+            self.log(f"   Ligand: {ligand_obj}")
+
+            temp_dir = tempfile.mkdtemp(prefix="haddock3_")
+            receptor_pdb = os.path.join(temp_dir, "receptor.pdb")
+            ligand_pdb = os.path.join(temp_dir, "ligand.pdb")
+
+            cmd.save(receptor_pdb, receptor_obj)
+            cmd.save(ligand_pdb, ligand_obj)
+
+            runner = Haddock3Runner()
+            result = runner.run(
+                receptor_pdb=receptor_pdb,
+                ligand_pdb=ligand_pdb,
+                active_residues_receptor=active_receptor or None,
+                passive_residues_receptor=passive_receptor or None,
+                active_residues_ligand=active_ligand or None,
+                passive_residues_ligand=passive_ligand or None,
+                output_dir=temp_dir,
+            )
+
+            if isinstance(result, dict) and not result.get("success", True):
+                error_msg = result.get("error", "Unknown error")
+                show_message_box(self, "Error", f"HADDOCK3 docking failed: {error_msg}", "critical")
+                self.log(f"❌ HADDOCK3 docking failed: {error_msg}")
+                return
+
+            self.log("✅ HADDOCK3 docking finished")
+            show_message_box(self, "HADDOCK3", "HADDOCK3 docking completed", "info")
+
+        except Exception as e:
+            show_message_box(self, "Error", f"HADDOCK3 docking failed: {str(e)}", "critical")
+            self.log(f"❌ HADDOCK3 docking failed: {str(e)}")
+        finally:
+            try:
+                import shutil as _shutil
+                if 'temp_dir' in locals() and temp_dir and os.path.exists(temp_dir):
+                    _shutil.rmtree(temp_dir)
+            except Exception as e:
+                self.log(f"⚠️ Failed to clean temp dir: {str(e)}")
+
     def load_vina_result(self):
         """Load Vina docking result"""
         try:
