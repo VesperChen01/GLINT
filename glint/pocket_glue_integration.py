@@ -139,6 +139,8 @@ def analyze_pockets_with_glue(obj_with_glue, obj_without_glue=None,
     
     Return：(pockets_with, pockets_without, comparison)
     """
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     if not cmd:
         return None, None, None
     
@@ -384,6 +386,8 @@ def comprehensive_glue_pocket_analysis(obj_name, chain_a, chain_b,
 
     Return：综合分析Results字典
     """
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     if not cmd:
         return None
 
@@ -455,6 +459,8 @@ def comprehensive_gmotif_pocket_analysis(obj_name, e3_chain, substrate_chain,
     
     Return：综合分析Results字典
     """
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     if not cmd:
         return None
     

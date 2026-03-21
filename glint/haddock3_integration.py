@@ -432,6 +432,7 @@ class Haddock3Runner:
         Return:
             dict: {'success': bool, 'output_dir': str, 'models_pdb': str, 'run_dir': str}
         """
+        if output_dir: output_dir = os.path.normpath(output_dir)
         receptor_pdb = os.path.abspath(receptor_pdb)
         ligand_pdb = os.path.abspath(ligand_pdb)
         if not os.path.exists(receptor_pdb) or not os.path.exists(ligand_pdb):

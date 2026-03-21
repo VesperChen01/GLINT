@@ -50,7 +50,7 @@ class CommonTab(QWidget):
         self.on_error: Callable[[str], None] = parent.on_error
         self.refresh_objects: Callable[[], None] = parent.refresh_objects
 
-    def _get_card_style_common(self, is_dark: bool) -> str:
+    def _get_card_style(self, is_dark: bool) -> str:
         """获取卡片样式"""
         if is_dark:
             return """
@@ -77,6 +77,50 @@ class CommonTab(QWidget):
                 background: transparent;
             }
         """
+
+    def _get_primary_btn_style(self) -> str:
+        """主按钮样式 - 蓝色渐变"""
+        return """
+            QPushButton {
+                background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #3b82f6, stop:1 #2563eb);
+                color: white; border: none; border-radius: 8px;
+                font-weight: 600; font-size: 13px; padding: 8px 20px;
+            }
+            QPushButton:hover { background: qlineargradient(x1:0, y1:0, x2:1, y2:0, stop:0 #2563eb, stop:1 #1d4ed8); }
+            QPushButton:pressed { background: #1d4ed8; }
+            QPushButton:disabled { background: #94a3b8; }
+        """
+
+    def _get_secondary_btn_style(self) -> str:
+        """次要按钮样式 - 浅灰色"""
+        return """
+            QPushButton {
+                background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0;
+                border-radius: 8px; padding: 8px 16px; font-weight: 500;
+            }
+            QPushButton:hover { background: #e2e8f0; }
+        """
+
+    def _get_green_btn_style(self) -> str:
+        """绿色按钮样式 - 可视化"""
+        return """
+            QPushButton {
+                background: #10b981; color: white; border: none;
+                border-radius: 8px; font-weight: 500; padding: 8px 16px;
+            }
+            QPushButton:hover { background: #059669; }
+        """
+
+    def _get_purple_btn_style(self) -> str:
+        """紫色按钮样式 - 比较/分析"""
+        return """
+            QPushButton {
+                background: #6366f1; color: white; border: none;
+                border-radius: 8px; font-weight: 500; padding: 8px 16px;
+            }
+            QPushButton:hover { background: #4f46e5; }
+        """
+
 
     def _create_pocket_detection_card(self) -> QWidget:
         """Create pocket detection and visualization card"""
@@ -309,7 +353,7 @@ class CommonTab(QWidget):
     def _create_mutation_analysis_card(self, is_dark: bool = False) -> QWidget:
         """Create mutation analysis card"""
         card = QFrame()
-        card.setStyleSheet(self._get_card_style_common(is_dark))
+        card.setStyleSheet(self._get_card_style(is_dark))
         layout = QVBoxLayout(card)
         layout.setSpacing(12)
         layout.setContentsMargins(16, 14, 16, 14)

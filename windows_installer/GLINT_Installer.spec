@@ -68,5 +68,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon='glint/assets/logo.ico',  # 假设会生成 glint/assets/logo.ico
+    icon='glint/assets/logo.ico',  # Expected to generate glint/assets/logo.ico
 )

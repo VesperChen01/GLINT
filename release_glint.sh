@@ -131,6 +131,15 @@ else
     exit 1
 fi
 
+# Copy APBS DMG (optional)
+APBS_DMG="external/apbs/APBS-1.5.dmg"
+if [ -f "$APBS_DMG" ]; then
+    cp "$APBS_DMG" "${RESOURCES}/"
+    echo -e "${GREEN}   ✅ APBS DMG copied${NC}"
+else
+    echo -e "${YELLOW}   ⚠️  APBS-1.5.dmg not found at ${APBS_DMG}${NC}"
+fi
+
 # Copy glint library
 echo -e "${BLUE}[3/5] Copying GLINT library...${NC}"
 cp -R "${GLINT_LIB}" "${RESOURCES}/"
@@ -160,4 +169,3 @@ echo -e "${GREEN}🎉 Release complete!${NC}"
 echo -e "   DMG: ${BLUE}${DMG_NAME}${NC}"
 echo -e "   App: ${BLUE}${APP_NAME}${NC}"
 ls -lh "${DMG_NAME}"
-

@@ -76,7 +76,7 @@ class HitIdentificationTab(CommonTab):
         self.parent_window.hdock_run_btn = QPushButton("Run HADDOCK3")
         self.parent_window.hdock_run_btn.setMinimumHeight(36)
         self.parent_window.hdock_run_btn.setStyleSheet(self._get_primary_btn_style())
-        self.parent_window.hdock_run_btn.clicked.connect(self.run_hdock)
+        self.parent_window.hdock_run_btn.clicked.connect(self.run_haddock)
 
         hdock_btn_row.addWidget(self.parent_window.hdock_run_btn)
         hdock_btn_row.addStretch(1)
@@ -354,50 +354,6 @@ class HitIdentificationTab(CommonTab):
         
         return card
 
-    def _get_primary_btn_style(self) -> str:
-        """获取主按钮样式"""
-        return """
-            QPushButton {
-                background: #3b82f6;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background: #2563eb;
-            }
-            QPushButton:pressed {
-                background: #1d4ed8;
-            }
-            QPushButton:disabled {
-                background: #94a3b8;
-            }
-        """
-
-    def _get_secondary_btn_style(self) -> str:
-        """获取次要按钮样式"""
-        return """
-            QPushButton {
-                background: #64748b;
-                color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 8px 16px;
-                font-weight: 500;
-            }
-            QPushButton:hover {
-                background: #475569;
-            }
-            QPushButton:pressed {
-                background: #334155;
-            }
-            QPushButton:disabled {
-                background: #cbd5e1;
-            }
-        """
-
     def refresh_objects(self):
         """刷新PyMOL对象列表"""
         try:
@@ -647,7 +603,7 @@ class HitIdentificationTab(CommonTab):
                 self.log(f"⚠️ Failed to clean temp dir: {str(e)}")
 
 
-    def run_hdock(self):
+    def run_haddock(self):
         """Run HADDOCK3 docking"""
         try:
             from pymol import cmd

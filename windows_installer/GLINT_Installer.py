@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-GLINT Windows Installer - 图形化安装程序
+GLINT Windows Installer - GUI Setup Program
 Professional GUI installer for Windows, similar to macOS version
 """
 
@@ -22,49 +22,57 @@ except ImportError:
     print("Error: tkinter not found")
     sys.exit(1)
 
-# 配置
+# Configuration
 ENV_NAME = "glint"
-PYTHON_VERSION = "3.10"  # 更新为 3.10
+PYTHON_VERSION = "3.10"  # Use Python 3.10
 DEFAULT_INSTALL_PATH = os.path.join(os.path.expanduser("~"), ".pymol", "startup", "glint")
 
-# Conda 依赖包 (与 macOS 版本保持一致)
-# 注意: haddock_biobb 已移除，因为 haddocking channel 不可用 (HTTP 404)
+# Conda packages (aligned with macOS version)
+# Note: haddock_biobb removed because haddocking channel is unavailable (HTTP 404)
 CONDA_PACKAGES = [
-    "rdkit", "scipy", "matplotlib", "pillow", "numpy=1.26.4",  # 指定 numpy 版本以兼容 PyMOL
+    "rdkit", "scipy", "matplotlib", "pillow", "numpy=1.26.4",  # Pin numpy version for PyMOL compatibility
     "pandas", "seaborn", "pyqt", "openbabel", "pymol-open-source",
-    "meeko", "scikit-image",
+    "scikit-image",
     "pdb2pqr",
 ]
 
-# Pip 包 (open3d 在 conda 上不稳定, haddock3 因 haddocking channel 不可用改用 pip)
-# vina: conda-forge 当前无 win-64 构建，因此改用 pip 安装
-PIP_PACKAGES = ["requests", "open3d", "haddock3", "vina"]
+# Pip packages (open3d unstable on conda, haddock3 moved from unavailable haddocking channel)
+# vina: no win-64 build on conda-forge, install via pip instead
+# meeko: install via pip on Windows to avoid conda build/solver inconsistencies and to get a consistent, up-to-date package
+PIP_PACKAGES = ["requests", "open3d", "haddock3", "vina", "meeko"]
 
-# APBS 1.5 预编译二进制文件下载地址
+# APBS 1.5 prebuilt binary download URLs (old apbs-pdb2pqr release assets are gone; use github.com/.../raw/refs/heads/master direct links to avoid LFS pointer issues on raw.githubusercontent.com)
 APBS_DOWNLOAD_URLS = {
-    "darwin_x86_64": "https://github.com/Electrostatics/apbs-pdb2pqr/releases/download/vAPBS-1.5.0/APBS-1.5-osx.zip",
-    "darwin_arm64": "https://github.com/Electrostatics/apbs-pdb2pqr/releases/download/vAPBS-1.5.0/APBS-1.5-osx.zip",
-    "linux_x86_64": "https://github.com/Electrostatics/apbs-pdb2pqr/releases/download/vAPBS-1.5.0/APBS-1.5-linux64.tar.gz",
-    "windows_x86_64": "https://github.com/Electrostatics/apbs-pdb2pqr/releases/download/vAPBS-1.5.0/APBS-1.5-win64.zip",
+    "darwin_x86_64": "https://github.com/Electrostatics/electrostatics.github.io/raw/refs/heads/master/old-releases/apbs/1.5.0/APBS-1.5.dmg",
+    "darwin_arm64": "https://github.com/Electrostatics/electrostatics.github.io/raw/refs/heads/master/old-releases/apbs/1.5.0/APBS-1.5.dmg",
+    "linux_x86_64": "https://github.com/Electrostatics/electrostatics.github.io/raw/refs/heads/master/old-releases/apbs/1.5.0/APBS-1.5-linux64.tar.gz",
+    "windows_x86_64": "https://github.com/Electrostatics/electrostatics.github.io/raw/refs/heads/master/old-releases/apbs/1.5.0/apbs1.5_win64.zip",
 }
 
 
 def get_glint_source_dir():
-    """获取 GLINT 源码目录"""
+    """Locate the bundled GLINT source directory"""
     script_dir = os.path.dirname(os.path.abspath(__file__))
 
-    # 1. 优先查找同级目录的 glint
+    # 1. Check sibling 'glint' directory
     bundled_dir = os.path.join(script_dir, "glint")
     if os.path.isdir(bundled_dir):
         return bundled_dir
 
-    # 2. PyInstaller 打包后的临时目录
+    # 2. PyInstaller bundled temp directory
     if hasattr(sys, '_MEIPASS'):
         bundled_dir = os.path.join(sys._MEIPASS, "glint")
         if os.path.isdir(bundled_dir):
             return bundled_dir
 
     return None
+
+
+def _verify_apbs_binary(env_path: str) -> bool:
+    """Verify APBS binary in conda environment using file existence and execute permission."""
+    dest_apbs = os.path.join(env_path, "Scripts", "apbs.exe")
+    return os.path.isfile(dest_apbs) and os.access(dest_apbs, os.X_OK)
+
 
 
 class InstallerApp:
@@ -96,7 +104,7 @@ class InstallerApp:
         self.root.after(500, lambda: threading.Thread(target=self._check_environment, daemon=True).start())
 
     def _configure_styles(self):
-        """Configure better fonts and styles for Windows"""
+        """Configure fonts and styles for Windows"""
         style = ttk.Style()
 
         # Try to use a modern theme
@@ -108,43 +116,22 @@ class InstallerApp:
         elif 'clam' in available_themes:
             style.theme_use('clam')
 
-        # Define better fonts - use Microsoft YaHei for Chinese support, fallback to Segoe UI
-        # These fonts look much better on Windows
-        self.title_font = ("Microsoft YaHei UI", 22, "bold")
-        self.subtitle_font = ("Microsoft YaHei UI", 11)
-        self.normal_font = ("Microsoft YaHei UI", 10)
-        self.small_font = ("Microsoft YaHei UI", 9)
-        self.mono_font = ("Cascadia Code", 9)  # Better monospace font
+        # Default fonts: Segoe UI for UI, Consolas for monospace
+        self.title_font = ("Segoe UI", 22, "bold")
+        self.subtitle_font = ("Segoe UI", 11)
+        self.normal_font = ("Segoe UI", 10)
+        self.small_font = ("Segoe UI", 9)
+        self.mono_font = ("Consolas", 9)
 
-        # Fallback fonts if Microsoft YaHei is not available
+        # Upgrade monospace font if Cascadia Code is available
         try:
             import tkinter.font as tkfont
             available_fonts = tkfont.families()
-
-            if "Microsoft YaHei UI" not in available_fonts:
-                if "Microsoft YaHei" in available_fonts:
-                    self.title_font = ("Microsoft YaHei", 22, "bold")
-                    self.subtitle_font = ("Microsoft YaHei", 11)
-                    self.normal_font = ("Microsoft YaHei", 10)
-                    self.small_font = ("Microsoft YaHei", 9)
-                elif "Segoe UI" in available_fonts:
-                    self.title_font = ("Segoe UI", 22, "bold")
-                    self.subtitle_font = ("Segoe UI", 11)
-                    self.normal_font = ("Segoe UI", 10)
-                    self.small_font = ("Segoe UI", 9)
-
-            if "Cascadia Code" not in available_fonts:
-                if "Consolas" in available_fonts:
-                    self.mono_font = ("Consolas", 9)
-                else:
-                    self.mono_font = ("Courier New", 9)
+            if "Cascadia Code" in available_fonts:
+                self.mono_font = ("Cascadia Code", 9)
         except Exception:
-            # 字体枚举失败时使用安全默认字体（避免在部分打包/Windows 环境中导致 GUI 渲染异常）
-            self.title_font = ("Segoe UI", 22, "bold")
-            self.subtitle_font = ("Segoe UI", 11)
-            self.normal_font = ("Segoe UI", 10)
-            self.small_font = ("Segoe UI", 9)
-            self.mono_font = ("Consolas", 9)
+            # Font enumeration failed; keep safe defaults
+            pass
 
         # Configure ttk styles with better fonts
         style.configure("TLabel", font=self.normal_font)
@@ -158,7 +145,7 @@ class InstallerApp:
         self.root.configure(bg='#f0f0f0')
 
     def _set_icon(self):
-        """设置窗口图标"""
+        """Set window icon"""
         try:
             icon_path = os.path.join(os.path.dirname(__file__), "glint", "assets", "logo.png")
             if os.path.exists(icon_path):
@@ -168,7 +155,7 @@ class InstallerApp:
             pass
 
     def _center_window(self):
-        """居中窗口"""
+        """Center the window on screen"""
         self.root.update_idletasks()
         w = self.root.winfo_width()
         h = self.root.winfo_height()
@@ -197,7 +184,7 @@ class InstallerApp:
                             font=self.subtitle_font, foreground="#666666")
         subtitle.pack(pady=(5, 0))
 
-        # 从 _version.py 动态获取版本
+        # Dynamically read version from _version.py
         try:
             from glint._version import __version__
         except ImportError:
@@ -242,7 +229,7 @@ class InstallerApp:
         ttk.Button(path_row, text="Browse...", command=self._browse_path, width=10).pack(side=tk.RIGHT, padx=(10, 0))
 
         path_note = ttk.Label(path_frame,
-                             text="📌 GLINT will be installed here. PyMOL loads plugins from ~/.pymol/startup/",
+                             text="GLINT will be installed here. PyMOL loads plugins from ~/.pymol/startup/",
                              font=self.small_font, foreground="#888888")
         path_note.pack(anchor=tk.W, pady=(8, 0))
 
@@ -259,7 +246,7 @@ class InstallerApp:
         btn_frame = ttk.Frame(main)
         btn_frame.pack(fill=tk.X, side=tk.BOTTOM, pady=(5, 0))
 
-        self.install_btn = ttk.Button(btn_frame, text="🚀 Install GLINT",
+        self.install_btn = ttk.Button(btn_frame, text="Install GLINT",
                                       command=self._start_install, width=20)
         self.install_btn.pack(side=tk.RIGHT, padx=(10, 0))
 
@@ -286,7 +273,7 @@ class InstallerApp:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     def _install_apbs_binary(self):
-        """下载并安装 APBS 1.5 预编译二进制文件到 conda 环境"""
+        """Download and install APBS 1.5 prebuilt binary into the conda environment"""
         import platform
         import urllib.request
         import zipfile
@@ -295,7 +282,7 @@ class InstallerApp:
 
         self._log("  Installing APBS 1.5 binary...")
 
-        # 确定平台
+        # Determine platform
         system = platform.system().lower()
         machine = platform.machine().lower()
 
@@ -309,16 +296,16 @@ class InstallerApp:
         elif system == "windows":
             key = "windows_x86_64"
         else:
-            self._log(f"  ⚠️ Unsupported platform: {system} {machine}")
+            self._log(f" Unsupported platform: {system} {machine}")
             return False
 
         url = APBS_DOWNLOAD_URLS.get(key)
         if not url:
-            self._log(f"  ⚠️ No APBS binary available for {key}")
+            self._log(f"  No APBS binary available for {key}")
             return False
 
         try:
-            # 下载到临时目录
+            # Download to temp directory
             temp_dir = tempfile.mkdtemp()
             filename = os.path.basename(url)
             download_path = os.path.join(temp_dir, filename)
@@ -326,7 +313,7 @@ class InstallerApp:
             self._log(f"  Downloading from {url}...")
             urllib.request.urlretrieve(url, download_path)
 
-            # 解压
+            # Extract archive
             extract_dir = os.path.join(temp_dir, "apbs_extract")
             os.makedirs(extract_dir, exist_ok=True)
 
@@ -337,7 +324,7 @@ class InstallerApp:
                 with tarfile.open(download_path, 'r:gz') as tf:
                     tf.extractall(extract_dir)
 
-            # 找到 apbs 可执行文件
+            # Locate the apbs executable
             apbs_exe = None
             for root, dirs, files in os.walk(extract_dir):
                 for f in files:
@@ -348,10 +335,10 @@ class InstallerApp:
                     break
 
             if not apbs_exe:
-                self._log("  ⚠️ APBS executable not found in archive")
+                self._log("APBS executable not found in archive")
                 return False
 
-            # 复制到 conda 环境的 bin 目录 (Windows 用 Scripts)
+            # Copy to conda env bin directory (Scripts on Windows)
             if system == "windows":
                 env_bin = os.path.join(self.env_path, "Scripts")
                 dest_apbs = os.path.join(env_bin, "apbs.exe")
@@ -364,7 +351,7 @@ class InstallerApp:
             if system != "windows":
                 os.chmod(dest_apbs, 0o755)
 
-            # 同时复制相关的库文件（如果有）
+            # Also copy associated library files if present
             apbs_dir = os.path.dirname(apbs_exe)
             lib_dir = os.path.join(apbs_dir, "..", "lib")
             if os.path.exists(lib_dir):
@@ -376,18 +363,18 @@ class InstallerApp:
                     if os.path.isfile(src):
                         shutil.copy2(src, dst)
 
-            # 清理临时文件
+            # Clean up temp files
             shutil.rmtree(temp_dir, ignore_errors=True)
 
-            self._log(f"  ✅ APBS 1.5 installed to {dest_apbs}")
+            self._log(f"APBS 1.5 installed to {dest_apbs}")
             return True
 
         except Exception as e:
-            self._log(f"  ⚠️ Failed to install APBS: {e}")
+            self._log(f"Failed to install APBS: {e}")
             return False
 
     def _log(self, msg):
-        """线程安全的日志输出，通过 root.after 调度到主线程"""
+        """Thread-safe log output, dispatched to main thread via root.after"""
         def _write():
             self.log_text.configure(state=tk.NORMAL)
             self.log_text.insert(tk.END, msg + "\n")
@@ -400,7 +387,7 @@ class InstallerApp:
 
 
     def _run_cmd_stream(self, cmd, timeout=3600):
-        """流式执行命令，逐行输出到 GUI 日志区域，返回 returncode"""
+        """Run a command with streaming stdout, log each line to GUI, return returncode"""
         import time
         proc = subprocess.Popen(
             cmd,
@@ -429,17 +416,17 @@ class InstallerApp:
         return proc.returncode
 
     def _browse_path(self):
-        """浏览安装路径"""
+        """Browse for installation path"""
         path = filedialog.askdirectory(title="Select Installation Directory",
                                        initialdir=os.path.dirname(self.install_path.get()))
         if path:
             self.install_path.set(path)
 
     def _check_environment(self):
-        """检查环境"""
+        """Check environment prerequisites"""
         self._log("Checking environment...")
 
-        # 1. 查找 Conda
+        # 1. Find Conda
         self.conda_exe = self._find_conda()
 
         if self.conda_exe:
@@ -449,7 +436,7 @@ class InstallerApp:
                 if result.returncode == 0:
                     version = result.stdout.strip()
                     self.root.after(0, lambda: self.conda_status.configure(
-                        text=f"✅ {version}", foreground="green"))
+                        text=f"{version}", foreground="green"))
                     self.conda_ok = True
                     self.root.after(0, lambda: self.conda_install_btn.configure(state=tk.DISABLED))
                     self._log(f"  Conda found: {self.conda_exe}")
@@ -458,17 +445,17 @@ class InstallerApp:
                     raise Exception("conda command failed")
             except Exception as e:
                 self.root.after(0, lambda: self.conda_status.configure(
-                    text="❌ Error", foreground="red"))
+                    text="Error", foreground="red"))
                 self._log(f"  Conda error: {e}")
         else:
             self.root.after(0, lambda: self.conda_status.configure(
-                text="❌ Not found", foreground="red"))
+                text="Not found", foreground="red"))
             self.root.after(0, lambda: self.conda_install_btn.configure(state=tk.NORMAL))
             self._log("  Conda: Not found")
             self._log("  Please install Miniconda first!")
             return
 
-        # 2. 检查环境
+        # 2. Check conda environment
         try:
             base_result = subprocess.run([self.conda_exe, "info", "--base"],
                                         capture_output=True, text=True, timeout=10)
@@ -481,12 +468,12 @@ class InstallerApp:
 
             if os.path.isdir(self.env_path):
                 self.root.after(0, lambda: self.env_status.configure(
-                    text="✅ Exists", foreground="green"))
+                    text="Exists", foreground="green"))
                 self.env_ok = True
                 self._log(f"  Environment '{ENV_NAME}': {self.env_path}")
             else:
                 self.root.after(0, lambda: self.env_status.configure(
-                    text="⚠️ Will create", foreground="orange"))
+                    text="Will create", foreground="orange"))
                 self._log(f"  Environment '{ENV_NAME}': Will be created")
         except Exception as e:
             self.root.after(0, lambda: self.env_status.configure(
@@ -496,8 +483,8 @@ class InstallerApp:
         self._log("Ready to install.")
 
     def _find_conda(self):
-        """查找 Conda 安装路径"""
-        # Windows 常见路径
+        """Find conda executable path"""
+        # Common Windows installation paths
         home = os.path.expanduser("~")
         candidates = [
             os.path.join(home, "miniconda3", "Scripts", "conda.exe"),
@@ -512,7 +499,7 @@ class InstallerApp:
             r"C:\Anaconda3\Scripts\conda.exe",
         ]
 
-        # 检查 PATH
+        # Check PATH
         try:
             result = subprocess.run(["where", "conda"], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
@@ -522,7 +509,7 @@ class InstallerApp:
         except:
             pass
 
-        # 检查候选路径
+        # Check candidate paths
         for path in candidates:
             if os.path.exists(path):
                 return path
@@ -530,14 +517,14 @@ class InstallerApp:
         return None
 
     def _install_conda(self):
-        """打开 Miniconda 下载页面"""
+        """Open Miniconda download page"""
         webbrowser.open("https://docs.conda.io/en/latest/miniconda.html")
         messagebox.showinfo("Install Miniconda",
                            "Please download and install Miniconda for Windows.\n\n"
                            "After installation, restart this installer.")
 
     def _start_install(self):
-        """开始安装"""
+        """Start installation"""
         if not self.conda_ok:
             messagebox.showerror("Error", "Please install Miniconda first!")
             return
@@ -546,11 +533,11 @@ class InstallerApp:
         threading.Thread(target=self._do_install, daemon=True).start()
 
     def _do_install(self):
-        """执行安装"""
+        """Perform the installation"""
         try:
             self.progress["value"] = 0
 
-            # 1. 创建/检查 Conda 环境
+            # 1. Create / check conda environment
             self._log("\n" + "=" * 50)
             self._log("[1/5] Checking conda environment...")
             self._log("=" * 50)
@@ -568,6 +555,21 @@ class InstallerApp:
                 except Exception as e:
                     raise Exception(f"Failed to determine environment path: {e}")
 
+
+            # Auto-accept conda Terms of Service (prevents CondaToSNonInteractiveError)
+            try:
+                self._log("  Accepting conda Terms of Service...")
+                tos_result = subprocess.run(
+                    [self.conda_exe, "config", "--set", "auto_accept_default_terms", "true"],
+                    capture_output=True, text=True, timeout=15
+                )
+                if tos_result.returncode == 0:
+                    self._log(" Conda TOS accepted")
+                else:
+                    self._log(f" Could not auto-accept TOS: {tos_result.stderr.strip()}")
+            except Exception as e:
+                self._log(f" TOS acceptance skipped: {e}")
+
             if not self.env_ok:
                 self._log(f"  Creating environment at {self.env_path}...")
                 returncode = self._run_cmd_stream(
@@ -576,72 +578,108 @@ class InstallerApp:
                 )
                 if returncode != 0:
                     raise Exception("Failed to create conda environment")
-                self._log("  ✅ Environment created")
+                self._log(" Environment created")
             else:
                 self._log(f"  Environment exists: {self.env_path}")
 
             self.progress["value"] = 20
 
-            # 2. 安装依赖
+            # 2. Install dependencies
             if self.install_deps.get():
                 self._log("\n" + "=" * 50)
                 self._log("[2/5] Installing dependencies...")
                 self._log("=" * 50)
-                self._log("  This may take 10-20 minutes, please wait...")
 
-                pkg_str = " ".join(CONDA_PACKAGES)
-                self._log(f"  Installing: {pkg_str}")
+                total_pkgs = len(CONDA_PACKAGES) + len(PIP_PACKAGES)
+                installed_count = 0
+                failed_pkgs = []
 
-                cmd = [
-                    self.conda_exe, "install",
-                    "-p", self.env_path,
-                    "-c", "conda-forge",
-                    "-y"
-                ] + CONDA_PACKAGES
+                # Progress range for dependency step: 20 -> 55
+                progress_start = 20
+                progress_end = 55
 
-                returncode = self._run_cmd_stream(cmd, timeout=3600)
+                # --- Conda packages (one by one) ---
+                self._log(f"\n  Conda packages to install: {len(CONDA_PACKAGES)}")
+                for idx, pkg in enumerate(CONDA_PACKAGES, 1):
+                    overall_idx = installed_count + 1
+                    self._log(
+                        f"\n  Installing (overall {overall_idx}/{total_pkgs}) via conda: {pkg} ({idx}/{len(CONDA_PACKAGES)})..."
+                    )
+                    cmd = [
+                        self.conda_exe, "install",
+                        "-p", self.env_path,
+                        "-c", "conda-forge",
+                        "-y", pkg
+                    ]
+                    try:
+                        rc = self._run_cmd_stream(cmd, timeout=600)
+                        if rc == 0:
+                            self._log(f" {pkg} installed")
+                        else:
+                            self._log(f" {pkg} failed (exit code {rc})")
+                            failed_pkgs.append(pkg)
+                    except subprocess.TimeoutExpired:
+                        self._log(f" {pkg} timed out")
+                        failed_pkgs.append(pkg)
+                    except Exception as e:
+                        self._log(f" {pkg} error: {e}")
+                        failed_pkgs.append(pkg)
 
-                if returncode == 0:
-                    self._log("  ✅ Conda packages installed")
-                else:
-                    self._log("  ⚠️ Some packages may have failed")
+                    installed_count += 1
+                    pct = progress_start + (progress_end - progress_start) * installed_count / total_pkgs
+                    self.progress["value"] = pct
 
-                self.progress["value"] = 50
-
-                # 安装 pip 包
+                # --- Pip packages (one by one) ---
                 if PIP_PACKAGES:
-                    self._log("\n  Installing pip packages...")
-                    pip_cmd = [
-                        self.conda_exe, "run", "-p", self.env_path,
-                        "python", "-m", "pip", "install"
-                    ] + PIP_PACKAGES
+                    self._log(f"\n  Pip packages to install: {len(PIP_PACKAGES)}")
+                    for idx, pkg in enumerate(PIP_PACKAGES, 1):
+                        overall_idx = installed_count + 1
+                        self._log(
+                            f"\n  Installing (overall {overall_idx}/{total_pkgs}) via pip: {pkg} ({idx}/{len(PIP_PACKAGES)})..."
+                        )
+                        pip_cmd = [
+                            self.conda_exe, "run", "-p", self.env_path,
+                            "python", "-m", "pip", "install", pkg
+                        ]
+                        try:
+                            rc = self._run_cmd_stream(pip_cmd, timeout=300)
+                            if rc == 0:
+                                self._log(f" {pkg} installed")
+                            else:
+                                self._log(f" {pkg} failed (exit code {rc})")
+                                failed_pkgs.append(pkg)
+                        except subprocess.TimeoutExpired:
+                            self._log(f" {pkg} timed out")
+                            failed_pkgs.append(pkg)
+                        except Exception as e:
+                            self._log(f" {pkg} error: {e}")
+                            failed_pkgs.append(pkg)
 
-                    pip_rc = self._run_cmd_stream(pip_cmd, timeout=600)
-                    if pip_rc == 0:
-                        self._log("  ✅ Pip packages installed")
-                    else:
-                        self._log("  ⚠️ Some pip packages may have failed")
+                        installed_count += 1
+                        pct = progress_start + (progress_end - progress_start) * installed_count / total_pkgs
+                        self.progress["value"] = pct
 
-                # 安装 APBS 1.5 预编译二进制文件（EC 分析的核心依赖）
+                # Summary
+                if failed_pkgs:
+                    self._log(f"\n {len(failed_pkgs)} package(s) failed: {', '.join(failed_pkgs)}")
+                else:
+                    self._log("\n All packages installed successfully")
+
+                # Install APBS 1.5 prebuilt binary (core dependency for EC analysis)
                 self._log("\n  Installing APBS 1.5...")
                 if self._install_apbs_binary():
-                    # 验证安装
-                    apbs_check = subprocess.run(
-                        [self.conda_exe, "run", "-p", self.env_path, "apbs", "--version"],
-                        capture_output=True, text=True, timeout=30
-                    )
-                    if apbs_check.returncode == 0:
-                        self._log("  ✅ APBS verified")
+                    if _verify_apbs_binary(self.env_path):
+                        self._log("APBS verified")
                     else:
-                        self._log("  ⚠️ APBS installed but verification failed")
+                        self._log("APBS installed but verification failed")
                 else:
-                    self._log("  ⚠️ APBS installation failed — EC analysis may not work")
+                    self._log("APBS installation failed — EC analysis may not work")
             else:
                 self._log("\n[2/5] Skipping dependencies (unchecked)")
 
             self.progress["value"] = 60
 
-            # 3. 复制插件文件
+            # 3. Copy plugin files
             self._log("\n" + "=" * 50)
             self._log("[3/5] Installing plugin files...")
             self._log("=" * 50)
@@ -650,10 +688,10 @@ class InstallerApp:
             source_dir = get_glint_source_dir()
 
             if source_dir and os.path.isdir(source_dir):
-                # 创建目标目录
+                # Create destination directory
                 os.makedirs(install_path, exist_ok=True)
 
-                # 删除旧安装
+                # Remove old installation
                 if os.path.exists(install_path):
                     for item in os.listdir(install_path):
                         item_path = os.path.join(install_path, item)
@@ -665,7 +703,7 @@ class InstallerApp:
                         except:
                             pass
 
-                # 复制文件
+                # Copy files
                 IGNORED = {'__pycache__', '.DS_Store', '.git', '.gitignore', '*.pyc'}
                 for item in os.listdir(source_dir):
                     if item in IGNORED:
@@ -679,15 +717,15 @@ class InstallerApp:
                         else:
                             shutil.copy2(src, dst)
                     except Exception as e:
-                        self._log(f"  ⚠️ Failed to copy {item}: {e}")
+                        self._log(f"Failed to copy {item}: {e}")
 
-                self._log(f"  ✅ Copied to {install_path}")
+                self._log(f"Copied to {install_path}")
             else:
-                self._log(f"  ⚠️ Source directory not found: {source_dir}")
+                self._log(f"Source directory not found: {source_dir}")
 
             self.progress["value"] = 80
 
-            # 4. 创建快捷方式
+            # 4. Create desktop shortcut
             if self.create_shortcut.get():
                 self._log("\n" + "=" * 50)
                 self._log("[4/5] Creating desktop shortcut...")
@@ -698,9 +736,9 @@ class InstallerApp:
 
             self.progress["value"] = 100
 
-            # 5. 完成
+            # 5. Done
             self._log("\n" + "=" * 50)
-            self._log("[5/5] ✅ Installation complete!")
+            self._log("[5/5]Installation complete!")
             self._log("=" * 50)
             self._log("\nHow to use GLINT:")
             self._log("  1. Double-click 'GLINT' shortcut on Desktop")
@@ -712,7 +750,7 @@ class InstallerApp:
                 "You can now launch GLINT from the Desktop shortcut."))
 
         except Exception as e:
-            self._log(f"\n❌ Error: {e}")
+            self._log(f"\n Error: {e}")
             self._log(traceback.format_exc())
             self.root.after(0, lambda: messagebox.showerror("Error", str(e)))
         finally:
@@ -739,7 +777,7 @@ class InstallerApp:
         with open(launcher_bat, "w", encoding="utf-8") as f:
             f.write("@echo off\n")
             f.write(f'call "{activate_bat}" "{self.env_path}"\n')
-            # 添加环境变量以解决 OpenMP 错误
+            # Set environment variables to work around OpenMP errors
             f.write('set KMP_DUPLICATE_LIB_OK=TRUE\n')
             f.write('set OMP_NUM_THREADS=1\n')
             f.write('pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser(\'~/.pymol/startup\')); import glint; glint.glint_gui()"\n')
@@ -773,14 +811,14 @@ $Shortcut.Save()
             result = subprocess.run(["powershell", "-Command", ps_script],
                                    capture_output=True, timeout=30)
             if result.returncode == 0:
-                self._log(f"  ✅ Created shortcut: {shortcut_path}")
+                self._log(f"Created shortcut: {shortcut_path}")
                 if icon_path:
-                    self._log(f"  ✅ Icon set: {icon_path}")
+                    self._log(f"Icon set: {icon_path}")
             else:
                 raise Exception(result.stderr.decode() if result.stderr else "Unknown error")
         except Exception as e:
-            self._log(f"  ⚠️ Shortcut creation failed: {e}")
-            self._log(f"  You can manually run: {launcher_bat}")
+            self._log(f"Shortcut creation failed: {e}")
+            self._log(f"You can manually run: {launcher_bat}")
 
     def _create_icon(self, launcher_dir):
         """Create .ico file from PNG logo"""
@@ -797,7 +835,7 @@ $Shortcut.Save()
                 logo_png = os.path.join(self.install_path.get(), "assets", "logo.png")
 
             if not os.path.exists(logo_png):
-                self._log("  ⚠️ Logo PNG not found, using default icon")
+                self._log("Logo PNG not found, using default icon")
                 return None
 
             icon_path = os.path.join(launcher_dir, "glint.ico")
@@ -809,10 +847,10 @@ $Shortcut.Save()
                 # Create multiple sizes for better quality
                 sizes = [(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)]
                 img.save(icon_path, format='ICO', sizes=sizes)
-                self._log(f"  ✅ Created icon: {icon_path}")
+                self._log(f"Created icon: {icon_path}")
                 return icon_path
             except ImportError:
-                self._log("  ⚠️ PIL not available, trying alternative method...")
+                self._log("PIL not available, trying alternative method...")
 
             # Alternative: Use conda environment's PIL
             try:
@@ -830,21 +868,21 @@ print("OK")
                     capture_output=True, text=True, timeout=30
                 )
                 if result.returncode == 0 and os.path.exists(icon_path):
-                    self._log(f"  ✅ Created icon: {icon_path}")
+                    self._log(f"Created icon: {icon_path}")
                     return icon_path
             except Exception as e:
-                self._log(f"  ⚠️ Icon conversion failed: {e}")
+                self._log(f"Icon conversion failed: {e}")
 
             return None
 
         except Exception as e:
-            self._log(f"  ⚠️ Icon creation error: {e}")
+            self._log(f"Icon creation error: {e}")
             return None
 
 
 def main():
     try:
-        # 设置 DPI 感知 (Windows 10+)
+        # Set DPI awareness (Windows 10+)
         try:
             from ctypes import windll
             windll.shcore.SetProcessDpiAwareness(1)

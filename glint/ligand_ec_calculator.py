@@ -1484,6 +1484,9 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         print("[calculate_ligand_ec] ❌ RDKit required")
         return None
     
+
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     # Create output directory
     if output_dir is None:
         output_dir = tempfile.mkdtemp(prefix='glint_ec_')
@@ -1880,6 +1883,9 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
         print("[analyze_ternary_ec] ❌ Must specify both protein_a_chains and protein_b_chains")
         return None
     
+
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     # Create output directory
     if output_dir is None:
         output_dir = tempfile.mkdtemp(prefix='glint_ternary_ec_')
@@ -3028,6 +3034,9 @@ def visualize_ec_surface(obj_name: str, ligand_resname: str,
         print("[visualize_ec_surface] 💡 Run calculate_ligand_ec first and pass the result")
         return False
     
+
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     if output_dir is None:
         output_dir = tempfile.mkdtemp(prefix='glint_ec_vis_')
     
@@ -3378,6 +3387,9 @@ def compare_ligand_ec(obj_name: str, ligand_resnames: List[str],
         print("[compare_ligand_ec] ❌ NumPy and RDKit required")
         return None
     
+
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     if output_dir is None:
         output_dir = tempfile.mkdtemp(prefix='glint_ec_compare_')
     else:
@@ -3509,6 +3521,9 @@ def analyze_multiconformer_ec(obj_name: str, ligand_resname: str,
                                        output_dir, ph, surface_density)
         conformer_states = list(range(1, n_states + 1))
     
+
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     if output_dir is None:
         output_dir = tempfile.mkdtemp(prefix='glint_ec_multiconf_')
     else:
@@ -3644,6 +3659,9 @@ def calculate_ec_hotspots(obj_name: str, ligand_resname: str,
         print("[calculate_ec_hotspots] ❌ NumPy and RDKit required")
         return None
     
+
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     # First run standard EC analysis with higher density
     ec_result = calculate_ligand_ec(
         obj_name=obj_name,
@@ -3807,6 +3825,9 @@ def analyze_substituent_ec_effect(obj_name: str, ligand_resname: str,
         print("[analyze_substituent_ec_effect] ❌ NumPy and RDKit required")
         return None
     
+
+    if output_dir: output_dir = os.path.normpath(output_dir)
+
     # First run full EC analysis
     ec_result = calculate_ligand_ec(
         obj_name=obj_name,
