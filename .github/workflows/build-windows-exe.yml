@@ -12,6 +12,8 @@ jobs:
   build:
     runs-on: windows-latest
     name: Build GLINT_Installer.exe
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: 'true'
 
     steps:
       - name: Checkout repository
