@@ -68,6 +68,24 @@ def get_glint_source_dir():
     return None
 
 
+def get_external_dir():
+    """Locate the bundled external directory"""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+
+    # 1. Check sibling 'external' directory
+    bundled_dir = os.path.join(script_dir, "external")
+    if os.path.isdir(bundled_dir):
+        return bundled_dir
+
+    # 2. PyInstaller bundled temp directory
+    if hasattr(sys, '_MEIPASS'):
+        bundled_dir = os.path.join(sys._MEIPASS, "external")
+        if os.path.isdir(bundled_dir):
+            return bundled_dir
+
+    return None
+
+
 def _verify_apbs_binary(env_path: str) -> bool:
     """Verify APBS binary in conda environment using file existence and execute permission."""
     dest_apbs = os.path.join(env_path, "Scripts", "apbs.exe")
@@ -389,13 +407,21 @@ class InstallerApp:
     def _run_cmd_stream(self, cmd, timeout=3600):
         """Run a command with streaming stdout, log each line to GUI, return returncode"""
         import time
+        import os
+        
+        env = os.environ.copy()
+        env['PYTHONIOENCODING'] = 'utf-8'
+        env['PYTHONUTF8'] = '1'
+        
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
-            text=True,
+            encoding='utf-8',
+            errors='replace',
             bufsize=1,
-            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0
+            creationflags=subprocess.CREATE_NO_WINDOW if hasattr(subprocess, 'CREATE_NO_WINDOW') else 0,
+            env=env
         )
         start = time.time()
         try:
@@ -522,6 +548,29 @@ class InstallerApp:
         messagebox.showinfo("Install Miniconda",
                            "Please download and install Miniconda for Windows.\n\n"
                            "After installation, restart this installer.")
+
+    def _install_vina_binary(self):
+        """Install Vina binary into the conda environment"""
+        external_dir = get_external_dir()
+        if not external_dir:
+            self._log("External directory not found, cannot install Vina binary")
+            return False
+
+        source = os.path.join(external_dir, "vina", "vina_1.2.7_win.exe")
+        if not os.path.exists(source):
+            self._log(f"Vina binary not found: {source}")
+            return False
+
+        try:
+            dest_dir = os.path.join(self.env_path, "Scripts")
+            os.makedirs(dest_dir, exist_ok=True)
+            dest = os.path.join(dest_dir, "vina.exe")
+            shutil.copy2(source, dest)
+            self._log(f"Vina installed to {dest}")
+            return True
+        except Exception as e:
+            self._log(f"Failed to install Vina: {e}")
+            return False
 
     def _start_install(self):
         """Start installation"""
@@ -674,6 +723,13 @@ class InstallerApp:
                         self._log("APBS installed but verification failed")
                 else:
                     self._log("APBS installation failed — EC analysis may not work")
+
+                # Install Vina binary
+                self._log("\n  Installing Vina...")
+                if self._install_vina_binary():
+                    self._log("Vina installed successfully")
+                else:
+                    self._log("Vina installation failed — Vina may not be available")
             else:
                 self._log("\n[2/5] Skipping dependencies (unchecked)")
 
