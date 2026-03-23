@@ -39,7 +39,7 @@ CONDA_PACKAGES = [
 # Pip packages (open3d unstable on conda, haddock3 moved from unavailable haddocking channel)
 # vina: no win-64 build on conda-forge, install via pip instead
 # meeko: install via pip on Windows to avoid conda build/solver inconsistencies and to get a consistent, up-to-date package
-PIP_PACKAGES = ["requests", "open3d", "haddock3", "vina", "meeko"]
+PIP_PACKAGES = ["requests", "open3d", "haddock3", "meeko"]
 
 # APBS 1.5 prebuilt binary download URLs (old apbs-pdb2pqr release assets are gone; use github.com/.../raw/refs/heads/master direct links to avoid LFS pointer issues on raw.githubusercontent.com)
 APBS_DOWNLOAD_URLS = {
@@ -291,104 +291,40 @@ class InstallerApp:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     def _install_apbs_binary(self):
-        """Download and install APBS 1.5 prebuilt binary into the conda environment"""
-        import platform
-        import urllib.request
-        import zipfile
-        import tarfile
-        import tempfile
+        """Install APBS 1.5 prebuilt binary from bundled external/apbs/apbs-win/ into the conda environment"""
+        self._log("  Installing APBS 1.5 binary from bundled files...")
 
-        self._log("  Installing APBS 1.5 binary...")
-
-        # Determine platform
-        system = platform.system().lower()
-        machine = platform.machine().lower()
-
-        if system == "darwin":
-            if machine == "arm64":
-                key = "darwin_arm64"
-            else:
-                key = "darwin_x86_64"
-        elif system == "linux":
-            key = "linux_x86_64"
-        elif system == "windows":
-            key = "windows_x86_64"
-        else:
-            self._log(f" Unsupported platform: {system} {machine}")
+        external_dir = get_external_dir()
+        if not external_dir:
+            self._log("  External directory not found, cannot install APBS binary")
             return False
 
-        url = APBS_DOWNLOAD_URLS.get(key)
-        if not url:
-            self._log(f"  No APBS binary available for {key}")
+        apbs_src_dir = os.path.join(external_dir, "apbs", "apbs-win")
+        if not os.path.isdir(apbs_src_dir):
+            self._log(f"  APBS source directory not found: {apbs_src_dir}")
+            return False
+
+        apbs_exe_src = os.path.join(apbs_src_dir, "apbs.exe")
+        if not os.path.isfile(apbs_exe_src):
+            self._log(f"  APBS executable not found: {apbs_exe_src}")
             return False
 
         try:
-            # Download to temp directory
-            temp_dir = tempfile.mkdtemp()
-            filename = os.path.basename(url)
-            download_path = os.path.join(temp_dir, filename)
+            dest_dir = os.path.join(self.env_path, "Scripts")
+            os.makedirs(dest_dir, exist_ok=True)
+            dest_apbs = os.path.join(dest_dir, "apbs.exe")
+            shutil.copy2(apbs_exe_src, dest_apbs)
 
-            self._log(f"  Downloading from {url}...")
-            urllib.request.urlretrieve(url, download_path)
+            # Also copy DLLs alongside apbs.exe
+            for item in os.listdir(apbs_src_dir):
+                if item.lower().endswith(".dll"):
+                    shutil.copy2(os.path.join(apbs_src_dir, item),
+                                 os.path.join(dest_dir, item))
 
-            # Extract archive
-            extract_dir = os.path.join(temp_dir, "apbs_extract")
-            os.makedirs(extract_dir, exist_ok=True)
-
-            if filename.endswith('.zip'):
-                with zipfile.ZipFile(download_path, 'r') as zf:
-                    zf.extractall(extract_dir)
-            elif filename.endswith('.tar.gz'):
-                with tarfile.open(download_path, 'r:gz') as tf:
-                    tf.extractall(extract_dir)
-
-            # Locate the apbs executable
-            apbs_exe = None
-            for root, dirs, files in os.walk(extract_dir):
-                for f in files:
-                    if f == 'apbs' or f == 'apbs.exe':
-                        apbs_exe = os.path.join(root, f)
-                        break
-                if apbs_exe:
-                    break
-
-            if not apbs_exe:
-                self._log("APBS executable not found in archive")
-                return False
-
-            # Copy to conda env bin directory (Scripts on Windows)
-            if system == "windows":
-                env_bin = os.path.join(self.env_path, "Scripts")
-                dest_apbs = os.path.join(env_bin, "apbs.exe")
-            else:
-                env_bin = os.path.join(self.env_path, "bin")
-                dest_apbs = os.path.join(env_bin, "apbs")
-            os.makedirs(env_bin, exist_ok=True)
-
-            shutil.copy2(apbs_exe, dest_apbs)
-            if system != "windows":
-                os.chmod(dest_apbs, 0o755)
-
-            # Also copy associated library files if present
-            apbs_dir = os.path.dirname(apbs_exe)
-            lib_dir = os.path.join(apbs_dir, "..", "lib")
-            if os.path.exists(lib_dir):
-                env_lib = os.path.join(self.env_path, "lib")
-                os.makedirs(env_lib, exist_ok=True)
-                for item in os.listdir(lib_dir):
-                    src = os.path.join(lib_dir, item)
-                    dst = os.path.join(env_lib, item)
-                    if os.path.isfile(src):
-                        shutil.copy2(src, dst)
-
-            # Clean up temp files
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-            self._log(f"APBS 1.5 installed to {dest_apbs}")
+            self._log(f"  APBS 1.5 installed to {dest_apbs}")
             return True
-
         except Exception as e:
-            self._log(f"Failed to install APBS: {e}")
+            self._log(f"  Failed to install APBS: {e}")
             return False
 
     def _log(self, msg):
@@ -690,6 +626,9 @@ class InstallerApp:
                             self.conda_exe, "run", "-p", self.env_path,
                             "python", "-m", "pip", "install", pkg
                         ]
+                        # haddock3 has C/C++ build deps that fail on Windows; force binary-only install
+                        if pkg == "haddock3":
+                            pip_cmd += ["--only-binary", "haddock3"]
                         try:
                             rc = self._run_cmd_stream(pip_cmd, timeout=300)
                             if rc == 0:
