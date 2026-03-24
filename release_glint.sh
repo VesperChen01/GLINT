@@ -3,7 +3,7 @@
 # Creates DMG installer package
 #
 # Usage: ./release_glint.sh [version]
-# Example: ./release_glint.sh v0.2.3
+# Example: ./release_glint.sh v0.2.5
 
 set -e
 
@@ -26,7 +26,7 @@ GLINT_LIB="glint"
 if [ -n "$1" ]; then
     VERSION="$1"
 else
-    VERSION=$(python3 -c "from glint._version import __version__; print(__version__)" 2>/dev/null || echo "v0.2.3")
+    VERSION=$(python3 -c "from glint._version import __version__; print(__version__)" 2>/dev/null || echo "v0.2.5")
 fi
 
 DMG_NAME="GLINT_Installer_${VERSION}.dmg"
