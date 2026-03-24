@@ -37,17 +37,9 @@ CONDA_PACKAGES = [
 ]
 
 # Pip packages (open3d unstable on conda, haddock3 moved from unavailable haddocking channel)
-# vina: no win-64 build on conda-forge, install via pip instead
+# vina: installed from bundled Windows binary, not via pip
 # meeko: install via pip on Windows to avoid conda build/solver inconsistencies and to get a consistent, up-to-date package
-PIP_PACKAGES = ["requests", "open3d", "haddock3", "vina", "meeko"]
-
-# APBS 1.5 prebuilt binary download URLs (old apbs-pdb2pqr release assets are gone; use github.com/.../raw/refs/heads/master direct links to avoid LFS pointer issues on raw.githubusercontent.com)
-APBS_DOWNLOAD_URLS = {
-    "darwin_x86_64": "https://github.com/Electrostatics/electrostatics.github.io/raw/refs/heads/master/old-releases/apbs/1.5.0/APBS-1.5.dmg",
-    "darwin_arm64": "https://github.com/Electrostatics/electrostatics.github.io/raw/refs/heads/master/old-releases/apbs/1.5.0/APBS-1.5.dmg",
-    "linux_x86_64": "https://github.com/Electrostatics/electrostatics.github.io/raw/refs/heads/master/old-releases/apbs/1.5.0/APBS-1.5-linux64.tar.gz",
-    "windows_x86_64": "https://github.com/Electrostatics/electrostatics.github.io/raw/refs/heads/master/old-releases/apbs/1.5.0/apbs1.5_win64.zip",
-}
+PIP_PACKAGES = ["requests", "open3d", "haddock3", "meeko"]
 
 
 def get_glint_source_dir():
@@ -291,105 +283,86 @@ class InstallerApp:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
 
     def _install_apbs_binary(self):
-        """Download and install APBS 1.5 prebuilt binary into the conda environment"""
-        import platform
-        import urllib.request
-        import zipfile
-        import tarfile
+        """Install APBS 1.5 from bundled MSI resources into the conda environment"""
         import tempfile
 
         self._log("  Installing APBS 1.5 binary...")
 
-        # Determine platform
-        system = platform.system().lower()
-        machine = platform.machine().lower()
-
-        if system == "darwin":
-            if machine == "arm64":
-                key = "darwin_arm64"
-            else:
-                key = "darwin_x86_64"
-        elif system == "linux":
-            key = "linux_x86_64"
-        elif system == "windows":
-            key = "windows_x86_64"
-        else:
-            self._log(f" Unsupported platform: {system} {machine}")
+        external_dir = get_external_dir()
+        if not external_dir:
+            self._log("External directory not found, cannot install APBS binary")
             return False
 
-        url = APBS_DOWNLOAD_URLS.get(key)
-        if not url:
-            self._log(f"  No APBS binary available for {key}")
+        source_dir = os.path.join(external_dir, "apbs", "apbs-win")
+        if not os.path.isdir(source_dir):
+            self._log(f"APBS resource directory not found: {source_dir}")
             return False
 
+        msi_path = os.path.join(source_dir, "apb1.5.msi")
+        if not os.path.isfile(msi_path):
+            self._log(f"APBS MSI not found: {msi_path}")
+            return False
+
+        temp_dir = tempfile.mkdtemp(prefix="glint-apbs-")
         try:
-            # Download to temp directory
-            temp_dir = tempfile.mkdtemp()
-            filename = os.path.basename(url)
-            download_path = os.path.join(temp_dir, filename)
-
-            self._log(f"  Downloading from {url}...")
-            urllib.request.urlretrieve(url, download_path)
-
-            # Extract archive
-            extract_dir = os.path.join(temp_dir, "apbs_extract")
+            extract_dir = os.path.join(temp_dir, "msi_extract")
             os.makedirs(extract_dir, exist_ok=True)
 
-            if filename.endswith('.zip'):
-                with zipfile.ZipFile(download_path, 'r') as zf:
-                    zf.extractall(extract_dir)
-            elif filename.endswith('.tar.gz'):
-                with tarfile.open(download_path, 'r:gz') as tf:
-                    tf.extractall(extract_dir)
+            creationflags = subprocess.CREATE_NO_WINDOW if hasattr(subprocess, "CREATE_NO_WINDOW") else 0
+            result = subprocess.run(
+                ["msiexec", "/a", msi_path, f"TARGETDIR={extract_dir}", "/qn"],
+                capture_output=True,
+                text=True,
+                timeout=300,
+                creationflags=creationflags,
+            )
+            if result.returncode != 0:
+                self._log(f"Failed to extract APBS MSI (exit code {result.returncode})")
+                details = "\n".join(part.strip() for part in [result.stdout or "", result.stderr or ""] if part.strip())
+                if details:
+                    self._log(details)
+                return False
 
-            # Locate the apbs executable
             apbs_exe = None
-            for root, dirs, files in os.walk(extract_dir):
-                for f in files:
-                    if f == 'apbs' or f == 'apbs.exe':
-                        apbs_exe = os.path.join(root, f)
-                        break
-                if apbs_exe:
+            for root, _, files in os.walk(extract_dir):
+                if "apbs.exe" in files:
+                    apbs_exe = os.path.join(root, "apbs.exe")
                     break
 
             if not apbs_exe:
-                self._log("APBS executable not found in archive")
+                self._log("APBS executable not found in extracted MSI contents")
                 return False
 
-            # Copy to conda env bin directory (Scripts on Windows)
-            if system == "windows":
-                env_bin = os.path.join(self.env_path, "Scripts")
-                dest_apbs = os.path.join(env_bin, "apbs.exe")
-            else:
-                env_bin = os.path.join(self.env_path, "bin")
-                dest_apbs = os.path.join(env_bin, "apbs")
-            os.makedirs(env_bin, exist_ok=True)
+            source_bin_dir = os.path.dirname(apbs_exe)
+            dest_dir = os.path.join(self.env_path, "Scripts")
+            os.makedirs(dest_dir, exist_ok=True)
 
-            shutil.copy2(apbs_exe, dest_apbs)
-            if system != "windows":
-                os.chmod(dest_apbs, 0o755)
+            for item in os.listdir(source_bin_dir):
+                source = os.path.join(source_bin_dir, item)
+                dest = os.path.join(dest_dir, item)
+                if os.path.isdir(source):
+                    if os.path.exists(dest):
+                        shutil.rmtree(dest)
+                    shutil.copytree(source, dest)
+                else:
+                    shutil.copy2(source, dest)
 
-            # Also copy associated library files if present
-            apbs_dir = os.path.dirname(apbs_exe)
-            lib_dir = os.path.join(apbs_dir, "..", "lib")
-            if os.path.exists(lib_dir):
-                env_lib = os.path.join(self.env_path, "lib")
-                os.makedirs(env_lib, exist_ok=True)
-                for item in os.listdir(lib_dir):
-                    src = os.path.join(lib_dir, item)
-                    dst = os.path.join(env_lib, item)
-                    if os.path.isfile(src):
-                        shutil.copy2(src, dst)
+            dest_apbs = os.path.join(dest_dir, "apbs.exe")
+            if not os.path.isfile(dest_apbs):
+                self._log("APBS binary not found after installation")
+                return False
 
-            # Clean up temp files
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-            self._log(f"APBS 1.5 installed to {dest_apbs}")
+            self._log(f"APBS installed to {dest_apbs}")
             return True
 
+        except subprocess.TimeoutExpired:
+            self._log("APBS MSI extraction timed out")
+            return False
         except Exception as e:
             self._log(f"Failed to install APBS: {e}")
             return False
+        finally:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
     def _log(self, msg):
         """Thread-safe log output, dispatched to main thread via root.after"""
@@ -690,6 +663,8 @@ class InstallerApp:
                             self.conda_exe, "run", "-p", self.env_path,
                             "python", "-m", "pip", "install", pkg
                         ]
+                        if pkg == "haddock3":
+                            pip_cmd.extend(["--only-binary", ":all:"])
                         try:
                             rc = self._run_cmd_stream(pip_cmd, timeout=300)
                             if rc == 0:
