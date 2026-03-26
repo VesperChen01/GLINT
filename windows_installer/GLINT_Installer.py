@@ -36,11 +36,13 @@ CONDA_PACKAGES = [
     "pdb2pqr",
 ]
 
-# Pip packages: keep only broadly available ones; remove haddock3 from mandatory install on Windows
-PIP_PACKAGES = ["requests", "open3d", "meeko"]
-
-
-
+# 镜像源配置
+TUNA_CONDA_CHANNELS = [
+    "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main",
+    "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r",
+    "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2",
+]
+TUNA_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
 
 def get_glint_source_dir():
     """Locate the bundled GLINT source directory"""
@@ -102,6 +104,7 @@ class InstallerApp:
         self.install_path = tk.StringVar(value=DEFAULT_INSTALL_PATH)
         self.create_shortcut = tk.BooleanVar(value=True)
         self.install_deps = tk.BooleanVar(value=True)
+        self.use_tuna_mirror = tk.BooleanVar(value=False)
         self.conda_ok = False
         self.env_ok = False
         self.conda_exe = None
@@ -249,8 +252,8 @@ class InstallerApp:
 
         ttk.Checkbutton(opts_frame, text="Install/Update dependencies (conda packages + PyMOL)",
                        variable=self.install_deps).pack(anchor=tk.W, pady=3)
-        ttk.Checkbutton(opts_frame, text="Create desktop shortcut",
-                       variable=self.create_shortcut).pack(anchor=tk.W, pady=3)
+        ttk.Checkbutton(opts_frame, text="Use Tsinghua mirror for conda/pip",
+                       variable=self.use_tuna_mirror).pack(anchor=tk.W, pady=3)
 
         # Button section (pack before progress so buttons are always visible)
         btn_frame = ttk.Frame(main)
@@ -627,12 +630,18 @@ class InstallerApp:
                     self._log(
                         f"\n  Installing (overall {overall_idx}/{total_pkgs}) via conda: {pkg} ({idx}/{len(CONDA_PACKAGES)})..."
                     )
+                    conda_channels = ["-c", "conda-forge"]
+                    if self.use_tuna_mirror.get():
+                        conda_channels = [
+                            "-c", "https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge",
+                            "-c", "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main",
+                            "-c", "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r",
+                            "-c", "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2",
+                        ]
                     cmd = [
                         self.conda_exe, "install",
                         "-p", self.env_path,
-                        "-c", "conda-forge",
-                        "-y", pkg
-                    ]
+                    ] + conda_channels + ["-y", pkg]
                     try:
                         rc = self._run_cmd_stream(cmd, timeout=600)
                         if rc == 0:
@@ -661,8 +670,11 @@ class InstallerApp:
                         )
                         pip_cmd = [
                             self.conda_exe, "run", "-p", self.env_path,
-                            "python", "-m", "pip", "install", pkg
+                            "python", "-m", "pip", "install"
                         ]
+                        if self.use_tuna_mirror.get():
+                            pip_cmd.extend(["-i", TUNA_PIP_INDEX_URL, "--trusted-host", "pypi.tuna.tsinghua.edu.cn"])
+                        pip_cmd.append(pkg)
                         if pkg == "haddock3":
                             pip_cmd.extend(["--only-binary", ":all:"])
                         try:
