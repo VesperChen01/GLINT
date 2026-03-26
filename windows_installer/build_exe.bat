@@ -11,6 +11,14 @@ echo   GLINT Windows EXE Builder
 echo ========================================
 echo.
 
+set "SCRIPT_DIR=%~dp0"
+set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
+set "PARENT_DIR=%SCRIPT_DIR%\.."
+set "GLINT_SRC=%PARENT_DIR%\glint"
+set "EXTERNAL_SRC=%PARENT_DIR%\external"
+set "GLINT_DST=%SCRIPT_DIR%\glint"
+set "EXTERNAL_DST=%SCRIPT_DIR%\external"
+
 REM Check Python
 echo [1/4] Checking Python...
 python --version >nul 2>&1
@@ -37,67 +45,75 @@ echo.
 REM Prepare files
 echo [3/4] Preparing files...
 
-REM Get current directory
-set "SCRIPT_DIR=%~dp0"
-set "SCRIPT_DIR=%SCRIPT_DIR:~0,-1%"
-
-REM Check if glint folder exists
-if not exist "%SCRIPT_DIR%\glint" (
-    echo [INFO] glint folder not found in current directory
-    echo [INFO] Checking parent directory...
-
-    if exist "%SCRIPT_DIR%\..\glint" (
-        echo [INFO] Copying glint from parent directory...
-        xcopy /E /I /Y /Q "%SCRIPT_DIR%\..\glint" "%SCRIPT_DIR%\glint"
-        if errorlevel 1 (
-            echo [ERROR] Failed to copy glint source
-            echo.
-            echo Please manually copy the glint folder into this directory:
-            echo   %SCRIPT_DIR%
-            echo.
-            pause
-            exit /b 1
-        )
-        echo [OK] glint copied successfully
-    ) else (
-        echo [ERROR] glint folder not found!
-        echo.
-        echo Please copy the glint folder into this directory:
-        echo   %SCRIPT_DIR%
-        echo.
-        echo Expected structure:
-        echo   windows_installer\
-        echo   +-- build_exe.bat
-        echo   +-- GLINT_Installer.py
-        echo   +-- glint\
-        echo       +-- __init__.py
-        echo       +-- gui\
-        echo       +-- assets\
-        echo       +-- ...
-        echo.
-        pause
-        exit /b 1
-    )
-) else (
-    echo [OK] glint folder found
+if not exist "%GLINT_SRC%" (
+    echo [ERROR] Source glint folder not found: %GLINT_SRC%
+    pause
+    exit /b 1
 )
 
-REM Ensure external resources are available
-if not exist "%SCRIPT_DIR%\external" (
-    echo [INFO] external folder not found in current directory
-    if exist "%SCRIPT_DIR%\..\external" (
-        echo [INFO] Copying external from parent directory...
-        xcopy /E /I /Y /Q "%SCRIPT_DIR%\..\external" "%SCRIPT_DIR%\external"
-        if errorlevel 1 (
-            echo [WARNING] Failed to copy external resources
-        ) else (
-            echo [OK] external copied successfully
-        )
-    ) else (
-        echo [WARNING] external folder not found; APBS/Vina resources will not be bundled
-    )
-) else (
-    echo [OK] external folder found
+if exist "%GLINT_DST%" (
+    echo [INFO] Removing stale bundled glint directory...
+    rmdir /S /Q "%GLINT_DST%"
+)
+echo [INFO] Copying latest glint source...
+xcopy /E /I /Y /Q "%GLINT_SRC%" "%GLINT_DST%"
+if errorlevel 1 (
+    echo [ERROR] Failed to copy glint source
+    pause
+    exit /b 1
 )
 
-REM Remove __pycache__ directories
+if exist "%EXTERNAL_DST%" (
+    echo [INFO] Removing stale bundled external directory...
+    rmdir /S /Q "%EXTERNAL_DST%"
+)
+if exist "%EXTERNAL_SRC%" (
+    echo [INFO] Copying latest external resources...
+    xcopy /E /I /Y /Q "%EXTERNAL_SRC%" "%EXTERNAL_DST%"
+    if errorlevel 1 (
+        echo [WARNING] Failed to copy external resources
+    ) else (
+        echo [OK] external copied successfully
+    )
+) else (
+    echo [WARNING] external folder not found; APBS/Vina resources will not be bundled
+)
+
+echo [INFO] Cleaning old build artifacts...
+if exist "%SCRIPT_DIR%\build" rmdir /S /Q "%SCRIPT_DIR%\build"
+if exist "%SCRIPT_DIR%\dist" rmdir /S /Q "%SCRIPT_DIR%\dist"
+for /d /r "%GLINT_DST%" %%d in (__pycache__) do @if exist "%%d" rmdir /S /Q "%%d"
+for /d /r "%EXTERNAL_DST%" %%d in (__pycache__) do @if exist "%%d" rmdir /S /Q "%%d"
+echo [OK] Files prepared
+echo.
+
+REM Run PyInstaller
+echo [4/4] Building EXE with PyInstaller...
+echo This may take a few minutes...
+echo.
+
+cd /d "%SCRIPT_DIR%"
+pyinstaller --clean --noconfirm GLINT_Installer.spec
+if errorlevel 1 (
+    echo.
+    echo [ERROR] PyInstaller build failed!
+    echo.
+    echo Common solutions:
+    echo   1. Make sure Python is in PATH
+    echo   2. Try running as Administrator
+    echo   3. Check if antivirus is blocking
+    echo.
+    pause
+    exit /b 1
+)
+
+echo.
+echo ========================================
+echo   Build Complete!
+echo ========================================
+echo.
+echo Output: %SCRIPT_DIR%\dist\GLINT_Installer.exe
+echo.
+echo You can distribute this EXE file to Windows users.
+echo.
+pause

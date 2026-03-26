@@ -42,8 +42,11 @@ TUNA_CONDA_CHANNELS = [
     "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r",
     "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2",
 ]
+# 清华 PyPI 镜像地址
+TUNA_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
 # Pip packages (Windows keeps a smaller, stable set)
 PIP_PACKAGES = ["requests", "open3d", "meeko"]
+
 
 def get_glint_source_dir():
     """Locate the bundled GLINT source directory"""
@@ -385,11 +388,11 @@ class InstallerApp:
         """Run a command with streaming stdout, log each line to GUI, return returncode"""
         import time
         import os
-        
+
         env = os.environ.copy()
         env['PYTHONIOENCODING'] = 'utf-8'
         env['PYTHONUTF8'] = '1'
-        
+
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -604,9 +607,13 @@ class InstallerApp:
                 self._log("[2/5] Installing dependencies...")
                 self._log("=" * 50)
 
-                total_pkgs = len(CONDA_PACKAGES) + len(PIP_PACKAGES)
+                # 使用 globals() 兜底，兼容旧打包产物或异常全局状态，避免 NameError 中断安装
+                pip_packages = globals().get("PIP_PACKAGES", ["requests", "open3d", "meeko"])
+                tuna_pip_index_url = globals().get("TUNA_PIP_INDEX_URL", "https://pypi.tuna.tsinghua.edu.cn/simple")
+                total_pkgs = len(CONDA_PACKAGES) + len(pip_packages)
                 installed_count = 0
                 failed_pkgs = []
+
 
                 # Progress range for dependency step: 20 -> 55
                 progress_start = 20
@@ -650,19 +657,19 @@ class InstallerApp:
                     self.progress["value"] = pct
 
                 # --- Pip packages (one by one) ---
-                if PIP_PACKAGES:
-                    self._log(f"\n  Pip packages to install: {len(PIP_PACKAGES)}")
-                    for idx, pkg in enumerate(PIP_PACKAGES, 1):
+                if pip_packages:
+                    self._log(f"\n  Pip packages to install: {len(pip_packages)}")
+                    for idx, pkg in enumerate(pip_packages, 1):
                         overall_idx = installed_count + 1
                         self._log(
-                            f"\n  Installing (overall {overall_idx}/{total_pkgs}) via pip: {pkg} ({idx}/{len(PIP_PACKAGES)})..."
+                            f"\n  Installing (overall {overall_idx}/{total_pkgs}) via pip: {pkg} ({idx}/{len(pip_packages)})..."
                         )
                         pip_cmd = [
                             self.conda_exe, "run", "-p", self.env_path,
                             "python", "-m", "pip", "install"
                         ]
                         if self.use_tuna_mirror.get():
-                            pip_cmd.extend(["-i", TUNA_PIP_INDEX_URL, "--trusted-host", "pypi.tuna.tsinghua.edu.cn"])
+                            pip_cmd.extend(["-i", tuna_pip_index_url, "--trusted-host", "pypi.tuna.tsinghua.edu.cn"])
                         pip_cmd.append(pkg)
                         if pkg == "haddock3":
                             pip_cmd.extend(["--only-binary", ":all:"])
