@@ -27,6 +27,12 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller Pillow
 
+      - name: Build EXE with PowerShell script
+        shell: pwsh
+        working-directory: windows_installer
+        run: |
+          powershell -ExecutionPolicy Bypass -File build_exe.ps1
+
       - name: Verify output
         shell: pwsh
         run: |
@@ -45,3 +51,4 @@ jobs:
           path: windows_installer/dist/GLINT_Installer.exe
           retention-days: 30
           if-no-files-found: error
+
