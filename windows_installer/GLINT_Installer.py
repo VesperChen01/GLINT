@@ -42,7 +42,8 @@ TUNA_CONDA_CHANNELS = [
     "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r",
     "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2",
 ]
-TUNA_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
+# Pip packages (Windows keeps a smaller, stable set)
+PIP_PACKAGES = ["requests", "open3d", "meeko"]
 
 def get_glint_source_dir():
     """Locate the bundled GLINT source directory"""
@@ -581,20 +582,8 @@ class InstallerApp:
                     raise Exception(f"Failed to determine environment path: {e}")
 
 
-            # Auto-accept conda Terms of Service (prevents CondaToSNonInteractiveError)
-            try:
-                self._log("  Accepting conda Terms of Service...")
-                tos_result = subprocess.run(
-                    [self.conda_exe, "config", "--set", "auto_accept_default_terms", "true"],
-                    capture_output=True, text=True, timeout=15
-                )
-                if tos_result.returncode == 0:
-                    self._log(" Conda TOS accepted")
-                else:
-                    self._log(f" Could not auto-accept TOS: {tos_result.stderr.strip()}")
-            except Exception as e:
-                self._log(f" TOS acceptance skipped: {e}")
-
+            # Windows 下 conda 版本差异较大，旧版不一定支持自动 ToS 配置
+            # 这里直接跳过，避免 'auto_accept_default_terms' 报错
             if not self.env_ok:
                 self._log(f"  Creating environment at {self.env_path}...")
                 returncode = self._run_cmd_stream(
