@@ -68,30 +68,13 @@ jobs:
       - name: Install build dependencies
         run: python -m pip install pyinstaller Pillow --quiet
 
-      - name: Copy glint source into windows_installer
+      - name: Build EXE with PowerShell script
         shell: pwsh
-        run: |
-          if (Test-Path "windows_installer\glint") {
-            Remove-Item -Path "windows_installer\glint" -Recurse -Force
-          }
-          Copy-Item -Path "glint" -Destination "windows_installer\glint" -Recurse -Force
-          Get-ChildItem -Path "windows_installer\glint" -Directory -Recurse -Filter "__pycache__" |
-            Remove-Item -Recurse -Force
-
-      - name: Generate logo.ico
-        shell: pwsh
-        run: |
-          python -c "
-          from PIL import Image
-          img = Image.open('windows_installer/glint/assets/logo.png').convert('RGBA')
-          img.save('windows_installer/glint/assets/logo.ico', format='ICO',
-                   sizes=[(16,16),(32,32),(48,48),(64,64),(128,128),(256,256)])
-          print('logo.ico generated')
-          "
-
-      - name: Build EXE with PyInstaller
         working-directory: windows_installer
-        run: pyinstaller --noconfirm GLINT_Installer.spec
+        run: |
+          powershell -ExecutionPolicy Bypass -File build_exe.ps1
+
+
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4

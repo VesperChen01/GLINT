@@ -36,10 +36,10 @@ CONDA_PACKAGES = [
     "pdb2pqr",
 ]
 
-# Pip packages (open3d unstable on conda, haddock3 moved from unavailable haddocking channel)
-# vina: installed from bundled Windows binary, not via pip
-# meeko: install via pip on Windows to avoid conda build/solver inconsistencies and to get a consistent, up-to-date package
-PIP_PACKAGES = ["requests", "open3d", "haddock3", "meeko"]
+# Pip packages: keep only broadly available ones; remove haddock3 from mandatory install on Windows
+PIP_PACKAGES = ["requests", "open3d", "meeko"]
+
+
 
 
 def get_glint_source_dir():
@@ -689,91 +689,52 @@ class InstallerApp:
                 else:
                     self._log("\n All packages installed successfully")
 
-                # Install APBS 1.5 prebuilt binary (core dependency for EC analysis)
-                self._log("\n  Installing APBS 1.5...")
-                if self._install_apbs_binary():
-                    if _verify_apbs_binary(self.env_path):
-                        self._log("APBS verified")
-                    else:
-                        self._log("APBS installed but verification failed")
-                else:
-                    self._log("APBS installation failed — EC analysis may not work")
-
-                # Install Vina binary
-                self._log("\n  Installing Vina...")
-                if self._install_vina_binary():
-                    self._log("Vina installed successfully")
-                else:
-                    self._log("Vina installation failed — Vina may not be available")
-            else:
-                self._log("\n[2/5] Skipping dependencies (unchecked)")
-
-            self.progress["value"] = 60
-
-            # 3. Copy plugin files
-            self._log("\n" + "=" * 50)
-            self._log("[3/5] Installing plugin files...")
-            self._log("=" * 50)
-
-            install_path = self.install_path.get()
-            source_dir = get_glint_source_dir()
-
-            if source_dir and os.path.isdir(source_dir):
-                # Create destination directory
-                os.makedirs(install_path, exist_ok=True)
-
-                # Remove old installation
-                if os.path.exists(install_path):
-                    for item in os.listdir(install_path):
-                        item_path = os.path.join(install_path, item)
-                        try:
-                            if os.path.isdir(item_path):
-                                shutil.rmtree(item_path)
-                            else:
-                                os.remove(item_path)
-                        except:
-                            pass
-
-                # Copy files
-                IGNORED = {'__pycache__', '.DS_Store', '.git', '.gitignore', '*.pyc'}
-                for item in os.listdir(source_dir):
-                    if item in IGNORED:
-                        continue
-                    src = os.path.join(source_dir, item)
-                    dst = os.path.join(install_path, item)
-                    try:
-                        if os.path.isdir(src):
-                            shutil.copytree(src, dst,
-                                          ignore=shutil.ignore_patterns(*IGNORED))
-                        else:
-                            shutil.copy2(src, dst)
-                    except Exception as e:
-                        self._log(f"Failed to copy {item}: {e}")
-
-                self._log(f"Copied to {install_path}")
-            else:
-                self._log(f"Source directory not found: {source_dir}")
-
-            self.progress["value"] = 80
-
-            # 4. Create desktop shortcut
-            if self.create_shortcut.get():
+                # 3. Copy plugin files
                 self._log("\n" + "=" * 50)
-                self._log("[4/5] Creating desktop shortcut...")
+                self._log("[3/5] Installing plugin files...")
                 self._log("=" * 50)
-                self._create_shortcut()
-            else:
-                self._log("\n[4/5] Skipping shortcut creation")
 
-            self.progress["value"] = 100
+                install_path = self.install_path.get()
+                source_dir = get_glint_source_dir()
 
-            # 5. Done
-            self._log("\n" + "=" * 50)
-            self._log("[5/5]Installation complete!")
-            self._log("=" * 50)
-            self._log("\nHow to use GLINT:")
-            self._log("  1. Double-click 'GLINT' shortcut on Desktop")
-            self._log("  2. Or run in PyMOL: glint_gui")
+                if source_dir and os.path.isdir(source_dir):
+                    # Create destination directory
+                    os.makedirs(install_path, exist_ok=True)
+
+                    # Remove old installation
+                    if os.path.exists(install_path):
+                        for item in os.listdir(install_path):
+                            item_path = os.path.join(install_path, item)
+                            try:
+                                if os.path.isdir(item_path):
+                                    shutil.rmtree(item_path)
+                                else:
+                                    os.remove(item_path)
+                            except:
+                                pass
+
+                    # Copy files
+                    IGNORED = {'__pycache__', '.DS_Store', '.git', '.gitignore', '*.pyc'}
+                    for item in os.listdir(source_dir):
+                        if item in IGNORED:
+                            continue
+                        src = os.path.join(source_dir, item)
+                        dst = os.path.join(install_path, item)
+                        try:
+                            if os.path.isdir(src):
+                                shutil.copytree(src, dst, ignore=shutil.ignore_patterns(*IGNORED))
+                            else:
+                                shutil.copy2(src, dst)
+                        except Exception as e:
+                            self._log(f"Failed to copy {item}: {e}")
+
+                    self._log(f"Copied to {install_path}")
+                else:
+                    self._log(f"Source directory not found: {source_dir}")
+
+                self.progress["value"] = 80
+
+
 
             self.root.after(0, lambda: messagebox.showinfo(
                 "Success",
@@ -803,22 +764,15 @@ class InstallerApp:
         # Create icon file from PNG
         icon_path = self._create_icon(launcher_dir)
 
-        # Create launcher batch file
-        launcher_bat = os.path.join(launcher_dir, "launch_glint.bat")
-        with open(launcher_bat, "w", encoding="utf-8") as f:
-            f.write("@echo off\n")
-            f.write(f'call "{activate_bat}" "{self.env_path}"\n')
-            # Set environment variables to work around OpenMP errors
-            f.write('set KMP_DUPLICATE_LIB_OK=TRUE\n')
-            f.write('set OMP_NUM_THREADS=1\n')
-            f.write('pymol -d "import sys, os; sys.path.insert(0, os.path.expanduser(\'~/.pymol/startup\')); import glint; glint.glint_gui()"\n')
+        pymol_exe = os.path.join(self.env_path, "Scripts", "pymol.exe")
+        if not os.path.exists(pymol_exe):
+            self._log(f"PyMOL executable not found: {pymol_exe}")
+            self._log("GLINT will not open until PyMOL is installed correctly")
+            return False
 
-        # Create VBS script to hide command window
-        vbs_file = os.path.join(launcher_dir, "launch_glint.vbs")
-        with open(vbs_file, "w", encoding="utf-8") as f:
-            f.write('Set WshShell = CreateObject("WScript.Shell")\n')
-            f.write(f'WshShell.Run chr(34) & "{launcher_bat}" & chr(34), 0\n')
-            f.write('Set WshShell = Nothing\n')
+
+
+
 
         # Create shortcut using PowerShell
         shortcut_path = os.path.join(desktop, "GLINT.lnk")

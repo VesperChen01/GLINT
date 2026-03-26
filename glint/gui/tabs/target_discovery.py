@@ -718,12 +718,24 @@ class TargetDiscoveryTab(CommonTab):
         except (ValueError, TypeError):  # float() 转换可能Failed
             ph = 7.4
             
+        # Get surface property mode and map to internal key
+        color_mode_idx = self.parent_window.surf_color_mode.currentIndex()
+        # 中文注释：Analyze Surface 需要根据用户选择筛选 patch 类型，避免两个选项返回相同结果
+        surface_property = 'electrostatic' if color_mode_idx == 0 else 'hydrophobicity'
+
         self.parent_window.surf_btn.setEnabled(False)
         self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
-        
+
         self.log(f"🔬 Starting surface analysis with APBS (pH={ph})...")
-        
-        self.parent_window.surf_thread = SurfaceAnalysisWorker(obj, outcsv, use_apbs=True, ph=ph)
+        self.log(f"   Surface property: {surface_property}")
+
+        self.parent_window.surf_thread = SurfaceAnalysisWorker(
+            obj,
+            outcsv,
+            use_apbs=True,
+            ph=ph,
+            surface_property=surface_property,
+        )
         self.parent_window.surf_thread.progress.connect(self.log)
         self.parent_window.surf_thread.error.connect(self.on_error)
         self.parent_window.surf_thread.finished.connect(self.on_finished_surface)

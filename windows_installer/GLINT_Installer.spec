@@ -14,25 +14,25 @@ spec_dir = os.path.dirname(os.path.abspath(SPEC))
 # Path to glint source
 glint_src = os.path.join(spec_dir, 'glint')
 
-# Collect all glint files
-glint_datas = []
-if os.path.exists(glint_src):
-    for root, dirs, files in os.walk(glint_src):
-        # Skip __pycache__ directories
+# Collect all external files
+external_src = os.path.join(spec_dir, 'external')
+external_datas = []
+if os.path.exists(external_src):
+    for root, dirs, files in os.walk(external_src):
         dirs[:] = [d for d in dirs if d != '__pycache__']
         for file in files:
             if file.endswith('.pyc') or file == '.DS_Store':
                 continue
             src_path = os.path.join(root, file)
-            # Calculate relative path from glint_src
             rel_dir = os.path.relpath(root, spec_dir)
-            glint_datas.append((src_path, rel_dir))
+            external_datas.append((src_path, rel_dir))
+
 
 a = Analysis(
     ['GLINT_Installer.py'],
     pathex=[spec_dir],
     binaries=[],
-    datas=glint_datas,
+    datas=glint_datas + external_datas,
     hiddenimports=[
         'tkinter',
         'tkinter.ttk',

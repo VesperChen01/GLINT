@@ -258,21 +258,25 @@ class SurfaceAnalysisWorker(QThread):
     finished = pyqtSignal(list, str) # (patches, out_csv)
     error = pyqtSignal(str)
 
-    def __init__(self, obj_name: str, out_csv: str, use_apbs: bool = True, ph: float = 7.4):
+    def __init__(self, obj_name: str, out_csv: str, use_apbs: bool = True, ph: float = 7.4,
+                 surface_property: str = 'electrostatic'):
         """
         Initialize the SurfaceAnalysisWorker.
-        
+
         Args:
             obj_name: Name of the PyMOL object to analyze
             out_csv: Optional path for CSV output
             use_apbs: Use APBS/PDB2PQR for accurate electrostatics (default: True)
             ph: pH for PDB2PQR protonation state (default: 7.4)
+            surface_property: 仅返回指定属性相关的 patch，'electrostatic' 或 'hydrophobicity'
         """
         super().__init__()
         self.obj_name = obj_name
         self.out_csv = out_csv
         self.use_apbs = use_apbs
         self.ph = ph
+        # 中文注释：容错处理，未知值回退到 electrostatic
+        self.surface_property = surface_property if surface_property in ('electrostatic', 'hydrophobicity') else 'electrostatic'
         
     def run(self):
         try:
@@ -291,8 +295,16 @@ class SurfaceAnalysisWorker(QThread):
                 ph=self.ph
             )
             patches = analyzer.analyze()
-            
-            self.progress.emit(f"Analysis complete. Found {len(patches)} patches.")
+
+            # 中文注释：按界面选择过滤 patch 类型，避免“Electrostatic/Hydrophobicity”两个选项显示同一批结果
+            if self.surface_property == 'electrostatic':
+                patches = [p for p in patches if p.type in ('positive', 'negative')]
+            elif self.surface_property == 'hydrophobicity':
+                patches = [p for p in patches if p.type == 'hydrophobic']
+
+            self.progress.emit(
+                f"Analysis complete. Found {len(patches)} patches (property={self.surface_property})."
+            )
             
             # Export to CSV if requested
             if self.out_csv:

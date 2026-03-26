@@ -1193,42 +1193,83 @@ quit
     def _run_command_line(self, input_file: str, working_dir: str) -> Optional[str]:
         """Run APBS using command line."""
         cmd_parts = [self.apbs_path, input_file]
-        
+
         print(f"[APBS] Running: {' '.join(cmd_parts)}")
         print(f"[APBS] Working directory: {working_dir}")
-        
+
+        # 为 APBS 进程构造运行时库路径，修复 macOS 下 libmaloc 等动态库找不到的问题
+        run_env = os.environ.copy()
+        lib_dirs = []
+        apbs_real = os.path.realpath(self.apbs_path)
+        apbs_bin_dir = os.path.dirname(apbs_real)
+
+        # 优先：apbs 所在环境的 lib / Frameworks
+        for d in [
+            os.path.join(apbs_bin_dir, '..', 'lib'),
+            os.path.join(apbs_bin_dir, '..', 'Frameworks'),
+        ]:
+            d = os.path.realpath(d)
+            if os.path.isdir(d):
+                lib_dirs.append(d)
+
+        # 次优先：当前 conda 环境（若存在）
+        conda_prefix = run_env.get('CONDA_PREFIX')
+        if conda_prefix:
+            for d in [
+                os.path.join(conda_prefix, 'lib'),
+                os.path.join(conda_prefix, 'Frameworks'),
+            ]:
+                d = os.path.realpath(d)
+                if os.path.isdir(d):
+                    lib_dirs.append(d)
+
+        # 去重并合并到 DYLD_LIBRARY_PATH / LD_LIBRARY_PATH
+        dedup_lib_dirs = []
+        for d in lib_dirs:
+            if d not in dedup_lib_dirs:
+                dedup_lib_dirs.append(d)
+
+        if dedup_lib_dirs:
+            # macOS 动态库搜索路径
+            old_dyld = run_env.get('DYLD_LIBRARY_PATH', '')
+            run_env['DYLD_LIBRARY_PATH'] = ':'.join(dedup_lib_dirs + ([old_dyld] if old_dyld else []))
+            # 兼容 Linux 路径变量（无副作用）
+            old_ld = run_env.get('LD_LIBRARY_PATH', '')
+            run_env['LD_LIBRARY_PATH'] = ':'.join(dedup_lib_dirs + ([old_ld] if old_ld else []))
+
         try:
             result = subprocess.run(
                 cmd_parts,
                 capture_output=True,
                 text=True,
                 cwd=working_dir,
-                timeout=600  # 10 minute timeout
+                timeout=600,  # 10 minute timeout
+                env=run_env,
             )
-            
+
             if result.returncode != 0:
                 print(f"[APBS] Error output:\n{result.stderr}")
                 # APBS sometimes returns non-zero but still produces output
-            
+
             # Find output DX file
             # APBS adds .dx extension to the prefix
             base_name = os.path.splitext(os.path.basename(input_file))[0]
             dx_file = os.path.join(working_dir, base_name + '.dx')
-            
+
             if os.path.exists(dx_file):
                 print(f"[APBS] ✅ Generated: {dx_file}")
                 return dx_file
-            
+
             # Try alternative naming
             for f in os.listdir(working_dir):
                 if f.endswith('.dx'):
                     dx_file = os.path.join(working_dir, f)
                     print(f"[APBS] ✅ Found output: {dx_file}")
                     return dx_file
-            
+
             print("[APBS] ❌ No output DX file found")
             return None
-            
+
         except subprocess.TimeoutExpired:
             print("[APBS] ❌ Timeout")
             return None

@@ -82,56 +82,22 @@ if not exist "%SCRIPT_DIR%\glint" (
     echo [OK] glint folder found
 )
 
-REM Remove __pycache__ directories
-echo [INFO] Cleaning __pycache__ directories...
-for /d /r "%SCRIPT_DIR%\glint" %%d in (__pycache__) do (
-    if exist "%%d" (
-        rmdir /s /q "%%d" 2>nul
+REM Ensure external resources are available
+if not exist "%SCRIPT_DIR%\external" (
+    echo [INFO] external folder not found in current directory
+    if exist "%SCRIPT_DIR%\..\external" (
+        echo [INFO] Copying external from parent directory...
+        xcopy /E /I /Y /Q "%SCRIPT_DIR%\..\external" "%SCRIPT_DIR%\external"
+        if errorlevel 1 (
+            echo [WARNING] Failed to copy external resources
+        ) else (
+            echo [OK] external copied successfully
+        )
+    ) else (
+        echo [WARNING] external folder not found; APBS/Vina resources will not be bundled
     )
-)
-echo [OK] Files prepared
-echo.
-
-REM Run PyInstaller
-echo [4/4] Building EXE with PyInstaller...
-echo This may take a few minutes...
-echo.
-
-cd /d "%SCRIPT_DIR%"
-
-pyinstaller --noconfirm ^
-    --onefile ^
-    --windowed ^
-    --name "GLINT_Installer" ^
-    --add-data "glint;glint" ^
-    --add-data "glint\assets;glint\assets" ^
-    --hidden-import tkinter ^
-    --hidden-import tkinter.ttk ^
-    --hidden-import tkinter.filedialog ^
-    --hidden-import tkinter.messagebox ^
-    GLINT_Installer.py
-
-if errorlevel 1 (
-    echo.
-    echo [ERROR] PyInstaller build failed!
-    echo.
-    echo Common solutions:
-    echo   1. Make sure Python is in PATH
-    echo   2. Try running as Administrator
-    echo   3. Check if antivirus is blocking
-    echo.
-    pause
-    exit /b 1
+) else (
+    echo [OK] external folder found
 )
 
-echo.
-echo ========================================
-echo   Build Complete!
-echo ========================================
-echo.
-echo Output: %SCRIPT_DIR%\dist\GLINT_Installer.exe
-echo.
-echo You can distribute this EXE file to Windows users.
-echo.
-
-pause
+REM Remove __pycache__ directories
