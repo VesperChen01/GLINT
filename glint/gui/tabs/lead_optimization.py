@@ -40,7 +40,7 @@ class _Diagram2DWorker(QThread):
         super().__init__()
         self.csv_path = csv_path
         self.ligand_resname = ligand_resname
-        self.pdb_file = pdb_file          # 主线程预Export的配体 PDB FilePath
+        self.pdb_file = pdb_file          # 主线程预EXPORT的配体 PDB FilePath
         self.output_path = output_path
         self.min_confidence = min_confidence
         self._timed_out = False
@@ -99,7 +99,7 @@ class _Diagram2DWorker(QThread):
         else:
             self.error.emit("Failed to generate diagram. See log for details.")
 
-        # 清理主线程预Export的临时 PDB File
+        # 清理主线程预EXPORT的临时 PDB File
         try:
             if self.pdb_file and os.path.exists(self.pdb_file):
                 os.remove(self.pdb_file)
@@ -171,6 +171,20 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.ec_ligand_name.setPlaceholderText("e.g. LIG, CC885")
         self.parent_window.ec_ligand_name.setMinimumHeight(32)
         ec_grid.addWidget(self.parent_window.ec_ligand_name, 0, 3)
+# EC surface style dropdown: Solid Surface calls visualize_ec_smooth_surface, Mesh Surface calls visualize_ec_mesh_surface
+# Row 1: Surface Style and Execute Button
+        ec_grid.addWidget(QLabel("Surface Style:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_surface_style = QComboBox()
+        self.parent_window.ec_surface_style.setMinimumHeight(32)
+        self.parent_window.ec_surface_style.addItems(["Solid Surface", "Mesh Surface"])
+        self.parent_window.ec_surface_style.setToolTip("Solid: Render EC as solid surface | Mesh: Render EC as semi-transparent mesh surface")
+        ec_grid.addWidget(self.parent_window.ec_surface_style, 1, 1)
+        
+        self.parent_window.ec_analyze_btn = QPushButton("Analyze EC")
+        self.parent_window.ec_analyze_btn.setMinimumHeight(36)
+        self.parent_window.ec_analyze_btn.setStyleSheet(self._get_primary_btn_style())
+        self.parent_window.ec_analyze_btn.clicked.connect(self.run_ec_analysis)
+        ec_grid.addWidget(self.parent_window.ec_analyze_btn, 1, 2, 1, 2)
 
         ec_layout.addLayout(ec_grid)
         layout.addWidget(grp_ec)
@@ -680,3 +694,85 @@ class LeadOptimizationTab(CommonTab):
         except Exception as e:
             traceback.print_exc()
             show_message_box(self, "Error", f"Ligand-Ligand analysis failed:\n{str(e)}", "critical")
+
+    def run_ec_analysis(self):
+        """运行 EC (Electrostatic Complementarity) 分析"""
+        try:
+            from pymol import cmd
+        except ImportError:
+            show_message_box(self, "Error", "PyMOL not available", "critical")
+            return
+
+        obj_name = self.parent_window.ec_obj_combo.currentText().strip()
+        if not obj_name:
+            show_message_box(self, "Warning", "Please select a target object.", "warning")
+            return
+
+        ligand_name = self.parent_window.ec_ligand_name.text().strip()
+        if not ligand_name:
+            show_message_box(self, "Warning", "Please specify a ligand/glue name.", "warning")
+            return
+
+        # 中文注释：清理用户输入中的异常符号（如 Y˙70 里的中点），
+        # 仅保留残基名常见的字母数字字符，避免 PyMOL resn 匹配失败。
+        ligand_name_clean = ''.join(ch for ch in ligand_name if ch.isalnum())
+        if ligand_name_clean and ligand_name_clean != ligand_name:
+            print(f"[GLINT] ⚠️ Normalized ligand name: '{ligand_name}' -> '{ligand_name_clean}'")
+            ligand_name = ligand_name_clean
+            self.parent_window.ec_ligand_name.setText(ligand_name)
+
+        surface_style = self.parent_window.ec_surface_style.currentText()
+
+        try:
+            from ...ligand_ec_calculator import calculate_ligand_ec
+            from ...ec_visualization import visualize_ec_smooth_surface, visualize_ec_mesh_surface
+            
+            print(f"[GLINT] 🔬 Running EC analysis: {obj_name} (ligand={ligand_name}, style={surface_style})")
+            
+            # 计算 EC
+            result = calculate_ligand_ec(
+                obj_name=obj_name,
+                ligand_resname=ligand_name,
+                visualize=False  # 先计算，再根据样式可视化
+            )
+            
+            if not result:
+                show_message_box(self, "EC Analysis", "EC calculation failed. Check console for details.", "warning")
+                return
+            
+            ec_score = result.get('ec_score', 0)
+            ec_stats = result.get('ec_statistics', {})
+            
+            # 根据用户选择的样式进行可视化
+            if surface_style == "Solid Surface":
+                # 中文注释：Solid Surface 应使用光滑的 molecular surface，
+                # 避免 GUI 层误传 gaussian 导致表面重新变成颗粒/泡状外观。
+                visualize_ec_smooth_surface(
+                    obj_name, ligand_name,
+                    ec_result=result,
+                    surface_type='molecular',
+                    transparency=0.30
+                )
+            else:  # Mesh Surface
+                visualize_ec_mesh_surface(
+                    obj_name, ligand_name,
+                    ec_result=result
+                )
+            
+            msg = f"EC Analysis completed.\n\n"
+            msg += f"EC Score: {ec_score:.4f}\n"
+            if ec_stats:
+                msg += f"EC Mean: {ec_stats.get('ec_mean', 0):.4f}\n"
+                msg += f"EC Median: {ec_stats.get('ec_median', 0):.4f}\n"
+                msg += f"Positive EC: {ec_stats.get('ec_positive_fraction', 0)*100:.1f}%\n"
+                msg += f"Negative EC: {ec_stats.get('ec_negative_fraction', 0)*100:.1f}%"
+            
+            output_dir = result.get('output_dir')
+            if output_dir:
+                msg += f"\n\nOutput saved to: {output_dir}"
+            
+            show_message_box(self, "EC Analysis", msg, "info")
+            
+        except Exception as e:
+            traceback.print_exc()
+            show_message_box(self, "Error", f"EC analysis failed:\n{str(e)}", "critical")

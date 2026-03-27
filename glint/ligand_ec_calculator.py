@@ -630,15 +630,22 @@ class GasteigerChargeCalculator:
         try:
             with open(pqr_file, 'r') as f:
                 for line in f:
-                    if line.startswith(('ATOM', 'HETATM')):
-                        # PQR format: x, y, z, charge, radius
-                        x = float(line[30:38])
-                        y = float(line[38:46])
-                        z = float(line[46:54])
-                        charge = float(line[54:62])
+                    if not line.startswith(('ATOM', 'HETATM')):
+                        continue
 
-                        coords.append([x, y, z])
-                        charges.append(charge)
+                    # 中文注释：优先兼容 _fix_pqr_format 修复后的空格分隔格式，
+                    # 同时保留对旧固定列格式和异常拼接行的兼容能力。
+                    parsed = (
+                        _parse_pqr_whitespace(line)
+                        or _parse_pqr_fixed_columns(line)
+                        or _parse_pqr_regex(line)
+                    )
+                    if not parsed:
+                        continue
+
+                    _, _, _, _, _, _, x, y, z, charge, _ = parsed
+                    coords.append([x, y, z])
+                    charges.append(charge)
         except Exception as e:
             print(f"[calculate_potential_from_pqr] Error reading PQR: {e}")
             return np.zeros(len(points))

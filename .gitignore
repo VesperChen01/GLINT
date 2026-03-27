@@ -38,4 +38,8 @@ windows_installer/__pycache__/
 .vscode/
 .idea/
 *.swp
-*.swoexternal/apbs/APBS-1.5-linux64.tar
+*.swo
+io.mc
+external/apbs/APBS-1.5-linux64.tar
+
+

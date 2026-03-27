@@ -8,8 +8,9 @@ from typing import Optional
 from ..qt_adapter import (
     Qt, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
     QGroupBox, QScrollArea, QFrame, QFileDialog, QMessageBox,
-    QComboBox, QCheckBox, QSpinBox, QGridLayout
+    QComboBox, QCheckBox, QSpinBox, QGridLayout, QDesktopServices, QUrl
 )
+
 
 from ..utils import t, show_message_box
 from .common import CommonTab
@@ -46,7 +47,7 @@ class HitIdentificationTab(CommonTab):
 
         # 1. Vina Docking (Small Molecule)
         main_layout.addWidget(self._create_vina_card(is_dark))
-        
+
         # Vina buttons row
         vina_btn_row = QHBoxLayout()
         vina_btn_row.setSpacing(10)
@@ -60,7 +61,7 @@ class HitIdentificationTab(CommonTab):
         self.parent_window.vina_load_result_btn.setMinimumHeight(36)
         self.parent_window.vina_load_result_btn.setStyleSheet(self._get_secondary_btn_style())
         self.parent_window.vina_load_result_btn.clicked.connect(self.load_vina_result)
-        
+
         vina_btn_row.addWidget(self.parent_window.vina_dock_btn)
         vina_btn_row.addWidget(self.parent_window.vina_load_result_btn)
         vina_btn_row.addStretch(1)
@@ -78,7 +79,19 @@ class HitIdentificationTab(CommonTab):
         self.parent_window.hdock_run_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.hdock_run_btn.clicked.connect(self.run_haddock)
 
+        self.parent_window.hdock_open_server_btn = QPushButton("Open HADDOCK Server")
+        self.parent_window.hdock_open_server_btn.setMinimumHeight(36)
+        self.parent_window.hdock_open_server_btn.setStyleSheet(self._get_secondary_btn_style())
+        self.parent_window.hdock_open_server_btn.clicked.connect(self.open_haddock_server)
+
+        self.parent_window.hdock_export_server_btn = QPushButton("Export PDB for Server")
+        self.parent_window.hdock_export_server_btn.setMinimumHeight(36)
+        self.parent_window.hdock_export_server_btn.setStyleSheet(self._get_secondary_btn_style())
+        self.parent_window.hdock_export_server_btn.clicked.connect(self.export_haddock_pdb_for_server)
+
         hdock_btn_row.addWidget(self.parent_window.hdock_run_btn)
+        hdock_btn_row.addWidget(self.parent_window.hdock_open_server_btn)
+        hdock_btn_row.addWidget(self.parent_window.hdock_export_server_btn)
         hdock_btn_row.addStretch(1)
         main_layout.addLayout(hdock_btn_row)
 
@@ -126,28 +139,28 @@ class HitIdentificationTab(CommonTab):
         title = QLabel("AutoDock Vina - Small Molecule Docking")
         title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
         layout.addWidget(title)
-        
+
         # Row 1: Receptor + Ligand
         row1 = QHBoxLayout()
         row1.setSpacing(6)
-        
+
         self.parent_window.vina_receptor_combo = QComboBox()
         self.parent_window.vina_receptor_combo.setMinimumHeight(28)
         self.parent_window.vina_receptor_combo.setMinimumWidth(120)
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setMinimumHeight(28)
         refresh_btn.clicked.connect(self.refresh_objects)
-        
+
         self.parent_window.vina_ligand = QLineEdit()
         self.parent_window.vina_ligand.setPlaceholderText("Ligand file or folder")
         self.parent_window.vina_ligand.setMinimumHeight(28)
         self.parent_window.vina_ligand.setMinimumWidth(150)
-        
+
         lig_browse_btn = QPushButton("Browse")
         lig_browse_btn.setMinimumHeight(28)
         lig_browse_btn.setToolTip("Select ligand file or folder for batch docking")
         lig_browse_btn.clicked.connect(self.browse_vina_ligand)
-        
+
         row1.addWidget(QLabel("Receptor:"))
         row1.addWidget(self.parent_window.vina_receptor_combo)
         row1.addWidget(refresh_btn)
@@ -157,20 +170,20 @@ class HitIdentificationTab(CommonTab):
         row1.addWidget(lig_browse_btn)
         row1.addStretch()
         layout.addLayout(row1)
-        
+
         # Row 2: Selection + Get Center + Center/Size/Exhaust/Modes
         row2 = QHBoxLayout()
         row2.setSpacing(6)
-        
+
         self.parent_window.vina_selection = QLineEdit()
         self.parent_window.vina_selection.setPlaceholderText("resn LIG")
         self.parent_window.vina_selection.setMinimumHeight(28)
         self.parent_window.vina_selection.setMinimumWidth(100)
-        
+
         get_center_btn = QPushButton("Get Center")
         get_center_btn.setMinimumHeight(28)
         get_center_btn.clicked.connect(self.get_vina_center)
-        
+
         self.parent_window.vina_center_x = QLineEdit("0")
         self.parent_window.vina_center_x.setMinimumHeight(28)
         self.parent_window.vina_center_x.setMaximumWidth(50)
@@ -180,7 +193,7 @@ class HitIdentificationTab(CommonTab):
         self.parent_window.vina_center_z = QLineEdit("0")
         self.parent_window.vina_center_z.setMinimumHeight(28)
         self.parent_window.vina_center_z.setMaximumWidth(50)
-        
+
         self.parent_window.vina_size_x = QLineEdit("20")
         self.parent_window.vina_size_x.setMinimumHeight(28)
         self.parent_window.vina_size_x.setMaximumWidth(50)
@@ -190,19 +203,19 @@ class HitIdentificationTab(CommonTab):
         self.parent_window.vina_size_z = QLineEdit("20")
         self.parent_window.vina_size_z.setMinimumHeight(28)
         self.parent_window.vina_size_z.setMaximumWidth(50)
-        
+
         self.parent_window.vina_exhaustiveness = QSpinBox()
         self.parent_window.vina_exhaustiveness.setRange(1, 32)
         self.parent_window.vina_exhaustiveness.setValue(8)
         self.parent_window.vina_exhaustiveness.setMinimumHeight(28)
         self.parent_window.vina_exhaustiveness.setMaximumWidth(60)
-        
+
         self.parent_window.vina_num_modes = QSpinBox()
         self.parent_window.vina_num_modes.setRange(1, 20)
         self.parent_window.vina_num_modes.setValue(9)
         self.parent_window.vina_num_modes.setMinimumHeight(28)
         self.parent_window.vina_num_modes.setMaximumWidth(60)
-        
+
         row2.addWidget(QLabel("Selection:"))
         row2.addWidget(self.parent_window.vina_selection)
         row2.addWidget(get_center_btn)
@@ -223,7 +236,7 @@ class HitIdentificationTab(CommonTab):
         row2.addWidget(self.parent_window.vina_num_modes)
         row2.addStretch()
         layout.addLayout(row2)
-        
+
         return card
 
     def _create_hdock_card(self, is_dark: bool = False) -> QWidget:
@@ -237,23 +250,23 @@ class HitIdentificationTab(CommonTab):
         title = QLabel("HADDOCK3 - Protein-Protein Docking")
         title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
         layout.addWidget(title)
-        
+
         # Row 1: Receptor + Ligand
         row1 = QHBoxLayout()
         row1.setSpacing(6)
-        
+
         self.parent_window.hdock_receptor_combo = QComboBox()
         self.parent_window.hdock_receptor_combo.setMinimumHeight(28)
         self.parent_window.hdock_receptor_combo.setMinimumWidth(120)
-        
+
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setMinimumHeight(28)
         refresh_btn.clicked.connect(self.refresh_objects)
-        
+
         self.parent_window.hdock_ligand_combo = QComboBox()
         self.parent_window.hdock_ligand_combo.setMinimumHeight(28)
         self.parent_window.hdock_ligand_combo.setMinimumWidth(120)
-        
+
         row1.addWidget(QLabel("Receptor:"))
         row1.addWidget(self.parent_window.hdock_receptor_combo)
         row1.addWidget(refresh_btn)
@@ -262,31 +275,31 @@ class HitIdentificationTab(CommonTab):
         row1.addWidget(self.parent_window.hdock_ligand_combo)
         row1.addStretch()
         layout.addLayout(row1)
-        
+
         # Row 2: Active/Passive residues
         row2 = QHBoxLayout()
         row2.setSpacing(6)
-        
+
         self.parent_window.hdock_active_receptor = QLineEdit()
         self.parent_window.hdock_active_receptor.setPlaceholderText("e.g., 10,15,20")
         self.parent_window.hdock_active_receptor.setMinimumHeight(28)
         self.parent_window.hdock_active_receptor.setMinimumWidth(100)
-        
+
         self.parent_window.hdock_passive_receptor = QLineEdit()
         self.parent_window.hdock_passive_receptor.setPlaceholderText("e.g., 11,16,21")
         self.parent_window.hdock_passive_receptor.setMinimumHeight(28)
         self.parent_window.hdock_passive_receptor.setMinimumWidth(100)
-        
+
         self.parent_window.hdock_active_ligand = QLineEdit()
         self.parent_window.hdock_active_ligand.setPlaceholderText("e.g., 5,8,12")
         self.parent_window.hdock_active_ligand.setMinimumHeight(28)
         self.parent_window.hdock_active_ligand.setMinimumWidth(100)
-        
+
         self.parent_window.hdock_passive_ligand = QLineEdit()
         self.parent_window.hdock_passive_ligand.setPlaceholderText("e.g., 6,9,13")
         self.parent_window.hdock_passive_ligand.setMinimumHeight(28)
         self.parent_window.hdock_passive_ligand.setMinimumWidth(100)
-        
+
         row2.addWidget(QLabel("Receptor Active:"))
         row2.addWidget(self.parent_window.hdock_active_receptor)
         row2.addWidget(QLabel("Passive:"))
@@ -298,7 +311,7 @@ class HitIdentificationTab(CommonTab):
         row2.addWidget(self.parent_window.hdock_passive_ligand)
         row2.addStretch()
         layout.addLayout(row2)
-        
+
         return card
 
     def _create_mutation_analysis_card(self, is_dark: bool = False) -> QWidget:
@@ -312,24 +325,24 @@ class HitIdentificationTab(CommonTab):
         title = QLabel("Protein Mutation & ΔΔG Analysis")
         title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
         layout.addWidget(title)
-        
+
         # Row 1: Structure + Mutation List
         row1 = QHBoxLayout()
         row1.setSpacing(6)
-        
+
         self.parent_window.mutation_structure_combo = QComboBox()
         self.parent_window.mutation_structure_combo.setMinimumHeight(28)
         self.parent_window.mutation_structure_combo.setMinimumWidth(120)
-        
+
         refresh_btn = QPushButton("Refresh")
         refresh_btn.setMinimumHeight(28)
         refresh_btn.clicked.connect(self.refresh_objects)
-        
+
         self.parent_window.mutation_list = QLineEdit()
         self.parent_window.mutation_list.setPlaceholderText("e.g., A50G,A51V,A52L")
         self.parent_window.mutation_list.setMinimumHeight(28)
         self.parent_window.mutation_list.setMinimumWidth(200)
-        
+
         row1.addWidget(QLabel("Structure:"))
         row1.addWidget(self.parent_window.mutation_structure_combo)
         row1.addWidget(refresh_btn)
@@ -338,20 +351,20 @@ class HitIdentificationTab(CommonTab):
         row1.addWidget(self.parent_window.mutation_list)
         row1.addStretch()
         layout.addLayout(row1)
-        
+
         # Row 2: Run button
         row2 = QHBoxLayout()
         row2.setSpacing(10)
-        
+
         self.parent_window.mutation_run_btn = QPushButton("Run ΔΔG Analysis")
         self.parent_window.mutation_run_btn.setMinimumHeight(36)
         self.parent_window.mutation_run_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.mutation_run_btn.clicked.connect(self.run_mutation_analysis)
-        
+
         row2.addWidget(self.parent_window.mutation_run_btn)
         row2.addStretch()
         layout.addLayout(row2)
-        
+
         return card
 
     def refresh_objects(self):
@@ -359,14 +372,14 @@ class HitIdentificationTab(CommonTab):
         try:
             from pymol import cmd
             objects = cmd.get_object_list()
-            
+
             # Update Vina receptor
             current_vina = self.parent_window.vina_receptor_combo.currentText()
             self.parent_window.vina_receptor_combo.clear()
             self.parent_window.vina_receptor_combo.addItems(objects)
             if current_vina in objects:
                 self.parent_window.vina_receptor_combo.setCurrentText(current_vina)
-            
+
             # Update HADDOCK3 receptor and ligand
             current_hdock_rec = self.parent_window.hdock_receptor_combo.currentText()
             current_hdock_lig = self.parent_window.hdock_ligand_combo.currentText()
@@ -378,14 +391,14 @@ class HitIdentificationTab(CommonTab):
                 self.parent_window.hdock_receptor_combo.setCurrentText(current_hdock_rec)
             if current_hdock_lig in objects:
                 self.parent_window.hdock_ligand_combo.setCurrentText(current_hdock_lig)
-            
+
             # Update mutation structure
             current_mutation = self.parent_window.mutation_structure_combo.currentText()
             self.parent_window.mutation_structure_combo.clear()
             self.parent_window.mutation_structure_combo.addItems(objects)
             if current_mutation in objects:
                 self.parent_window.mutation_structure_combo.setCurrentText(current_mutation)
-            
+
             self.log(f"✓ Refreshed objects: {len(objects)} found")
         except Exception as e:
             self.log(f"❌ Failed to refresh objects: {str(e)}")
@@ -393,7 +406,7 @@ class HitIdentificationTab(CommonTab):
     def browse_vina_ligand(self):
         """Browse for ligand file or folder"""
         from ..qt_adapter import QFileDialog
-        
+
         # Ask user to choose file or folder
         choice = show_message_box(
             self,
@@ -404,7 +417,7 @@ class HitIdentificationTab(CommonTab):
             "question",
             buttons=["Single File", "Folder", "Cancel"]
         )
-        
+
         if choice == "Single File":
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
@@ -415,7 +428,7 @@ class HitIdentificationTab(CommonTab):
             if file_path:
                 self.parent_window.vina_ligand.setText(file_path)
                 self.log(f"✓ Selected ligand file: {file_path}")
-        
+
         elif choice == "Folder":
             folder_path = QFileDialog.getExistingDirectory(
                 self,
@@ -433,21 +446,21 @@ class HitIdentificationTab(CommonTab):
             if not selection:
                 show_message_box(self, "Error", "Please enter a selection", "warning")
                 return
-            
+
             # Get center of mass
             model = cmd.get_model(selection)
             if not model.atom:
                 show_message_box(self, "Error", f"No atoms found in selection: {selection}", "warning")
                 return
-            
+
             x = sum(atom.coord[0] for atom in model.atom) / len(model.atom)
             y = sum(atom.coord[1] for atom in model.atom) / len(model.atom)
             z = sum(atom.coord[2] for atom in model.atom) / len(model.atom)
-            
+
             self.parent_window.vina_center_x.setText(f"{x:.2f}")
             self.parent_window.vina_center_y.setText(f"{y:.2f}")
             self.parent_window.vina_center_z.setText(f"{z:.2f}")
-            
+
             self.log(f"✓ Center calculated: ({x:.2f}, {y:.2f}, {z:.2f})")
         except Exception as e:
             show_message_box(self, "Error", f"Failed to get center: {str(e)}", "critical")
@@ -460,19 +473,19 @@ class HitIdentificationTab(CommonTab):
             import subprocess
             import tempfile
             import shutil
-            
+
             # Get parameters
             receptor_obj = self.parent_window.vina_receptor_combo.currentText()
             ligand_path = self.parent_window.vina_ligand.text().strip()
-            
+
             if not receptor_obj or not ligand_path:
                 show_message_box(self, "Error", "Please select receptor and ligand", "warning")
                 return
-            
+
             if not os.path.exists(ligand_path):
                 show_message_box(self, "Error", f"Ligand path not found: {ligand_path}", "warning")
                 return
-            
+
             # Get box parameters
             try:
                 center_x = float(self.parent_window.vina_center_x.text())
@@ -486,41 +499,41 @@ class HitIdentificationTab(CommonTab):
             except ValueError as e:
                 show_message_box(self, "Error", f"Invalid numeric parameter: {str(e)}", "warning")
                 return
-            
+
             self.log("🚀 Starting Vina docking...")
             self.log(f"   Receptor: {receptor_obj}")
             self.log(f"   Ligand: {ligand_path}")
             self.log(f"   Box center: ({center_x}, {center_y}, {center_z})")
             self.log(f"   Box size: ({size_x}, {size_y}, {size_z})")
-            
+
             # Create temp directory
             temp_dir = tempfile.mkdtemp(prefix="vina_")
             receptor_pdbqt = os.path.join(temp_dir, "receptor.pdbqt")
-            
+
             # Save receptor as PDBQT
             cmd.save(receptor_pdbqt, receptor_obj)
-            
+
             # Check if ligand is file or folder
             is_batch = os.path.isdir(ligand_path)
-            
+
             if is_batch:
                 # Batch docking
-                ligand_files = [f for f in os.listdir(ligand_path) 
+                ligand_files = [f for f in os.listdir(ligand_path)
                               if f.endswith(('.pdbqt', '.sdf', '.mol2'))]
                 if not ligand_files:
                     show_message_box(self, "Error", "No ligand files found in folder", "warning")
                     shutil.rmtree(temp_dir)
                     return
-                
+
                 self.log(f"📦 Batch docking: {len(ligand_files)} ligands")
                 results = []
-                
+
                 for i, lig_file in enumerate(ligand_files, 1):
                     lig_path = os.path.join(ligand_path, lig_file)
                     output_pdbqt = os.path.join(temp_dir, f"output_{i}.pdbqt")
-                    
+
                     self.log(f"   [{i}/{len(ligand_files)}] Docking {lig_file}...")
-                    
+
                     # Run Vina
                     cmd_list = [
                         "vina",
@@ -536,9 +549,9 @@ class HitIdentificationTab(CommonTab):
                         "--exhaustiveness", str(exhaustiveness),
                         "--num_modes", str(num_modes)
                     ]
-                    
+
                     result = subprocess.run(cmd_list, capture_output=True, text=True)
-                    
+
                     if result.returncode == 0 and os.path.exists(output_pdbqt):
                         # Parse affinity from output
                         affinity = self._parse_vina_affinity(result.stdout)
@@ -546,19 +559,19 @@ class HitIdentificationTab(CommonTab):
                         self.log(f"      ✓ Affinity: {affinity} kcal/mol")
                     else:
                         self.log(f"      ❌ Failed: {result.stderr}")
-                
+
                 # Sort by affinity and load top results
                 results.sort(key=lambda x: x[1])
                 top_n = min(5, len(results))
-                
+
                 self.log(f"\n📊 Top {top_n} results:")
                 for i, (lig_file, affinity, output_path) in enumerate(results[:top_n], 1):
                     obj_name = f"vina_result_{i}"
                     cmd.load(output_path, obj_name)
                     self.log(f"   {i}. {lig_file}: {affinity} kcal/mol → {obj_name}")
-                
+
                 self.log(f"✅ Batch docking completed: {len(results)} ligands processed")
-                
+
             else:
                 # Single ligand docking
                 output_pdbqt = os.path.join(temp_dir, "output.pdbqt")
@@ -675,6 +688,59 @@ class HitIdentificationTab(CommonTab):
                     _shutil.rmtree(temp_dir)
             except Exception as e:
                 self.log(f"⚠️ Failed to clean temp dir: {str(e)}")
+
+
+    def open_haddock_server(self):
+        """打开 HADDOCK Web Server 页面，便于手动提交云端任务。"""
+        server_url = "https://wenmr.science.uu.nl/haddock2.4/"
+        opened = QDesktopServices.openUrl(QUrl(server_url))
+        if opened:
+            self.log(f"🌐 Opened HADDOCK server: {server_url}")
+        else:
+            show_message_box(self, "HADDOCK Server", f"无法自动打开浏览器，请手动访问：\n{server_url}", "warning")
+            self.log(f"⚠️ Failed to open HADDOCK server automatically: {server_url}")
+
+    def export_haddock_pdb_for_server(self):
+        """导出当前受体和配体对象为 PDB，便于上传到 HADDOCK Web Server。"""
+        try:
+            from pymol import cmd
+        except Exception:
+            show_message_box(self, "Error", "PyMOL not available", "critical")
+            return
+
+        receptor_obj = self.parent_window.hdock_receptor_combo.currentText().strip()
+        ligand_obj = self.parent_window.hdock_ligand_combo.currentText().strip()
+        if not receptor_obj or not ligand_obj:
+            show_message_box(self, "Warning", "Please select receptor and ligand objects", "warning")
+            return
+
+        export_dir = QFileDialog.getExistingDirectory(
+            self,
+            "选择 HADDOCK Server 导出目录",
+            os.path.expanduser("~")
+        )
+        if not export_dir:
+            return
+
+        try:
+            receptor_pdb = os.path.join(export_dir, f"{receptor_obj}_receptor.pdb")
+            ligand_pdb = os.path.join(export_dir, f"{ligand_obj}_ligand.pdb")
+
+            # 中文注释：导出当前 PyMOL 对象，方便用户手动上传到 HADDOCK 服务器
+            cmd.save(receptor_pdb, receptor_obj)
+            cmd.save(ligand_pdb, ligand_obj)
+
+            msg = (
+                "已导出 HADDOCK Server 所需 PDB 文件：\n\n"
+                f"Receptor: {receptor_pdb}\n"
+                f"Ligand: {ligand_pdb}\n\n"
+                "接下来可点击 Open HADDOCK Server 进行网页提交。"
+            )
+            show_message_box(self, "Export Complete", msg, "info")
+            self.log(f"📦 Exported HADDOCK server PDBs: {receptor_pdb}, {ligand_pdb}")
+        except Exception as e:
+            show_message_box(self, "Error", f"Failed to export HADDOCK server PDBs: {str(e)}", "critical")
+            self.log(f"❌ Failed to export HADDOCK server PDBs: {str(e)}")
 
     def load_vina_result(self):
         """Load Vina docking result"""

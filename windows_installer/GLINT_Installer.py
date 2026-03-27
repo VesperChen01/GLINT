@@ -47,6 +47,10 @@ TUNA_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
 # Pip packages (Windows keeps a smaller, stable set)
 PIP_PACKAGES = ["requests", "open3d", "meeko"]
 
+# TUNA Mirrors
+TUNA_CONDA_CHANNEL = "https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/"
+TUNA_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+TUNA_PIP_TRUSTED_HOST = "pypi.tuna.tsinghua.edu.cn"
 
 def get_glint_source_dir():
     """Locate the bundled GLINT source directory"""
@@ -108,7 +112,7 @@ class InstallerApp:
         self.install_path = tk.StringVar(value=DEFAULT_INSTALL_PATH)
         self.create_shortcut = tk.BooleanVar(value=True)
         self.install_deps = tk.BooleanVar(value=True)
-        self.use_tuna_mirror = tk.BooleanVar(value=False)
+        self.use_china_mirror = tk.BooleanVar(value=False)
         self.conda_ok = False
         self.env_ok = False
         self.conda_exe = None
@@ -256,8 +260,10 @@ class InstallerApp:
 
         ttk.Checkbutton(opts_frame, text="Install/Update dependencies (conda packages + PyMOL)",
                        variable=self.install_deps).pack(anchor=tk.W, pady=3)
-        ttk.Checkbutton(opts_frame, text="Use Tsinghua mirror for conda/pip",
-                       variable=self.use_tuna_mirror).pack(anchor=tk.W, pady=3)
+        ttk.Checkbutton(opts_frame, text="Create desktop shortcut",
+                       variable=self.create_shortcut).pack(anchor=tk.W, pady=3)
+        ttk.Checkbutton(opts_frame, text="Use China mainland mirrors (使用清华镜像源加速)",
+                       variable=self.use_china_mirror).pack(anchor=tk.W, pady=3)
 
         # Button section (pack before progress so buttons are always visible)
         btn_frame = ttk.Frame(main)
@@ -585,8 +591,6 @@ class InstallerApp:
                     raise Exception(f"Failed to determine environment path: {e}")
 
 
-            # Windows 下 conda 版本差异较大，旧版不一定支持自动 ToS 配置
-            # 这里直接跳过，避免 'auto_accept_default_terms' 报错
             if not self.env_ok:
                 self._log(f"  Creating environment at {self.env_path}...")
                 returncode = self._run_cmd_stream(
@@ -609,52 +613,46 @@ class InstallerApp:
 
                 # 使用 globals() 兜底，兼容旧打包产物或异常全局状态，避免 NameError 中断安装
                 pip_packages = globals().get("PIP_PACKAGES", ["requests", "open3d", "meeko"])
-                tuna_pip_index_url = globals().get("TUNA_PIP_INDEX_URL", "https://pypi.tuna.tsinghua.edu.cn/simple")
                 total_pkgs = len(CONDA_PACKAGES) + len(pip_packages)
                 installed_count = 0
                 failed_pkgs = []
-
 
                 # Progress range for dependency step: 20 -> 55
                 progress_start = 20
                 progress_end = 55
 
-                # --- Conda packages (one by one) ---
+                # --- Conda packages (single batch install) ---
                 self._log(f"\n  Conda packages to install: {len(CONDA_PACKAGES)}")
-                for idx, pkg in enumerate(CONDA_PACKAGES, 1):
-                    overall_idx = installed_count + 1
-                    self._log(
-                        f"\n  Installing (overall {overall_idx}/{total_pkgs}) via conda: {pkg} ({idx}/{len(CONDA_PACKAGES)})..."
-                    )
-                    conda_channels = ["-c", "conda-forge"]
-                    if self.use_tuna_mirror.get():
-                        conda_channels = [
-                            "-c", "https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge",
-                            "-c", "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main",
-                            "-c", "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r",
-                            "-c", "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2",
-                        ]
-                    cmd = [
-                        self.conda_exe, "install",
-                        "-p", self.env_path,
-                    ] + conda_channels + ["-y", pkg]
-                    try:
-                        rc = self._run_cmd_stream(cmd, timeout=600)
-                        if rc == 0:
-                            self._log(f" {pkg} installed")
-                        else:
-                            self._log(f" {pkg} failed (exit code {rc})")
-                            failed_pkgs.append(pkg)
-                    except subprocess.TimeoutExpired:
-                        self._log(f" {pkg} timed out")
-                        failed_pkgs.append(pkg)
-                    except Exception as e:
-                        self._log(f" {pkg} error: {e}")
-                        failed_pkgs.append(pkg)
 
-                    installed_count += 1
-                    pct = progress_start + (progress_end - progress_start) * installed_count / total_pkgs
-                    self.progress["value"] = pct
+                # 中文注释：如用户勾选中国大陆镜像，则安装 conda 包时优先使用清华镜像源加速。
+                conda_channel = TUNA_CONDA_CHANNEL if self.use_china_mirror.get() else "conda-forge"
+
+                cmd = [
+                    self.conda_exe, "install",
+                    "-p", self.env_path,
+                    "-c", conda_channel,
+                    "-c", "schrodinger",
+                    "--solver=libmamba",
+                    "-y",
+                    *CONDA_PACKAGES
+                ]
+                try:
+                    rc = self._run_cmd_stream(cmd, timeout=1800)
+                    if rc == 0:
+                        self._log(" Conda packages installed")
+                    else:
+                        self._log(f" Conda package installation failed (exit code {rc})")
+                        failed_pkgs.extend(CONDA_PACKAGES)
+                except subprocess.TimeoutExpired:
+                    self._log(" Conda package installation timed out")
+                    failed_pkgs.extend(CONDA_PACKAGES)
+                except Exception as e:
+                    self._log(f" Conda package installation error: {e}")
+                    failed_pkgs.extend(CONDA_PACKAGES)
+
+                installed_count += len(CONDA_PACKAGES)
+                pct = progress_start + (progress_end - progress_start) * installed_count / total_pkgs
+                self.progress["value"] = pct
 
                 # --- Pip packages (one by one) ---
                 if pip_packages:
@@ -668,8 +666,11 @@ class InstallerApp:
                             self.conda_exe, "run", "-p", self.env_path,
                             "python", "-m", "pip", "install"
                         ]
-                        if self.use_tuna_mirror.get():
-                            pip_cmd.extend(["-i", tuna_pip_index_url, "--trusted-host", "pypi.tuna.tsinghua.edu.cn"])
+
+                        # 中文注释：pip 安装同样在勾选镜像时追加清华源参数。
+                        if self.use_china_mirror.get():
+                            pip_cmd.extend(["-i", TUNA_PIP_INDEX_URL, "--trusted-host", TUNA_PIP_TRUSTED_HOST])
+
                         pip_cmd.append(pkg)
                         if pkg == "haddock3":
                             pip_cmd.extend(["--only-binary", ":all:"])
