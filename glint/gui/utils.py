@@ -292,8 +292,7 @@ def _check_and_install_deps() -> bool:
             from env_checker import ensure_dependencies
         
         return ensure_dependencies(silent=False)
-    except Exception as e:
-        print(f"[GLINT] Dependency check failed: {e}")
+    except Exception:
         return False
 
 

@@ -187,16 +187,11 @@ def _register_commands():
                 return __import__(module_name, globals(), locals(), [], 1)
         except ImportError as e:
             _import_errors.append((module_name, str(e)))
-            print(f"[GLINT] ⚠️ Module import failed: {module_name}")
-            print(f"[GLINT]   Error: {e}")
             return None if not items else tuple([None] * len(items))
         except Exception as e:
             _import_errors.append((module_name, str(e)))
-            print(f"[GLINT] ❌ Module import exception: {module_name}")
-            print(f"[GLINT]   Error: {e}")
-            traceback.print_exc()
             return None if not items else tuple([None] * len(items))
-    
+
     try:
         from .highlight_residues import highlight_csv_residues
         from .interaction_analyzer import (
@@ -215,10 +210,9 @@ def _register_commands():
         # Ligand-Ligand Interaction
         try:
             from .ligand_ligand_analyzer import analyze_ligand_ligand_interactions
-        except ImportError as e:
-            print(f"[GLINT] ℹ️ ligand_ligand_analyzer not available: {e}")
+        except ImportError:
             analyze_ligand_ligand_interactions = None
-        
+
         # Molecular glue specific features (PPI analysis & Neo-epitope)
         from .ppi_analyzer import (
             analyze_protein_protein_interface,
@@ -249,10 +243,9 @@ def _register_commands():
                 BatchAnalyzer
             )
             _batch_available = True
-        except ImportError as e:
-            print(f"⚠️ Batch analyzer not available: {e}")
+        except ImportError:
             _batch_available = False
-        
+
         # Molecular glue design analysis (Ternary complex modeling)
         from .glue_design_analyzer import (
             align_gloop_for_modeling,
@@ -277,10 +270,9 @@ def _register_commands():
                 GasteigerChargeCalculator
             )
             _ec_available = True
-        except ImportError as e:
-            print(f"⚠️ EC Calculator not available: {e}")
+        except ImportError:
             _ec_available = False
-        
+
         # Pocket detection and analysis
         from .pocket_detector import detect_pockets, compare_pockets
         from .pocket_visualizer import (
@@ -321,10 +313,9 @@ def _register_commands():
                 quick_ligand_view
             )
             _pymol_styles_available = True
-        except ImportError as e:
-            print(f"⚠️ PyMOL styles not available: {e}")
+        except ImportError:
             _pymol_styles_available = False
-        
+
         # Surface similarity and complementarity analysis module
         try:
             from .surface_similarity import (
@@ -333,10 +324,9 @@ def _register_commands():
                 SurfaceSimilarityAnalyzer
             )
             _surface_similarity_available = True
-        except ImportError as e:
-            print(f"⚠️ Surface similarity analysis not available: {e}")
+        except ImportError:
             _surface_similarity_available = False
-        
+
         # Vina integration (optional, requires Vina installation)
         try:
             from .vina_integration import (
@@ -477,8 +467,6 @@ def _import_gui_dialog():
     # 1) Preferred: infer from current __file__
     plugin_dir = os.path.dirname(os.path.abspath(__file__))
     if not _looks_like_plugin_root(plugin_dir):
-        print(f"[GLINT Debug] __file__ path suspicious: {plugin_dir}")
-        # 2) Fallback: use inspect to get the real source file path
         try:
             import inspect
             frame = inspect.currentframe()
@@ -487,10 +475,9 @@ def _import_gui_dialog():
                 cand = os.path.dirname(os.path.abspath(file_from_frame))
                 if _looks_like_plugin_root(cand):
                     plugin_dir = cand
-                    print(f"[GLINT Debug] Corrected plugin_dir via inspect: {plugin_dir}")
-        except Exception as e:
-            print(f"[GLINT Debug] Inspect failed: {e}")
-    
+        except Exception:
+            pass
+
     # 3) Still incorrect: search common installation paths
     if not _looks_like_plugin_root(plugin_dir):
         home = os.path.expanduser("~")
@@ -505,29 +492,17 @@ def _import_gui_dialog():
         for cand in candidates:
             if _looks_like_plugin_root(cand):
                 plugin_dir = cand
-                print(f"[GLINT Debug] Found plugin root candidate: {plugin_dir}")
                 break
-    
+
     parent_dir = os.path.dirname(plugin_dir)
-    
-    # Debug: print path information
-    print(f"[GLINT Debug] plugin_dir = {plugin_dir}")
-    print(f"[GLINT Debug] parent_dir = {parent_dir}")
-    print(f"[GLINT Debug] parent_dir in sys.path? {parent_dir in sys.path}")
-    
+
     if parent_dir and parent_dir not in sys.path:
         sys.path.insert(0, parent_dir)
-        print(f"[GLINT Debug] Added {parent_dir} to sys.path")
-    
-    # Use absolute import glint.gui.main_window
+
     try:
         import glint.gui.main_window as gui_module
         return gui_module.GLINTDialog
-    except ImportError as e:
-        print(f"❌ Error importing modular GUI: {e}")
-        print(f"[GLINT Debug] sys.path = {sys.path[:5]}")
-        import traceback
-        traceback.print_exc()
+    except ImportError:
         return None
 
 def _check_qt_safe():

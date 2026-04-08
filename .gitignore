@@ -15,7 +15,7 @@ __pycache__/
 dist/
 build/
 
-## Installer directories (排除构建产物，保留源文件)
+## Installer directories (exclude build artifacts, keep source files)
 macos_installer/
 linux_installer/
 windows_installer/dist/

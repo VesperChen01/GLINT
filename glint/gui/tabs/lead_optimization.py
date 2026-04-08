@@ -17,22 +17,10 @@ from .common import CommonTab
 
 
 class _Diagram2DWorker(QThread):
-    """后台线程：生成 2D 相互作用图，避免阻塞 Qt 主线程。
-
-    注意：PyMOL cmd 不是线程安全的，因此所有 PyMOL 操作必须在主线程中Completed。
-    本 Worker 通过 pdb_file（主线程预先Export的临时 PDB File）获取配体数据，
-    避免在后台线程中调用 PyMOL，防止 Qt 事件循环死锁。
-
-    超时保护：总超时 90 秒，防止 RDKit/matplotlib 在复杂分子上无限期运行。
-
-    Signals:
-        finished(str): 生成Success时发射，携带输出FilePath
-        error(str): 生成Failed时发射，携带ErrorInformation
-    """
+    """Background worker that generates a 2D interaction diagram safely."""
     finished = pyqtSignal(str)
     error = pyqtSignal(str)
 
-    # 总超时Time（秒）
     TOTAL_TIMEOUT = 90
 
     def __init__(self, csv_path: str, ligand_resname: str,
@@ -40,21 +28,19 @@ class _Diagram2DWorker(QThread):
         super().__init__()
         self.csv_path = csv_path
         self.ligand_resname = ligand_resname
-        self.pdb_file = pdb_file          # 主线程预EXPORT的配体 PDB FilePath
+        self.pdb_file = pdb_file
         self.output_path = output_path
         self.min_confidence = min_confidence
         self._timed_out = False
 
     def run(self) -> None:
-        """在后台线程中执行 generate_2d_interaction_diagram，带总超时保护。"""
+        """Run diagram generation in a worker thread with timeout protection."""
         import threading
 
         result_holder = {'path': None, 'error': None}
 
         def _generate():
-            """实际的图表生成逻辑，在子线程中运行。"""
             try:
-                # 确保 matplotlib using非交互式后端
                 import matplotlib
                 matplotlib.use('Agg')
 
@@ -63,34 +49,26 @@ class _Diagram2DWorker(QThread):
                 except ImportError:
                     from interaction_2d_plot import generate_2d_interaction_diagram
 
-                # using pdb_file 而非 obj_name，确保后台线程不调用 PyMOL
                 final_path = generate_2d_interaction_diagram(
                     csv_path=self.csv_path,
                     ligand_resname=self.ligand_resname,
                     pdb_file=self.pdb_file,
                     output_path=self.output_path,
-                    min_confidence=self.min_confidence
+                    min_confidence=self.min_confidence,
                 )
                 result_holder['path'] = final_path
-
             except Exception as e:
-                import traceback
-                traceback.print_exc()
                 result_holder['error'] = str(e)
 
-        # 在独立线程中运行图表生成，带超时保护
         gen_thread = threading.Thread(target=_generate, daemon=True)
         gen_thread.start()
         gen_thread.join(timeout=self.TOTAL_TIMEOUT)
 
         if gen_thread.is_alive():
-            # 超时：线程仍在运行
             self._timed_out = True
-            print(f"[2D Diagram] ⚠️ 图表生成超时 ({self.TOTAL_TIMEOUT}s)，强制中止")
             self.error.emit(
-                f"图表生成超时 ({self.TOTAL_TIMEOUT}s)。\n"
-                "可能原因：配体结构过于复杂或 Open Babel 未响应。\n"
-                "请尝试简化配体或Confirm Open Babel 已正确安装。"
+                f"Diagram generation timed out after {self.TOTAL_TIMEOUT}s.\n"
+                "Try a simpler ligand structure or verify that Open Babel is available."
             )
         elif result_holder['error']:
             self.error.emit(result_holder['error'])
@@ -99,7 +77,6 @@ class _Diagram2DWorker(QThread):
         else:
             self.error.emit("Failed to generate diagram. See log for details.")
 
-        # 清理主线程预EXPORT的临时 PDB File
         try:
             if self.pdb_file and os.path.exists(self.pdb_file):
                 os.remove(self.pdb_file)
@@ -119,7 +96,7 @@ class LeadOptimizationTab(CommonTab):
         self.init_ui()
 
     def init_ui(self):
-        """InitializeUI - 现代卡片式布局"""
+        """Initialize the tab with a modern card layout."""
         self.setObjectName("scroll_content")
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, True)
         self.parent_window._lead_scroll_content = self

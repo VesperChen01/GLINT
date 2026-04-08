@@ -93,9 +93,8 @@ if not current_binding:
         import pymol
         v = pymol.get_version()[0]
         if v.startswith('3'):
-            # PyMOL 3.x prefers Qt6
             BINDING_ORDER = ['PySide6', 'PyQt6', 'PyQt5', 'PySide2']
-    except Exception:  # PyMOL Version检测可能Failed
+    except Exception:
         pass
 
     for binding in BINDING_ORDER:
@@ -103,13 +102,7 @@ if not current_binding:
             current_binding = binding
             break
 else:
-    # Use the already loaded binding
     _try_import(current_binding)
-
-if current_binding:
-    print(f"[GLINT] Using Qt binding: {current_binding}")
-else:
-    print("[GLINT] Error: No Qt binding found.")
 
 # Export
 __all__ = ['QtCore', 'QtWidgets', 'QtGui', 'Qt', 'Signal', 'Slot', 'Property', 'current_binding'] + _COMMON_CLASSES

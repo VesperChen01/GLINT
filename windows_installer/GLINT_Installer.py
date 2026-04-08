@@ -36,18 +36,18 @@ CONDA_PACKAGES = [
     "pdb2pqr",
 ]
 
-# 镜像源配置
+# Mirror configuration
 TUNA_CONDA_CHANNELS = [
     "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/main",
     "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/r",
     "https://mirrors.tuna.tsinghua.edu.cn/anaconda/pkgs/msys2",
 ]
-# 清华 PyPI 镜像地址
+# Tsinghua PyPI mirror URL
 TUNA_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple"
 # Pip packages (Windows keeps a smaller, stable set)
 PIP_PACKAGES = ["requests", "open3d", "meeko"]
 
-# TUNA Mirrors
+# TUNA mirrors
 TUNA_CONDA_CHANNEL = "https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge/"
 TUNA_PIP_INDEX_URL = "https://pypi.tuna.tsinghua.edu.cn/simple/"
 TUNA_PIP_TRUSTED_HOST = "pypi.tuna.tsinghua.edu.cn"

@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-CRBN G-MOTIF（G-loop）识别（支持：内置真实模板 / 自定义Select）
-- template_mode: "builtin"（默认，using GSPT1）/ "selection"
-- 当 "builtin" 时，用内置的 PDB+残基段Select取 8×Cα 作为模板；必要时自动 cmd.fetch(async_=0)
-- 当 "selection" 时，从 template_sel（Select表达式/sele 名）中取 8×Cα
+CRBN G-motif (G-loop) detection.
+Supports built-in structural templates and custom selections.
 
-修复/特性：
-- 正确处理插入码（如 100A）、altloc（''/A）、残基Sort
-- 默认 RMSD_cutoff = 3.5 Å；可选 pos6=Gly（可Close）
-- 控制台输出前若干最小 RMSD，便于调阈Value
-- 输出 CSV 兼容 highlight_residues：Chain1,Residue1,Chain2,Residue2,Distance,Interaction
+- template_mode: "builtin" (default, uses GSPT1) or "selection"
+- In "builtin" mode, an internal PDB residue segment is used to extract 8×Cα atoms as the template;
+  cmd.fetch(async_=0) may be invoked automatically when required.
+- In "selection" mode, 8×Cα atoms are taken from template_sel (a selection expression or sele name).
+
+Key behaviors:
+- Handles insertion codes (for example 100A), altloc values (''/A), and residue sorting correctly.
+- Default RMSD cutoff is 3.5 Å; pos6=Gly filtering can be disabled.
+- Can print the top lowest RMSD values to help tune thresholds.
+- CSV output is compatible with highlight_residues:
+  Chain1,Residue1,Chain2,Residue2,Distance,Interaction
 """
 from __future__ import print_function
 import os, csv, re
@@ -17,14 +21,14 @@ from collections import defaultdict
 from typing import Optional
 from pymol import cmd
 
-# ====== 1) 内置模板定义（可按需自改）======
-# 注意：模板Name必须与 GUI (target_discovery.py) 中的定义一致
-# using简化的蛋白Name作为主Key，便于 GUI 调用
+# ====== 1) Built-in template definitions (customize if needed) ======
+# Template names must stay aligned with the GUI definitions in target_discovery.py
+# Simplified protein names are used as the primary keys for GUI consumption
 
 BUILTIN_TEMPLATES = {
-    # ===== 主要模板（推荐using）=====
-    # GSPT1 G-loop: 来自 5HXB (CRBN-pomalidomide-IKZF1 complex)
-    # 这是最常用的分子胶底物模板
+    # ===== Primary templates (recommended) =====
+    # GSPT1 G-loop from 5HXB (CRBN-pomalidomide-IKZF1 complex)
+    # This is the most common molecular glue substrate template
     "GSPT1": {
         "pdb": "5HXB",
         "chain": "A",
@@ -32,7 +36,7 @@ BUILTIN_TEMPLATES = {
         "selection_fmt": "{obj} and chain A and resi 570+571+572+573+574+575+576+577 and name CA",
         "description": "GSPT1 G-loop from 5HXB (CRBN-pomalidomide-IKZF1 complex)",
     },
-    # CK1α G-loop: 来自 5FQD (CRBN-lenalidomide-CK1α complex)
+    # CK1α G-loop from 5FQD (CRBN-lenalidomide-CK1α complex)
     "CK1α": {
         "pdb": "5FQD",
         "chain": "C",
@@ -42,7 +46,7 @@ BUILTIN_TEMPLATES = {
     },
 
     
-    # ===== 兼容旧版格式（保留向后兼容）=====
+    # ===== Legacy template aliases (kept for backward compatibility) =====
     "GSPT1 (5HXB A:570-577)": {
         "pdb": "5HXB",
         "chain": "A",
@@ -66,9 +70,9 @@ BUILTIN_TEMPLATES = {
     },
 }
 
-# 模板别名映射（支持多种命名方式）
+# Template alias mapping (supports multiple naming styles)
 TEMPLATE_ALIASES = {
-    # 简化Name -> 标准Name
+    # Simplified name -> canonical name
     "gspt1": "GSPT1",
     "ck1a": "CK1α",
     "ck1alpha": "CK1α",
@@ -116,7 +120,7 @@ def list_builtin_templates() -> list:
     result = []
     seen = set()
     for name, config in BUILTIN_TEMPLATES.items():
-        # Skip旧版格式（避免重复）
+        # Skip legacy format entries to avoid duplicates
         if "legacy" in config.get("description", "").lower():
             continue
         if name not in seen:
@@ -124,15 +128,15 @@ def list_builtin_templates() -> list:
             result.append((name, config.get("description", "")))
     return result
 
-# ====== CRBN 关Key残基Configuration ======
-# 用于 validate_crbn_hbonds Function的动态残基匹配
+# ====== CRBN key residue configuration ======
+# Used for dynamic residue matching in validate_crbn_hbonds
 
-# 默认Configuration（基于人源 CRBN，UniProt Q96SW2）
+# Default configuration (human CRBN, UniProt Q96SW2)
 CRBN_KEY_RESIDUES_DEFAULT = {
     'N351': {
-        'resn': 'ASN',           # 残基Type
-        'resi': '351',           # 残基Number
-        'atoms': ['ND2', 'OD1'], # 参与氢Key的原子
+        'resn': 'ASN',           # Residue type
+        'resi': '351',           # Residue number
+        'atoms': ['ND2', 'OD1'], # Atoms participating in key H-bonds
         'description': 'Asn351 sidechain (NH2/O donor/acceptor)'
     },
     'H357': {
@@ -149,8 +153,8 @@ CRBN_KEY_RESIDUES_DEFAULT = {
     },
 }
 
-# 常见 PDB 结构的 CRBN 残基预设Configuration
-# 格式: 'PDB_CODE': {'N351': 'actual_resi', 'H357': 'actual_resi', 'W400': 'actual_resi'}
+# Common PDB presets for CRBN residue indices
+# Format: 'PDB_CODE': {'N351': 'actual_resi', 'H357': 'actual_resi', 'W400': 'actual_resi'}
 CRBN_PRESETS = {
     # CRBN-lenalidomide-GSPT1 ternary complex
     '6H0G': {'N351': '351', 'H357': '357', 'W400': '400'},
@@ -162,78 +166,72 @@ CRBN_PRESETS = {
     '4CI1': {'N351': '351', 'H357': '357', 'W400': '400'},
     # CRBN-CC-885-GSPT1 complex
     '5HXB': {'N351': '351', 'H357': '357', 'W400': '400'},
-    # 小鼠 CRBN (如果残基Number不同，在此Add)
+    # Mouse CRBN (add entries if residue numbering differs)
     # 'XXXX': {'N351': 'XXX', 'H357': 'XXX', 'W400': 'XXX'},
 }
 
 def get_crbn_key_residues(pdb_preset: Optional[str] = None,
                           custom_config: Optional[dict] = None) -> dict:
     """
-    获取 CRBN 关Key残基Configuration
-    
-    优先级: custom_config > pdb_preset > default
-    
+    Return the CRBN key residue configuration.
+
+    Priority: custom_config > pdb_preset > default
+
     Parameters:
-        pdb_preset: PDB 代码（如 '6H0G'），using预设Configuration
-        custom_config: 自定义Configuration字典
-    
+        pdb_preset: PDB code (e.g. "6H0G"), uses a preset configuration
+        custom_config: Custom configuration dictionary
+
     Return:
-        dict: 关Key残基Configuration
+        dict: Key residue configuration
     """
     if custom_config:
-        # 验证自定义Configuration格式
+        # Validate custom configuration
         required_keys = {'N351', 'H357', 'W400'}
         if not required_keys.issubset(custom_config.keys()):
-            print(f"[CRBN Config] ⚠️ 自定义Configuration缺少必要Key: {required_keys - set(custom_config.keys())}")
-            print("[CRBN Config] using默认Configuration")
             return CRBN_KEY_RESIDUES_DEFAULT.copy()
-        
-        # 构建完整Configuration
+
+        # Build the full configuration
         result = {}
         for key in required_keys:
             if isinstance(custom_config[key], dict):
                 result[key] = custom_config[key]
             else:
-                # 简化格式: {'N351': '351'} -> 完整格式
+                # Simplified format: {'N351': '351'} -> full format
                 base = CRBN_KEY_RESIDUES_DEFAULT[key].copy()
                 base['resi'] = str(custom_config[key])
                 result[key] = base
         return result
-    
+
     if pdb_preset:
         preset_key = pdb_preset.upper()
         if preset_key in CRBN_PRESETS:
-            # 从预设构建完整Configuration
+            # Build a full configuration from the preset
             preset = CRBN_PRESETS[preset_key]
             result = {}
             for key in ['N351', 'H357', 'W400']:
                 base = CRBN_KEY_RESIDUES_DEFAULT[key].copy()
                 base['resi'] = preset[key]
                 result[key] = base
-            print(f"[CRBN Config] using预设Configuration: {preset_key}")
             return result
-        else:
-            print(f"[CRBN Config] ⚠️ 未知预设 '{pdb_preset}'，可用预设: {list(CRBN_PRESETS.keys())}")
-            print("[CRBN Config] using默认Configuration")
-    
+
     return CRBN_KEY_RESIDUES_DEFAULT.copy()
 
-# 氨基酸三字母到单字母转换表
+# Amino-acid 3-letter to 1-letter mapping
 AA_3TO1 = {
     'ALA': 'A', 'ARG': 'R', 'ASN': 'N', 'ASP': 'D', 'CYS': 'C',
     'GLN': 'Q', 'GLU': 'E', 'GLY': 'G', 'HIS': 'H', 'ILE': 'I',
     'LEU': 'L', 'LYS': 'K', 'MET': 'M', 'PHE': 'F', 'PRO': 'P',
     'SER': 'S', 'THR': 'T', 'TRP': 'W', 'TYR': 'Y', 'VAL': 'V',
-    # 非标准/修饰氨基酸
-    'MSE': 'M',  # 硒代蛋氨酸
-    'SEC': 'U',  # 硒半胱氨酸
-    'PYL': 'O',  # 吡咯赖氨酸
+    # Non-standard or modified residues
+    'MSE': 'M',  # Selenomethionine
+    'SEC': 'U',  # Selenocysteine
+    'PYL': 'O',  # Pyrrolysine
 }
 
 def _aa_3to1(resn: str) -> str:
-    """将三字母氨基酸代码转换为单字母代码"""
+    """Convert a 3-letter amino-acid code to a 1-letter code."""
     resn_upper = resn.strip().upper()
-    return AA_3TO1.get(resn_upper, 'X')  # 未知氨基酸Return 'X'
+    return AA_3TO1.get(resn_upper, 'X')  # Unknown residues map to 'X'
 
 def _parse_resi(resi_str: str):
     if resi_str is None:
@@ -248,7 +246,7 @@ def _parse_resi(resi_str: str):
         return (0, s or "")
 
 def _collect_ca_by_chain(obj_name: str):
-    """Return {chain: [(sort_key, resi_label, resn, (x,y,z))...按 sort_key Sort]}（altloc 取 ''/A）"""
+    """Return {chain: [(sort_key, resi_label, resn, (x,y,z))...]}, altloc ''/A only."""
     by_chain = defaultdict(list)
     m = cmd.get_model(obj_name)
     for a in m.atom:
@@ -280,14 +278,14 @@ def _kabsch_rmsd(P, Q):
     diff = P_aln - Q
     return float((diff**2).sum() / len(P))**0.5
 
-# ====== 3) 模板坐标获取：理想化 / 内置 / Select ======
+# ====== 3) Template coordinate acquisition: idealized / built-in / selection ======
 def _ideal_beta_hairpin_template():
     left = [(0.0,0.0,0.0),(3.8,0.2,0.0),(7.6,0.1,0.1),(11.4,0.0,0.0)]
     right = [(11.4,4.0,0.2),(7.6,4.2,0.0),(3.8,4.1,-0.1),(0.0,4.0,0.0)]
     return left + right  # 8×3
 
 def _coords_from_selection(sel: str):
-    """从Select中抓 8×Cα（按 resi Sort取前 8 个）。"""
+    """Collect 8×Cα coordinates from a selection (sorted by resi)."""
     if not sel:
         raise ValueError("template_sel is empty. Provide a selection containing 8 CA atoms.")
     sel_ca = f"({sel}) and name CA"
@@ -319,85 +317,85 @@ def _find_loaded_object_contains(code: str):
 
 def _coords_from_builtin(name: str):
     """
-    从内置模板获取 8×Cα 坐标
-    
+    Fetch 8×Cα coordinates from a built-in template.
+
     Parameters:
-        name: 模板Name，支持多种格式：
-              - 简化Name: "GSPT1", "CK1α", "VAV1"
-              - 小写: "gspt1", "ck1a"
-              - 旧版格式: "GSPT1 (6H0G A:60-67)"
-    
+        name: Template name in one of the supported formats:
+              - Canonical: "GSPT1", "CK1α", "VAV1"
+              - Lowercase: "gspt1", "ck1a"
+              - Legacy: "GSPT1 (6H0G A:60-67)"
+
     Return:
-        list: 8 个 Cα 原子的 (x, y, z) 坐标
+        list: Coordinates for 8 Cα atoms as (x, y, z)
     """
-    # using新的模板FindFunction
+    # Use the unified template lookup helper
     info = get_builtin_template(name)
     if not info:
         available = [t[0] for t in list_builtin_templates()]
         raise ValueError(f"Unknown builtin template: '{name}'. Available templates: {available}")
-    
+
     pdb_code = info["pdb"]
-    print(f"[G-MOTIF] Using builtin template: {name} (PDB: {pdb_code})")
-    
-    # 若会话中不存在，自动 fetch（注意 async_）
+
+    # Auto-fetch the PDB if it is not already loaded
     obj = _find_loaded_object_contains(pdb_code)
     if obj is None:
         try:
-            print(f"[G-MOTIF] Fetching {pdb_code} from RCSB...")
-            cmd.fetch(pdb_code, async_=0)  # ✅ 修复：用 async_ 避免语法Error
+            cmd.fetch(pdb_code, async_=0)  # Use async_ keyword for compatibility
             obj = _find_loaded_object_contains(pdb_code) or pdb_code
         except Exception as e:
-            raise RuntimeError(f"Failed to fetch {pdb_code} ({e}). Load the PDB manually or use the 'selection' template.")
-    
+            raise RuntimeError(
+                f"Failed to fetch {pdb_code} ({e}). Load the PDB manually or use the 'selection' template."
+            )
+
     sel = info["selection_fmt"].format(obj=obj)
     return _coords_from_selection(sel)
 
 def _get_template_coords(template_mode: str, template_sel: Optional[str], template_builtin: Optional[str]):
     """
-    获取模板坐标
-    
+    Return template coordinates.
+
     Parameters:
-        template_mode: "builtin"（默认）或 "selection"
-        template_sel: 自定义Select表达式（当 template_mode="selection"）
-        template_builtin: 内置模板Name（默认 "GSPT1"）
-    
+        template_mode: "builtin" (default) or "selection"
+        template_sel: Selection expression when template_mode == "selection"
+        template_builtin: Built-in template name (default "GSPT1")
+
     Return:
-        list: 8 个 Cα 原子的 (x, y, z) 坐标
+        list: Coordinates for 8 Cα atoms as (x, y, z)
     """
     mode = (template_mode or "builtin").lower()
     if mode == "selection":
         return _coords_from_selection(template_sel or "")
-    # 默认using builtin 模式，GSPT1 作为默认模板
+    # Default to builtin mode with GSPT1
     return _coords_from_builtin(template_builtin or "GSPT1")
 
 def _calculate_sasa_for_window(obj_name, chain, window):
     """
-    计算 8 个残基窗口的溶剂可及表面积 (SASA)
-    
+    Compute SASA for an 8-residue window.
+
     Parameters:
-        obj_name: PyMOL 对象名
-        chain: 链 ID
-        window: [(resi_label, resn, xyz), ...] 8个残基的列表
-    
+        obj_name: PyMOL object name
+        chain: Chain ID
+        window: [(resi_label, resn, xyz), ...] list of 8 residues
+
     Return:
-        float: 平均 SASA (Ų/残基)，如果计算FailedReturn None
+        float: Mean SASA (Å²/residue), or None if the calculation fails
     """
     try:
-        # 构建残基列表
+        # Build residue list
         resi_list = '+'.join([w[0] for w in window])
         selection = f"{obj_name} and chain {chain} and resi {resi_list}"
-        
-        # 计算 SASA
+
+        # Compute SASA
         total_sasa = cmd.get_area(selection, state=1)
-        
-        # 计算平均Value
+
+        # Compute mean SASA
         avg_sasa = total_sasa / 8.0
         return avg_sasa
-    except Exception as e:
-        # 如果计算Failed，Return None（例如对象不存在）
+    except Exception:
+        # Return None on failure (e.g. object missing)
         return None
 
-# ====== 4) 主Function ======
+# ====== 4) Main function ======
 def find_crbn_g_motif(obj_name=None, pdb_file=None,
                        template_mode="builtin", template_sel=None, template_builtin="GSPT1",
                        rmsd_cutoff=1.0, out_csv=None, auto_highlight=0, require_gly_pos="6,3",
@@ -405,41 +403,41 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
                        min_sasa_per_residue=15.0, topk_debug=10,
                        highlight_surface=False, export_coords=False, coords_csv=None):
     """
-    G-loop 挖掘主Function
-    
+    Main entry point for G-loop motif discovery.
+
     Parameters:
-        obj_name: PyMOL 对象名
-        pdb_file: PDB FilePath
-        template_mode: "builtin"（默认）/ "selection"
-        template_sel: Select表达式（当 template_mode="selection"）
-        template_builtin: 内置模板名（默认 "GSPT1"，可选 "CK1α", "VAV1"）
-        rmsd_cutoff: RMSD 阈Value（默认 1.0 Å）
-        out_csv: 输出 CSV FilePath
-        auto_highlight: 是否自动高亮（0/1）
-        require_gly_pos: 要求甘氨酸的位置，可选Value：
-            - "6,3" 或 "3,6": 第 6 位或第 3 位为甘氨酸（默认）
-            - "6": 仅第 6 位为甘氨酸
-            - "3": 仅第 3 位为甘氨酸
-            - None 或 "": 不要求甘氨酸
-        exclude_proline: 是否排除含脯氨酸的窗口（默认 False）
-        check_surface_exposure: 是否检查表面暴露（默认 True）
-        min_sasa_per_residue: 最小 SASA 阈Value，单位 Ų/残基（默认 15.0）
-        topk_debug: Display前 N 个最小 RMSD（调试用）
-        highlight_surface: 是否高亮 G-loop 表面（默认 False）
-        export_coords: 是否Export坐标（默认 False）
-        coords_csv: 坐标输出 CSV Path（可选）
-    
+        obj_name: PyMOL object name
+        pdb_file: PDB file path
+        template_mode: "builtin" (default) or "selection"
+        template_sel: Selection expression when template_mode == "selection"
+        template_builtin: Built-in template name (default "GSPT1", options "CK1α", "VAV1")
+        rmsd_cutoff: RMSD cutoff (default 1.0 Å)
+        out_csv: Output CSV path
+        auto_highlight: Auto-highlight toggle (0/1)
+        require_gly_pos: Required glycine positions:
+            - "6,3" or "3,6": glycine at position 6 or 3 (default)
+            - "6": glycine at position 6 only
+            - "3": glycine at position 3 only
+            - None or "": no glycine requirement
+        exclude_proline: Exclude windows containing proline (default False)
+        check_surface_exposure: Check surface exposure (default True)
+        min_sasa_per_residue: Minimum SASA threshold (default 15.0 Å²/residue)
+        topk_debug: Show top N lowest RMSD values for debugging
+        highlight_surface: Highlight G-loop surface (default False)
+        export_coords: Export coordinates (default False)
+        coords_csv: Optional coordinates CSV output path
+
     Return:
         dict: {
             'hits': [(chain, start_resi_label, end_resi_label, seq8, rmsd), ...],
-            'csv_path': str,  # 输出 CSV Path
-            'coordinates': {...} or None,  # 坐标数据（如果 export_coords=True）
-            'surface_info': {...} or None,  # 表面Information（如果 highlight_surface=True）
+            'csv_path': str,  # Output CSV path
+            'coordinates': {...} or None,  # Coordinate data when export_coords=True
+            'surface_info': {...} or None,  # Surface info when highlight_surface=True
         }
-        
-        为了向后兼容，如果只有 hits，也可以直接迭代ReturnValue
+
+        For backward compatibility, you may iterate directly over hits-only results.
     """
-    # 载入对象
+    # Load object
     tmp_obj = None
     if pdb_file:
         tmp_obj = "_gmotif_tmp_obj"
@@ -453,14 +451,12 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
             
         obj = obj_name or (objs[0] if objs else None)
     if not obj:
-        print("[G-MOTIF] No object available; load a structure or provide pdb_file")
         return []
 
-    # 模板坐标
+    # Template coordinates
     try:
         tmpl = _get_template_coords(template_mode, template_sel, template_builtin)
-    except Exception as e:
-        print(f"[G-MOTIF] Template error: {e}; falling back to GSPT1 template.")
+    except Exception:
         tmpl = _coords_from_builtin("GSPT1")
 
     hits = []
@@ -470,12 +466,12 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
     gly_pos_windows = 0
     proline_excluded_windows = 0
     buried_windows = 0
-    
-    # 解析 require_gly_pos Parameters
+
+    # Parse require_gly_pos values
     gly_positions = []
     if require_gly_pos:
         if isinstance(require_gly_pos, str):
-            # 支持 "6,3" 或 "3,6" 或 "6" 或 "3" 格式
+            # Supports "6,3", "3,6", "6", or "3"
             for pos in require_gly_pos.replace(" ", "").split(","):
                 try:
                     gly_positions.append(int(pos))
@@ -493,11 +489,11 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
         for i in range(0, len(seq) - 7):
             window = seq[i:i+8]
             total_windows += 1
-            # 检查指Locate置是否为甘氨酸（第 6 位或第 3 位）
+            # Check required glycine positions (pos 6 or 3)
             if gly_positions:
                 has_gly_at_required_pos = False
                 for pos in gly_positions:
-                    # 位置 1-8 对应索引 0-7
+                    # Positions 1-8 map to indices 0-7
                     idx = pos - 1
                     if 0 <= idx < 8 and window[idx][1] in ("GLY", "G"):
                         has_gly_at_required_pos = True
@@ -505,7 +501,7 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
                 if not has_gly_at_required_pos:
                     continue
                 gly_pos_windows += 1
-            # 检查是否Package含脯氨酸（Pro, P）
+            # Exclude windows containing proline
             if exclude_proline:
                 has_proline = any(w[1] in ("PRO", "P") for w in window)
                 if has_proline:
@@ -518,101 +514,74 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
                 continue
             best_rmsd_pool.append((rmsd, ch, window))
             if rmsd <= float(rmsd_cutoff):
-                # 表面暴露检查
+                # Surface exposure check
                 if check_surface_exposure:
                     avg_sasa = _calculate_sasa_for_window(obj, ch, window)
                     if avg_sasa is None or avg_sasa < min_sasa_per_residue:
                         buried_windows += 1
                         continue
-                
+
                 resi_s = window[0][0]; resi_e = window[-1][0]
                 seq8 = ''.join(_aa_3to1(aa) if aa else 'X' for aa in [w[1] for w in window])
                 hits.append((ch, resi_s, resi_e, seq8, rmsd))
 
-    # 调试输出
-    print(f"[G-MOTIF] Total windows: {total_windows}")
-    if gly_positions:
-        pos_str = " or ".join([f"pos{p}" for p in gly_positions])
-        print(f"[G-MOTIF] Windows with {pos_str}=Gly: {gly_pos_windows}")
-    if exclude_proline:
-        print(f"[G-MOTIF] Windows excluded (含脯氨酸): {proline_excluded_windows}")
-    if check_surface_exposure:
-        print(f"[G-MOTIF] Windows excluded (埋藏在内部): {buried_windows}")
-    if best_rmsd_pool:
-        best_rmsd_pool.sort(key=lambda x: x[0])
-        nshow = min(topk_debug, len(best_rmsd_pool))
-        print(f"[G-MOTIF] Smallest RMSD (top {nshow}):")
-        for k in range(nshow):
-            r, ch, window = best_rmsd_pool[k]
-            seq8 = ''.join(_aa_3to1(aa) if aa else 'X' for aa in [w[1] for w in window])
-            resi_s = window[0][0]; resi_e = window[-1][0]
-            print("  #{:02d} chain={} {:>6s}-{:>6s}  seq={}  RMSD={:.2f} Å".format(
-                k+1, ch or '.', str(resi_s), str(resi_e), seq8, r
-            ))
-
-    # 写 CSV - 输出所有扫描的窗口(不仅是 hits)
+    # Write CSV - output all scanned windows (not just hits)
     if out_csv is None:
         import tempfile
         fd, out_csv = tempfile.mkstemp(suffix="_gmotif.csv"); os.close(fd)
-    
-    # 对 best_rmsd_pool 按 RMSD Sort
+
+    # Sort best_rmsd_pool by RMSD
     best_rmsd_pool.sort(key=lambda x: x[0])
-    
-    print(f"[G-MOTIF] Writing {len(best_rmsd_pool)} windows to CSV (all RMSD values): {out_csv}")
-    print(f"[G-MOTIF] Hits (RMSD ≤ {rmsd_cutoff} Å): {len(hits)}")
-    
+
     with open(out_csv, "w", newline="", encoding="utf-8-sig") as f:
         w = csv.writer(f)
-        # 表头增加 Status 列
+        # Add Status column
         w.writerow(["Chain", "Sequence", "Start", "End", "RMSD", "Status", "Type"])
-        
-        # 写入所有窗口
+
+        # Write all windows
         for rmsd, ch, window in best_rmsd_pool:
             resi_s = window[0][0]
             resi_e = window[-1][0]
             seq8 = ''.join(_aa_3to1(aa) if aa else 'X' for aa in [w[1] for w in window])
-            
-            # 判断是否通过阈Value
-            status = "Pass" if rmsd <= float(rmsd_cutoff) else "Fail"
-            
-            w.writerow([ch, seq8, resi_s, resi_e, f"{rmsd:.2f}", status, "G-Motif"])
 
-    print(f"[G-MOTIF] Hits: {len(hits)}; output: {out_csv}")
+            # Determine pass/fail by RMSD cutoff
+            status = "Pass" if rmsd <= float(rmsd_cutoff) else "Fail"
+
+            w.writerow([ch, seq8, resi_s, resi_e, f"{rmsd:.2f}", status, "G-Motif"])
 
     # Sort hits by RMSD (ascending) so hits[0] is the best one
     hits.sort(key=lambda x: x[4])
 
-    # 准备ReturnResults
+    # Prepare return payload
     result = {
         'hits': hits,
         'csv_path': out_csv,
         'coordinates': None,
         'surface_info': None,
-        'all_windows': best_rmsd_pool  # 所有扫描的窗口（用于高级分析）
+        'all_windows': best_rmsd_pool  # All scanned windows (for advanced analysis)
     }
 
-    # 自动高亮
+    # Auto-highlight
     if auto_highlight and hits:
         try:
             try:
                 from .highlight_residues import highlight_gmotif_loops
             except Exception:
                 from highlight_residues import highlight_gmotif_loops
-            # using专门的 G-loop 高亮Function
+            # Use the dedicated G-loop highlight helper
             highlight_gmotif_loops(out_csv, obj=obj, color="yellow", show_labels=True, clear_old=True)
-            print(f"[G-MOTIF] Auto-highlighted {len(hits)} G-loop regions in PyMOL")
-        except Exception as e:
-            print(f"[G-MOTIF] Auto highlight failed: {e}")
+        except Exception:
+            pass
 
-    # 高亮表面（新功能）
+    # Highlight surface (optional)
     if highlight_surface and hits:
         try:
             try:
                 from .highlight_residues import highlight_gloop_surface
             except Exception:
                 from highlight_residues import highlight_gloop_surface
-            
-            # 高亮First hit 的表面
+
+            # Highlight the first hit surface
             first_hit = hits[0]
             ch, resi_s, resi_e, seq8, rmsd = first_hit
             surface_result = highlight_gloop_surface(
@@ -620,135 +589,135 @@ def find_crbn_g_motif(obj_name=None, pdb_file=None,
                 surface_color="yellow", surface_transparency=0.3
             )
             result['surface_info'] = surface_result
-            print(f"[G-MOTIF] ✅ Surface highlighted for G-loop {ch}:{resi_s}-{resi_e}")
-        except Exception as e:
-            print(f"[G-MOTIF] Surface highlight failed: {e}")
+        except Exception:
+            pass
 
-    # Export坐标（新功能）
+    # Export coordinates (optional)
     if export_coords and hits:
         try:
             try:
                 from .highlight_residues import get_gloop_coordinates
             except Exception:
                 from highlight_residues import get_gloop_coordinates
-            
-            # ExportFirst hit 的坐标
+
+            # Export coordinates for the first hit
             first_hit = hits[0]
             ch, resi_s, resi_e, seq8, rmsd = first_hit
-            
-            # 如果没有指定坐标 CSV Path，自动生成
+
+            # Auto-generate coordinates CSV if none was provided
             if coords_csv is None:
                 import tempfile
                 fd, coords_csv = tempfile.mkstemp(suffix="_gloop_coords.csv")
                 os.close(fd)
-            
+
             coords_result = get_gloop_coordinates(
                 obj=obj, chain=ch, start_resi=resi_s, end_resi=resi_e,
-                atom_types=["all"],  # Export所有原子
+                atom_types=["all"],  # Export all atoms
                 output_csv=coords_csv
             )
             result['coordinates'] = coords_result
-            print(f"[G-MOTIF] ✅ Coordinates exported to: {coords_csv}")
-        except Exception as e:
-            print(f"[G-MOTIF] Coordinate export failed: {e}")
+        except Exception:
+            pass
 
     if tmp_obj:
-        try: cmd.delete(tmp_obj)
-        except Exception: pass
+        try:
+            cmd.delete(tmp_obj)
+        except Exception:
+            pass
 
-    # 为了向后兼容，Return一个可以像列表一样迭代的对象
+    # Return a list-iterable wrapper for backward compatibility
     return GMotifResult(result)
 
 
 class GMotifResult:
     """
-    G-Motif ResultsPackage装Class，支持向后兼容的列表迭代和新的字典访问
+    G-motif result wrapper with backward-compatible iteration and dict-like access.
     """
     def __init__(self, data):
         self._data = data
         self._hits = data.get('hits', [])
     
     def __iter__(self):
-        """支持 for hit in result 的迭代"""
+        """Iterate over hits (for 'for hit in result')."""
         return iter(self._hits)
-    
+
     def __len__(self):
-        """支持 len(result)"""
+        """Return the number of hits."""
         return len(self._hits)
-    
+
     def __getitem__(self, key):
-        """支持 result[0] 和 result['hits'] 两种访问方式"""
+        """Support result[0] and result['hits'] access."""
         if isinstance(key, int):
             return self._hits[key]
         return self._data.get(key)
-    
+
     def __bool__(self):
-        """支持 if result: 判断"""
+        """Allow truthiness checks like 'if result:'"""
         return len(self._hits) > 0
-    
+
     @property
     def hits(self):
-        """获取 hits 列表"""
+        """Return the hits list."""
         return self._hits
-    
+
     @property
     def csv_path(self):
-        """获取 CSV Path"""
+        """Return the CSV path."""
         return self._data.get('csv_path')
-    
+
     @property
     def coordinates(self):
-        """获取坐标数据"""
+        """Return coordinate data."""
         return self._data.get('coordinates')
-    
+
     @property
     def surface_info(self):
-        """获取表面Information"""
+        """Return surface information."""
         return self._data.get('surface_info')
-    
+
     @property
     def all_windows(self):
-        """获取所有扫描的窗口"""
+        """Return all scanned windows."""
         return self._data.get('all_windows', [])
-    
+
     def get(self, key, default=None):
-        """字典式 get Method"""
+        """Dictionary-style getter."""
         return self._data.get(key, default)
-    
+
     def to_dict(self):
-        """转换为普通字典"""
+        """Convert to a plain dictionary."""
         return self._data.copy()
-    
+
     def __repr__(self):
         return f"GMotifResult(hits={len(self._hits)}, csv='{self.csv_path}')"
 
 
-# ====== 5) G-motif 内部几何验证 ======
+# ====== 5) G-motif internal geometry validation ======
 def validate_g_motif_geometry(obj_name, g_motif_chain, g_motif_resi_range,
                                max_internal_hbond=3.5, reference_rmsd_threshold=1.0,
                                template_name: Optional[str] = None):
     """
-    验证 G-motif 内部geometric features（α-turn）
-    
-    支持两种 G-loop Type：
-    - Type A (Gly 在第 6 位): G₋₄ backbone O → G₀ backbone N (索引 1 → 5)
-    - Type B (Gly 在第 3 位): G₀ backbone O → G₊₄ backbone N (索引 2 → 6)
-    
+    Validate internal G-motif geometry (α-turn).
+
+    Supports two G-loop types:
+    - Type A (Gly at position 6): G₋₄ backbone O → G₀ backbone N (indices 1 → 5)
+    - Type B (Gly at position 3): G₀ backbone O → G₊₄ backbone N (indices 2 → 6)
+
     Parameters:
-        obj_name: PyMOL 对象名
-        g_motif_chain: G-motif 所在链 ID
-        g_motif_resi_range: G-motif 残基范围 (start, end) 或 "start-end"
-        max_internal_hbond: 氢Key最大距离阈Value（默认 3.5 Å）
-        reference_rmsd_threshold: RMSD 阈Value（默认 1.0 Å）
-        template_name: 用于 RMSD 比较的模板Name（默认 None，自动检测）
-    
+        obj_name: PyMOL object name
+        g_motif_chain: Chain ID of the G-motif
+        g_motif_resi_range: Residue range (start, end) or "start-end"
+        max_internal_hbond: Max hydrogen bond distance (default 3.5 Å)
+        reference_rmsd_threshold: RMSD threshold (default 1.0 Å)
+        template_name: Template name for RMSD comparison (default None, auto-detect)
+
     Return:
         dict: {
-            'gloop_type': str,  # "Type_A" (Gly@6) 或 "Type_B" (Gly@3)
-            'gly_position': int,  # 甘氨酸位置 (3 或 6)
+            'gloop_type': str,  # "Type_A" (Gly@6) or "Type_B" (Gly@3)
+            'gly_position': int,  # Glycine position (3 or 6)
             'has_alpha_turn_hbond': bool,
             'alpha_turn_distance': float,
-            'alpha_turn_description': str,  # 氢KeyDescription
+            'alpha_turn_description': str,  # H-bond description
             'has_secondary_hbond': bool,
             'secondary_hbond_distance': float,
             'secondary_hbond_description': str,
@@ -759,8 +728,8 @@ def validate_g_motif_geometry(obj_name, g_motif_chain, g_motif_resi_range,
         }
     """
     import numpy as np
-    
-    # 解析范围
+
+    # Parse range
     if isinstance(g_motif_resi_range, str):
         parts = g_motif_resi_range.split('-')
         start_resi = parts[0].strip()
@@ -770,7 +739,7 @@ def validate_g_motif_geometry(obj_name, g_motif_chain, g_motif_resi_range,
     
     g_sel = f"{obj_name} and chain {g_motif_chain} and resi {start_resi}-{end_resi}"
     
-    # 获取 8 个残基的 backbone 原子
+    # Collect backbone atoms for 8 residues
     g_model = cmd.get_model(g_sel)
     g_residues = {}
     for a in g_model.atom:

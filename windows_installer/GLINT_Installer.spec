@@ -10,12 +10,29 @@ spec_dir = os.path.dirname(os.path.abspath(SPEC))
 glint_src = os.path.join(spec_dir, 'glint')
 external_src = os.path.join(spec_dir, 'external')
 
+EXCLUDED_NAMES = {
+    '.DS_Store',
+    'Thumbs.db',
+}
+EXCLUDED_SUFFIXES = (
+    '.pyc', '.pyo', '.log', '.tmp', '.bak', '.orig', '.zip', '.tar', '.tar.gz', '.tgz', '.dmg',
+    '.sh', '.bat', '.ps1',
+)
+
+
+def should_include_file(filename: str) -> bool:
+    lower_name = filename.lower()
+    if filename in EXCLUDED_NAMES:
+        return False
+    return not any(lower_name.endswith(suffix) for suffix in EXCLUDED_SUFFIXES)
+
+
 glint_datas = []
 if os.path.exists(glint_src):
     for root, dirs, files in os.walk(glint_src):
         dirs[:] = [d for d in dirs if d != '__pycache__']
         for file in files:
-            if file.endswith('.pyc') or file == '.DS_Store':
+            if not should_include_file(file):
                 continue
             glint_datas.append((os.path.join(root, file), os.path.relpath(root, spec_dir)))
 
@@ -24,7 +41,7 @@ if os.path.exists(external_src):
     for root, dirs, files in os.walk(external_src):
         dirs[:] = [d for d in dirs if d != '__pycache__']
         for file in files:
-            if file.endswith('.pyc') or file == '.DS_Store':
+            if not should_include_file(file):
                 continue
             external_datas.append((os.path.join(root, file), os.path.relpath(root, spec_dir)))
 

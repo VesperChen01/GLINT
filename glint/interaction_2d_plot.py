@@ -391,6 +391,94 @@ def try_load_mol_from_smiles(pdb_file, ligand_resname):
     return None
 
 
+def _make_rdkit_safe_resname(resname):
+    """
+    为 RDKit PDB 解析生成稳定的 3 字符残基名。
+
+    PDB 残基名应位于固定 3 列；对于纯数字或非字母开头的值（如 0），
+    RDKit 解析时可能把列错位解释为 chain / resseq，因此统一改写为安全名。
+    """
+    text = (resname or "").strip()
+    if not text:
+        return "LIG"
+
+    if re.match(r'^[A-Za-z][A-Za-z0-9]{0,2}$', text):
+        return text[:3].upper()
+
+    alnum = re.sub(r'[^A-Za-z0-9]', '', text).upper()
+    if alnum and alnum[0].isalpha():
+        return alnum[:3].ljust(3, 'X')
+
+    if not alnum:
+        return "LIG"
+
+    return ("L" + alnum[-2:]).ljust(3, '0')[:3]
+
+
+def _normalize_pdb_atom_line(line, safe_resname=None):
+    """将原始 ATOM/HETATM 行重建为固定列 PDB 格式。"""
+    record = line[:6].strip() or "HETATM"
+    serial = int(line[6:11].strip() or 0)
+    atom_name = line[12:16] if len(line) >= 16 else line[12:].strip()[:4]
+    atom_name = atom_name[:4].rjust(4)
+    alt_loc = line[16:17] if len(line) >= 17 else " "
+    resname = (safe_resname if safe_resname is not None else line[17:20].strip()) or "LIG"
+    resname = resname[:3].rjust(3)
+    chain = (line[21:22] if len(line) >= 22 else " ").strip()[:1] or "A"
+    resseq = int(line[22:26].strip() or 1)
+    icode = line[26:27] if len(line) >= 27 else " "
+    x = float(line[30:38].strip() or 0.0)
+    y = float(line[38:46].strip() or 0.0)
+    z = float(line[46:54].strip() or 0.0)
+    occupancy = float(line[54:60].strip() or 1.0)
+    temp_factor = float(line[60:66].strip() or 0.0)
+    element = line[76:78].strip() if len(line) >= 78 else ""
+    charge = line[78:80].strip() if len(line) >= 80 else ""
+    if not element:
+        element = _parse_element_from_atom_name(atom_name) or ""
+    return (
+        f"{record:<6}{serial:>5} {atom_name}{alt_loc}{resname} {chain}{resseq:>4}{icode}   "
+        f"{x:>8.3f}{y:>8.3f}{z:>8.3f}{occupancy:>6.2f}{temp_factor:>6.2f}          "
+        f"{element:>2}{charge:>2}"
+    )
+
+
+def _normalize_pdb_conect_line(line):
+    """将 CONECT 记录规范为固定宽度格式。"""
+    parts = line.split()
+    if len(parts) < 3:
+        return line
+    try:
+        nums = [int(part) for part in parts[1:]]
+    except ValueError:
+        return line
+    return "CONECT" + "".join(f"{num:>5}" for num in nums)
+
+
+def _build_rdkit_safe_pdb_block(atom_lines, conect_lines, ligand_resname):
+    """重建供 RDKit 使用的稳定 PDB block。"""
+    safe_resname = _make_rdkit_safe_resname(ligand_resname)
+    normalized_atoms = []
+    changed = safe_resname != (ligand_resname or "").strip()
+
+    for line in atom_lines:
+        normalized = _normalize_pdb_atom_line(line, safe_resname=safe_resname)
+        normalized_atoms.append(normalized)
+        if normalized != line:
+            changed = True
+
+    normalized_conect = []
+    for line in conect_lines:
+        normalized = _normalize_pdb_conect_line(line)
+        normalized_conect.append(normalized)
+        if normalized != line:
+            changed = True
+
+    pdb_block = '\n'.join(normalized_atoms + normalized_conect + ['END'])
+    return pdb_block, safe_resname, changed
+
+
+
 def _parse_element_from_atom_name(atom_name):
     """
     从 PDB 原子名解析元素Type。
@@ -1038,9 +1126,16 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
                         except (ValueError, IndexError):  # CONECT 记录解析可能Failed
                             pass
                 
-                # 构建配体 PDB 块
-                ligand_pdb = '\n'.join(ligand_lines + filtered_conect + ['END'])
+                # 构建供 RDKit 使用的规范化配体 PDB 块
+                ligand_pdb, safe_resname, pdb_block_normalized = _build_rdkit_safe_pdb_block(
+                    ligand_lines, filtered_conect, ligand_resname
+                )
                 print(f"[2D Diagram] Extracted ligand: {len(ligand_lines)} atoms, {len(filtered_conect)} CONECT records")
+                if pdb_block_normalized:
+                    if safe_resname != (ligand_resname or '').strip():
+                        print(f"[2D Diagram] Normalized extracted PDB block for RDKit parsing (resname: {ligand_resname} -> {safe_resname})")
+                    else:
+                        print(f"[2D Diagram] Normalized extracted PDB block for RDKit parsing")
                 
                 # Save临时File供后续 SMILES 转换using
                 temp_ligand_pdb = tempfile.mktemp(suffix=".pdb")
