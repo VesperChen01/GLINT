@@ -1,0 +1,68 @@
+# 同步排除配置文件
+# 用于 rsync --exclude-from，定义哪些文件不同步到公开仓库
+
+# Git 和工具配置
+.github/
+.git/
+.gitignore
+.magi/
+.ace-tool/
+.DS_Store
+
+# 安装脚本（不开源）
+install_glint.sh
+release_glint.sh
+io.mc
+
+# 安装器源码（不开源，只发布产物）
+macos_installer/
+windows_installer/
+linux_installer/
+
+# 测试和开发文件
+haddock3_testfile/
+case_study/
+tests/
+*.test.py
+*_test.py
+
+# 外部工具和依赖
+external/
+
+# 内部文档
+docs/
+
+# 构建产物和应用包（通过 GitHub Releases 发布）
+*.dmg
+*.app/
+*.exe
+*.msi
+dist/
+build/
+
+# Python 缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+.eggs/
+
+# 备份文件
+*.bak
+*.backup
+*~
+
+# IDE 和编辑器
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
