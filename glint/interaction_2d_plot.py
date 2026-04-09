@@ -2226,11 +2226,11 @@ def generate_2d_interaction_diagram(csv_path, ligand_resname, pdb_file=None, obj
     
     if legend_handles:
         # 🔧 优化图例位置，避免遮挡残基Label和分子结构
-        # 将图例放置在右上角外侧
+        # 将图例放置在左上角内部
         ax.legend(
             handles=legend_handles,
             loc='upper left',
-            bbox_to_anchor=(1.02, 1.0),  # 放置在画布右侧外部
+            bbox_to_anchor=(0.01, 0.99),  # 放置在画布左上角内部
             frameon=True,
             fontsize=8,
             fancybox=True,
