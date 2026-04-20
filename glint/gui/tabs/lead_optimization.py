@@ -149,19 +149,34 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.ec_ligand_name.setMinimumHeight(32)
         ec_grid.addWidget(self.parent_window.ec_ligand_name, 0, 3)
 # EC surface style dropdown: Solid Surface calls visualize_ec_smooth_surface, Mesh Surface calls visualize_ec_mesh_surface
-# Row 1: Surface Style and Execute Button
-        ec_grid.addWidget(QLabel("Surface Style:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        # Row 1: Output Directory（自定义 EC 输出目录）
+        ec_grid.addWidget(QLabel("Output Dir:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.ec_output_dir = QLineEdit()
+        self.parent_window.ec_output_dir.setPlaceholderText("Default: temp directory")
+        self.parent_window.ec_output_dir.setMinimumHeight(32)
+        ec_output_browse = QPushButton(t("browse"))
+        ec_output_browse.setMinimumHeight(32)
+        ec_output_browse.setStyleSheet(self._get_secondary_btn_style())
+        ec_output_browse.clicked.connect(lambda: self._browse_directory(self.parent_window.ec_output_dir, "Select EC Output Directory"))
+        r1_ec = QHBoxLayout()
+        r1_ec.addWidget(self.parent_window.ec_output_dir, 1)
+        r1_ec.addWidget(ec_output_browse)
+        ec_grid.addLayout(r1_ec, 1, 1, 1, 3)
+
+        # Row 2: Surface Style and Execute Button
+        ec_grid.addWidget(QLabel("Surface Style:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.ec_surface_style = QComboBox()
         self.parent_window.ec_surface_style.setMinimumHeight(32)
         self.parent_window.ec_surface_style.addItems(["Solid Surface", "Mesh Surface"])
         self.parent_window.ec_surface_style.setToolTip("Solid: Render EC as solid surface | Mesh: Render EC as semi-transparent mesh surface")
-        ec_grid.addWidget(self.parent_window.ec_surface_style, 1, 1)
+        ec_grid.addWidget(self.parent_window.ec_surface_style, 2, 1)
         
         self.parent_window.ec_analyze_btn = QPushButton("Analyze EC")
         self.parent_window.ec_analyze_btn.setMinimumHeight(36)
         self.parent_window.ec_analyze_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.ec_analyze_btn.clicked.connect(self.run_ec_analysis)
-        ec_grid.addWidget(self.parent_window.ec_analyze_btn, 1, 2, 1, 2)
+        ec_grid.addWidget(self.parent_window.ec_analyze_btn, 2, 2, 1, 2)
+
 
         ec_layout.addLayout(ec_grid)
         layout.addWidget(grp_ec)
@@ -700,6 +715,16 @@ class LeadOptimizationTab(CommonTab):
 
         surface_style = self.parent_window.ec_surface_style.currentText()
 
+        # 提取用户指定的输出目录（可选）
+        ec_output_dir = self.parent_window.ec_output_dir.text().strip()
+        if ec_output_dir:
+            try:
+                ec_output_dir = os.path.normpath(ec_output_dir)
+            except Exception:
+                show_message_box(self, "Warning", f"Invalid output directory path:\n{ec_output_dir}", "warning")
+                return
+
+
         try:
             from ...ligand_ec_calculator import calculate_ligand_ec
             from ...ec_visualization import visualize_ec_smooth_surface, visualize_ec_mesh_surface
@@ -710,6 +735,7 @@ class LeadOptimizationTab(CommonTab):
             result = calculate_ligand_ec(
                 obj_name=obj_name,
                 ligand_resname=ligand_name,
+                output_dir=ec_output_dir if ec_output_dir else None,
                 visualize=False  # 先计算，再根据样式可视化
             )
             

@@ -205,7 +205,6 @@ def _register_commands():
             toggle_interaction_lines
         )
         from .interaction_2d_plot import generate_2d_interaction_diagram
-        from .binding_heatmap import plot_binding_heatmap
         
         # Ligand-Ligand Interaction
         try:
@@ -356,7 +355,6 @@ def _register_commands():
         cmd.extend("toggle_interaction_lines", toggle_interaction_lines)
         cmd.extend("generate_interaction_network_plot", generate_interaction_network_plot)
         cmd.extend("generate_2d_diagram", generate_2d_interaction_diagram)
-        cmd.extend("plot_binding_heatmap", plot_binding_heatmap)
         if analyze_ligand_ligand_interactions:
             cmd.extend("analyze_ligand_ligand_interactions", analyze_ligand_ligand_interactions)
         

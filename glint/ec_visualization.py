@@ -134,7 +134,7 @@ def _ec_5color_interpolate(t: float):
         (r, g, b) 元组，每个分量 ∈ [0, 1]
     """
     # 中文注释：使用更柔和、论文图风格更强的红白绿锚点，
-    # 降低饱和度与纯色冲击，减少当前表面的“塑料感”和硬切感。
+    # 降低饱和度与纯色冲击，减少当前表面的"塑料感"和硬切感。
     anchors = [
         (0.00, (0.72, 0.25, 0.25)),
         (0.25, (0.93, 0.63, 0.63)),
@@ -333,7 +333,7 @@ def _create_ec_real_mesh_cgo(mesh_name: str,
     visible_points = surface_points[::stride]
     visible_ec = ec_values[::stride]
 
-    # 中文注释：小球半径使用较小固定值，使视觉更接近“点状 mesh”，而非连续 surface。
+    # 中文注释：小球半径使用较小固定值，使视觉更接近"点状 mesh"，而非连续 surface。
     sphere_radius = 0.18
     cgo_obj = []
     for point, ec_val in zip(visible_points, visible_ec):
@@ -452,7 +452,10 @@ def _draw_ec_residue_interaction_dashes(obj_name: str,
             continue
 
         prot_sel = f"({obj_name} and chain {chain} and resi {resi} and name {prot_atom})"
-        lig_sel = f"({obj_name} and chain {lig_chain} and resn {lig_parts[0]} and resi {lig_parts[1]} and name {lig_atom})"
+        # 清理配体 resn/resi 中的非法字符（如尖括号）
+        lig_resn_clean = lig_parts[0].replace('<', '').replace('>', '')
+        lig_resi_clean = lig_parts[1].replace('<', '').replace('>', '')
+        lig_sel = f"({obj_name} and chain {lig_chain} and resn {lig_resn_clean} and resi {lig_resi_clean} and name {lig_atom})"
         if cmd.count_atoms(prot_sel) == 0 or cmd.count_atoms(lig_sel) == 0:
             continue
 
@@ -506,7 +509,9 @@ def _show_ec_contributing_residues(obj_name: str,
     if surface_points is None or ec_values is None or len(surface_points) == 0:
         return
 
-    ligand_resname = ligand_sel.split('resn', 1)[1].strip() if 'resn' in ligand_sel else ''
+    # 清理 ligand_sel 中解析出的 resn 尖括号
+    ligand_resname_raw = ligand_sel.split('resn', 1)[1].strip() if 'resn' in ligand_sel else ''
+    ligand_resname = ligand_resname_raw.replace('<', '').replace('>', '') if ligand_resname_raw else ''
     interaction_map = _get_protein_ligand_interaction_map(obj_name, ligand_resname) if ligand_resname else {}
 
     try:
@@ -1554,35 +1559,21 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
             cmd.set('line_width', 1.5, protein_sel)
         cmd.color('glint_protein_purple', f"{obj_name} and polymer")
         cmd.set('cartoon_transparency', 0.8, obj_name)
-        _show_ec_contributing_residues(
-            obj_name=obj_name,
-            ligand_sel=ligand_sel,
-            surface_points=surface_points,
-            ec_values=ec_values,
-            protein_distance=protein_distance,
-        )
-        _set_publication_rendering()
         cmd.zoom(ligand_sel, buffer=8)
-        if ray_trace:
-            cmd.ray()
-        print(f"[visualize_ec_mesh_surface] ✅ 已创建真实 CGO mesh: {mesh_obj}")
+
+        print(f"[visualize_ec_mesh_surface] ✅ Created mesh surface: {mesh_obj}")
         return True
 
-    # 显示 mesh 风格外壳：为兼容当前 PyMOL/Apple 图形环境，
-    # 这里不用直接 show('mesh')，而改用更稳定可见的 surface + mesh-like mode。
+    # Fallback: use PyMOL's built-in mesh representation
     cmd.hide('everything', mesh_obj)
-    cmd.show('surface', mesh_obj)
-    cmd.set('surface_mode', 1, mesh_obj)
-    cmd.set('surface_type', 0, mesh_obj)
-    cmd.set('surface_quality', 1, mesh_obj)
+    cmd.show('mesh', mesh_obj)
     cmd.set('mesh_width', mesh_width, mesh_obj)
-    cmd.set('transparency', 0.55, mesh_obj)
-    cmd.set('surface_smooth_edges', 0, mesh_obj)
-    cmd.rebuild(mesh_obj)
 
-    # EC 着色（基于 B-factor 的 spectrum）
+    # Apply coloring
     ec_min, ec_max = ec_range
-    b_min, b_max = ec_min * 100, ec_max * 100
+    b_min = ec_min * 100
+    b_max = ec_max * 100
+
     if color_scheme == 'rwg':
         _apply_5color_ec_gradient(mesh_obj, b_min, b_max)
     elif color_scheme == 'bwr':
@@ -1590,311 +1581,4 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
     else:
         _apply_5color_ec_gradient(mesh_obj, b_min, b_max)
 
-    # 显示配体 sticks（绿色碳 + 元素着色，模仿参考图）
-
-    # 中文注释：在 mesh 路线实际着色前先确保自定义紫色已注册，避免 Unknown color 异常。
-    cmd.set_color('glint_protein_purple', [0.67, 0.55, 0.86])
-
-    if show_ligand_sticks:
-        _apply_sticks_coloring(ligand_sel, carbon_color='green')
-        cmd.set('stick_radius', 0.16, ligand_sel)
-
-    # 显示蛋白 lines
-    if show_protein_lines:
-        protein_sel = f"{obj_name} and polymer within {protein_distance} of {ligand_sel}"
-        cmd.show('lines', protein_sel)
-        cmd.color('glint_protein_purple', f"{protein_sel} and elem C")
-        cmd.set('line_width', 1.5, protein_sel)
-    cmd.color('glint_protein_purple', f"{obj_name} and polymer")
-    cmd.set('cartoon_transparency', 0.8, obj_name)
-    _show_ec_contributing_residues(
-        obj_name=obj_name,
-        ligand_sel=ligand_sel,
-        surface_points=surface_points,
-        ec_values=ec_values,
-        protein_distance=protein_distance,
-    )
-
-    _set_publication_rendering()
-    cmd.zoom(ligand_sel, buffer=8)
-
-    if ray_trace:
-        cmd.ray()
-
-    print(f"[visualize_ec_mesh_surface] ✅ 已创建 mesh 表面: {mesh_obj}")
-    return True
-
-
-
-def visualize_ec_dual_panel(obj_name: str, ligand_resname: str,
-                             ec_values: np.ndarray = None,
-                             surface_points: np.ndarray = None,
-                             ec_result: Dict = None,
-                             surface_type: str = 'gaussian',
-                             surface_quality: int = 2,
-                             spacing_factor: float = 1.5,
-                             show_protein_lines: bool = True,
-                             protein_distance: float = 5.0,
-                             color_scheme: str = 'rwg',
-                             ec_range: tuple = (-1.0, 1.0),
-                             show_labels: bool = True,
-                             mesh_width: float = 1.0,
-                             ray_trace: bool = False,
-                             enhance_contrast: bool = True) -> bool:
-    """一键生成 FMO 风格双面板对比展示（实体表面 vs mesh 表面）。
-
-    左面板：opaque surface + sticks（类似电子密度图）
-      - 光滑不透明表面，按 EC 值着色（深红-浅红-白-浅绿-深绿）
-      - 分子骨架（绿色碳 + 元素着色）穿透表面可见
-
-    右面板：mesh surface + sticks（类似静电势图）
-      - 半透明网格表面，按 EC 值着色
-      - 分子骨架清晰可见
-
-    两面板之间有适当间距，白色背景，出版级渲染质量。
-
-    Args:
-        obj_name: PyMOL 对象名
-        ligand_resname: 配体残基名（如 'LIG'）
-        ec_values: EC 值数组
-        surface_points: 表面点坐标数组
-        ec_result: calculate_ligand_ec 的完整结果字典
-        surface_type: 表面类型 - 'gaussian', 'solvent', 'molecular'
-        surface_quality: 表面质量（0-4）
-        spacing_factor: 面板间距系数（相对于分子跨度，默认 1.5）
-        show_protein_lines: 是否显示蛋白 lines
-        protein_distance: 蛋白显示距离截断（Å）
-        color_scheme: 颜色方案 - 'rwg' 或 'bwr'
-        ec_range: EC 值映射范围
-        show_labels: 是否显示 EC 统计值标注
-        mesh_width: mesh 线宽
-        ray_trace: 是否进行光线追踪
-        enhance_contrast: 是否启用非线性对比度增强
-
-    Returns:
-        True if successful
-    """
-    if not PYMOL_AVAILABLE:
-        print("[visualize_ec_dual_panel] ❌ PyMOL required")
-        return False
-    if not NUMPY_AVAILABLE:
-        print("[visualize_ec_dual_panel] ❌ NumPy required")
-        return False
-
-    # 从 ec_result 提取数据
-    if ec_result is not None:
-        ec_values = ec_result.get('ec_values', ec_values)
-        surface_points = ec_result.get('surface_points', surface_points)
-
-    if ec_values is None or surface_points is None:
-        print("[visualize_ec_dual_panel] ❌ Need ec_values and surface_points")
-        return False
-
-    print("[visualize_ec_dual_panel] 创建 FMO 风格双面板展示...")
-
-    # 自适应颜色范围
-    ec_range = _auto_ec_range(ec_values, default_range=ec_range)
-    ec_min, ec_max = ec_range
-    b_min, b_max = ec_min * 100, ec_max * 100
-
-    ligand_sel = f"{obj_name} and resn {ligand_resname}"
-
-    # 计算平移距离（基于分子 X 方向跨度）
-    mol_extent = _calculate_mol_extent(ligand_sel)
-    shift_x = mol_extent * spacing_factor  # 左右各偏移半个距离
-
-    surface_type_map = {'molecular': 0, 'solvent': 1, 'gaussian': 2}
-    st_code = surface_type_map.get(surface_type, 2)
-
-    # ── 左面板：opaque surface（电子密度风格） ──
-    left_obj = f"ec_dual_left_{ligand_resname}"
-    cmd.create(left_obj, ligand_sel)
-    cmd.translate([-shift_x / 2, 0, 0], left_obj)
-
-    # 映射 EC 到 B-factor
-    if SCIPY_AVAILABLE:
-        _map_ec_to_bfactors_kdtree(left_obj, surface_points, ec_values,
-                                    enhance_contrast=enhance_contrast)
-    else:
-        _map_ec_to_bfactors_simple(left_obj, surface_points, ec_values,
-                                    enhance_contrast=enhance_contrast)
-    cmd.rebuild(left_obj)
-
-    # 显示不透明实体表面
-    cmd.show('surface', left_obj)
-    cmd.set('surface_type', st_code, left_obj)
-    cmd.set('surface_quality', surface_quality, left_obj)
-    cmd.set('transparency', 0.0, left_obj)
-
-    # EC 着色
-    if color_scheme == 'rwg':
-        _apply_5color_ec_gradient(left_obj, b_min, b_max)
-    else:
-        cmd.spectrum('b', 'blue_white_red', left_obj, minimum=b_min, maximum=b_max)
-
-    # 左面板 sticks（绿色碳，穿透表面可见）
-    cmd.show('sticks', left_obj)
-    cmd.color('green', f"{left_obj} and elem C")
-    cmd.color('blue', f"{left_obj} and elem N")
-    cmd.color('red', f"{left_obj} and elem O")
-    cmd.color('yellow', f"{left_obj} and elem S")
-    cmd.set('stick_radius', 0.15, left_obj)
-
-    # ── 右面板：mesh surface（静电势风格） ──
-    right_obj = f"ec_dual_right_{ligand_resname}"
-    cmd.create(right_obj, ligand_sel)
-    cmd.translate([shift_x / 2, 0, 0], right_obj)
-
-    # 映射 EC 到 B-factor
-    if SCIPY_AVAILABLE:
-        _map_ec_to_bfactors_kdtree(right_obj, surface_points, ec_values,
-                                    enhance_contrast=enhance_contrast)
-    else:
-        _map_ec_to_bfactors_simple(right_obj, surface_points, ec_values,
-                                    enhance_contrast=enhance_contrast)
-    cmd.rebuild(right_obj)
-
-    # 显示 mesh 表面
-    cmd.show('mesh', right_obj)
-    cmd.set('surface_type', st_code, right_obj)
-    cmd.set('surface_quality', surface_quality, right_obj)
-    cmd.set('mesh_width', mesh_width, right_obj)
-
-    # EC 着色
-    if color_scheme == 'rwg':
-        _apply_5color_ec_gradient(right_obj, b_min, b_max)
-    else:
-        cmd.spectrum('b', 'blue_white_red', right_obj, minimum=b_min, maximum=b_max)
-
-    # 右面板 sticks（绿色碳，清晰可见）
-    cmd.show('sticks', right_obj)
-    cmd.color('green', f"{right_obj} and elem C")
-    cmd.color('blue', f"{right_obj} and elem N")
-    cmd.color('red', f"{right_obj} and elem O")
-    cmd.color('yellow', f"{right_obj} and elem S")
-    cmd.set('stick_radius', 0.15, right_obj)
-
-    # ── 蛋白环境（可选） ──
-    if show_protein_lines:
-        protein_sel = f"{obj_name} and polymer within {protein_distance} of {ligand_sel}"
-        # 左侧蛋白副本
-        left_prot = f"ec_dual_left_prot_{ligand_resname}"
-        cmd.create(left_prot, protein_sel)
-        cmd.translate([-shift_x / 2, 0, 0], left_prot)
-        cmd.show('lines', left_prot)
-        cmd.color('gray70', f"{left_prot} and elem C")
-        cmd.set('line_width', 1.5, left_prot)
-        # 右侧蛋白副本
-        right_prot = f"ec_dual_right_prot_{ligand_resname}"
-        cmd.create(right_prot, protein_sel)
-        cmd.translate([shift_x / 2, 0, 0], right_prot)
-        cmd.show('lines', right_prot)
-        cmd.color('gray70', f"{right_prot} and elem C")
-        cmd.set('line_width', 1.5, right_prot)
-
-    # 隐藏原始对象的配体（避免重叠干扰）
-    cmd.hide('everything', ligand_sel)
-    cmd.set('cartoon_transparency', 0.9, obj_name)
-
-    # ── EC 统计值标注（类似 E_HOMO / E_LUMO 文字） ──
-    if show_labels:
-        # 获取左面板中心位置用于标注
-        left_coords = []
-        cmd.iterate_state(1, left_obj,
-                         "left_coords.append([x, y, z])",
-                         space={'left_coords': left_coords})
-        if left_coords:
-            left_center = np.mean(left_coords, axis=0).tolist()
-            # 标注在左面板下方
-            _add_ec_stat_labels(ec_values, left_center,
-                                label_prefix='left_',
-                                y_offset=-(mol_extent * 0.6 + 3.0))
-            # 左面板标题
-            title_name_l = "ec_dual_title_left"
-            try:
-                cmd.delete(title_name_l)
-            except Exception:
-                pass
-            cmd.pseudoatom(title_name_l,
-                           pos=[left_center[0],
-                                left_center[1] + mol_extent * 0.6 + 2.0,
-                                left_center[2]],
-                           label="EC Surface (Opaque)")
-            cmd.set('label_size', 16, title_name_l)
-            cmd.set('label_color', 'black', title_name_l)
-            cmd.set('label_font_id', 7, title_name_l)
-            cmd.hide('everything', title_name_l)
-            cmd.show('labels', title_name_l)
-
-        # 右面板标题标注
-        right_coords = []
-        cmd.iterate_state(1, right_obj,
-                         "right_coords.append([x, y, z])",
-                         space={'right_coords': right_coords})
-        if right_coords:
-            right_center = np.mean(right_coords, axis=0).tolist()
-            title_name_r = "ec_dual_title_right"
-            try:
-                cmd.delete(title_name_r)
-            except Exception:
-                pass
-            cmd.pseudoatom(title_name_r,
-                           pos=[right_center[0],
-                                right_center[1] + mol_extent * 0.6 + 2.0,
-                                right_center[2]],
-                           label="Electrostatic Complementarity")
-            cmd.set('label_size', 16, title_name_r)
-            cmd.set('label_color', 'black', title_name_r)
-            cmd.set('label_font_id', 7, title_name_r)
-            cmd.hide('everything', title_name_r)
-            cmd.show('labels', title_name_r)
-
-    # ── 出版级渲染设置 ──
-    _set_publication_rendering()
-
-    # 缩放到包含两个面板的视野
-    cmd.zoom(f"{left_obj} or {right_obj}", buffer=10)
-
-    if ray_trace:
-        print("[visualize_ec_dual_panel] 正在光线追踪...")
-        cmd.ray()
-
-    print(f"[visualize_ec_dual_panel] ✅ 双面板展示已创建")
-    print(f"  左面板 (opaque surface): {left_obj}")
-    print(f"  右面板 (mesh surface):   {right_obj}")
-    print(f"  面板间距: {shift_x:.1f} Å")
-
-    # 创建色标条
-    create_ec_legend(ec_range=ec_range, color_scheme=color_scheme)
-    return True
-
-
-# Register PyMOL commands
-if PYMOL_AVAILABLE:
-    cmd.extend('visualize_ec_smooth_surface', visualize_ec_smooth_surface)
-    cmd.extend('visualize_ec_cgo_surface', visualize_ec_cgo_surface)
-    cmd.extend('save_ec_visualization', save_ec_visualization)
-    cmd.extend('visualize_ternary_ec_surfaces', visualize_ternary_ec_surfaces)
-    cmd.extend('create_ec_legend', create_ec_legend)
-    cmd.extend('visualize_ec_mesh_surface', visualize_ec_mesh_surface)
-    cmd.extend('visualize_ec_dual_panel', visualize_ec_dual_panel)
-
-
-# Module info
-if __name__ == '__main__':
-    print("="*60)
-    print("GLINT EC Visualization Module")
-    print("="*60)
-    print("\nThis module provides publication-quality EC surface visualization.")
-    print("\nUsage in PyMOL:")
-    print("  from glint.ec_visualization import visualize_ec_smooth_surface")
-    print("  ")
-    print("  # After running calculate_ligand_ec:")
-    print("  result = calculate_ligand_ec('complex', 'LIG')")
-    print("  visualize_ec_smooth_surface('complex', 'LIG', ec_result=result)")
-    print("\nDependencies:")
-    print(f"  NumPy: {'✅' if NUMPY_AVAILABLE else '❌'}")
-    print(f"  SciPy: {'✅' if SCIPY_AVAILABLE else '❌'}")
-    print(f"  PyMOL: {'✅' if PYMOL_AVAILABLE else '❌'}")
-
-    # 映射 EC 到 B-factor
+    cmd.set('transparency', 0.5,

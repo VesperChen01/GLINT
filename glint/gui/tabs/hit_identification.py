@@ -95,9 +95,6 @@ class HitIdentificationTab(CommonTab):
         hdock_btn_row.addStretch(1)
         main_layout.addLayout(hdock_btn_row)
 
-        # 3. Protein Mutation & ΔΔG Analysis (independent card under HADDOCK3)
-        main_layout.addWidget(self._create_mutation_analysis_card(is_dark))
-
         main_layout.addStretch(1)
 
     def _get_card_style(self, is_dark: bool) -> str:
@@ -314,59 +311,6 @@ class HitIdentificationTab(CommonTab):
 
         return card
 
-    def _create_mutation_analysis_card(self, is_dark: bool = False) -> QWidget:
-        """Create compact mutation analysis card"""
-        card = QFrame()
-        card.setStyleSheet(self._get_card_style(is_dark))
-        layout = QVBoxLayout(card)
-        layout.setSpacing(12)
-        layout.setContentsMargins(16, 14, 16, 14)
-
-        title = QLabel("Protein Mutation & ΔΔG Analysis")
-        title.setStyleSheet("font-size: 15px; font-weight: 600; color: #1e293b; padding-bottom: 4px;" if not is_dark else "font-size: 15px; font-weight: 600; color: #e2e8f0; padding-bottom: 4px;")
-        layout.addWidget(title)
-
-        # Row 1: Structure + Mutation List
-        row1 = QHBoxLayout()
-        row1.setSpacing(6)
-
-        self.parent_window.mutation_structure_combo = QComboBox()
-        self.parent_window.mutation_structure_combo.setMinimumHeight(28)
-        self.parent_window.mutation_structure_combo.setMinimumWidth(120)
-
-        refresh_btn = QPushButton("Refresh")
-        refresh_btn.setMinimumHeight(28)
-        refresh_btn.clicked.connect(self.refresh_objects)
-
-        self.parent_window.mutation_list = QLineEdit()
-        self.parent_window.mutation_list.setPlaceholderText("e.g., A50G,A51V,A52L")
-        self.parent_window.mutation_list.setMinimumHeight(28)
-        self.parent_window.mutation_list.setMinimumWidth(200)
-
-        row1.addWidget(QLabel("Structure:"))
-        row1.addWidget(self.parent_window.mutation_structure_combo)
-        row1.addWidget(refresh_btn)
-        row1.addSpacing(10)
-        row1.addWidget(QLabel("Mutations:"))
-        row1.addWidget(self.parent_window.mutation_list)
-        row1.addStretch()
-        layout.addLayout(row1)
-
-        # Row 2: Run button
-        row2 = QHBoxLayout()
-        row2.setSpacing(10)
-
-        self.parent_window.mutation_run_btn = QPushButton("Run ΔΔG Analysis")
-        self.parent_window.mutation_run_btn.setMinimumHeight(36)
-        self.parent_window.mutation_run_btn.setStyleSheet(self._get_primary_btn_style())
-        self.parent_window.mutation_run_btn.clicked.connect(self.run_mutation_analysis)
-
-        row2.addWidget(self.parent_window.mutation_run_btn)
-        row2.addStretch()
-        layout.addLayout(row2)
-
-        return card
-
     def refresh_objects(self):
         """刷新PyMOL对象列表"""
         try:
@@ -393,11 +337,13 @@ class HitIdentificationTab(CommonTab):
                 self.parent_window.hdock_ligand_combo.setCurrentText(current_hdock_lig)
 
             # Update mutation structure
-            current_mutation = self.parent_window.mutation_structure_combo.currentText()
-            self.parent_window.mutation_structure_combo.clear()
-            self.parent_window.mutation_structure_combo.addItems(objects)
-            if current_mutation in objects:
-                self.parent_window.mutation_structure_combo.setCurrentText(current_mutation)
+            current_mutation = getattr(self.parent_window, 'mutation_structure_combo', None)
+            if current_mutation:
+                current_mutation_text = current_mutation.currentText()
+                current_mutation.clear()
+                current_mutation.addItems(objects)
+                if current_mutation_text in objects:
+                    current_mutation.setCurrentText(current_mutation_text)
 
             self.log(f"✓ Refreshed objects: {len(objects)} found")
         except Exception as e:
@@ -816,8 +762,17 @@ class HitIdentificationTab(CommonTab):
             self.log(f"❌ Mutation analyzer not available: {str(e)}")
             return
 
-        obj_name = self.parent_window.mutation_structure_combo.currentText().strip()
-        mutation_text = self.parent_window.mutation_list.text().strip()
+        obj_name = getattr(self.parent_window, 'mutation_structure_combo', None)
+        if obj_name:
+            obj_name = obj_name.currentText().strip()
+        else:
+            obj_name = ""
+            
+        mutation_list_widget = getattr(self.parent_window, 'mutation_list', None)
+        if mutation_list_widget:
+            mutation_text = mutation_list_widget.text().strip()
+        else:
+            mutation_text = ""
 
         if not obj_name:
             show_message_box(self, "Warning", "请选择要分析的结构对象", "warning")
