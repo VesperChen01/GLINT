@@ -5,7 +5,7 @@ Surface Similarity and Complementarity Analysis Module
 MaSIF-inspired protein surface analysis for GLINT.
 
 Features:
-- Surface mesh generation (MSMS, EDTSurf, or built-in)
+- Surface mesh generation (Open3D or built-in EDTSurf fallback)
 - Geometric features: curvature, shape index, curvedness
 - Chemical features: electrostatics, hydrophobicity, H-bond capacity
 - Surface similarity comparison
@@ -14,8 +14,7 @@ Features:
 
 Dependencies:
 - Required: numpy, scipy
-- Optional: open3d (for advanced mesh processing)
-- Optional: MSMS binary (for accurate surface generation)
+- Recommended: open3d (preferred surface generation backend)
 - Optional: APBS (for accurate electrostatics)
 
 Cross-platform support: macOS, Windows, Linux
@@ -23,10 +22,7 @@ Cross-platform support: macOS, Windows, Linux
 
 from __future__ import annotations
 import os
-import sys
 import math
-import tempfile
-import subprocess
 import platform
 from typing import List, Dict, Tuple, Optional, Any, Union
 from dataclasses import dataclass, field
@@ -266,56 +262,39 @@ class SurfaceGenerator:
     Generate molecular surface using various methods.
     
     Supports:
-    - MSMS (most accurate, requires binary)
-    - EDTSurf (built-in approximation)
-    - PyMOL surface (if available)
-    - Open3D ball pivoting (if available)
+    - Open3D ball pivoting (preferred backend)
+    - EDTSurf (built-in approximation / fallback)
     """
     
-    def __init__(self, method: str = "auto", msms_path: Optional[str] = None):
+    def __init__(self, method: str = "auto"):
         """
         Initialize surface generator.
         
         Args:
-            method: "msms", "edtsurf", "pymol", "open3d", or "auto"
-            msms_path: Path to MSMS binary (optional)
+            method: "auto", "open3d", or "edtsurf"
         """
-        self.method = method
-        self.msms_path = msms_path or self._find_msms()
-        
-    def _find_msms(self) -> Optional[str]:
-        """Find MSMS binary in common locations."""
-        system = platform.system().lower()
-        
-        # Common installation paths
-        search_paths = []
-        
-        if system == "darwin":  # macOS
-            search_paths = [
-                "/usr/local/bin/msms",
-                os.path.expanduser("~/bin/msms"),
-                "/opt/homebrew/bin/msms",
-                os.path.expanduser("~/.local/bin/msms"),
-            ]
-        elif system == "linux":
-            search_paths = [
-                "/usr/bin/msms",
-                "/usr/local/bin/msms",
-                os.path.expanduser("~/bin/msms"),
-                os.path.expanduser("~/.local/bin/msms"),
-            ]
-        elif system == "windows":
-            search_paths = [
-                r"C:\Program Files\MSMS\msms.exe",
-                r"C:\msms\msms.exe",
-                os.path.expanduser(r"~\msms\msms.exe"),
-            ]
-        
-        for path in search_paths:
-            if os.path.isfile(path) and os.access(path, os.X_OK):
-                return path
-        
-        return None
+        self.method = (method or "auto").lower()
+        self.last_requested_method = self.method
+        self.last_resolved_method = self.method
+
+    def _resolve_method(self, requested: str) -> str:
+        """Resolve a requested method to the best currently available backend."""
+        method = (requested or "auto").lower()
+
+        if method == "auto":
+            if HAS_OPEN3D:
+                return "open3d"
+            return "edtsurf"
+
+        if method == "open3d" and not HAS_OPEN3D:
+            print("⚠️  Open3D requested but not available. Falling back to built-in EDTSurf.")
+            return "edtsurf"
+
+        if method not in {"open3d", "edtsurf"}:
+            print(f"⚠️  Unknown surface method '{method}'. Falling back to auto selection.")
+            return self._resolve_method("auto")
+
+        return method
     
     def generate(self, atoms: List[Dict], probe_radius: float = 1.4) -> SurfaceMesh:
         """
@@ -328,81 +307,31 @@ class SurfaceGenerator:
         Returns:
             SurfaceMesh object
         """
-        method = self.method
-        
-        if method == "auto":
-            if self.msms_path:
-                method = "msms"
-            elif HAS_OPEN3D:
-                method = "open3d"
-            else:
-                method = "edtsurf"
-        
-        if method == "msms":
-            return self._generate_msms(atoms, probe_radius)
-        elif method == "open3d":
-            return self._generate_open3d(atoms, probe_radius)
-        else:
-            return self._generate_edtsurf(atoms, probe_radius)
-    
-    def _generate_msms(self, atoms: List[Dict], probe_radius: float) -> SurfaceMesh:
-        """Generate surface using MSMS."""
-        if not self.msms_path:
-            raise RuntimeError("MSMS binary not found")
-        
-        # Create temporary files
-        with tempfile.TemporaryDirectory() as tmpdir:
-            xyzr_file = os.path.join(tmpdir, "input.xyzr")
-            vert_file = os.path.join(tmpdir, "output.vert")
-            face_file = os.path.join(tmpdir, "output.face")
-            
-            # Write XYZR file
-            with open(xyzr_file, 'w') as f:
-                for atom in atoms:
-                    x, y, z = atom['coord']
-                    r = atom.get('radius', 1.7)  # Default VDW radius
-                    f.write(f"{x:.3f} {y:.3f} {z:.3f} {r:.3f}\n")
-            
-            # Run MSMS
-            cmd_args = [
-                self.msms_path,
-                "-if", xyzr_file,
-                "-of", os.path.join(tmpdir, "output"),
-                "-probe_radius", str(probe_radius),
-                "-density", "3.0",  # Vertex density
-                "-no_header"
-            ]
-            
-            try:
-                subprocess.run(cmd_args, check=True, capture_output=True)
-            except subprocess.CalledProcessError as e:
-                raise RuntimeError(f"MSMS failed: {e.stderr.decode()}")
-            
-            # Read vertices
-            vertices = []
-            normals = []
-            with open(vert_file, 'r') as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if len(parts) >= 6:
-                        vertices.append([float(parts[0]), float(parts[1]), float(parts[2])])
-                        normals.append([float(parts[3]), float(parts[4]), float(parts[5])])
-            
-            # Read faces
-            faces = []
-            with open(face_file, 'r') as f:
-                for line in f:
-                    parts = line.strip().split()
-                    if len(parts) >= 3:
-                        # MSMS uses 1-based indexing
-                        faces.append([int(parts[0])-1, int(parts[1])-1, int(parts[2])-1])
-        
-        return SurfaceMesh(
-            vertices=np.array(vertices),
-            faces=np.array(faces),
-            normals=np.array(normals),
-            generation_method="msms"
-        )
+        method = self._resolve_method(self.method)
+        self.last_requested_method = self.method
+        self.last_resolved_method = method
+
+        generators = {
+            "open3d": self._generate_open3d,
+            "edtsurf": self._generate_edtsurf,
+        }
+
+        try:
+            mesh = generators[method](atoms, probe_radius)
+            if mesh.n_vertices == 0:
+                raise RuntimeError(f"{method} generated an empty surface")
+            mesh.generation_method = method
+            return mesh
+        except Exception as exc:
+            if method == "edtsurf":
+                raise RuntimeError(f"Built-in EDTSurf surface generation failed: {exc}")
+
+            print(f"⚠️  Surface generation with '{method}' failed: {exc}")
+            print("   Falling back to built-in EDTSurf approximation.")
+            fallback = self._generate_edtsurf(atoms, probe_radius)
+            fallback.generation_method = "edtsurf"
+            self.last_resolved_method = "edtsurf"
+            return fallback
     
     def _generate_open3d(self, atoms: List[Dict], probe_radius: float) -> SurfaceMesh:
         """Generate surface using Open3D."""
@@ -461,9 +390,22 @@ class SurfaceGenerator:
     
     def _generate_edtsurf(self, atoms: List[Dict], probe_radius: float) -> SurfaceMesh:
         """
-        Generate surface using EDT (Euclidean Distance Transform) method.
-        Pure NumPy/SciPy implementation.
+        Generate a built-in approximate molecular surface without external tools.
+
+        If scikit-image is available, use a grid-based EDT + marching cubes path.
+        Otherwise, use a faster point-cloud approximation based on solvent-accessible
+        sphere sampling plus local triangulation. The fallback is less precise than
+        MSMS, but it keeps similarity/complementarity analysis functional.
         """
+        try:
+            from skimage.measure import marching_cubes  # noqa: F401
+            has_skimage = True
+        except ImportError:
+            has_skimage = False
+
+        if not has_skimage:
+            return self._generate_sampled_surface(atoms, probe_radius)
+
         coords = np.array([a['coord'] for a in atoms])
         radii = np.array([a.get('radius', 1.7) for a in atoms])
         
@@ -501,6 +443,96 @@ class SurfaceGenerator:
             normals=normals,
             generation_method="edtsurf"
         )
+
+    def _generate_sampled_surface(self, atoms: List[Dict], probe_radius: float) -> SurfaceMesh:
+        """Approximate the molecular surface using solvent-accessible point sampling."""
+        coords = np.array([a['coord'] for a in atoms], dtype=float)
+        radii = np.array([a.get('radius', 1.7) for a in atoms], dtype=float)
+
+        if len(coords) == 0:
+            return SurfaceMesh(
+                vertices=np.empty((0, 3), dtype=float),
+                faces=np.empty((0, 3), dtype=int),
+                normals=np.empty((0, 3), dtype=float),
+                generation_method="edtsurf"
+            )
+
+        atom_tree = cKDTree(coords)
+        golden_angle = math.pi * (3.0 - math.sqrt(5.0))
+
+        sampled_vertices = []
+        sampled_normals = []
+
+        for atom_idx, (coord, radius) in enumerate(zip(coords, radii)):
+            accessible_radius = radius + probe_radius
+            n_samples = max(48, min(192, int(24.0 * accessible_radius * accessible_radius)))
+
+            for sample_idx in range(n_samples):
+                y = 1.0 - (2.0 * sample_idx + 1.0) / n_samples
+                radial = math.sqrt(max(0.0, 1.0 - y * y))
+                theta = golden_angle * sample_idx
+                direction = np.array([
+                    math.cos(theta) * radial,
+                    y,
+                    math.sin(theta) * radial,
+                ], dtype=float)
+                point = coord + accessible_radius * direction
+
+                neighbor_indices = atom_tree.query_ball_point(point, accessible_radius + radii.max() + 0.1)
+                buried = False
+                for neighbor_idx in neighbor_indices:
+                    if neighbor_idx == atom_idx:
+                        continue
+                    cutoff = radii[neighbor_idx] + probe_radius - 0.05
+                    if np.linalg.norm(point - coords[neighbor_idx]) < cutoff:
+                        buried = True
+                        break
+
+                if not buried:
+                    sampled_vertices.append(point)
+                    sampled_normals.append(direction)
+
+        if not sampled_vertices:
+            raise RuntimeError("No exposed surface points could be sampled")
+
+        vertices = np.asarray(sampled_vertices, dtype=float)
+        normals = np.asarray(sampled_normals, dtype=float)
+        vertices, normals = self._deduplicate_surface_points(vertices, normals, spacing=1.0)
+        faces = self._triangulate_surface_points(vertices, normals, spacing=1.25)
+
+        return SurfaceMesh(
+            vertices=vertices,
+            faces=faces,
+            normals=normals,
+            generation_method="edtsurf"
+        )
+
+    def _deduplicate_surface_points(self, vertices: np.ndarray, normals: np.ndarray,
+                                    spacing: float) -> Tuple[np.ndarray, np.ndarray]:
+        """Merge nearby sampled points to keep the fallback surface compact and stable."""
+        if len(vertices) == 0:
+            return vertices, normals
+
+        quantized = np.round(vertices / spacing).astype(int)
+        buckets: Dict[Tuple[int, int, int], List[int]] = {}
+        for idx, key in enumerate(map(tuple, quantized)):
+            buckets.setdefault(key, []).append(idx)
+
+        merged_vertices = []
+        merged_normals = []
+        for indices in buckets.values():
+            pts = vertices[indices]
+            nrm = normals[indices]
+            avg_normal = nrm.mean(axis=0)
+            norm = np.linalg.norm(avg_normal)
+            if norm == 0:
+                avg_normal = np.array([0.0, 0.0, 1.0], dtype=float)
+            else:
+                avg_normal = avg_normal / norm
+            merged_vertices.append(pts.mean(axis=0))
+            merged_normals.append(avg_normal)
+
+        return np.asarray(merged_vertices, dtype=float), np.asarray(merged_normals, dtype=float)
     
     def _marching_cubes(self, volume: np.ndarray, level: float,
                         origin: np.ndarray, spacing: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
@@ -668,6 +700,10 @@ class FeatureExtractor:
     
     def _find_apbs(self) -> Optional[str]:
         """Find APBS binary."""
+        resolved = find_executable("apbs")
+        if resolved:
+            return resolved
+
         system = platform.system().lower()
         
         search_paths = []
@@ -1566,20 +1602,21 @@ class SurfaceSimilarityAnalyzer:
     
     def __init__(self, 
                  surface_method: str = "auto",
-                 msms_path: Optional[str] = None,
                  apbs_path: Optional[str] = None,
+                 use_apbs: bool = True,
                  patch_radius: float = 12.0):
         """
         Initialize analyzer.
         
         Args:
-            surface_method: "msms", "open3d", "edtsurf", or "auto"
-            msms_path: Path to MSMS binary
+            surface_method: "auto", "open3d", or "edtsurf"
             apbs_path: Path to APBS binary
+            use_apbs: Prefer APBS electrostatics when available
             patch_radius: Radius for surface patches (Å)
         """
-        self.surface_generator = SurfaceGenerator(surface_method, msms_path)
+        self.surface_generator = SurfaceGenerator(surface_method)
         self.apbs_path = apbs_path
+        self.use_apbs = use_apbs
         self.comparator = SurfaceComparator(patch_radius=patch_radius)
         
         # Cache for analyzed surfaces
@@ -1588,7 +1625,7 @@ class SurfaceSimilarityAnalyzer:
     def analyze_surface(self, obj_name: str = None, 
                        pdb_file: str = None,
                        selection: str = "all",
-                       use_apbs: bool = False) -> Tuple[SurfaceMesh, List[SurfacePoint]]:
+                       use_apbs: Optional[bool] = None) -> Tuple[SurfaceMesh, List[SurfacePoint]]:
         """
         Analyze a protein surface.
         
@@ -1596,7 +1633,7 @@ class SurfaceSimilarityAnalyzer:
             obj_name: PyMOL object name
             pdb_file: PDB file path (alternative to obj_name)
             selection: PyMOL selection (if using obj_name)
-            use_apbs: Use APBS for electrostatics
+            use_apbs: Use APBS for electrostatics. If None, use analyzer default.
         
         Returns:
             (SurfaceMesh, List[SurfacePoint])
@@ -1607,12 +1644,17 @@ class SurfaceSimilarityAnalyzer:
             raise ValueError("No atoms found")
         
         print(f"Analyzing surface: {len(atoms)} atoms")
+        if use_apbs is None:
+            use_apbs = self.use_apbs
         
         # Generate surface
         mesh = self.surface_generator.generate(atoms)
         mesh.source_object = obj_name or pdb_file or "unknown"
         
-        print(f"Generated surface: {mesh.n_vertices} vertices, {mesh.n_faces} faces")
+        print(
+            f"Generated surface: {mesh.n_vertices} vertices, {mesh.n_faces} faces "
+            f"(method={mesh.generation_method})"
+        )
         
         # Extract features
         extractor = FeatureExtractor(atoms, self.apbs_path)
@@ -1621,7 +1663,7 @@ class SurfaceSimilarityAnalyzer:
         mesh.points = points
         
         # Cache result
-        cache_key = obj_name or pdb_file or "default"
+        cache_key = f"{obj_name or pdb_file or 'default'}|{selection}|apbs={int(bool(use_apbs))}"
         self._cache[cache_key] = (mesh, points)
         
         return mesh, points
@@ -1675,16 +1717,16 @@ class SurfaceSimilarityAnalyzer:
     
     def _get_or_analyze(self, obj: str, selection: str) -> Tuple[SurfaceMesh, List[SurfacePoint]]:
         """Get cached analysis or perform new analysis."""
-        cache_key = f"{obj}_{selection}"
+        cache_key = f"{obj}_{selection}|apbs={int(bool(self.use_apbs))}"
         
         if cache_key in self._cache:
             return self._cache[cache_key]
         
         # Check if it's a file path
         if os.path.isfile(obj):
-            return self.analyze_surface(pdb_file=obj)
+            return self.analyze_surface(pdb_file=obj, use_apbs=self.use_apbs)
         else:
-            return self.analyze_surface(obj_name=obj, selection=selection)
+            return self.analyze_surface(obj_name=obj, selection=selection, use_apbs=self.use_apbs)
     
     def search_similar_surfaces(self,
                                 template_obj: str,

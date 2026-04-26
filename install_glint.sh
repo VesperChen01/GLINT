@@ -165,6 +165,7 @@ CONDA_PACKAGES=(
     "vina"
     "pdb2pqr"
     "apbs"  # Required for electrostatic complementarity analysis
+    "open3d"  # Preferred surface backend across macOS/Windows/Linux
 )
 
 # Temporarily suppress InsecureRequestWarning during installation
@@ -172,10 +173,10 @@ export PYTHONWARNINGS="ignore::urllib3.exceptions.InsecureRequestWarning"
 conda install -n "$ENV_NAME" -c conda-forge "${CONDA_PACKAGES[@]}" python=$PYTHON_VERSION -y
 unset PYTHONWARNINGS # Clear the override after installation
 
-# Surface-analysis dependencies are installed with pip because open3d is less stable on conda
-echo "   Installing surface-analysis dependencies (Open3D, scikit-image)..."
-conda run -n "$ENV_NAME" python -m pip install open3d scikit-image --quiet --disable-pip-version-check || {
-    echo -e "${YELLOW}⚠️  Open3D installation failed; surface analysis will use the built-in fallback path${NC}"
+# Surface-analysis extras
+echo "   Installing optional surface-analysis extras (scikit-image)..."
+conda run -n "$ENV_NAME" python -m pip install scikit-image --quiet --disable-pip-version-check || {
+    echo -e "${YELLOW}⚠️  scikit-image installation failed; GLINT will use the built-in EDTSurf fallback path${NC}"
 }
 
 echo -e "${GREEN}✅ Dependency installation completed${NC}"
@@ -324,9 +325,16 @@ else
     echo "   You can retry later with: conda run -n $ENV_NAME python -m pip install -U haddock3"
 fi
 
-# 4d. Verify EC analysis dependencies
-echo -e "\n${BLUE}[4d]${NC} Verifying EC analysis dependencies..."
+# 4d. Verify surface/EC analysis dependencies
+echo -e "\n${BLUE}[4d]${NC} Verifying surface/EC analysis dependencies..."
 EC_DEPS_OK=true
+
+# Check Open3D
+if conda run -n "$ENV_NAME" python -c "import open3d" 2>/dev/null; then
+    echo -e "${GREEN}✅ Open3D is available${NC}"
+else
+    echo -e "${YELLOW}⚠️  Open3D is unavailable; surface analysis will use built-in EDTSurf${NC}"
+fi
 
 # Check PDB2PQR
 if conda run -n "$ENV_NAME" python -c "import pdb2pqr" 2>/dev/null; then

@@ -16,6 +16,7 @@ import traceback
 from typing import Optional, List, Tuple, Dict, Any, Union
 
 from .qt_adapter import QThread, Signal as pyqtSignal
+from ..path_utils import find_executable
 
 from .utils import (
     get_lang, t,
@@ -336,7 +337,6 @@ class SurfaceSimilarityWorker(QThread):
                  interface_distance: float = 4.0,
                  out_csv: str = None,
                  surface_method: str = "auto",
-                 use_apbs: bool = False,
                  similarity_threshold: float = 0.5,
                  top_k: int = 5):
         super().__init__()
@@ -349,18 +349,39 @@ class SurfaceSimilarityWorker(QThread):
         self.interface_distance = interface_distance
         self.out_csv = out_csv
         self.surface_method = surface_method
-        self.use_apbs = use_apbs
         self.similarity_threshold = similarity_threshold
         self.top_k = top_k
+
+    def _emit_backend_notice(self, analyzer) -> None:
+        """Explain the active precision mode and how to enable the preferred backend."""
+        resolved_method = getattr(analyzer.surface_generator, "last_resolved_method", self.surface_method)
+        open3d_available = resolved_method == "open3d"
+        apbs_available = bool(find_executable("apbs"))
+
+        self.progress.emit(f"  Active surface backend: {resolved_method}")
+        if self.surface_method == "auto":
+            self.progress.emit("  Auto mode policy: open3d -> edtsurf")
+
+        if not open3d_available:
+            self.progress.emit("  Precision notice: Open3D is unavailable, so GLINT is using the built-in EDTSurf fallback.")
+            self.progress.emit("  For higher-precision surface reconstruction, install Open3D or rerun the installer:")
+            self.progress.emit("    conda install -n glint -c conda-forge open3d")
+            self.progress.emit("    or bash install_glint.sh")
+
+        if not apbs_available:
+            self.progress.emit("  Electrostatics notice: APBS is unavailable, so electrostatics fall back to the Coulomb approximation.")
+            self.progress.emit("  For higher-precision electrostatics, install APBS:")
+            self.progress.emit("    conda install -n glint -c conda-forge apbs pdb2pqr")
         
     def run(self):
         try:
             from ..surface_similarity import SurfaceSimilarityAnalyzer
             
-            self.progress.emit(f"Initializing surface analyzer (method={self.surface_method})...")
+            self.progress.emit(f"Initializing surface analyzer (method={self.surface_method}, electrostatics=APBS-first)...")
             
             analyzer = SurfaceSimilarityAnalyzer(
                 surface_method=self.surface_method,
+                use_apbs=True,
                 patch_radius=self.patch_radius
             )
             
@@ -373,6 +394,7 @@ class SurfaceSimilarityWorker(QThread):
                     self.selection1, self.selection2,
                     self.interface_distance
                 )
+                self._emit_backend_notice(analyzer)
                 
                 self.progress.emit(f"Complementarity analysis complete. Score: {result.score:.3f}")
                 
@@ -409,6 +431,7 @@ class SurfaceSimilarityWorker(QThread):
                     similarity_threshold=self.similarity_threshold,
                     top_k=self.top_k
                 )
+                self._emit_backend_notice(analyzer)
                 
                 self.progress.emit(f"Search complete:")
                 self.progress.emit(f"  Template patches: {result.n_template_patches}")
@@ -465,6 +488,7 @@ class SurfaceSimilarityWorker(QThread):
                     self.obj1, self.obj2,
                     self.selection1, self.selection2
                 )
+                self._emit_backend_notice(analyzer)
                 
                 self.progress.emit(f"Similarity analysis complete. Score: {result.score:.3f}")
                 
@@ -489,8 +513,7 @@ class SurfaceSimilarityWorker(QThread):
                 
                 mesh, points = analyzer.analyze_surface(
                     obj_name=self.obj1,
-                    selection=self.selection1,
-                    use_apbs=self.use_apbs
+                    selection=self.selection1
                 )
                 
                 self.progress.emit(f"Surface analysis complete. {mesh.n_vertices} vertices, {mesh.n_faces} faces")
@@ -506,8 +529,10 @@ class SurfaceSimilarityWorker(QThread):
                     'points': points,
                     'n_vertices': mesh.n_vertices,
                     'n_faces': mesh.n_faces,
-                    'surface_area': mesh.surface_area
+                    'surface_area': mesh.surface_area,
+                    'generation_method': mesh.generation_method,
                 }
+                self._emit_backend_notice(analyzer)
             
             self.finished.emit(result, self.out_csv or "")
             

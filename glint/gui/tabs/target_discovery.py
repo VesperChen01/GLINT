@@ -14,6 +14,7 @@ from ..qt_adapter import (
 from ..utils import t, show_message_box
 from .common import CommonTab
 from ..workers import GMotifWorker, SurfaceAnalysisWorker, SurfaceSimilarityWorker
+from ...path_utils import find_executable
 
 try:
     from ...open_targets_api import search_disease
@@ -30,6 +31,7 @@ class TargetDiscoveryTab(CommonTab):
         self._last_gmotif_csv = None
         self._last_similarity_result = None
         self._last_complementarity_result = None
+        self._surface_precision_notice_shown = False
         
         # Remove proxies for methods implemented here to avoid shadowing
         for attr in ['start_gmotif', 'browse_gm_out_csv']:
@@ -37,6 +39,51 @@ class TargetDiscoveryTab(CommonTab):
                 del self.__dict__[attr]
         
         self.init_ui()
+
+    def _build_surface_precision_notice(self, surface_method: str) -> str:
+        """User-facing note about fallback behavior and high-precision setup."""
+        lines = [
+            "Surface Similarity & Complementarity precision policy:",
+            "  Auto mode uses open3d first and falls back to built-in edtsurf if needed.",
+            "  Electrostatics run in APBS-first mode and fall back automatically if APBS is unavailable.",
+            "",
+            "For higher-precision setup:",
+            "  conda install -n glint -c conda-forge open3d apbs pdb2pqr",
+            "  or rerun: bash install_glint.sh",
+        ]
+
+        open3d_ready = False
+        try:
+            import open3d  # noqa: F401
+            open3d_ready = True
+        except Exception:
+            open3d_ready = False
+
+        apbs_ready = bool(find_executable("apbs"))
+
+        lines.extend([
+            "",
+            f"Current environment:",
+            f"  Open3D: {'available' if open3d_ready else 'missing -> edtsurf fallback may be used'}",
+            f"  APBS: {'available' if apbs_ready else 'missing -> Coulomb approximation may be used'}",
+        ])
+
+        if surface_method and surface_method != "auto":
+            lines.append(f"  Selected surface method: {surface_method}")
+
+        return "\n".join(lines)
+
+    def _maybe_show_surface_precision_notice(self, surface_method: str) -> None:
+        """Show the fallback/install notice once per session before running analysis."""
+        if self._surface_precision_notice_shown:
+            return
+        show_message_box(
+            self,
+            "Surface Precision Notice",
+            self._build_surface_precision_notice(surface_method),
+            "information",
+        )
+        self._surface_precision_notice_shown = True
         
     def init_ui(self):
         """InitializeUI - 现代卡片式布局"""
@@ -307,8 +354,8 @@ class TargetDiscoveryTab(CommonTab):
         
         sim_grid.addWidget(QLabel("Surface Method:"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_surface_method = QComboBox(); self.parent_window.sim_surface_method.setMinimumHeight(32)
-        self.parent_window.sim_surface_method.addItems(["auto", "msms", "open3d", "edtsurf"])
-        self.parent_window.sim_surface_method.setToolTip("auto: use best available\nmsms: most accurate (requires MSMS)\nopen3d: good quality (requires open3d)\nedtsurf: built-in fallback")
+        self.parent_window.sim_surface_method.addItems(["auto", "open3d", "edtsurf"])
+        self.parent_window.sim_surface_method.setToolTip("auto: prefer open3d, then built-in edtsurf\nopen3d: preferred quality backend\nedtsurf: built-in fallback")
         sim_grid.addWidget(self.parent_window.sim_surface_method, 2, 3)
         
         # Row 3: Patch Radius / Interface Distance
@@ -322,17 +369,16 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_interface_dist.setToolTip("Distance threshold for interface contacts (default: 4 Å)")
         sim_grid.addWidget(self.parent_window.sim_interface_dist, 3, 3)
         
-        # Row 4: Output CSV / Use APBS
+        # Row 4: Output CSV
         sim_grid.addWidget(QLabel("Output CSV:"), 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_out_csv = QLineEdit(); self.parent_window.sim_out_csv.setMinimumHeight(32)
         self.parent_window.sim_out_browse = QPushButton(t("browse")); self.parent_window.sim_out_browse.setMinimumHeight(32); self.parent_window.sim_out_browse.clicked.connect(self.browse_sim_out_csv)
         r4_sim = QHBoxLayout(); r4_sim.addWidget(self.parent_window.sim_out_csv, 1); r4_sim.addWidget(self.parent_window.sim_out_browse)
         sim_grid.addLayout(r4_sim, 4, 1)
-        
-        self.parent_window.sim_use_apbs = QCheckBox("Use APBS (accurate ESP)")
-        self.parent_window.sim_use_apbs.setChecked(False)
-        self.parent_window.sim_use_apbs.setToolTip("Use APBS for accurate electrostatics (slower, requires APBS)")
-        sim_grid.addWidget(self.parent_window.sim_use_apbs, 4, 3)
+        sim_grid.addWidget(QLabel("Electrostatics:"), 4, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        apbs_mode_label = QLabel("APBS-first")
+        apbs_mode_label.setToolTip("Surface similarity/complementarity now always prefers APBS electrostatics and falls back automatically if APBS is unavailable.")
+        sim_grid.addWidget(apbs_mode_label, 4, 3)
         
         # Row 5: Include Ligands option
         self.parent_window.sim_include_ligands = QCheckBox("Include Ligands")
@@ -901,7 +947,7 @@ class TargetDiscoveryTab(CommonTab):
         sel1 = self.parent_window.sim_sel1.text().strip() or "all"
         outcsv = self.parent_window.sim_out_csv.text().strip() or None
         surface_method = self.parent_window.sim_surface_method.currentText()
-        use_apbs = self.parent_window.sim_use_apbs.isChecked()
+        self._maybe_show_surface_precision_notice(surface_method)
         
         try:
             patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
@@ -917,8 +963,7 @@ class TargetDiscoveryTab(CommonTab):
             analysis_type="single",
             patch_radius=patch_radius,
             out_csv=outcsv,
-            surface_method=surface_method,
-            use_apbs=use_apbs
+            surface_method=surface_method
         )
         self.parent_window.sim_thread.progress.connect(self.log)
         self.parent_window.sim_thread.error.connect(self.on_error)
@@ -950,6 +995,7 @@ class TargetDiscoveryTab(CommonTab):
         sel2 = self.parent_window.sim_sel2.text().strip() or "all"
         outcsv = self.parent_window.sim_out_csv.text().strip() or None
         surface_method = self.parent_window.sim_surface_method.currentText()
+        self._maybe_show_surface_precision_notice(surface_method)
         
         # Determine analysis type
         analysis_idx = self.parent_window.sim_analysis_type.currentIndex()
@@ -1000,6 +1046,7 @@ class TargetDiscoveryTab(CommonTab):
         if isinstance(result, dict):
             # Single surface result
             self.log(f"✅ Surface analysis complete:")
+            self.log(f"   Active backend: {result.get('generation_method', 'unknown')}")
             self.log(f"   Vertices: {result.get('n_vertices', 0)}")
             self.log(f"   Faces: {result.get('n_faces', 0)}")
             self.log(f"   Surface Area: {result.get('surface_area', 0):.1f} Å²")

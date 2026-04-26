@@ -48,23 +48,9 @@ EC_REQUIRED_PACKAGES = [
 
 # External tool configuration (cmd_name, display_name, description, install_info)
 EXTERNAL_TOOLS = {
-    "msms": {
-        "display_name": "MSMS",
-        "description": "Molecular surface generation tool (most accurate)",
-        "install_info": {
-            "macOS": "brew install brewsci/bio/msms or download from https://ccsb.scripps.edu/msms/",
-            "Linux": "Download from https://ccsb.scripps.edu/msms/ and add to PATH",
-            "Windows": "Download the Windows version from https://ccsb.scripps.edu/msms/",
-        },
-        "search_paths": {
-            "macOS": ["/usr/local/bin/msms", "/opt/homebrew/bin/msms", "~/bin/msms"],
-            "Linux": ["/usr/bin/msms", "/usr/local/bin/msms", "~/bin/msms"],
-            "Windows": [r"C:\Program Files\MSMS\msms.exe", r"C:\msms\msms.exe"],
-        }
-    },
     "apbs": {
         "display_name": "APBS",
-        "description": "Adaptive Poisson-Boltzmann solver (accurate electrostatic potential, required for EC analysis)",
+        "description": "Adaptive Poisson-Boltzmann solver (accurate electrostatic potential, required for EC and surface analysis)",
         "install_info": {
             "macOS": "pip install apbs or brew install brewsci/bio/apbs",
             "Linux": "pip install apbs or apt install apbs",
@@ -574,7 +560,7 @@ class EnvironmentChecker:
         Includes:
         1. Install Open3D
         2. Install scikit-image
-        3. Check MSMS/APBS (provide installation guidance)
+        3. Check APBS (provide installation guidance)
 
         Returns:
             bool: Whether everything succeeded
@@ -611,13 +597,7 @@ class EnvironmentChecker:
         # 3. Check external tools
         self.log("\n  Checking external tools...")
         tools = self.check_external_tools()
-
-        msms_available = tools.get("msms", {}).get("available", False)
         apbs_available = tools.get("apbs", {}).get("available", False)
-
-        if not msms_available:
-            self.log("\n  💡 MSMS is not installed; surface generation will use Open3D or built-in methods")
-            self.log(f"     Recommended install: {tools.get('msms', {}).get('install_info', 'See the official documentation')}")
 
         if not apbs_available:
             self.log("\n  💡 APBS is not installed; electrostatic potential will use a Coulomb approximation")
@@ -626,7 +606,7 @@ class EnvironmentChecker:
         if success:
             self.log("\n✅ Surface analysis environment setup completed")
         else:
-            self.log("\n⚠️ Surface analysis is available (basic mode); full functionality requires manual configuration")
+            self.log("\n⚠️ Surface analysis is available (fallback mode); install Open3D/APBS for preferred behavior")
 
         return success
 

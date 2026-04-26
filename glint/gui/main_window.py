@@ -654,7 +654,7 @@ class GLINTDialog(QDialog):
             <table>
                 <tr><th>Parameter</th><th>Description</th><th>Default</th></tr>
                 <tr><td>Analysis Type</td><td>Similarity or Complementarity (PPI)</td><td>Similarity</td></tr>
-                <tr><td>Surface Method</td><td>auto/msms/open3d/edtsurf</td><td>auto</td></tr>
+                <tr><td>Surface Method</td><td>auto/open3d/edtsurf</td><td>auto</td></tr>
                 <tr><td>Patch Radius</td><td>Radius for comparison (Å)</td><td>12.0</td></tr>
                 <tr><td>Interface Distance</td><td>Contact threshold (Å)</td><td>4.0</td></tr>
             </table>
