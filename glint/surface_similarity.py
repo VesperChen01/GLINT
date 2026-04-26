@@ -248,9 +248,14 @@ class ComplementarityResult:
     interface_area: float = 0.0
     n_contacts: int = 0
     gap_volume: float = 0.0
+    min_distance: float = 0.0
+    analysis_mode: str = "interface"
+    n_patch_matches: int = 0
+    patch_radius: float = 0.0
     
     # Residue pairs at interface
     interface_residues: List[Tuple[str, str]] = field(default_factory=list)
+    patch_matches: List[Tuple[np.ndarray, np.ndarray, float, float, float, float]] = field(default_factory=list)
 
 
 # =============================================================================
@@ -1205,19 +1210,11 @@ class SurfaceComparator:
             print(f"   Interface distance threshold: {interface_distance:.1f} Å")
             if min_distance > 50:
                 print(f"\n💡 The surfaces appear to be from different structures that are not spatially aligned.")
-                print(f"   For complementarity analysis, use chains from the SAME complex (e.g., 'chain A' vs 'chain B').")
-                print(f"   For comparing different structures, use 'Similarity Search' instead.")
+                print(f"   Switching to patch-based complementarity across the two surfaces.")
             elif min_distance > interface_distance:
-                print(f"\n💡 Try increasing the 'Interface Distance' parameter to {min_distance + 2:.1f} Å or more.")
+                print(f"\n💡 No direct contacts at {interface_distance:.1f} Å. Switching to patch-based complementarity.")
 
-            return ComplementarityResult(
-                score=0.0,
-                geometric_complementarity=0.0,
-                electrostatic_complementarity=0.0,
-                hydrophobic_complementarity=0.0,
-                interface_area=0.0,
-                n_contacts=0
-            )
+            return self._compute_patch_complementarity(mesh1, mesh2, points1, points2, min_distance)
         
         # Compute complementarity scores
         geo_comp = self._geometric_complementarity(interface_points1, interface_points2)
@@ -1246,7 +1243,75 @@ class SurfaceComparator:
             hydrophobic_complementarity=hydro_comp,
             interface_area=interface_area,
             n_contacts=len(interface_pairs),
+            min_distance=min_distance,
+            analysis_mode="interface",
             interface_residues=interface_residues
+        )
+
+    def _compute_patch_complementarity(self, mesh1: SurfaceMesh, mesh2: SurfaceMesh,
+                                       points1: List[SurfacePoint],
+                                       points2: List[SurfacePoint],
+                                       min_distance: float) -> ComplementarityResult:
+        """Compute cross-structure complementarity using best matching surface patches."""
+        patches1 = self._extract_patches(mesh1, points1)
+        patches2 = self._extract_patches(mesh2, points2)
+
+        patch_scores = []
+        geo_scores = []
+        esp_scores = []
+        hydro_scores = []
+        residue_pairs = []
+        best_patch_matches = []
+
+        for p1 in patches1:
+            best = None
+            best_components = (0.0, 0.0, 0.0, 0.0)
+            best_pair = (None, None)
+            for p2 in patches2:
+                geo = self._geometric_patch_complementarity(p1, p2)
+                esp = self._electrostatic_patch_complementarity(p1, p2)
+                hydro = self._hydrophobic_patch_complementarity(p1, p2)
+                overall = 0.4 * geo + 0.35 * esp + 0.25 * hydro
+                if best is None or overall > best:
+                    best = overall
+                    best_components = (overall, geo, esp, hydro)
+
+                    res1 = p1.points[0].nearest_residue if p1.points else None
+                    res2 = p2.points[0].nearest_residue if p2.points else None
+                    best_pair = (res1, res2)
+
+            if best is not None:
+                overall, geo, esp, hydro = best_components
+                patch_scores.append(overall)
+                geo_scores.append(geo)
+                esp_scores.append(esp)
+                hydro_scores.append(hydro)
+                best_patch_matches.append((p1.center.copy(), p2.center.copy(), overall, geo, esp, hydro))
+                if best_pair[0] and best_pair[1]:
+                    residue_pairs.append(best_pair)
+
+        unique_pairs = []
+        seen = set()
+        for pair in residue_pairs:
+            if pair not in seen:
+                seen.add(pair)
+                unique_pairs.append(pair)
+
+        best_patch_matches.sort(key=lambda x: x[2], reverse=True)
+
+        return ComplementarityResult(
+            score=float(np.mean(patch_scores)) if patch_scores else 0.0,
+            geometric_complementarity=float(np.mean(geo_scores)) if geo_scores else 0.0,
+            electrostatic_complementarity=float(np.mean(esp_scores)) if esp_scores else 0.0,
+            hydrophobic_complementarity=float(np.mean(hydro_scores)) if hydro_scores else 0.0,
+            interface_area=0.0,
+            n_contacts=0,
+            min_distance=min_distance,
+            analysis_mode="patch",
+            n_patch_matches=len(patch_scores),
+            patch_radius=self.patch_radius,
+            interface_residues=unique_pairs[:20],
+            patch_matches=best_patch_matches[:20],
         )
     
     def _extract_patches(self, mesh: SurfaceMesh, 
@@ -1356,6 +1421,16 @@ class SurfaceComparator:
             complementarity_scores.append(0.6 * si_comp + 0.4 * normal_comp)
         
         return np.mean(complementarity_scores)
+
+    def _geometric_patch_complementarity(self, p1: SurfacePatch, p2: SurfacePatch) -> float:
+        """Compute patch-level geometric complementarity from feature distributions."""
+        si1 = np.array([pt.shape_index for pt in p1.points])
+        si2 = -np.array([pt.shape_index for pt in p2.points])
+        curv1 = np.array([pt.curvedness for pt in p1.points])
+        curv2 = np.array([pt.curvedness for pt in p2.points])
+        si_comp = self._histogram_correlation(si1, si2)
+        curv_comp = self._histogram_correlation(curv1, curv2)
+        return (si_comp + curv_comp) / 2
     
     def _electrostatic_complementarity(self, points1: List[SurfacePoint],
                                        points2: List[SurfacePoint]) -> float:
@@ -1382,6 +1457,12 @@ class SurfaceComparator:
             complementarity_scores.append(comp)
         
         return np.mean(complementarity_scores)
+
+    def _electrostatic_patch_complementarity(self, p1: SurfacePatch, p2: SurfacePatch) -> float:
+        """Compute patch-level electrostatic complementarity from opposite-charge distributions."""
+        esp1 = np.tanh(np.array([pt.electrostatic_potential for pt in p1.points]) / 5.0)
+        esp2 = -np.tanh(np.array([pt.electrostatic_potential for pt in p2.points]) / 5.0)
+        return self._histogram_correlation(esp1, esp2)
     
     def _hydrophobic_complementarity(self, points1: List[SurfacePoint],
                                      points2: List[SurfacePoint]) -> float:
@@ -1403,6 +1484,12 @@ class SurfaceComparator:
             complementarity_scores.append(comp)
         
         return np.mean(complementarity_scores)
+
+    def _hydrophobic_patch_complementarity(self, p1: SurfacePatch, p2: SurfacePatch) -> float:
+        """Compute patch-level hydrophobic complementarity as hydrophobicity matching."""
+        hydro1 = np.array([pt.hydrophobicity for pt in p1.points])
+        hydro2 = np.array([pt.hydrophobicity for pt in p2.points])
+        return self._histogram_correlation(hydro1, hydro2)
     
     def _histogram_correlation(self, values1: np.ndarray,
                                values2: np.ndarray,
@@ -1604,7 +1691,8 @@ class SurfaceSimilarityAnalyzer:
                  surface_method: str = "auto",
                  apbs_path: Optional[str] = None,
                  use_apbs: bool = True,
-                 patch_radius: float = 12.0):
+                 patch_radius: float = 12.0,
+                 max_feature_vertices: int = 12000):
         """
         Initialize analyzer.
         
@@ -1618,9 +1706,26 @@ class SurfaceSimilarityAnalyzer:
         self.apbs_path = apbs_path
         self.use_apbs = use_apbs
         self.comparator = SurfaceComparator(patch_radius=patch_radius)
+        self.max_feature_vertices = max(1000, int(max_feature_vertices))
         
         # Cache for analyzed surfaces
         self._cache: Dict[str, Tuple[SurfaceMesh, List[SurfacePoint]]] = {}
+
+    def _reduce_mesh_for_feature_extraction(self, mesh: SurfaceMesh) -> Tuple[SurfaceMesh, int]:
+        """Downsample very dense meshes before per-vertex feature extraction."""
+        n_vertices = len(mesh.vertices)
+        if n_vertices <= self.max_feature_vertices:
+            return mesh, n_vertices
+
+        sample_indices = np.linspace(0, n_vertices - 1, self.max_feature_vertices, dtype=int)
+        reduced_mesh = SurfaceMesh(
+            vertices=mesh.vertices[sample_indices].copy(),
+            faces=np.empty((0, 3), dtype=int),
+            normals=mesh.normals[sample_indices].copy(),
+            source_object=mesh.source_object,
+            generation_method=mesh.generation_method,
+        )
+        return reduced_mesh, len(sample_indices)
     
     def analyze_surface(self, obj_name: str = None, 
                        pdb_file: str = None,
@@ -1655,12 +1760,20 @@ class SurfaceSimilarityAnalyzer:
             f"Generated surface: {mesh.n_vertices} vertices, {mesh.n_faces} faces "
             f"(method={mesh.generation_method})"
         )
+
+        feature_mesh, feature_vertex_count = self._reduce_mesh_for_feature_extraction(mesh)
+        if feature_vertex_count != mesh.n_vertices:
+            print(
+                f"Downsampling feature extraction mesh: {mesh.n_vertices} -> "
+                f"{feature_vertex_count} vertices"
+            )
         
         # Extract features
         extractor = FeatureExtractor(atoms, self.apbs_path)
-        points = extractor.extract_features(mesh, use_apbs=use_apbs)
+        points = extractor.extract_features(feature_mesh, use_apbs=use_apbs)
         
         mesh.points = points
+        mesh.feature_vertex_count = feature_vertex_count
         
         # Cache result
         cache_key = f"{obj_name or pdb_file or 'default'}|{selection}|apbs={int(bool(use_apbs))}"

@@ -1581,4 +1581,31 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
     else:
         _apply_5color_ec_gradient(mesh_obj, b_min, b_max)
 
-    cmd.set('transparency', 0.5,
+    cmd.set('transparency', 0.5, mesh_obj)
+    cmd.set('surface_color_smoothing', 1)
+    cmd.set('surface_color_smoothing_threshold', 0.22)
+
+    if show_ligand_sticks:
+        _apply_sticks_coloring(ligand_sel, carbon_color='green')
+        cmd.set('stick_transparency', 0.0, ligand_sel)
+
+    cmd.set_color('glint_protein_purple', [0.67, 0.55, 0.86])
+
+    if show_protein_lines:
+        protein_sel = f"{obj_name} and polymer within {protein_distance} of {ligand_sel}"
+        cmd.show('lines', protein_sel)
+        cmd.color('glint_protein_purple', f"{protein_sel} and elem C")
+        cmd.set('line_width', 1.5, protein_sel)
+
+    cmd.color('glint_protein_purple', f"{obj_name} and polymer")
+    cmd.set('cartoon_transparency', 0.8, obj_name)
+
+    _set_publication_rendering()
+    cmd.zoom(ligand_sel, buffer=8)
+
+    if ray_trace:
+        print("[visualize_ec_mesh_surface] Ray tracing...")
+        cmd.ray()
+
+    print(f"[visualize_ec_mesh_surface] ✅ Created mesh surface: {mesh_obj}")
+    return True

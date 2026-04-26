@@ -396,7 +396,10 @@ class SurfaceSimilarityWorker(QThread):
                 )
                 self._emit_backend_notice(analyzer)
                 
-                self.progress.emit(f"Complementarity analysis complete. Score: {result.score:.3f}")
+                self.progress.emit(
+                    f"Complementarity analysis complete ({getattr(result, 'analysis_mode', 'interface')}). "
+                    f"Score: {result.score:.3f}"
+                )
                 
                 # Export interface residues if CSV requested
                 if self.out_csv:
@@ -529,6 +532,7 @@ class SurfaceSimilarityWorker(QThread):
                     'points': points,
                     'n_vertices': mesh.n_vertices,
                     'n_faces': mesh.n_faces,
+                    'n_feature_points': len(points),
                     'surface_area': mesh.surface_area,
                     'generation_method': mesh.generation_method,
                 }

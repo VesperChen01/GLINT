@@ -445,7 +445,7 @@ cat > "$CONTENTS/Info.plist" << 'PLIST_EOF'
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0.0</string>
+    <string>0.3.0</string>
 </dict>
 </plist>
 PLIST_EOF

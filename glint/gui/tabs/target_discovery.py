@@ -30,7 +30,9 @@ class TargetDiscoveryTab(CommonTab):
         self._gmotif_hits = []
         self._last_gmotif_csv = None
         self._last_similarity_result = None
+        self._last_search_result = None
         self._last_complementarity_result = None
+        self._last_surface_visual_mode = None
         self._surface_precision_notice_shown = False
         
         # Remove proxies for methods implemented here to avoid shadowing
@@ -316,10 +318,11 @@ class TargetDiscoveryTab(CommonTab):
         sim_grid.addWidget(self.parent_window.obj_combo_sim2, 0, 3)
         
         # Row 1: Selection 1 / Selection 2
-        sim_grid.addWidget(QLabel("Selection 1:"), 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_sel1_label = QLabel("Template Selection:")
+        sim_grid.addWidget(self.parent_window.sim_sel1_label, 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_sel1 = QLineEdit("all"); self.parent_window.sim_sel1.setMinimumHeight(32)
         self.parent_window.sim_sel1.setToolTip(
-            "Selection for Object 1. Examples:\n"
+            "Template region inside Object 1. Examples:\n"
             "  • 'all' - entire structure\n"
             "  • 'A' or 'chain A' - chain A\n"
             "  • 'A B' or 'A+B' - chains A and B\n"
@@ -327,10 +330,11 @@ class TargetDiscoveryTab(CommonTab):
         )
         sim_grid.addWidget(self.parent_window.sim_sel1, 1, 1)
 
-        sim_grid.addWidget(QLabel("Selection 2:"), 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_sel2_label = QLabel("Target Selection:")
+        sim_grid.addWidget(self.parent_window.sim_sel2_label, 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_sel2 = QLineEdit("all"); self.parent_window.sim_sel2.setMinimumHeight(32)
         self.parent_window.sim_sel2.setToolTip(
-            "Selection for Object 2. Examples:\n"
+            "Target region inside Object 2. Examples:\n"
             "  • 'all' - entire structure\n"
             "  • 'B' or 'chain B' - chain B\n"
             "  • 'C D' or 'C+D' - chains C and D\n"
@@ -338,77 +342,86 @@ class TargetDiscoveryTab(CommonTab):
         )
         sim_grid.addWidget(self.parent_window.sim_sel2, 1, 3)
         
-        # Row 2: Analysis Type / Surface Method
-        sim_grid.addWidget(QLabel("Analysis Type:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.sim_analysis_type = QComboBox(); self.parent_window.sim_analysis_type.setMinimumHeight(32)
-        self.parent_window.sim_analysis_type.addItems(["Similarity Search", "Complementarity (PPI)"])
-        self.parent_window.sim_analysis_type.setToolTip(
-            "Similarity Search: Compare surface features between two different structures.\n"
-            "  - Use for finding similar binding sites across proteins\n"
-            "  - Objects can be from different PDB files\n\n"
-            "Complementarity (PPI): Analyze interface fit between receptor and ligand.\n"
-            "  - Use for chains within the SAME complex (e.g., 'chain A' vs 'chain B')\n"
-            "  - Objects must be spatially close (in contact)"
+        # Row 2: Template Region / Ligand Pocket
+        self.parent_window.sim_template_region_label = QLabel("Template Source:")
+        sim_grid.addWidget(self.parent_window.sim_template_region_label, 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_template_region = QComboBox(); self.parent_window.sim_template_region.setMinimumHeight(32)
+        self.parent_window.sim_template_region.addItems(["Custom Region", "Ligand Pocket"])
+        self.parent_window.sim_template_region.setToolTip(
+            "Custom Region: use the Template Selection field.\n"
+            "Ligand Pocket: automatically build a binding-pocket selection around a ligand in Object 1."
         )
-        sim_grid.addWidget(self.parent_window.sim_analysis_type, 2, 1)
-        
-        sim_grid.addWidget(QLabel("Surface Method:"), 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_template_region.setCurrentText("Ligand Pocket")
+        sim_grid.addWidget(self.parent_window.sim_template_region, 2, 1)
+
+        self.parent_window.sim_pocket_label = QLabel("Pocket Ligand / Radius:")
+        sim_grid.addWidget(self.parent_window.sim_pocket_label, 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_pocket_ligand = QLineEdit("organic")
+        self.parent_window.sim_pocket_ligand.setMinimumHeight(32)
+        self.parent_window.sim_pocket_ligand.setToolTip(
+            "Ligand selection inside Object 1.\n"
+            "Examples: 'resn LIG', 'organic', 'chain B and resn LEN'"
+        )
+        self.parent_window.sim_pocket_radius = QLineEdit("6.0")
+        self.parent_window.sim_pocket_radius.setMinimumHeight(32)
+        self.parent_window.sim_pocket_radius.setMaximumWidth(80)
+        self.parent_window.sim_pocket_radius.setToolTip("Pocket radius around the ligand selection (Å)")
+        self.parent_window.sim_pocket_row = QHBoxLayout(); self.parent_window.sim_pocket_row.addWidget(self.parent_window.sim_pocket_ligand, 1); self.parent_window.sim_pocket_row.addWidget(self.parent_window.sim_pocket_radius)
+        sim_grid.addLayout(self.parent_window.sim_pocket_row, 2, 3)
+
+        # Row 3: Surface Method / Output CSV
+        self.parent_window.sim_surface_method_label = QLabel("Surface Method:")
+        sim_grid.addWidget(self.parent_window.sim_surface_method_label, 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_surface_method = QComboBox(); self.parent_window.sim_surface_method.setMinimumHeight(32)
         self.parent_window.sim_surface_method.addItems(["auto", "open3d", "edtsurf"])
         self.parent_window.sim_surface_method.setToolTip("auto: prefer open3d, then built-in edtsurf\nopen3d: preferred quality backend\nedtsurf: built-in fallback")
-        sim_grid.addWidget(self.parent_window.sim_surface_method, 2, 3)
-        
-        # Row 3: Patch Radius / Interface Distance
-        sim_grid.addWidget(QLabel("Patch Radius (Å):"), 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.sim_patch_radius = QLineEdit("12.0"); self.parent_window.sim_patch_radius.setMinimumHeight(32)
-        self.parent_window.sim_patch_radius.setToolTip("Radius of surface patches for comparison (default: 12 Å)")
-        sim_grid.addWidget(self.parent_window.sim_patch_radius, 3, 1)
-        
-        sim_grid.addWidget(QLabel("Interface Dist (Å):"), 3, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.sim_interface_dist = QLineEdit("4.0"); self.parent_window.sim_interface_dist.setMinimumHeight(32)
-        self.parent_window.sim_interface_dist.setToolTip("Distance threshold for interface contacts (default: 4 Å)")
-        sim_grid.addWidget(self.parent_window.sim_interface_dist, 3, 3)
-        
-        # Row 4: Output CSV
-        sim_grid.addWidget(QLabel("Output CSV:"), 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        sim_grid.addWidget(self.parent_window.sim_surface_method, 3, 1)
+
+        sim_grid.addWidget(QLabel("Output CSV:"), 3, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_out_csv = QLineEdit(); self.parent_window.sim_out_csv.setMinimumHeight(32)
         self.parent_window.sim_out_browse = QPushButton(t("browse")); self.parent_window.sim_out_browse.setMinimumHeight(32); self.parent_window.sim_out_browse.clicked.connect(self.browse_sim_out_csv)
         r4_sim = QHBoxLayout(); r4_sim.addWidget(self.parent_window.sim_out_csv, 1); r4_sim.addWidget(self.parent_window.sim_out_browse)
-        sim_grid.addLayout(r4_sim, 4, 1)
-        sim_grid.addWidget(QLabel("Electrostatics:"), 4, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        apbs_mode_label = QLabel("APBS-first")
-        apbs_mode_label.setToolTip("Surface similarity/complementarity now always prefers APBS electrostatics and falls back automatically if APBS is unavailable.")
-        sim_grid.addWidget(apbs_mode_label, 4, 3)
+        sim_grid.addLayout(r4_sim, 3, 3)
         
-        # Row 5: Include Ligands option
-        self.parent_window.sim_include_ligands = QCheckBox("Include Ligands")
-        self.parent_window.sim_include_ligands.setChecked(True)
-        self.parent_window.sim_include_ligands.setToolTip("Include small molecules (HETATM) in surface analysis using atom-type based features")
-        sim_grid.addWidget(self.parent_window.sim_include_ligands, 5, 1)
-
+        # Row 4: Patch Radius / Interface Distance
+        self.parent_window.sim_patch_radius_label = QLabel("Patch Radius (Å):")
+        sim_grid.addWidget(self.parent_window.sim_patch_radius_label, 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_patch_radius = QLineEdit("12.0"); self.parent_window.sim_patch_radius.setMinimumHeight(32)
+        self.parent_window.sim_patch_radius.setToolTip("Radius of surface patches for comparison (default: 12 Å)")
+        sim_grid.addWidget(self.parent_window.sim_patch_radius, 4, 1)
+        
+        self.parent_window.sim_interface_dist_label = QLabel("Interface Dist (Å):")
+        sim_grid.addWidget(self.parent_window.sim_interface_dist_label, 4, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_interface_dist = QLineEdit("4.0"); self.parent_window.sim_interface_dist.setMinimumHeight(32)
+        self.parent_window.sim_interface_dist.setToolTip("Distance threshold for interface contacts (default: 4 Å)")
+        sim_grid.addWidget(self.parent_window.sim_interface_dist, 4, 3)
+        
         sim_layout.addLayout(sim_grid)
 
         # Buttons - using Ternary Evaluation 风格
         sim_btn_row = QHBoxLayout()
         sim_btn_row.setSpacing(10)
 
-        self.parent_window.sim_analyze_btn = QPushButton("Analyze Surface")
-        self.parent_window.sim_analyze_btn.setMinimumHeight(36)
-        self.parent_window.sim_analyze_btn.setStyleSheet(self._get_primary_btn_style())
-        self.parent_window.sim_analyze_btn.clicked.connect(self.start_surface_similarity)
+        self.parent_window.sim_similarity_btn = QPushButton("Run Similarity Search")
+        self.parent_window.sim_similarity_btn.setMinimumHeight(36)
+        self.parent_window.sim_similarity_btn.setStyleSheet(self._get_purple_btn_style())
+        self.parent_window.sim_similarity_btn.clicked.connect(self.start_similarity_search)
 
-        self.parent_window.sim_compare_btn = QPushButton("Compare / Complementarity")
-        self.parent_window.sim_compare_btn.setMinimumHeight(36)
-        self.parent_window.sim_compare_btn.setStyleSheet(self._get_purple_btn_style())
-        self.parent_window.sim_compare_btn.clicked.connect(self.start_surface_comparison)
+        self.parent_window.sim_complement_btn = QPushButton("Run Complementarity Search")
+        self.parent_window.sim_complement_btn.setMinimumHeight(36)
+        self.parent_window.sim_complement_btn.setStyleSheet(self._get_primary_btn_style())
+        self.parent_window.sim_complement_btn.clicked.connect(self.start_complementarity_search)
 
-        self.parent_window.sim_visualize_btn = QPushButton("Visualize Features")
+        self.parent_window.sim_visualize_btn = QPushButton("Show Matched Regions")
         self.parent_window.sim_visualize_btn.setMinimumHeight(36)
         self.parent_window.sim_visualize_btn.setStyleSheet(self._get_green_btn_style())
         self.parent_window.sim_visualize_btn.clicked.connect(self.visualize_surface_features)
+
+        self.parent_window.sim_template_region.currentIndexChanged.connect(self._update_similarity_ui_mode)
+        self._update_similarity_ui_mode()
         
-        sim_btn_row.addWidget(self.parent_window.sim_analyze_btn)
-        sim_btn_row.addWidget(self.parent_window.sim_compare_btn)
+        sim_btn_row.addWidget(self.parent_window.sim_similarity_btn)
+        sim_btn_row.addWidget(self.parent_window.sim_complement_btn)
         sim_btn_row.addWidget(self.parent_window.sim_visualize_btn)
         sim_btn_row.addStretch(1)
         
@@ -417,6 +430,43 @@ class TargetDiscoveryTab(CommonTab):
         
         # Add stretch at the end to prevent compression
         layout.addStretch(1)
+
+    def _set_sim_widget_visible(self, widget, visible: bool):
+        """Toggle widget visibility for both widgets and layouts."""
+        if hasattr(widget, "count") and not hasattr(widget, "setVisible"):
+            for i in range(widget.count()):
+                item = widget.itemAt(i)
+                child = item.widget()
+                if child is not None:
+                    child.setVisible(visible)
+        elif widget is not None:
+            widget.setVisible(visible)
+
+    def _update_similarity_ui_mode(self):
+        """Keep the surface-similarity UI task-focused instead of parameter-heavy."""
+        template_text = self.parent_window.sim_template_region.currentText().strip()
+        uses_ligand_pocket = template_text == "Ligand Pocket"
+
+        self.parent_window.sim_sel1_label.setText("Template Selection:")
+        self.parent_window.sim_sel2_label.setText("Target Selection:")
+
+        self._set_sim_widget_visible(self.parent_window.sim_template_region_label, True)
+        self._set_sim_widget_visible(self.parent_window.sim_template_region, True)
+        self._set_sim_widget_visible(self.parent_window.sim_pocket_label, uses_ligand_pocket)
+        self._set_sim_widget_visible(self.parent_window.sim_pocket_ligand, uses_ligand_pocket)
+        self._set_sim_widget_visible(self.parent_window.sim_pocket_radius, uses_ligand_pocket)
+
+        self.parent_window.sim_sel1.setPlaceholderText(
+            "Optional. Leave as all, or type a residue/chain selection"
+        )
+        self.parent_window.sim_sel2.setPlaceholderText("Usually keep as all")
+
+        self.parent_window.sim_sel1.setEnabled(not uses_ligand_pocket)
+        if uses_ligand_pocket and self.parent_window.sim_sel1.text().strip() == "all":
+            self.parent_window.sim_sel1.clear()
+
+        self._set_sim_widget_visible(self.parent_window.sim_interface_dist_label, True)
+        self._set_sim_widget_visible(self.parent_window.sim_interface_dist, True)
 
     # --- G-Motif Logic ---
     def browse_gm_out_csv(self):
@@ -954,7 +1004,6 @@ class TargetDiscoveryTab(CommonTab):
         except (ValueError, TypeError):  # float() 转换可能Failed
             patch_radius = 12.0
         
-        self.parent_window.sim_analyze_btn.setEnabled(False)
         self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
         
         self.parent_window.sim_thread = SurfaceSimilarityWorker(
@@ -970,24 +1019,17 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_thread.finished.connect(self.on_finished_similarity)
         self.parent_window.sim_thread.start()
 
-    def start_surface_comparison(self):
-        """Start surface comparison or complementarity analysis
-        
-        For Similarity Search:
-        - Object 1 is the TEMPLATE (e.g., known binding site like CRBN)
-        - Object 2 is the TARGET (protein to search for similar sites)
-        - The method generates patches from template and searches in target
-        """
+    def _start_search(self, analysis_type: str):
+        """Shared launcher for similarity/complementarity searches."""
         obj1 = self.parent_window.obj_combo_sim1.currentText().strip()
         obj2_text = self.parent_window.obj_combo_sim2.currentText().strip()
         
         if not obj1 or obj1 == t("no_object"):
             show_message_box(self, t("title"), t("no_object"), "warning"); return
         
-        # Check if obj2 is selected
-        if obj2_text == "(None - Single Surface)" or not obj2_text:
-            # Single surface analysis
-            self.start_surface_similarity()
+        # Search/complementarity always require Object 2
+        if obj2_text == "(None - Single Surface)" or not obj2_text or obj2_text == t("no_object"):
+            show_message_box(self, "Warning", "Please choose Object 2 for similarity or complementarity search.", "warning")
             return
         
         obj2 = obj2_text
@@ -996,12 +1038,25 @@ class TargetDiscoveryTab(CommonTab):
         outcsv = self.parent_window.sim_out_csv.text().strip() or None
         surface_method = self.parent_window.sim_surface_method.currentText()
         self._maybe_show_surface_precision_notice(surface_method)
-        
-        # Determine analysis type
-        analysis_idx = self.parent_window.sim_analysis_type.currentIndex()
-        # 0 = Similarity Search (use obj1 as template, search in obj2)
-        # 1 = Complementarity (PPI)
-        analysis_type = "complementarity" if analysis_idx == 1 else "search"
+
+        if analysis_type == "search":
+            template_mode = self.parent_window.sim_template_region.currentText().strip()
+            if template_mode == "Ligand Pocket":
+                sel1 = self._build_ligand_pocket_selection(obj1)
+                if not sel1:
+                    return
+                self.log(f"   Template region: ligand pocket")
+                self.log(f"   Template selection expanded to: {sel1}")
+
+        if obj1 == obj2 and sel1 == sel2:
+            show_message_box(
+                self,
+                t("title"),
+                "Object 1 and Object 2 are identical with the same selection. "
+                "Choose a different object or use different selections, such as chain A vs chain B.",
+                "warning",
+            )
+            return
         
         try:
             patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
@@ -1013,7 +1068,9 @@ class TargetDiscoveryTab(CommonTab):
         except (ValueError, TypeError):  # float() 转换可能Failed
             interface_dist = 4.0
         
-        self.parent_window.sim_compare_btn.setEnabled(False)
+        self._last_search_mode = analysis_type
+        self.parent_window.sim_similarity_btn.setEnabled(False)
+        self.parent_window.sim_complement_btn.setEnabled(False)
         self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
         
         # Log the search direction for clarity
@@ -1039,9 +1096,57 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_thread.finished.connect(self.on_finished_comparison)
         self.parent_window.sim_thread.start()
 
+    def start_similarity_search(self):
+        """Run similarity search between Object 1 and Object 2."""
+        self._start_search("search")
+
+    def start_complementarity_search(self):
+        """Run complementarity search between Object 1 and Object 2."""
+        self._start_search("complementarity")
+
+    def _build_ligand_pocket_selection(self, obj_name: str) -> Optional[str]:
+        """Build a PyMOL selection for residues around a ligand in Object 1."""
+        ligand_expr = self.parent_window.sim_pocket_ligand.text().strip() or "organic"
+        try:
+            radius = float(self.parent_window.sim_pocket_radius.text().strip() or "6.0")
+        except (ValueError, TypeError):
+            radius = 6.0
+
+        ligand_sel = f"({obj_name} and ({ligand_expr}))"
+        pocket_sel = f"byres (({obj_name} and polymer) within {radius:.2f} of {ligand_sel})"
+
+        try:
+            from pymol import cmd
+            ligand_count = cmd.count_atoms(ligand_sel)
+            pocket_count = cmd.count_atoms(pocket_sel)
+        except Exception as e:
+            show_message_box(self, "Error", f"Failed to build ligand pocket selection:\n{e}", "critical")
+            return None
+
+        if ligand_count <= 0:
+            show_message_box(
+                self,
+                "Warning",
+                f"No ligand atoms found in Object 1 for selection:\n{ligand_expr}",
+                "warning",
+            )
+            return None
+
+        if pocket_count <= 0:
+            show_message_box(
+                self,
+                "Warning",
+                f"No polymer pocket residues found within {radius:.1f} Å of:\n{ligand_expr}",
+                "warning",
+            )
+            return None
+
+        return pocket_sel
+
     def on_finished_similarity(self, result, out_csv_path: str):
         """Handle single surface analysis completion"""
         self._last_similarity_result = result
+        self._last_surface_visual_mode = "single"
         
         if isinstance(result, dict):
             # Single surface result
@@ -1049,6 +1154,7 @@ class TargetDiscoveryTab(CommonTab):
             self.log(f"   Active backend: {result.get('generation_method', 'unknown')}")
             self.log(f"   Vertices: {result.get('n_vertices', 0)}")
             self.log(f"   Faces: {result.get('n_faces', 0)}")
+            self.log(f"   Feature points: {result.get('n_feature_points', 0)}")
             self.log(f"   Surface Area: {result.get('surface_area', 0):.1f} Å²")
         
         if out_csv_path and os.path.exists(out_csv_path):
@@ -1056,24 +1162,29 @@ class TargetDiscoveryTab(CommonTab):
             self.log(f"   Saved to: {os.path.basename(out_csv_path)}")
         
         self.parent_window.progress_bar.setVisible(False); self.parent_window.progress_bar.setRange(0, 1)
-        self.parent_window.sim_analyze_btn.setEnabled(True)
 
     def on_finished_comparison(self, result, out_csv_path: str):
         """Handle comparison/complementarity/search analysis completion"""
-        analysis_type = self.parent_window.sim_analysis_type.currentText()
+        analysis_type = getattr(self, "_last_search_mode", "")
         
-        if "Complementarity" in analysis_type:
+        if analysis_type == "complementarity":
             self._last_complementarity_result = result
+            self._last_surface_visual_mode = "complementarity"
             self.log(f"✅ Complementarity analysis complete:")
+            self.log(f"   Mode: {getattr(result, 'analysis_mode', 'interface')}")
             self.log(f"   Overall Score: {result.score:.3f}")
             self.log(f"   Geometric: {result.geometric_complementarity:.3f}")
             self.log(f"   Electrostatic: {result.electrostatic_complementarity:.3f}")
             self.log(f"   Hydrophobic: {result.hydrophobic_complementarity:.3f}")
             self.log(f"   Interface Area: {result.interface_area:.1f} Å²")
             self.log(f"   Contacts: {result.n_contacts}")
+            if getattr(result, 'analysis_mode', 'interface') == "patch":
+                self.log(f"   Patch matches: {getattr(result, 'n_patch_matches', 0)}")
+                self.log(f"   Minimum surface distance: {getattr(result, 'min_distance', 0.0):.1f} Å")
         elif hasattr(result, 'n_template_patches'):
             # SimilaritySearchResult - new search logic
             self._last_search_result = result
+            self._last_surface_visual_mode = "search"
             self.log(f"✅ Similarity search complete:")
             self.log(f"   Template: {result.template_object}")
             self.log(f"   Target: {result.target_object}")
@@ -1095,6 +1206,7 @@ class TargetDiscoveryTab(CommonTab):
         else:
             # Legacy SimilarityResult
             self._last_similarity_result = result
+            self._last_surface_visual_mode = "similarity"
             self.log(f"✅ Similarity analysis complete:")
             self.log(f"   Overall Score: {result.score:.3f}")
             self.log(f"   Geometric: {result.geometric_similarity:.3f}")
@@ -1107,7 +1219,8 @@ class TargetDiscoveryTab(CommonTab):
             self.log(f"   Saved to: {os.path.basename(out_csv_path)}")
         
         self.parent_window.progress_bar.setVisible(False); self.parent_window.progress_bar.setRange(0, 1)
-        self.parent_window.sim_compare_btn.setEnabled(True)
+        self.parent_window.sim_similarity_btn.setEnabled(True)
+        self.parent_window.sim_complement_btn.setEnabled(True)
 
     def visualize_surface_features(self):
         """Visualize surface features in PyMOL"""
@@ -1118,6 +1231,41 @@ class TargetDiscoveryTab(CommonTab):
             if not obj1 or obj1 == t("no_object"):
                 show_message_box(self, "Warning", "Please select an object first.", "warning")
                 return
+
+            obj2 = self.parent_window.obj_combo_sim2.currentText().strip()
+
+            if self._last_surface_visual_mode == "complementarity" and self._last_complementarity_result:
+                result = self._last_complementarity_result
+                if getattr(result, 'analysis_mode', 'interface') == "patch" and getattr(result, 'patch_matches', None):
+                    if not obj2 or obj2 == t("no_object") or obj2 == "(None - Single Surface)":
+                        show_message_box(self, "Warning", "Please select Object 2 before visualizing complementarity patches.", "warning")
+                        return
+                    self._visualize_complementarity_patches(
+                        obj1,
+                        obj2,
+                        result.patch_matches,
+                        getattr(result, 'patch_radius', 12.0),
+                    )
+                    self.log(f"✅ Visualized top complementary regions between {obj1} and {obj2}")
+                    self.log("   Red spheres: Object 1 patch centers")
+                    self.log("   Blue spheres: Object 2 patch centers")
+                    self.log("   Pink/Cyan surfaces: highlighted complementary patch regions")
+                    self.log("   Gray dashes: matched complementary patch pairs")
+                    return
+
+            if self._last_surface_visual_mode == "search" and self._last_search_result:
+                result = self._last_search_result
+                if not obj2 or obj2 == t("no_object") or obj2 == "(None - Single Surface)":
+                    show_message_box(self, "Warning", "Please select Object 2 before visualizing similarity-search patches.", "warning")
+                    return
+                if getattr(result, 'patch_results', None):
+                    self._visualize_similarity_search_patches(obj1, obj2, result.patch_results)
+                    self.log(f"✅ Visualized top similar regions between {obj1} and {obj2}")
+                    self.log("   Green spheres: template patch centers")
+                    self.log("   Yellow spheres: target patch centers")
+                    self.log("   Lime/Yellow surfaces: highlighted similar patch regions")
+                    self.log("   Gray dashes: matched similar patch pairs")
+                    return
 
             # Check if we have analysis results
             if not self._last_similarity_result:
@@ -1142,6 +1290,171 @@ class TargetDiscoveryTab(CommonTab):
                 
         except Exception as e:
             self.on_error(str(e))
+
+    def _visualize_complementarity_patches(self, obj1: str, obj2: str, patch_matches, patch_radius: float):
+        """Visualize top complementary patch matches on both objects."""
+        try:
+            from pymol import cmd
+
+            for name in list(cmd.get_names("objects")):
+                if (
+                    name.startswith("comp_patch_")
+                    or name.startswith("comp_link_")
+                    or name.startswith("comp_region_")
+                    or name.startswith("comp_esp_")
+                ):
+                    cmd.delete(name)
+
+            cmd.show("cartoon", obj1)
+            cmd.show("cartoon", obj2)
+            cmd.set("cartoon_transparency", 0.6, obj1)
+            cmd.set("cartoon_transparency", 0.6, obj2)
+            cmd.color("tv_red", obj1)
+            cmd.color("marine", obj2)
+
+            top_matches = patch_matches[:8]
+            for idx, (center1, center2, overall, geo, esp, hydro) in enumerate(top_matches, start=1):
+                patch1_name = f"comp_patch_{idx}_a"
+                patch2_name = f"comp_patch_{idx}_b"
+                link_name = f"comp_link_{idx}"
+                region1_name = f"comp_region_{idx}_a"
+                region2_name = f"comp_region_{idx}_b"
+
+                cmd.pseudoatom(patch1_name, pos=[float(v) for v in center1], vdw=1.2)
+                cmd.pseudoatom(patch2_name, pos=[float(v) for v in center2], vdw=1.2)
+                cmd.show("spheres", patch1_name)
+                cmd.show("spheres", patch2_name)
+                cmd.color("red", patch1_name)
+                cmd.color("cyan", patch2_name)
+                cmd.set("sphere_transparency", 0.18, patch1_name)
+                cmd.set("sphere_transparency", 0.18, patch2_name)
+
+                cmd.distance(link_name, patch1_name, patch2_name)
+                cmd.color("gray70", link_name)
+                cmd.set("dash_width", 2.0, link_name)
+                cmd.set("dash_gap", 0.35, link_name)
+                cmd.hide("labels", link_name)
+
+                cmd.create(region1_name, f"byres ({obj1} within {patch_radius:.2f} of {patch1_name})")
+                cmd.create(region2_name, f"byres ({obj2} within {patch_radius:.2f} of {patch2_name})")
+                cmd.show("surface", region1_name)
+                cmd.show("surface", region2_name)
+                cmd.show("sticks", region1_name)
+                cmd.show("sticks", region2_name)
+                cmd.set("transparency", 0.38, region1_name)
+                cmd.set("transparency", 0.38, region2_name)
+                cmd.set("surface_quality", 2, region1_name)
+                cmd.set("surface_quality", 2, region2_name)
+                cmd.set("stick_radius", 0.14, region1_name)
+                cmd.set("stick_radius", 0.14, region2_name)
+                self._apply_quick_esp_surface(region1_name, f"comp_esp_{idx}_a")
+                self._apply_quick_esp_surface(region2_name, f"comp_esp_{idx}_b")
+
+                self.log(
+                    f"   Patch {idx}: overall={overall:.3f}, geometric={geo:.3f}, "
+                    f"electrostatic={esp:.3f}, hydrophobic={hydro:.3f}"
+                )
+
+        except Exception as e:
+            self.log(f"Complementarity patch visualization failed: {e}")
+
+    def _visualize_similarity_search_patches(self, obj1: str, obj2: str, patch_results):
+        """Visualize top similarity-search patch matches on both objects."""
+        try:
+            from pymol import cmd
+
+            for name in list(cmd.get_names("objects")):
+                if (
+                    name.startswith("sim_patch_")
+                    or name.startswith("sim_link_")
+                    or name.startswith("sim_region_")
+                    or name.startswith("sim_esp_")
+                ):
+                    cmd.delete(name)
+
+            cmd.show("cartoon", obj1)
+            cmd.show("cartoon", obj2)
+            cmd.set("cartoon_transparency", 0.6, obj1)
+            cmd.set("cartoon_transparency", 0.6, obj2)
+            cmd.color("palegreen", obj1)
+            cmd.color("wheat", obj2)
+
+            sorted_results = sorted(
+                [pr for pr in patch_results if pr.best_match_center is not None],
+                key=lambda x: x.best_match_score,
+                reverse=True,
+            )[:8]
+
+            patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
+
+            for idx, pr in enumerate(sorted_results, start=1):
+                center1 = pr.template_center
+                center2 = pr.best_match_center
+                score = pr.best_match_score
+                patch1_name = f"sim_patch_{idx}_a"
+                patch2_name = f"sim_patch_{idx}_b"
+                link_name = f"sim_link_{idx}"
+                region1_name = f"sim_region_{idx}_a"
+                region2_name = f"sim_region_{idx}_b"
+
+                cmd.pseudoatom(patch1_name, pos=[float(v) for v in center1], vdw=1.2)
+                cmd.pseudoatom(patch2_name, pos=[float(v) for v in center2], vdw=1.2)
+                cmd.show("spheres", patch1_name)
+                cmd.show("spheres", patch2_name)
+                cmd.color("green", patch1_name)
+                cmd.color("yellow", patch2_name)
+                cmd.set("sphere_transparency", 0.18, patch1_name)
+                cmd.set("sphere_transparency", 0.18, patch2_name)
+
+                cmd.distance(link_name, patch1_name, patch2_name)
+                cmd.color("gray70", link_name)
+                cmd.set("dash_width", 2.0, link_name)
+                cmd.set("dash_gap", 0.35, link_name)
+                cmd.hide("labels", link_name)
+
+                cmd.create(region1_name, f"byres ({obj1} within {patch_radius:.2f} of {patch1_name})")
+                cmd.create(region2_name, f"byres ({obj2} within {patch_radius:.2f} of {patch2_name})")
+                cmd.show("surface", region1_name)
+                cmd.show("surface", region2_name)
+                cmd.show("sticks", region1_name)
+                cmd.show("sticks", region2_name)
+                cmd.set("transparency", 0.38, region1_name)
+                cmd.set("transparency", 0.38, region2_name)
+                cmd.set("surface_quality", 2, region1_name)
+                cmd.set("surface_quality", 2, region2_name)
+                cmd.set("stick_radius", 0.14, region1_name)
+                cmd.set("stick_radius", 0.14, region2_name)
+                self._apply_quick_esp_surface(region1_name, f"sim_esp_{idx}_a")
+                self._apply_quick_esp_surface(region2_name, f"sim_esp_{idx}_b")
+
+                self.log(f"   Patch {idx}: similarity={score:.3f}")
+
+        except Exception as e:
+            self.log(f"Similarity patch visualization failed: {e}")
+
+    def _apply_quick_esp_surface(self, obj_name: str, prefix: str, grid: float = 1.0,
+                                 color_range: Tuple[float, float, float] = (-5.0, 0.0, 5.0)):
+        """Apply a quick Coulomb electrostatic surface to a patch object."""
+        try:
+            from pymol import cmd
+
+            vmin, v0, vmax = color_range
+            map_name = f"{prefix}_map"
+            ramp_name = f"{prefix}_ramp"
+
+            cmd.map_new(map_name, "coulomb", grid, obj_name)
+            cmd.ramp_new(ramp_name, map_name, [vmin, v0, vmax], ["blue", "white", "red"])
+            cmd.show("surface", obj_name)
+            cmd.color(ramp_name, obj_name)
+            cmd.set("surface_quality", 1, obj_name)
+            cmd.set("surface_color_smoothing", 1, obj_name)
+            cmd.set("surface_ramp_above_mode", 1, obj_name)
+            cmd.color("gray80", f"{obj_name} and elem C")
+            cmd.color("blue", f"{obj_name} and elem N")
+            cmd.color("red", f"{obj_name} and elem O")
+            cmd.color("yellow", f"{obj_name} and elem S")
+        except Exception as e:
+            self.log(f"Quick ESP surface failed for {obj_name}: {e}")
 
     def _visualize_shape_index(self, obj_name: str, points):
         """Visualize shape index on surface"""

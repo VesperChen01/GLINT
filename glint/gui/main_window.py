@@ -29,6 +29,7 @@ from .tabs.ternary_evaluation import TernaryEvaluationTab
 
 # Import worker classes if needed for type hinting or global usage
 from .workers import AnalysisWorker, GMotifWorker
+from .._version import __version__
 
 # Navigation bar page index constants（Eliminate magic numbers）
 NAV_INDEX_README = 5
@@ -280,8 +281,12 @@ class GLINTDialog(QDialog):
         self.log(f"Error: {msg}")
         show_message_box(self, "Error", msg, icon_type="critical")
         self.progress_bar.setVisible(False)
+        self.progress_bar.setRange(0, 1)
         # Re-enable buttons if needed
         if hasattr(self, 'gm_btn'): self.gm_btn.setEnabled(True)
+        if hasattr(self, 'surf_btn'): self.surf_btn.setEnabled(True)
+        if hasattr(self, 'sim_similarity_btn'): self.sim_similarity_btn.setEnabled(True)
+        if hasattr(self, 'sim_complement_btn'): self.sim_complement_btn.setEnabled(True)
 
     def refresh_objects(self):
         names = []
@@ -296,6 +301,22 @@ class GLINTDialog(QDialog):
             
         if not names: names = [t("no_object")]
         
+        current_by_combo = {}
+
+        def remember_selection(cb):
+            if cb is not None:
+                current_by_combo[cb] = cb.currentText().strip()
+
+        def restore_selection(cb, fallback_index=0):
+            if cb is None:
+                return
+            previous = current_by_combo.get(cb, "")
+            idx = cb.findText(previous) if previous else -1
+            if idx < 0 and cb.count():
+                idx = min(fallback_index, cb.count() - 1)
+            if idx >= 0:
+                cb.setCurrentIndex(idx)
+
         # List of combos to update
         combos = [
             getattr(self, "obj_combo_gm", None),
@@ -309,17 +330,37 @@ class GLINTDialog(QDialog):
             getattr(self, "mut_obj_combo", None),
             getattr(self, "obj_combo_surf", None),  # Surface Analysis
             getattr(self, "obj_combo_sim1", None),  # Surface Similarity Object 1
-            getattr(self, "obj_combo_sim2", None),  # Surface Similarity Object 2
             getattr(self, "ec_obj_combo", None),  # EC Analysis
             getattr(self, "ternary_obj_combo", None),  # Ternary Evaluation
         ]
         
         for cb in combos:
             if cb is not None:
+                remember_selection(cb)
                 cb.blockSignals(True)
                 cb.clear()
                 cb.addItems(names)
+                restore_selection(cb)
                 cb.blockSignals(False)
+
+        sim2 = getattr(self, "obj_combo_sim2", None)
+        if sim2 is not None:
+            remember_selection(sim2)
+            sim2.blockSignals(True)
+            sim2.clear()
+            sim2.addItem("(None - Single Surface)")
+            sim2.addItems(names)
+            restore_selection(sim2)
+            sim1 = getattr(self, "obj_combo_sim1", None)
+            sel1 = getattr(self, "sim_sel1", None)
+            sel2 = getattr(self, "sim_sel2", None)
+            if (
+                sim1 is not None
+                and sim1.currentText().strip() == sim2.currentText().strip()
+                and (sel1 is None or sel2 is None or sel1.text().strip() == sel2.text().strip())
+            ):
+                sim2.setCurrentIndex(0)
+            sim2.blockSignals(False)
         
         self.log(f"Refreshed {len(names)} objects")
 
@@ -859,7 +900,7 @@ class GLINTDialog(QDialog):
         meta_layout.setContentsMargins(0, 0, 0, 0)
 
         # Version号 Badge (蓝色描边/背景)
-        version_badge = QLabel("v1.0.0")
+        version_badge = QLabel(f"v{__version__.lstrip('v')}")
         version_badge.setStyleSheet("""
             QLabel {
                 background-color: #eff6ff;

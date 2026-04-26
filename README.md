@@ -75,7 +75,7 @@ Molecular glues are small molecules that induce or stabilize protein-protein int
 <details open>
 <summary><b>🍎 macOS Installer (Recommended)</b></summary>
 
-1. Download `GLINT_Installer_v0.2.5.dmg` from [Releases](https://github.com/VesperChen01/GLINT/releases)
+1. Download `GLINT_Installer_0.3.0.dmg` from [Releases](https://github.com/VesperChen01/GLINT/releases)
 2. Open the DMG and run the installer
 3. Follow the on-screen instructions
 
