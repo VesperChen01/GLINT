@@ -775,9 +775,9 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
         cmd.color('glint_protein_purple', f"{protein_sel} and elem C")
         cmd.set('line_width', 1.5, protein_sel)
 
-    # Step 9: 先设置整体蛋白 cartoon 为紫色，再让红色冲突残基覆盖其碳骨架颜色。
+    # Step 9: EC 视图默认隐藏蛋白 cartoon，只保留局部线框/残基高亮与 EC 表面。
+    cmd.hide('cartoon', obj_name)
     cmd.color('glint_protein_purple', f"{obj_name} and polymer")
-    cmd.set('cartoon_transparency', 0.8, obj_name)
     _show_ec_contributing_residues(
         obj_name=obj_name,
         ligand_sel=ligand_sel,
@@ -1271,7 +1271,7 @@ def visualize_ternary_ec_surfaces(obj_name: str, glue_resname: str,
     for chain in protein_b_chains:
         cmd.color('magenta', f"{obj_name} and chain {chain} and elem C")
 
-    cmd.set('cartoon_transparency', 0.7, obj_name)
+    cmd.hide('cartoon', obj_name)
 
     # Zoom
     cmd.zoom(glue_sel, buffer=12)
@@ -1557,8 +1557,8 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
             cmd.show('lines', protein_sel)
             cmd.color('glint_protein_purple', f"{protein_sel} and elem C")
             cmd.set('line_width', 1.5, protein_sel)
+        cmd.hide('cartoon', obj_name)
         cmd.color('glint_protein_purple', f"{obj_name} and polymer")
-        cmd.set('cartoon_transparency', 0.8, obj_name)
         cmd.zoom(ligand_sel, buffer=8)
 
         print(f"[visualize_ec_mesh_surface] ✅ Created mesh surface: {mesh_obj}")
@@ -1597,8 +1597,8 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
         cmd.color('glint_protein_purple', f"{protein_sel} and elem C")
         cmd.set('line_width', 1.5, protein_sel)
 
+    cmd.hide('cartoon', obj_name)
     cmd.color('glint_protein_purple', f"{obj_name} and polymer")
-    cmd.set('cartoon_transparency', 0.8, obj_name)
 
     _set_publication_rendering()
     cmd.zoom(ligand_sel, buffer=8)

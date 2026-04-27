@@ -255,7 +255,20 @@ class ComplementarityResult:
     
     # Residue pairs at interface
     interface_residues: List[Tuple[str, str]] = field(default_factory=list)
-    patch_matches: List[Tuple[np.ndarray, np.ndarray, float, float, float, float]] = field(default_factory=list)
+    patch_matches: List["ComplementarityPatchMatch"] = field(default_factory=list)
+
+
+@dataclass
+class ComplementarityPatchMatch:
+    """Detailed patch-level complementarity match for visualization and reporting."""
+    center1: np.ndarray
+    center2: np.ndarray
+    overall_score: float
+    geometric_score: float
+    electrostatic_score: float
+    hydrophobic_score: float
+    residues1: List[str] = field(default_factory=list)
+    residues2: List[str] = field(default_factory=list)
 
 
 # =============================================================================
@@ -1267,6 +1280,7 @@ class SurfaceComparator:
             best = None
             best_components = (0.0, 0.0, 0.0, 0.0)
             best_pair = (None, None)
+            best_patch = None
             for p2 in patches2:
                 geo = self._geometric_patch_complementarity(p1, p2)
                 esp = self._electrostatic_patch_complementarity(p1, p2)
@@ -1275,6 +1289,7 @@ class SurfaceComparator:
                 if best is None or overall > best:
                     best = overall
                     best_components = (overall, geo, esp, hydro)
+                    best_patch = p2
 
                     res1 = p1.points[0].nearest_residue if p1.points else None
                     res2 = p2.points[0].nearest_residue if p2.points else None
@@ -1286,7 +1301,18 @@ class SurfaceComparator:
                 geo_scores.append(geo)
                 esp_scores.append(esp)
                 hydro_scores.append(hydro)
-                best_patch_matches.append((p1.center.copy(), p2.center.copy(), overall, geo, esp, hydro))
+                residues1 = sorted({pt.nearest_residue for pt in p1.points if pt.nearest_residue})
+                residues2 = sorted({pt.nearest_residue for pt in best_patch.points if pt.nearest_residue}) if best_patch else []
+                best_patch_matches.append(ComplementarityPatchMatch(
+                    center1=p1.center.copy(),
+                    center2=best_patch.center.copy() if best_patch is not None else np.zeros(3, dtype=float),
+                    overall_score=overall,
+                    geometric_score=geo,
+                    electrostatic_score=esp,
+                    hydrophobic_score=hydro,
+                    residues1=residues1,
+                    residues2=residues2,
+                ))
                 if best_pair[0] and best_pair[1]:
                     residue_pairs.append(best_pair)
 
@@ -1297,7 +1323,7 @@ class SurfaceComparator:
                 seen.add(pair)
                 unique_pairs.append(pair)
 
-        best_patch_matches.sort(key=lambda x: x[2], reverse=True)
+        best_patch_matches.sort(key=lambda x: x.overall_score, reverse=True)
 
         return ComplementarityResult(
             score=float(np.mean(patch_scores)) if patch_scores else 0.0,

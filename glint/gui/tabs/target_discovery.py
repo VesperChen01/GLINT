@@ -4,6 +4,7 @@ Target Discovery Tab: G-Motif, Disease, Pocket
 """
 import os
 from typing import Optional, List, Tuple, Dict, Any
+import numpy as np
 
 from ..qt_adapter import (
     Qt, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton,
@@ -365,7 +366,10 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.sim_pocket_radius = QLineEdit("6.0")
         self.parent_window.sim_pocket_radius.setMinimumHeight(32)
         self.parent_window.sim_pocket_radius.setMaximumWidth(80)
-        self.parent_window.sim_pocket_radius.setToolTip("Pocket radius around the ligand selection (Å)")
+        self.parent_window.sim_pocket_radius.setToolTip(
+            "Pocket radius around the ligand selection (Å).\n"
+            "Uses an atom-level polymer selection without automatic whole-residue expansion."
+        )
         self.parent_window.sim_pocket_row = QHBoxLayout(); self.parent_window.sim_pocket_row.addWidget(self.parent_window.sim_pocket_ligand, 1); self.parent_window.sim_pocket_row.addWidget(self.parent_window.sim_pocket_radius)
         sim_grid.addLayout(self.parent_window.sim_pocket_row, 2, 3)
 
@@ -1039,7 +1043,7 @@ class TargetDiscoveryTab(CommonTab):
         surface_method = self.parent_window.sim_surface_method.currentText()
         self._maybe_show_surface_precision_notice(surface_method)
 
-        if analysis_type == "search":
+        if analysis_type in {"search", "complementarity"}:
             template_mode = self.parent_window.sim_template_region.currentText().strip()
             if template_mode == "Ligand Pocket":
                 sel1 = self._build_ligand_pocket_selection(obj1)
@@ -1113,12 +1117,14 @@ class TargetDiscoveryTab(CommonTab):
             radius = 6.0
 
         ligand_sel = f"({obj_name} and ({ligand_expr}))"
-        pocket_sel = f"byres (({obj_name} and polymer) within {radius:.2f} of {ligand_sel})"
+        pocket_sel = f"(({obj_name} and polymer) within {radius:.2f} of {ligand_sel})"
+        residue_expanded_sel = f"byres {pocket_sel}"
 
         try:
             from pymol import cmd
             ligand_count = cmd.count_atoms(ligand_sel)
             pocket_count = cmd.count_atoms(pocket_sel)
+            residue_expanded_count = cmd.count_atoms(residue_expanded_sel)
         except Exception as e:
             show_message_box(self, "Error", f"Failed to build ligand pocket selection:\n{e}", "critical")
             return None
@@ -1140,6 +1146,11 @@ class TargetDiscoveryTab(CommonTab):
                 "warning",
             )
             return None
+
+        self.log(
+            f"   Ligand pocket template: ligand atoms={ligand_count}, "
+            f"pocket atoms={pocket_count}, byres-expanded atoms={residue_expanded_count}"
+        )
 
         return pocket_sel
 
@@ -1247,10 +1258,9 @@ class TargetDiscoveryTab(CommonTab):
                         getattr(result, 'patch_radius', 12.0),
                     )
                     self.log(f"✅ Visualized top complementary regions between {obj1} and {obj2}")
-                    self.log("   Red spheres: Object 1 patch centers")
-                    self.log("   Blue spheres: Object 2 patch centers")
-                    self.log("   Pink/Cyan surfaces: highlighted complementary patch regions")
-                    self.log("   Gray dashes: matched complementary patch pairs")
+                    self.log("   Muted cartoons: structural context")
+                    self.log("   Shared patch colors and labels: matched patch pairs")
+                    self.log("   Surface + sticks: highlighted complementary regions")
                     return
 
             if self._last_surface_visual_mode == "search" and self._last_search_result:
@@ -1261,10 +1271,9 @@ class TargetDiscoveryTab(CommonTab):
                 if getattr(result, 'patch_results', None):
                     self._visualize_similarity_search_patches(obj1, obj2, result.patch_results)
                     self.log(f"✅ Visualized top similar regions between {obj1} and {obj2}")
-                    self.log("   Green spheres: template patch centers")
-                    self.log("   Yellow spheres: target patch centers")
-                    self.log("   Lime/Yellow surfaces: highlighted similar patch regions")
-                    self.log("   Gray dashes: matched similar patch pairs")
+                    self.log("   Muted cartoons: structural context")
+                    self.log("   Shared patch colors and labels: matched patch pairs")
+                    self.log("   Surface + sticks: highlighted similar regions")
                     return
 
             # Check if we have analysis results
@@ -1299,64 +1308,82 @@ class TargetDiscoveryTab(CommonTab):
             for name in list(cmd.get_names("objects")):
                 if (
                     name.startswith("comp_patch_")
-                    or name.startswith("comp_link_")
                     or name.startswith("comp_region_")
-                    or name.startswith("comp_esp_")
+                    or name.startswith("comp_label_")
+                    or name.startswith("comp_pair_")
                 ):
                     cmd.delete(name)
 
-            cmd.show("cartoon", obj1)
-            cmd.show("cartoon", obj2)
-            cmd.set("cartoon_transparency", 0.6, obj1)
-            cmd.set("cartoon_transparency", 0.6, obj2)
-            cmd.color("tv_red", obj1)
-            cmd.color("marine", obj2)
+            self._prepare_patch_comparison_scene(obj1, obj2, mode="complementarity")
 
-            top_matches = patch_matches[:8]
-            for idx, (center1, center2, overall, geo, esp, hydro) in enumerate(top_matches, start=1):
-                patch1_name = f"comp_patch_{idx}_a"
-                patch2_name = f"comp_patch_{idx}_b"
-                link_name = f"comp_link_{idx}"
+            top_matches = patch_matches[:4]
+            zoom_targets = []
+            for idx, match in enumerate(top_matches, start=1):
+                center1 = np.asarray(getattr(match, "center1", [0.0, 0.0, 0.0]), dtype=float)
+                center2 = np.asarray(getattr(match, "center2", [0.0, 0.0, 0.0]), dtype=float)
+                overall = float(getattr(match, "overall_score", 0.0))
+                geo = float(getattr(match, "geometric_score", 0.0))
+                esp = float(getattr(match, "electrostatic_score", 0.0))
+                hydro = float(getattr(match, "hydrophobic_score", 0.0))
+                residues1 = list(getattr(match, "residues1", []) or [])
+                residues2 = list(getattr(match, "residues2", []) or [])
                 region1_name = f"comp_region_{idx}_a"
                 region2_name = f"comp_region_{idx}_b"
+                label1_name = f"comp_label_{idx}_a"
+                label2_name = f"comp_label_{idx}_b"
+                pair_group = f"comp_pair_{idx}"
+                color_name = self._patch_pair_color(idx - 1)
 
-                cmd.pseudoatom(patch1_name, pos=[float(v) for v in center1], vdw=1.2)
-                cmd.pseudoatom(patch2_name, pos=[float(v) for v in center2], vdw=1.2)
-                cmd.show("spheres", patch1_name)
-                cmd.show("spheres", patch2_name)
-                cmd.color("red", patch1_name)
-                cmd.color("cyan", patch2_name)
-                cmd.set("sphere_transparency", 0.18, patch1_name)
-                cmd.set("sphere_transparency", 0.18, patch2_name)
+                sel1 = self._build_residue_selection(obj1, residues1)
+                sel2 = self._build_residue_selection(obj2, residues2)
+                if sel1:
+                    cmd.create(region1_name, f"{obj1} and ({sel1})")
+                else:
+                    self._create_region_around_center(obj1, center1, patch_radius, region1_name)
+                if sel2:
+                    cmd.create(region2_name, f"{obj2} and ({sel2})")
+                else:
+                    self._create_region_around_center(obj2, center2, patch_radius, region2_name)
 
-                cmd.distance(link_name, patch1_name, patch2_name)
-                cmd.color("gray70", link_name)
-                cmd.set("dash_width", 2.0, link_name)
-                cmd.set("dash_gap", 0.35, link_name)
-                cmd.hide("labels", link_name)
-
-                cmd.create(region1_name, f"byres ({obj1} within {patch_radius:.2f} of {patch1_name})")
-                cmd.create(region2_name, f"byres ({obj2} within {patch_radius:.2f} of {patch2_name})")
-                cmd.show("surface", region1_name)
-                cmd.show("surface", region2_name)
-                cmd.show("sticks", region1_name)
-                cmd.show("sticks", region2_name)
-                cmd.set("transparency", 0.38, region1_name)
-                cmd.set("transparency", 0.38, region2_name)
-                cmd.set("surface_quality", 2, region1_name)
-                cmd.set("surface_quality", 2, region2_name)
-                cmd.set("stick_radius", 0.14, region1_name)
-                cmd.set("stick_radius", 0.14, region2_name)
-                self._apply_quick_esp_surface(region1_name, f"comp_esp_{idx}_a")
-                self._apply_quick_esp_surface(region2_name, f"comp_esp_{idx}_b")
+                self._style_patch_region(region1_name, color_name, idx)
+                self._style_patch_region(region2_name, color_name, idx)
+                self._add_patch_label(label1_name, center1, idx, color_name)
+                self._add_patch_label(label2_name, center2, idx, color_name)
+                cmd.group(pair_group, f"{region1_name} {region2_name} {label1_name} {label2_name}")
+                zoom_targets.extend([region1_name, region2_name])
 
                 self.log(
                     f"   Patch {idx}: overall={overall:.3f}, geometric={geo:.3f}, "
                     f"electrostatic={esp:.3f}, hydrophobic={hydro:.3f}"
                 )
 
+            if zoom_targets:
+                cmd.zoom(" or ".join(zoom_targets), buffer=4.0)
+
         except Exception as e:
             self.log(f"Complementarity patch visualization failed: {e}")
+
+    def _build_residue_selection(self, obj_name: str, residues) -> Optional[str]:
+        """Build a PyMOL selection from residue identifiers like 'A:TYR:384'."""
+        clauses = []
+        for residue in residues:
+            parts = str(residue).split(":")
+            if len(parts) != 3:
+                continue
+            chain, resn, resi = parts
+            chain = chain.strip()
+            resn = resn.strip()
+            resi = resi.strip()
+            if not resi:
+                continue
+            clause = f"(chain {chain} and resi {resi}"
+            if resn:
+                clause += f" and resn {resn}"
+            clause += ")"
+            clauses.append(clause)
+        if not clauses:
+            return None
+        return " or ".join(clauses)
 
     def _visualize_similarity_search_patches(self, obj1: str, obj2: str, patch_results):
         """Visualize top similarity-search patch matches on both objects."""
@@ -1366,71 +1393,127 @@ class TargetDiscoveryTab(CommonTab):
             for name in list(cmd.get_names("objects")):
                 if (
                     name.startswith("sim_patch_")
-                    or name.startswith("sim_link_")
                     or name.startswith("sim_region_")
-                    or name.startswith("sim_esp_")
+                    or name.startswith("sim_label_")
+                    or name.startswith("sim_pair_")
                 ):
                     cmd.delete(name)
 
-            cmd.show("cartoon", obj1)
-            cmd.show("cartoon", obj2)
-            cmd.set("cartoon_transparency", 0.6, obj1)
-            cmd.set("cartoon_transparency", 0.6, obj2)
-            cmd.color("palegreen", obj1)
-            cmd.color("wheat", obj2)
+            self._prepare_patch_comparison_scene(obj1, obj2, mode="similarity")
 
             sorted_results = sorted(
                 [pr for pr in patch_results if pr.best_match_center is not None],
                 key=lambda x: x.best_match_score,
                 reverse=True,
-            )[:8]
+            )[:4]
 
             patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
+            zoom_targets = []
 
             for idx, pr in enumerate(sorted_results, start=1):
                 center1 = pr.template_center
                 center2 = pr.best_match_center
                 score = pr.best_match_score
-                patch1_name = f"sim_patch_{idx}_a"
-                patch2_name = f"sim_patch_{idx}_b"
-                link_name = f"sim_link_{idx}"
                 region1_name = f"sim_region_{idx}_a"
                 region2_name = f"sim_region_{idx}_b"
+                label1_name = f"sim_label_{idx}_a"
+                label2_name = f"sim_label_{idx}_b"
+                pair_group = f"sim_pair_{idx}"
+                color_name = self._patch_pair_color(idx - 1)
 
-                cmd.pseudoatom(patch1_name, pos=[float(v) for v in center1], vdw=1.2)
-                cmd.pseudoatom(patch2_name, pos=[float(v) for v in center2], vdw=1.2)
-                cmd.show("spheres", patch1_name)
-                cmd.show("spheres", patch2_name)
-                cmd.color("green", patch1_name)
-                cmd.color("yellow", patch2_name)
-                cmd.set("sphere_transparency", 0.18, patch1_name)
-                cmd.set("sphere_transparency", 0.18, patch2_name)
+                self._create_region_around_center(obj1, np.asarray(center1, dtype=float), patch_radius, region1_name)
+                self._create_region_around_center(obj2, np.asarray(center2, dtype=float), patch_radius, region2_name)
 
-                cmd.distance(link_name, patch1_name, patch2_name)
-                cmd.color("gray70", link_name)
-                cmd.set("dash_width", 2.0, link_name)
-                cmd.set("dash_gap", 0.35, link_name)
-                cmd.hide("labels", link_name)
-
-                cmd.create(region1_name, f"byres ({obj1} within {patch_radius:.2f} of {patch1_name})")
-                cmd.create(region2_name, f"byres ({obj2} within {patch_radius:.2f} of {patch2_name})")
-                cmd.show("surface", region1_name)
-                cmd.show("surface", region2_name)
-                cmd.show("sticks", region1_name)
-                cmd.show("sticks", region2_name)
-                cmd.set("transparency", 0.38, region1_name)
-                cmd.set("transparency", 0.38, region2_name)
-                cmd.set("surface_quality", 2, region1_name)
-                cmd.set("surface_quality", 2, region2_name)
-                cmd.set("stick_radius", 0.14, region1_name)
-                cmd.set("stick_radius", 0.14, region2_name)
-                self._apply_quick_esp_surface(region1_name, f"sim_esp_{idx}_a")
-                self._apply_quick_esp_surface(region2_name, f"sim_esp_{idx}_b")
+                self._style_patch_region(region1_name, color_name, idx)
+                self._style_patch_region(region2_name, color_name, idx)
+                self._add_patch_label(label1_name, center1, idx, color_name)
+                self._add_patch_label(label2_name, center2, idx, color_name)
+                cmd.group(pair_group, f"{region1_name} {region2_name} {label1_name} {label2_name}")
+                zoom_targets.extend([region1_name, region2_name])
 
                 self.log(f"   Patch {idx}: similarity={score:.3f}")
 
+            if zoom_targets:
+                cmd.zoom(" or ".join(zoom_targets), buffer=4.0)
+
         except Exception as e:
             self.log(f"Similarity patch visualization failed: {e}")
+
+    def _prepare_patch_comparison_scene(self, obj1: str, obj2: str, mode: str = "comparison"):
+        """Prepare a quiet scene where only matched regions draw attention."""
+        from pymol import cmd
+
+        cmd.hide("everything", obj1)
+        cmd.hide("everything", obj2)
+        cmd.show("cartoon", obj1)
+        cmd.show("cartoon", obj2)
+        cmd.set("cartoon_transparency", 0.78, obj1)
+        cmd.set("cartoon_transparency", 0.78, obj2)
+        cmd.set("cartoon_fancy_helices", 1)
+        cmd.set("depth_cue", 0)
+        cmd.bg_color("white")
+
+        cmd.set_color("glint_patch_ctx_1", [0.72, 0.76, 0.82])
+        cmd.set_color("glint_patch_ctx_2", [0.84, 0.82, 0.76])
+        if mode == "complementarity":
+            cmd.color("glint_patch_ctx_1", obj1)
+            cmd.color("glint_patch_ctx_2", obj2)
+        else:
+            cmd.color("glint_patch_ctx_1", obj1)
+            cmd.color("glint_patch_ctx_2", obj2)
+
+    def _patch_pair_color(self, index: int) -> str:
+        """Return a stable highlight color for ranked patch pairs."""
+        from pymol import cmd
+
+        palette = [
+            ("glint_patch_rank_1", [0.15, 0.63, 0.56]),
+            ("glint_patch_rank_2", [0.91, 0.62, 0.20]),
+            ("glint_patch_rank_3", [0.53, 0.58, 0.91]),
+            ("glint_patch_rank_4", [0.86, 0.40, 0.58]),
+        ]
+        name, rgb = palette[index % len(palette)]
+        cmd.set_color(name, rgb)
+        return name
+
+    def _style_patch_region(self, region_name: str, color_name: str, rank: int):
+        """Apply a focused patch style."""
+        from pymol import cmd
+
+        transparency = min(0.46, 0.16 + 0.08 * max(rank - 1, 0))
+        cmd.show("surface", region_name)
+        cmd.show("sticks", region_name)
+        cmd.color(color_name, f"{region_name} and elem C")
+        cmd.color("blue", f"{region_name} and elem N")
+        cmd.color("red", f"{region_name} and elem O")
+        cmd.color("yellow", f"{region_name} and elem S")
+        cmd.set("surface_color", color_name, region_name)
+        cmd.set("transparency", transparency, region_name)
+        cmd.set("surface_quality", 2, region_name)
+        cmd.set("surface_smooth_edges", 1, region_name)
+        cmd.set("stick_radius", 0.16, region_name)
+
+    def _create_region_around_center(self, obj_name: str, center: np.ndarray, patch_radius: float, region_name: str):
+        """Create a residue-level region around a 3D center point."""
+        from pymol import cmd
+
+        anchor_name = f"{region_name}_anchor"
+        cmd.delete(anchor_name)
+        cmd.pseudoatom(anchor_name, pos=[float(v) for v in center])
+        cmd.create(region_name, f"byres ({obj_name} within {patch_radius:.2f} of {anchor_name})")
+        cmd.delete(anchor_name)
+
+    def _add_patch_label(self, label_name: str, center: np.ndarray, rank: int, color_name: str):
+        """Add a compact numeric label at a patch center."""
+        from pymol import cmd
+
+        pos = [float(v) for v in center]
+        cmd.pseudoatom(label_name, pos=pos, label=str(rank))
+        cmd.hide("nonbonded", label_name)
+        cmd.show("labels", label_name)
+        cmd.set("label_size", 18, label_name)
+        cmd.set("label_color", color_name, label_name)
+        cmd.set("label_outline_color", "white", label_name)
 
     def _apply_quick_esp_surface(self, obj_name: str, prefix: str, grid: float = 1.0,
                                  color_range: Tuple[float, float, float] = (-5.0, 0.0, 5.0)):

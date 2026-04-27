@@ -25,11 +25,36 @@ if _parent_dir not in sys.path:
 # but PyMOL's embedded Python doesn't inherit conda's site-packages.
 def _inject_conda_site_packages():
     import glob as _glob
+    import re as _re
     
     _debug = os.environ.get('GLINT_DEBUG', '')
     def _log(msg):
         if _debug:
             print(f"[GLINT Debug] {msg}")
+
+    def _score_site_packages_path(path):
+        """Return a priority score for a candidate site-packages path."""
+        norm = os.path.normpath(path)
+        parts = norm.split(os.sep)
+        py_part = None
+        for part in parts:
+            if part.startswith("python"):
+                py_part = part
+                break
+
+        if py_part is None:
+            if norm.endswith(os.path.join("lib", "site-packages")):
+                return (1, 0, 0)
+            return None
+
+        match = _re.fullmatch(r"python(\d+)\.(\d+)", py_part)
+        if not match:
+            return None
+
+        major = int(match.group(1))
+        minor = int(match.group(2))
+        exact = int((major, minor) == sys.version_info[:2])
+        return (2 + exact, major, minor)
     
     # 0. Check if PYTHONPATH already provides site-packages (e.g. set by launcher)
     _pythonpath = os.environ.get('PYTHONPATH', '')
@@ -71,11 +96,37 @@ def _inject_conda_site_packages():
         return
     
     _patterns = get_conda_site_packages_patterns(_prefix)
+    _versioned_candidates = []
+    _generic_candidates = []
+    _seen = set()
     for _pat in _patterns:
         for _sp in _glob.glob(_pat):
-            if _sp not in sys.path:
-                sys.path.insert(0, _sp)
-                _log(f"Injected: {_sp}")
+            if not os.path.isdir(_sp) or _sp in _seen:
+                continue
+            _seen.add(_sp)
+            _score = _score_site_packages_path(_sp)
+            if _score is None:
+                _log(f"Skipped malformed site-packages path: {_sp}")
+                continue
+            if _score[0] <= 1:
+                _generic_candidates.append((_score, _sp))
+            else:
+                _versioned_candidates.append((_score, _sp))
+
+    _versioned_candidates.sort(key=lambda item: item[0], reverse=True)
+    _generic_candidates.sort(key=lambda item: item[0], reverse=True)
+
+    _paths_to_inject = []
+    if _versioned_candidates:
+        _paths_to_inject.append(_versioned_candidates[0][1])
+        for _, _sp in _versioned_candidates[1:]:
+            _log(f"Skipped lower-priority site-packages path: {_sp}")
+    _paths_to_inject.extend([_sp for _, _sp in _generic_candidates])
+
+    for _sp in _paths_to_inject:
+        if _sp not in sys.path:
+            sys.path.insert(0, _sp)
+            _log(f"Injected: {_sp}")
 
 _inject_conda_site_packages()
 

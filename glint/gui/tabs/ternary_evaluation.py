@@ -619,6 +619,73 @@ class TernaryEvaluationTab(CommonTab):
         """安全获取字典Value，处理 None 的情况"""
         val = result.get(key, default)
         return default if val is None else val
+
+    def _parse_numeric_text(self, text: str) -> Optional[float]:
+        """Parse a numeric label value from the GUI."""
+        value = (text or "").strip()
+        if not value or value == "-":
+            return None
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return None
+
+    def _snapshot_current_result(self) -> Dict[str, Any]:
+        """Merge the latest GUI-visible values into a result dict for export/display."""
+        result = dict(self._last_result or {})
+
+        summary_map = {
+            "Total BSA": "bsa_total",
+            "MG-E3 BSA": "bsa_mg_e3",
+            "MG-POI BSA": "bsa_mg_poi",
+            "E3-POI BSA": "bsa_e3_poi",
+            "Contacts": "contact_count_45",
+        }
+        for label_name, key in summary_map.items():
+            label = self.summary_labels.get(label_name)
+            numeric = self._parse_numeric_text(label.text()) if label is not None else None
+            if numeric is None:
+                continue
+            result[key] = int(round(numeric)) if key == "contact_count_45" else numeric
+
+        ligand_map = {
+            "MW": "ligand_mw",
+            "LogP": "ligand_logp",
+            "TPSA": "ligand_tpsa",
+            "HBD": "ligand_hbd",
+            "HBA": "ligand_hba",
+            "RotBonds": "ligand_rotatable_bonds",
+            "Fsp3": "ligand_fsp3",
+            "Rings": "ligand_rings",
+        }
+        for label_name, key in ligand_map.items():
+            label = self.lig_prop_labels.get(label_name)
+            numeric = self._parse_numeric_text(label.text()) if label is not None else None
+            if numeric is None:
+                continue
+            if key in {"ligand_hbd", "ligand_hba", "ligand_rotatable_bonds", "ligand_rings"}:
+                result[key] = int(round(numeric))
+            else:
+                result[key] = numeric
+
+        geom_map = {
+            "COG Shift": "geom_cog_shift",
+            "Angle": "geom_angle_deg",
+            "E3-POI Dist": "dist_e3_poi",
+            "E3-MG Dist": "dist_e3_mg",
+            "POI-MG Dist": "dist_poi_mg",
+            "Duality": "duality_index",
+        }
+        for label_name, key in geom_map.items():
+            label = self.geom_labels.get(label_name)
+            numeric = self._parse_numeric_text(label.text()) if label is not None else None
+            if numeric is None:
+                continue
+            result[key] = numeric
+            if key == "duality_index":
+                result["balance_index"] = numeric
+
+        return result
     
     def _format_results(self, result: Dict[str, Any]) -> str:
         """格式化Results - Package含公式说明和中间计算Value"""
@@ -829,6 +896,21 @@ class TernaryEvaluationTab(CommonTab):
                     attr_name = attr_map.get(key, key.lower())
                     val = getattr(props, attr_name, 0)
                     lbl.setText(f"{val:.2f}" if isinstance(val, float) else str(val))
+
+                if self._last_result is None:
+                    self._last_result = {}
+                self._last_result.update({
+                    "ligand_mw": props.molecular_weight,
+                    "ligand_logp": props.logp,
+                    "ligand_tpsa": props.tpsa,
+                    "ligand_hbd": props.hbd_count,
+                    "ligand_hba": props.hba_count,
+                    "ligand_rotatable_bonds": props.rotatable_bonds,
+                    "ligand_fsp3": props.fsp3,
+                    "ligand_rings": props.num_rings,
+                })
+                if self.parent_window.ternary_result_text.toPlainText().strip():
+                    self.parent_window.ternary_result_text.setText(self._format_results(self._snapshot_current_result()))
                 
                 self.log(f"✅ Ligand properties: MW={props.molecular_weight:.1f}, LogP={props.logp:.2f}")
             else:
@@ -896,7 +978,8 @@ class TernaryEvaluationTab(CommonTab):
 
     def export_results(self):
         """ExportResults到CSV"""
-        if not self._last_result:
+        export_result = self._snapshot_current_result()
+        if not export_result:
             show_message_box(self, "Warning", "No results to export.", "warning")
             return
         
@@ -906,6 +989,6 @@ class TernaryEvaluationTab(CommonTab):
             with open(fn, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
                 writer.writerow(['Feature', 'Value'])
-                for k, v in self._last_result.items():
+                for k, v in export_result.items():
                     writer.writerow([k, v])
             self.log(f"✅ Results exported to {fn}")

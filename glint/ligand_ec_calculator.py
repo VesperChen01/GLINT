@@ -3026,8 +3026,8 @@ def _visualize_ec_map(obj_name: str, ec_pdb: str, ligand_resname: str = None):
         cmd.show('sticks', f"{obj_name} and resn {ligand_resname}")
         cmd.color('yellow', f"{obj_name} and resn {ligand_resname} and elem C")
     
-    # Set transparency for protein
-    cmd.set('cartoon_transparency', 0.5, obj_name)
+    # Hide protein cartoon in EC view
+    cmd.hide('cartoon', obj_name)
     
     # Zoom to ligand region
     if ligand_resname:
@@ -3166,8 +3166,8 @@ def visualize_ec_surface(obj_name: str, ligand_resname: str,
     cmd.color('gray50', f"{ligand_sel} and elem C")
     cmd.set('stick_transparency', 0.3, ligand_sel)
     
-    # Show protein as lines/cartoon with transparency
-    cmd.set('cartoon_transparency', 0.7, obj_name)
+    # Show protein as local lines only; hide global cartoon in EC view
+    cmd.hide('cartoon', obj_name)
     cmd.show('lines', f"{obj_name} and polymer within 5 of {ligand_sel}")
     
     # Zoom to ligand
