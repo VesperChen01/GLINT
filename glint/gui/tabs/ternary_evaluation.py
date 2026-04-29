@@ -977,18 +977,91 @@ class TernaryEvaluationTab(CommonTab):
             self.on_error(str(e))
 
     def export_results(self):
-        """ExportResults到CSV"""
-        export_result = self._snapshot_current_result()
-        if not export_result:
-            show_message_box(self, "Warning", "No results to export.", "warning")
+        """ExportResults到CSV - 与GUI摘要卡片内容保持一致"""
+        # 使用GUI摘要卡片中的显示值
+        export_data = []
+
+        # 导出摘要卡片数据（与GUI显示顺序一致）
+        summary_items = [
+            ("Total BSA", "Å²"),
+            ("MG-E3 BSA", "Å²"),
+            ("MG-POI BSA", "Å²"),
+            ("E3-POI BSA", "Å²"),
+            ("Contacts", ""),
+        ]
+
+        for name, unit in summary_items:
+            label = self.summary_labels.get(name)
+            if label:
+                value = label.text()
+                if value and value != "-":
+                    export_data.append((name + (f" ({unit})" if unit else ""), value))
+
+        # 导出配体性质
+        ligand_items = [
+            ("MW", "Da"),
+            ("LogP", ""),
+            ("TPSA", "Å²"),
+            ("HBD", ""),
+            ("HBA", ""),
+            ("RotBonds", ""),
+            ("Fsp3", ""),
+            ("Rings", ""),
+        ]
+
+        for name, unit in ligand_items:
+            label = self.lig_prop_labels.get(name)
+            if label:
+                value = label.text()
+                if value and value != "-":
+                    export_data.append((f"Ligand {name}" + (f" ({unit})" if unit else ""), value))
+
+        # 导出几何参数
+        geom_items = [
+            ("COG Shift", "Å"),
+            ("Angle", "°"),
+            ("E3-POI Dist", "Å"),
+            ("E3-MG Dist", "Å"),
+            ("POI-MG Dist", "Å"),
+            ("Duality", ""),
+        ]
+
+        for name, unit in geom_items:
+            label = self.geom_labels.get(name)
+            if label:
+                value = label.text()
+                if value and value != "-":
+                    export_data.append((name + (f" ({unit})" if unit else ""), value))
+
+        if not export_data:
+            show_message_box(self, "Warning", "No results to export. Please run evaluation first.", "warning")
             return
-        
+
         fn, _ = QFileDialog.getSaveFileName(self, "Save Results", "", "CSV (*.csv)")
         if fn:
             import csv
+            from datetime import datetime
+
             with open(fn, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(['Feature', 'Value'])
-                for k, v in export_result.items():
-                    writer.writerow([k, v])
+                # 写入标题
+                writer.writerow(['GLINT Ternary Complex Evaluation Results'])
+                writer.writerow(['Export Time:', datetime.now().strftime('%Y-%m-%d %H:%M:%S')])
+                writer.writerow([])
+
+                # 写入摘要信息
+                writer.writerow(['=== Quick Summary ==='])
+                for name, value in export_data:
+                    writer.writerow([name, value])
+
+                writer.writerow([])
+
+                # 添加完整结果文本（如果存在）
+                full_text = self.parent_window.ternary_result_text.toPlainText()
+                if full_text and full_text.strip():
+                    writer.writerow(['=== Detailed Results ==='])
+                    # 将多行文本按行写入
+                    for line in full_text.split('\n'):
+                        writer.writerow([line])
+
             self.log(f"✅ Results exported to {fn}")

@@ -656,6 +656,7 @@ class TernaryComplexEvaluator:
         self.parser = StructureParser()
         self.ligand_calc = LigandCalculator()
         self._obj_name = None  # PyMOL对象名
+        self._ligand_resn = None  # 配体残基名
 
     def evaluate(
         self,
@@ -722,8 +723,13 @@ class TernaryComplexEvaluator:
         features.interface, self._intermediate_values = self._calculate_interface(e3, poi, mg, e3_chain, poi_chain, mg_chain)
         
         # 3. 计算Ligand features
-        if ligand_smiles:
-            features.ligand = self.ligand_calc.calculate(smiles=ligand_smiles)
+        # 如果没有提供 SMILES，尝试从配体结构中提取
+        smiles_to_use = ligand_smiles
+        if not smiles_to_use and mg and mg.atoms:
+            smiles_to_use = self._extract_smiles_from_structure(mg.atoms, ligand_resn)
+
+        if smiles_to_use:
+            features.ligand = self.ligand_calc.calculate(smiles=smiles_to_use)
         
         # 4. 计算Distance features
         features.distances = self._calculate_distances(e3, poi, mg)
@@ -739,24 +745,24 @@ class TernaryComplexEvaluator:
     def _find_ligand_by_resn(self, chains: Dict[str, ChainInfo], ligand_resn: str) -> Optional[ChainInfo]:
         """
         按残基NameFind配体
-        
+
         Args:
             chains: 所有链的字典
             ligand_resn: 配体残基Name（如 UNL, LIG, MOL）
-        
+
         Returns:
             ChainInfo: Package含配体原子的虚拟Chain information，如果未找到则Return None
         """
         ligand_atoms = []
         ligand_chain_id = None
-        
+
         for chain_id, chain in chains.items():
             for atom in chain.atoms:
                 if atom.residue_name.upper() == ligand_resn.upper():
                     ligand_atoms.append(atom)
                     if ligand_chain_id is None:
                         ligand_chain_id = chain_id
-        
+
         if ligand_atoms:
             # Create一个虚拟的 ChainInfo 来存储配体原子
             return ChainInfo(
@@ -764,7 +770,72 @@ class TernaryComplexEvaluator:
                 chain_type="ligand",
                 atoms=ligand_atoms
             )
-        
+
+        return None
+
+    def _extract_smiles_from_structure(self, ligand_atoms: List[AtomInfo], ligand_resn: str) -> Optional[str]:
+        """
+        从配体原子中提取 SMILES
+
+        Args:
+            ligand_atoms: 配体原子列表
+            ligand_resn: 配体残基Name（用于从PyMOL中提取）
+
+        Returns:
+            str: SMILES字符串，如果提取失败则Return None
+        """
+        import tempfile
+        import os
+
+        # 尝试从 PyMOL 对象中提取配体
+        if self._obj_name:
+            try:
+                from pymol import cmd
+                fd, lig_pdb_path = tempfile.mkstemp(suffix=".pdb")
+                os.close(fd)
+
+                # Select并Save配体
+                lig_sel = f"{self._obj_name} and resn {ligand_resn}"
+                lig_count = cmd.count_atoms(lig_sel)
+
+                if lig_count > 0:
+                    cmd.save(lig_pdb_path, lig_sel)
+                    logger.debug(f"Exported ligand ({lig_count} atoms) to temp file")
+
+                    # 尝试从配体 PDB 提取 SMILES
+                    smiles = None
+                    try:
+                        from openbabel import openbabel as ob
+                        obConversion = ob.OBConversion()
+                        obConversion.SetInAndOutFormats("pdb", "smi")
+                        mol = ob.OBMol()
+                        obConversion.ReadFile(mol, lig_pdb_path)
+                        smiles = obConversion.WriteString(mol).strip().split()[0]
+                        logger.debug(f"Extracted SMILES using OpenBabel: {smiles[:50] if smiles else 'None'}")
+                    except ImportError:
+                        logger.debug("OpenBabel not available, trying RDKit...")
+                        # 尝试using RDKit 从 PDB 读取
+                        try:
+                            from rdkit import Chem
+                            mol = Chem.MolFromPDBFile(lig_pdb_path, removeHs=False)
+                            if mol:
+                                smiles = Chem.MolToSmiles(mol)
+                                logger.debug(f"Extracted SMILES using RDKit: {smiles[:50] if smiles else 'None'}")
+                        except ImportError:
+                            pass
+                    except Exception as e:
+                        logger.warning(f"Error extracting SMILES: {e}")
+
+                    # 清理临时File
+                    try:
+                        os.remove(lig_pdb_path)
+                    except OSError:
+                        pass
+
+                    return smiles
+            except Exception as e:
+                logger.warning(f"Failed to extract ligand from PyMOL: {e}")
+
         return None
 
     def _calculate_interface(self, e3: ChainInfo, poi: ChainInfo, mg: ChainInfo,
