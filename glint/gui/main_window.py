@@ -282,11 +282,37 @@ class GLINTDialog(QDialog):
         show_message_box(self, "Error", msg, icon_type="critical")
         self.progress_bar.setVisible(False)
         self.progress_bar.setRange(0, 1)
-        # Re-enable buttons if needed
-        if hasattr(self, 'gm_btn'): self.gm_btn.setEnabled(True)
-        if hasattr(self, 'surf_btn'): self.surf_btn.setEnabled(True)
-        if hasattr(self, 'sim_similarity_btn'): self.sim_similarity_btn.setEnabled(True)
-        if hasattr(self, 'sim_complement_btn'): self.sim_complement_btn.setEnabled(True)
+        # Reset all button states across all tabs
+        self._reset_all_buttons()
+
+    def _reset_all_buttons(self):
+        """Reset all button states across all tabs to enabled."""
+        # Target Discovery buttons
+        for btn_name in ['gm_btn', 'surf_btn', 'sim_similarity_btn', 'sim_complement_btn']:
+            btn = getattr(self, btn_name, None)
+            if btn is not None:
+                btn.setEnabled(True)
+
+        # Hit Identification buttons
+        for btn_name in ['vina_dock_btn', 'hdock_run_btn']:
+            btn = getattr(self, btn_name, None)
+            if btn is not None:
+                btn.setEnabled(True)
+
+        # Ternary Evaluation buttons
+        for btn_name in ['ternary_run_all_btn', 'ternary_visualize_btn']:
+            btn = getattr(self, btn_name, None)
+            if btn is not None:
+                btn.setEnabled(True)
+
+        # Lead Optimization buttons
+        for btn_name in ['lead_analyze_btn', 'lead_ppi_btn', 'lead_glue_btn',
+                         'lead_ternary_btn', 'lead_mutation_btn', 'lead_ec_btn',
+                         'lead_2d_btn', 'pl_2d_btn', 'mut_perform_btn',
+                         'mut_minimize_btn', 'mut_analyze_btn']:
+            btn = getattr(self, btn_name, None)
+            if btn is not None:
+                btn.setEnabled(True)
 
     def refresh_objects(self):
         names = []
