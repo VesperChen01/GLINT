@@ -118,8 +118,8 @@ PROBE_RADIUS = 1.4  # Å (water molecule)
 # EC calculation parameters
 EC_PARAMS = {
     'epsilon': 1e-6,           # Small value to avoid division by zero
-    'phi_clip_min': -10.0,     # Minimum potential clip value (kT/e)
-    'phi_clip_max': 10.0,      # Maximum potential clip value (kT/e)
+    'phi_clip_min': -1000.0,   # Minimum potential clip value (kT/e)
+    'phi_clip_max': 1000.0,    # Maximum potential clip value (kT/e)
     'surface_density': 10.0,   # Points per Å² for surface sampling
     'grid_spacing': 0.5,       # Å for APBS grid
 }
@@ -324,6 +324,126 @@ def _get_element_charge(element: str) -> float:
     }
     return charges.get(element.upper(), 0.0)
 
+
+def _assign_simple_protein_charge(resname: str, atom_name: str, element: str) -> float:
+    """Assign a conservative fallback protein partial charge."""
+    resname = (resname or '').upper()
+    atom_name = (atom_name or '').upper()
+    element = (element or '').upper()
+
+    residue_charges = {
+        'ARG': {'NH1': 0.50, 'NH2': 0.50, 'NE': 0.20, 'CZ': 0.20},
+        'LYS': {'NZ': 1.00},
+        'ASP': {'OD1': -0.50, 'OD2': -0.50, 'CG': 0.20},
+        'GLU': {'OE1': -0.50, 'OE2': -0.50, 'CD': 0.20},
+        'HIS': {'ND1': 0.20, 'NE2': 0.20},
+        'HIP': {'ND1': 0.50, 'NE2': 0.50},
+    }
+    if atom_name in residue_charges.get(resname, {}):
+        return residue_charges[resname][atom_name]
+
+    # Backbone and heteroatom fallback. This is deliberately mild so it is only
+    # a last-resort approximation when PDB2PQR/APBS is unavailable.
+    if atom_name == 'O':
+        return -0.35
+    if atom_name == 'N':
+        return -0.20
+    if atom_name.startswith('O'):
+        return -0.30
+    if atom_name.startswith('N'):
+        return 0.15 if resname in {'ARG', 'LYS', 'HIS', 'HIP'} else -0.20
+    if atom_name.startswith('H'):
+        return 0.10
+    if element in {'ZN', 'MG', 'CA', 'FE', 'MN'}:
+        return 2.00
+    return 0.0
+
+
+def _assign_simple_ligand_charge(atom: 'Chem.Atom') -> float:
+    """Assign fallback ligand partial charge when RDKit Gasteiger fails."""
+    symbol = (atom.GetSymbol() or '').upper()
+    formal = float(atom.GetFormalCharge())
+    if formal:
+        return formal
+
+    neighbors = [n.GetSymbol().upper() for n in atom.GetNeighbors()]
+    if symbol == 'O':
+        return -0.55
+    if symbol == 'N':
+        return -0.35
+    if symbol == 'S':
+        return -0.20
+    if symbol == 'P':
+        return 0.50
+    if symbol in {'F', 'CL', 'BR'}:
+        return {'F': -0.25, 'CL': -0.15, 'BR': -0.10}[symbol]
+    if symbol == 'I':
+        return -0.05
+    if symbol == 'H':
+        return 0.10
+    if symbol == 'C':
+        # Carbons bound to heteroatoms are mildly positive; plain hydrocarbon
+        # carbons stay neutral. This keeps fallback charges conservative.
+        if any(n in {'O', 'N', 'S', 'F', 'CL', 'BR', 'I'} for n in neighbors):
+            return 0.20
+        return 0.0
+    return 0.0
+
+
+def _prepare_ligand_for_gasteiger(mol: 'Chem.Mol') -> 'Chem.Mol':
+    """Prepare a ligand molecule for Gasteiger charges without requiring kekulization."""
+    if not RDKIT_AVAILABLE or mol is None:
+        return mol
+
+    repaired = Chem.Mol(mol)
+    try:
+        Chem.SanitizeMol(repaired)
+        return repaired
+    except Exception as standard_error:
+        try:
+            repaired = Chem.Mol(mol)
+            Chem.SanitizeMol(
+                repaired,
+                sanitizeOps=Chem.SanitizeFlags.SANITIZE_ALL ^ Chem.SanitizeFlags.SANITIZE_KEKULIZE
+            )
+            print(
+                "[GasteigerChargeCalculator] ⚠️ Ligand could not be kekulized; "
+                "using sanitized molecule with kekulization skipped for Gasteiger charges"
+            )
+            return repaired
+        except Exception as repair_error:
+            print(f"[GasteigerChargeCalculator] ⚠️ Ligand sanitization repair failed: {repair_error}")
+            print(f"[GasteigerChargeCalculator]    Original sanitize error: {standard_error}")
+            return mol
+
+
+def _potential_invalid(values: np.ndarray,
+                       label: str,
+                       min_nonzero_fraction: float = 0.05,
+                       min_abs_max: float = 1e-5) -> bool:
+    """Detect potential arrays that would make EC calculation meaningless."""
+    if values is None or len(values) == 0:
+        print(f"[EC validation] ❌ {label}: empty potential array")
+        return True
+
+    arr = np.asarray(values, dtype=float)
+    finite_mask = np.isfinite(arr)
+    if not np.all(finite_mask):
+        print(f"[EC validation] ❌ {label}: contains non-finite values")
+        return True
+
+    abs_arr = np.abs(arr)
+    nonzero_fraction = float(np.mean(abs_arr > min_abs_max))
+    abs_max = float(np.max(abs_arr)) if len(abs_arr) else 0.0
+    if abs_max <= min_abs_max or nonzero_fraction < min_nonzero_fraction:
+        print(
+            f"[EC validation] ❌ {label}: near-zero potential "
+            f"(abs_max={abs_max:.3e}, nonzero_fraction={nonzero_fraction:.1%})"
+        )
+        return True
+
+    return False
+
 class LigandSurfaceSampler:
     """
     Generate surface sampling points for a ligand molecule.
@@ -518,18 +638,41 @@ class GasteigerChargeCalculator:
         if not RDKIT_AVAILABLE:
             raise RuntimeError("RDKit required for charge calculation")
         
-        # Compute Gasteiger charges
-        AllChem.ComputeGasteigerCharges(mol)
-        
+        # Compute Gasteiger charges. PyMOL-exported SDF files can have incomplete
+        # aromatic/bond information. If full kekulization fails, repair the RDKit
+        # molecule by sanitizing everything except kekulization before charging.
+        charge_mol = _prepare_ligand_for_gasteiger(mol)
+        try:
+            AllChem.ComputeGasteigerCharges(charge_mol)
+        except Exception as e:
+            print(f"[GasteigerChargeCalculator] ⚠️ Gasteiger charge calculation failed: {e}")
+
         charges = []
-        for atom in mol.GetAtoms():
-            charge = atom.GetDoubleProp('_GasteigerCharge')
+        invalid_count = 0
+        for atom in charge_mol.GetAtoms():
+            charge = atom.GetDoubleProp('_GasteigerCharge') if atom.HasProp('_GasteigerCharge') else np.nan
             # Handle NaN values (can occur for some atoms)
-            if np.isnan(charge):
+            if not np.isfinite(charge):
                 charge = 0.0
+                invalid_count += 1
             charges.append(charge)
-        
-        return np.array(charges)
+
+        charges = np.array(charges, dtype=float)
+        if len(charges) == 0:
+            return charges
+
+        nonzero_fraction = float(np.mean(np.abs(charges) > 1e-6))
+        if invalid_count == len(charges) or nonzero_fraction < 0.05:
+            fallback = np.array([_assign_simple_ligand_charge(atom) for atom in mol.GetAtoms()], dtype=float)
+            fallback_nonzero = float(np.mean(np.abs(fallback) > 1e-6)) if len(fallback) else 0.0
+            print(
+                "[GasteigerChargeCalculator] ⚠️ Gasteiger charges invalid/near-zero "
+                f"({invalid_count}/{len(charges)} invalid, nonzero={nonzero_fraction:.1%}); "
+                f"using ligand fallback charges (nonzero={fallback_nonzero:.1%})"
+            )
+            return fallback
+
+        return charges
     
     def calculate_potential(self, mol: 'Chem.Mol', points: np.ndarray,
                            conformer_id: int = 0) -> np.ndarray:
@@ -1303,7 +1446,7 @@ class ECCalculator:
     - Perfect match: EC → +1
     """
     
-    def __init__(self, epsilon: float = 1e-6, clip_range: Tuple[float, float] = (-10.0, 10.0)):
+    def __init__(self, epsilon: float = 1e-6, clip_range: Tuple[float, float] = (-1000.0, 1000.0)):
         """
         Args:
             epsilon: Small value to avoid division by zero
@@ -1323,7 +1466,8 @@ class ECCalculator:
         Returns:
             Array of EC values at each point
         """
-        # Clip potentials to avoid extreme values
+        # Clip only pathological extremes. The old ±10 kT/e clip erased
+        # magnitude differences and could force many points to EC=±1.
         phi_p = np.clip(phi_protein, self.clip_min, self.clip_max)
         phi_l = np.clip(phi_ligand, self.clip_min, self.clip_max)
         
@@ -1790,13 +1934,26 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     print("\n[Step 6] Calculating potentials...")
 
     # Protein potential (from APBS grid or Coulomb approximation)
+    potential_source = 'apbs' if protein_grid is not None else 'coulomb_fallback'
     if protein_grid is not None:
         phi_protein = protein_grid.interpolate(surface_points)
+        if _potential_invalid(phi_protein, "APBS protein potential"):
+            print("[calculate_ligand_ec] ⚠️ APBS potential is invalid for ligand surface; using Coulomb fallback...")
+            protein_grid = None
+            _coulomb_fallback = True
+            _coulomb_fallback_reason = (
+                "APBS 输出存在，但在配体表面插值得到的蛋白静电势无效或近乎全 0；"
+                "已改用 PQR Coulomb 回退计算。"
+            )
+            charge_calc_protein = GasteigerChargeCalculator()
+            phi_protein = charge_calc_protein.calculate_potential_from_pqr(protein_pqr, surface_points)
+            potential_source = 'coulomb_fallback_after_apbs_validation'
     else:
         # Fallback: Use Coulomb potential from protein charges
         print("[calculate_ligand_ec] Using Coulomb approximation for protein potential...")
         charge_calc_protein = GasteigerChargeCalculator()
         phi_protein = charge_calc_protein.calculate_potential_from_pqr(protein_pqr, surface_points)
+        potential_source = 'coulomb_fallback'
 
     # Ligand potential (Gasteiger charges + Coulomb)
     # Use enhanced calculator if σ-hole or lone pairs requested
@@ -1805,6 +1962,16 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         use_lone_pairs=use_lone_pairs
     )
     phi_ligand = charge_calc.calculate_potential(ligand_mol, surface_points)
+
+    if _potential_invalid(phi_protein, "protein potential"):
+        print("[calculate_ligand_ec] ❌ Protein potential calculation failed; EC score would be invalid")
+        print("[calculate_ligand_ec] 💡 Check PDB2PQR/APBS installation or ligand/protein selection")
+        return None
+
+    if _potential_invalid(phi_ligand, "ligand potential"):
+        print("[calculate_ligand_ec] ❌ Ligand potential calculation failed; EC score would be invalid")
+        print("[calculate_ligand_ec] 💡 Check ligand valence/bonding; PyMOL SDF export may need sanitization")
+        return None
     
     # 记录高级功能using情况
     advanced_features = {
@@ -1884,6 +2051,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         # Coulomb 回退标记：当 APBS 不可用时通知 GUI 层
         'coulomb_fallback': _coulomb_fallback,
         'coulomb_fallback_reason': _coulomb_fallback_reason,
+        'potential_source': potential_source,
     }
     
     return result
@@ -2539,17 +2707,12 @@ def _simple_pdb_to_pqr(pdb_file: str, pqr_file: str) -> Optional[str]:
     
     using空格分隔的 PQR 格式输出，避免固定列拼接导致 APBS 解析Failed。
     """
-    # 基于残基Type的简单电荷分配
-    charges = {
-        'ARG': {'NH1': 0.5, 'NH2': 0.5, 'NE': 0.0},
-        'LYS': {'NZ': 1.0},
-        'ASP': {'OD1': -0.5, 'OD2': -0.5},
-        'GLU': {'OE1': -0.5, 'OE2': -0.5},
-        'HIS': {'ND1': 0.25, 'NE2': 0.25}
-    }
-    
     # 默认原子半径
-    radii = {'C': 1.7, 'N': 1.55, 'O': 1.52, 'S': 1.8, 'H': 1.2}
+    radii = {
+        'C': 1.7, 'N': 1.55, 'O': 1.52, 'S': 1.8, 'H': 1.2,
+        'P': 1.8, 'F': 1.47, 'CL': 1.75, 'BR': 1.85, 'I': 1.98,
+        'ZN': 1.39, 'MG': 1.73, 'CA': 1.94, 'FE': 1.72
+    }
     
     try:
         with open(pdb_file, 'r') as f_in, open(pqr_file, 'w') as f_out:
@@ -2567,10 +2730,12 @@ def _simple_pdb_to_pqr(pdb_file: str, pqr_file: str) -> Optional[str]:
                     z = float(line[46:54])
                     element = line[76:78].strip() if len(line) > 76 else atom_name[0]
                     
-                    # 获取电荷
-                    charge = 0.0
-                    if resname in charges and atom_name in charges[resname]:
-                        charge = charges[resname][atom_name]
+                    if not element:
+                        element = ''.join(ch for ch in atom_name if ch.isalpha())[:2] or atom_name[:1]
+                    element = element.upper()
+
+                    # 获取电荷。PDB2PQR 不可用时，用保守的残基/原子近似，避免蛋白势能全 0。
+                    charge = _assign_simple_protein_charge(resname, atom_name, element)
                     
                     # 获取半径
                     radius = radii.get(element.upper(), 1.7)

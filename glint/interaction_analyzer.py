@@ -1979,6 +1979,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                         conf = calculate_confidence_score(interaction_type, d, hb_angle if interaction_type == "Hydrogen Bond" else None)
                         # Add配体原子3D坐标，用于2D绘图时的精确映射
                         lig_coords = lig_atom[4]  # (x, y, z) tuple
+                        prot_coords = prot_atom[4]  # (x, y, z) tuple
                         interactions.append({
                             "Ligand_Chain": lig_chain,
                             "Ligand_Residue": f"{lig_name} {lig_id}",
@@ -1989,6 +1990,9 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                             "Protein_Chain": prot_chain,
                             "Protein_Residue": f"{prot_name} {prot_id}",
                             "Protein_Atom": prot_atom[3],
+                            "Protein_Atom_X": round(prot_coords[0], 3),
+                            "Protein_Atom_Y": round(prot_coords[1], 3),
+                            "Protein_Atom_Z": round(prot_coords[2], 3),
                             "Distance": round(d, 2),
                             "Interaction": interaction_type,
                             "Confidence": conf
@@ -1999,6 +2003,7 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                     if is_hal:
                         conf = calculate_confidence_score("Halogen Bond", hal_dist, hal_angle)
                         lig_coords = lig_atom[4]
+                        prot_coords = prot_atom[4]
                         interactions.append({
                             "Ligand_Chain": lig_chain,
                             "Ligand_Residue": f"{lig_name} {lig_id}",
@@ -2009,6 +2014,9 @@ def analyze_protein_ligand_interactions(obj_name=None, ligand_resname=None,
                             "Protein_Chain": prot_chain,
                             "Protein_Residue": f"{prot_name} {prot_id}",
                             "Protein_Atom": prot_atom[3],
+                            "Protein_Atom_X": round(prot_coords[0], 3),
+                            "Protein_Atom_Y": round(prot_coords[1], 3),
+                            "Protein_Atom_Z": round(prot_coords[2], 3),
                             "Distance": round(hal_dist, 2),
                             "Interaction": "Halogen Bond",
                             "Confidence": conf
@@ -5053,4 +5061,3 @@ def analyze_protein_nucleic_interactions(obj_name=None, nucleic_chains=None,
     return result
 
 cmd.extend("analyze_protein_nucleic_interactions", analyze_protein_nucleic_interactions)
-

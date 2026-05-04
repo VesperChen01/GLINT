@@ -177,6 +177,14 @@ class LeadOptimizationTab(CommonTab):
         self.parent_window.ec_analyze_btn.clicked.connect(self.run_ec_analysis)
         ec_grid.addWidget(self.parent_window.ec_analyze_btn, 2, 2, 1, 2)
 
+        self.parent_window.ec_result_label = QLabel("EC Score: -")
+        self.parent_window.ec_result_label.setWordWrap(True)
+        self.parent_window.ec_result_label.setStyleSheet(
+            "font-size: 13px; color: #334155; padding: 6px 2px;"
+            if not is_dark else
+            "font-size: 13px; color: #cbd5e1; padding: 6px 2px;"
+        )
+        ec_grid.addWidget(self.parent_window.ec_result_label, 3, 1, 1, 3)
 
         ec_layout.addLayout(ec_grid)
         layout.addWidget(grp_ec)
@@ -773,6 +781,17 @@ class LeadOptimizationTab(CommonTab):
             output_dir = result.get('output_dir')
             if output_dir:
                 msg += f"\n\nOutput saved to: {output_dir}"
+
+            if hasattr(self.parent_window, "ec_result_label"):
+                result_text = f"EC Score: {ec_score:.4f}"
+                if ec_stats:
+                    result_text += (
+                        f" | Mean: {ec_stats.get('ec_mean', 0):.4f}"
+                        f" | Median: {ec_stats.get('ec_median', 0):.4f}"
+                        f" | Positive: {ec_stats.get('ec_positive_fraction', 0)*100:.1f}%"
+                        f" | Negative: {ec_stats.get('ec_negative_fraction', 0)*100:.1f}%"
+                    )
+                self.parent_window.ec_result_label.setText(result_text)
             
             show_message_box(self, "EC Analysis", msg, "info")
             

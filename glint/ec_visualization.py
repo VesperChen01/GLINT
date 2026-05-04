@@ -114,6 +114,16 @@ def _auto_ec_range(ec_values: np.ndarray, default_range: tuple = (-1.0, 1.0),
     return default_range
 
 
+def _prepare_ec_color_values(ec_values: np.ndarray,
+                             ec_range: tuple = (-1.0, 1.0),
+                             enhance_contrast: bool = True) -> tuple:
+    """Return EC values and range used only for visualization coloring."""
+    color_values = np.asarray(ec_values, dtype=float)
+    if enhance_contrast:
+        color_values = _enhance_ec_contrast(color_values)
+    color_range = _auto_ec_range(color_values, default_range=ec_range)
+    return color_values, color_range
+
 
 def _ec_5color_interpolate(t: float):
     """将归一化进degrees t ∈ [0,1] 映射到 5 色渐变的 RGB Value。
@@ -353,11 +363,57 @@ def _create_ec_real_mesh_cgo(mesh_name: str,
 
 def _ec_residue_color_name(mean_ec: float) -> str:
     """根据残基平均 EC Value 返回对应颜色名。"""
-    if mean_ec <= -0.10:
-        return 'ec_dark_red' if mean_ec <= -0.5 else 'ec_light_red'
-    if mean_ec >= 0.10:
-        return 'ec_dark_green' if mean_ec >= 0.5 else 'ec_light_green'
+    if mean_ec <= -0.03:
+        return 'ec_dark_red' if mean_ec <= -0.30 else 'ec_light_red'
+    if mean_ec >= 0.03:
+        return 'ec_dark_green' if mean_ec >= 0.30 else 'ec_light_green'
     return 'ec_white'
+
+
+def _make_residue_selection(obj_name: str, chain: str, resi: str, resn: str) -> str:
+    """Build a PyMOL residue selection that also works for blank chain IDs."""
+    chain = str(chain or '').strip()
+    parts = [obj_name, f"resi {resi}", f"resn {resn}"]
+    if chain:
+        parts.insert(1, f"chain {chain}")
+    return "(" + " and ".join(parts) + ")"
+
+
+def _make_atom_selection(obj_name: str, chain: str, resi: str, resn: str, atom_name: str) -> str:
+    """Build a PyMOL atom selection that also works for blank chain IDs."""
+    residue_sel = _make_residue_selection(obj_name, chain, resi, resn)
+    return f"({residue_sel} and name {atom_name})"
+
+
+def _interaction_distance_limit(interaction_type: str) -> float:
+    """Return a strict visualization distance cutoff for a detected interaction."""
+    limits = {
+        'Hydrogen Bond': 3.8,
+        'Salt Bridge': 5.0,
+        'Hydrophobic': 4.5,
+        'Halogen Bond': 4.2,
+        'Metal Coordination': 3.5,
+        'Water Bridge': 4.0,
+    }
+    return limits.get(interaction_type, 5.0)
+
+
+def _interaction_coords(inter: Dict[str, Any]):
+    """Return ligand/protein coordinates stored in an interaction result."""
+    try:
+        lig = (
+            float(inter['Ligand_Atom_X']),
+            float(inter['Ligand_Atom_Y']),
+            float(inter['Ligand_Atom_Z']),
+        )
+        prot = (
+            float(inter['Protein_Atom_X']),
+            float(inter['Protein_Atom_Y']),
+            float(inter['Protein_Atom_Z']),
+        )
+        return lig, prot
+    except (KeyError, TypeError, ValueError):
+        return None, None
 
 
 def _get_protein_ligand_interaction_map(obj_name: str,
@@ -435,6 +491,8 @@ def _draw_ec_residue_interaction_dashes(obj_name: str,
 
     red_residue_keys = set(red_residue_keys)
     drawn = 0
+    skipped_long = 0
+    skipped_ambiguous = 0
     for i, inter in enumerate((result or {}).get('interactions', []), 1):
         chain = str(inter.get('Protein_Chain', '')).strip()
         residue_text = str(inter.get('Protein_Residue', '')).strip()
@@ -451,17 +509,44 @@ def _draw_ec_residue_interaction_dashes(obj_name: str,
         if (chain, resi, resn) not in red_residue_keys:
             continue
 
-        prot_sel = f"({obj_name} and chain {chain} and resi {resi} and name {prot_atom})"
+        if not prot_atom or not lig_atom or prot_atom.startswith('Ring(') or lig_atom.startswith('Ring('):
+            skipped_ambiguous += 1
+            continue
+
         # 清理配体 resn/resi 中的非法字符（如尖括号）
         lig_resn_clean = lig_parts[0].replace('<', '').replace('>', '')
         lig_resi_clean = lig_parts[1].replace('<', '').replace('>', '')
-        lig_sel = f"({obj_name} and chain {lig_chain} and resn {lig_resn_clean} and resi {lig_resi_clean} and name {lig_atom})"
-        if cmd.count_atoms(prot_sel) == 0 or cmd.count_atoms(lig_sel) == 0:
+        lig_coords, prot_coords = _interaction_coords(inter)
+        if lig_coords is None or prot_coords is None:
+            skipped_ambiguous += 1
             continue
 
         dash_name = f"ec_interact_{i}"
+        prot_pseudo = f"{dash_name}_prot"
+        lig_pseudo = f"{dash_name}_lig"
         try:
-            cmd.distance(dash_name, prot_sel, lig_sel, mode=0)
+            actual_distance = float(np.linalg.norm(np.asarray(prot_coords) - np.asarray(lig_coords)))
+            max_distance = _interaction_distance_limit(interaction_type)
+            reported_distance = inter.get('Distance', None)
+            try:
+                reported_distance = float(reported_distance)
+            except (TypeError, ValueError):
+                reported_distance = actual_distance
+
+            if actual_distance > max_distance or reported_distance > max_distance:
+                skipped_long += 1
+                print(
+                    f"[EC Residues] ⚠️ Skip long/invalid dash {interaction_type}: "
+                    f"{resn}{resi}:{prot_atom} - {lig_resn_clean}{lig_resi_clean}:{lig_atom}, "
+                    f"actual={actual_distance:.2f} Å, reported={reported_distance:.2f} Å"
+                )
+                continue
+
+            cmd.pseudoatom(prot_pseudo, pos=prot_coords, name='ECI')
+            cmd.pseudoatom(lig_pseudo, pos=lig_coords, name='ECI')
+            cmd.hide('everything', prot_pseudo)
+            cmd.hide('everything', lig_pseudo)
+            cmd.distance(dash_name, prot_pseudo, lig_pseudo, mode=0)
             cmd.enable(dash_name)
             apply_interaction_dash_style(
                 cmd,
@@ -476,9 +561,17 @@ def _draw_ec_residue_interaction_dashes(obj_name: str,
             cmd.show('dashes', dash_name)
             drawn += 1
         except Exception:
+            try:
+                cmd.delete(prot_pseudo)
+                cmd.delete(lig_pseudo)
+            except Exception:
+                pass
             continue
 
-    print(f"[EC Residues] ✅ 已绘制 {drawn} 条红色残基相关相互作用 dash")
+    print(
+        f"[EC Residues] ✅ 已绘制 {drawn} 条红色残基相关相互作用 dash"
+        f" (跳过 ambiguous={skipped_ambiguous}, long={skipped_long})"
+    )
 def _cleanup_ec_interaction_objects():
     """清理旧的 EC interaction dash/label 对象，避免重复叠加。"""
     try:
@@ -503,7 +596,7 @@ def _show_ec_contributing_residues(obj_name: str,
                                    surface_points: np.ndarray,
                                    ec_values: np.ndarray,
                                    protein_distance: float = 5.0,
-                                   assignment_cutoff: float = 3.2,
+                                   assignment_cutoff: float = 6.5,
                                    label_top_n: int = 12):
     """显示对 EC 有局部贡献的附近蛋白残基，并按冲突/互补着色与标注。"""
     if surface_points is None or ec_values is None or len(surface_points) == 0:
@@ -516,6 +609,14 @@ def _show_ec_contributing_residues(obj_name: str,
 
     try:
         cmd.delete('ec_contrib_residues')
+    except Exception:
+        pass
+
+    # 中文注释：EC residue 视图只允许红色冲突残基以 sticks 显示。
+    # 先隐藏所有蛋白 sticks/licorice，避免全蛋白背景紫色或历史显示状态漏出来。
+    try:
+        cmd.hide('sticks', f"({obj_name} and polymer)")
+        cmd.hide('licorice', f"({obj_name} and polymer)")
     except Exception:
         pass
 
@@ -553,7 +654,18 @@ def _show_ec_contributing_residues(obj_name: str,
         residue_scores.setdefault(key, []).append(float(ec_values[i]))
 
     if not residue_scores:
-        print('[EC Residues] ⚠️ 未分配到有效贡献残基，跳过标签显示')
+        print('[EC Residues] ⚠️ 表面点未直接分配到残基，改用附近蛋白原子反向匹配')
+        surface_tree = cKDTree(surface_points)
+        atom_to_surface_dist, atom_to_surface_idx = surface_tree.query(atom_coords, k=1)
+        reverse_cutoff = max(float(assignment_cutoff), float(protein_distance) + 2.0)
+        for atom_i, dist in enumerate(np.asarray(atom_to_surface_dist, dtype=float)):
+            if dist > reverse_cutoff:
+                continue
+            key = atom_meta[atom_i]
+            residue_scores.setdefault(key, []).append(float(ec_values[int(atom_to_surface_idx[atom_i])]))
+
+    if not residue_scores:
+        print('[EC Residues] ⚠️ 未分配到有效贡献残基，跳过显示')
         return
 
     ranked = []
@@ -567,12 +679,13 @@ def _show_ec_contributing_residues(obj_name: str,
     shown_count = 0
     red_residue_keys = []
     for (chain, resi, resn), mean_ec, strength, n_points in ranked:
-        # 中文注释：当前仅显示局部平均 EC 为负的冲突残基，减少绿色/中性残基干扰。
-        if mean_ec >= -0.10:
+        # 中文注释：EC 残基提示只突出红色冲突残基；绿色互补已由 EC surface 表达。
+        if mean_ec > -0.03:
             continue
-        residue_sel = f"({obj_name} and chain {chain} and resi {resi} and resn {resn})"
+        residue_sel = _make_residue_selection(obj_name, chain, resi, resn)
         color_name = _ec_residue_color_name(mean_ec)
         cmd.show('sticks', residue_sel)
+        cmd.set('stick_radius', 0.22, residue_sel)
         cmd.color(color_name, f"{residue_sel} and elem C")
         cmd.color('blue', f"{residue_sel} and elem N")
         cmd.color('red', f"{residue_sel} and elem O")
@@ -593,7 +706,7 @@ def _show_ec_contributing_residues(obj_name: str,
         _draw_ec_residue_interaction_dashes(obj_name, ligand_resname, red_residue_keys)
 
     cmd.set('label_size', 14)
-    print(f"[EC Residues] ✅ 已显示 {shown_count} 个红色冲突残基，标注前 {label_count} 个")
+    print(f"[EC Residues] ✅ 已显示 {shown_count} 个红色 EC 冲突残基，标注前 {label_count} 个")
 
 
 def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
@@ -658,8 +771,12 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
     print(f"[visualize_ec_smooth_surface] Surface type: {surface_type}")
     print(f"[visualize_ec_smooth_surface] EC range: {ec_range}")
 
-    # 自适应颜色范围：根据实际数据分布调整
-    ec_range = _auto_ec_range(ec_values, default_range=ec_range)
+    # 自适应颜色范围：根据实际数据分布调整。这里的增强只用于显示，不改变 EC 分数。
+    color_ec_values, color_ec_range = _prepare_ec_color_values(
+        ec_values,
+        ec_range=ec_range,
+        enhance_contrast=enhance_contrast,
+    )
 
     ligand_sel = f"{obj_name} and resn {ligand_resname}"
 
@@ -689,17 +806,65 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
     except Exception:
         pass
 
-    # Step 1: Create a copy of the ligand for surface generation
+    # Step 1: Prefer a real per-vertex CGO molecular surface. This preserves local
+    # EC color variation instead of averaging many surface samples onto a few atoms.
+    if surface_type == 'molecular' and _create_ec_real_surface_cgo(
+        surface_name=surface_obj,
+        ligand_sel=ligand_sel,
+        surface_points=surface_points,
+        ec_values=color_ec_values,
+        ec_range=color_ec_range,
+        color_scheme=color_scheme,
+        alpha=max(0.0, min(1.0, 1.0 - float(transparency))),
+    ):
+        if show_ligand_sticks:
+            cmd.show('sticks', ligand_sel)
+            cmd.set('stick_radius', 0.18, ligand_sel)
+            cmd.color('gray70', f"{ligand_sel} and elem C")
+            cmd.color('blue', f"{ligand_sel} and elem N")
+            cmd.color('red', f"{ligand_sel} and elem O")
+            cmd.color('yellow', f"{ligand_sel} and elem S")
+            cmd.color('green', f"{ligand_sel} and elem Cl")
+            cmd.color('orange', f"{ligand_sel} and elem Br")
+            cmd.set('stick_transparency', 0.0, ligand_sel)
+
+        cmd.set_color('glint_protein_purple', [0.67, 0.55, 0.86])
+        if show_protein_lines:
+            protein_sel = f"{obj_name} and polymer within {protein_distance} of {ligand_sel}"
+            cmd.show('lines', protein_sel)
+            cmd.color('glint_protein_purple', f"{protein_sel} and elem C")
+            cmd.set('line_width', 1.5, protein_sel)
+
+        cmd.hide('cartoon', obj_name)
+        cmd.color('glint_protein_purple', f"{obj_name} and polymer")
+        _show_ec_contributing_residues(
+            obj_name=obj_name,
+            ligand_sel=ligand_sel,
+            surface_points=surface_points,
+            ec_values=ec_values,
+            protein_distance=protein_distance,
+        )
+        _set_publication_rendering()
+        cmd.zoom(ligand_sel, buffer=8)
+
+        if ray_trace:
+            print("[visualize_ec_smooth_surface] Ray tracing...")
+            cmd.ray()
+
+        print(f"[visualize_ec_smooth_surface] ✅ Created surface: {surface_obj}")
+        return True
+
+    # Step 1b: Create a copy of the ligand for PyMOL built-in surface generation
     cmd.create(surface_obj, ligand_sel)
     cmd.enable(surface_obj)
 
     # Step 2: Map EC values to atom B-factors（含非线性增强）
     if SCIPY_AVAILABLE:
-        _map_ec_to_bfactors_kdtree(surface_obj, surface_points, ec_values,
-                                    enhance_contrast=enhance_contrast)
+        _map_ec_to_bfactors_kdtree(surface_obj, surface_points, color_ec_values,
+                                    enhance_contrast=False)
     else:
-        _map_ec_to_bfactors_simple(surface_obj, surface_points, ec_values,
-                                    enhance_contrast=enhance_contrast)
+        _map_ec_to_bfactors_simple(surface_obj, surface_points, color_ec_values,
+                                    enhance_contrast=False)
 
     # Step 3: Rebuild to apply B-factor changes
     cmd.rebuild(surface_obj)
@@ -725,7 +890,7 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
     cmd.set('surface_proximity', 1, surface_obj)
 
     # Step 5: Apply color spectrum based on B-factors
-    ec_min, ec_max = ec_range
+    ec_min, ec_max = color_ec_range
     b_min = ec_min * 100  # Scale to B-factor range
     b_max = ec_max * 100
 
@@ -952,14 +1117,15 @@ def visualize_ec_cgo_surface(obj_name: str, ligand_resname: str,
 
     print(f"[visualize_ec_cgo_surface] Creating CGO surface with {len(surface_points)} points...")
 
-    # 自适应颜色范围
-    ec_range = _auto_ec_range(ec_values, default_range=ec_range)
+    # 自适应颜色范围。增强只用于显示，不改变 EC 分数。
+    color_ec_values, color_ec_range = _prepare_ec_color_values(
+        ec_values,
+        ec_range=ec_range,
+        enhance_contrast=enhance_contrast,
+    )
 
-    # 非线性对比degrees增强
-    if enhance_contrast:
-        ec_values = _enhance_ec_contrast(ec_values)
-
-    ec_min, ec_max = ec_range
+    ec_values = color_ec_values
+    ec_min, ec_max = color_ec_range
 
     # Color mapping function
     def ec_to_rgb(ec_val):
@@ -1509,8 +1675,12 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
 
     print(f"[visualize_ec_mesh_surface] 创建 EC mesh 表面...")
 
-    # 自适应颜色范围
-    ec_range = _auto_ec_range(ec_values, default_range=ec_range)
+    # 自适应颜色范围。增强只用于显示，不改变 EC 分数。
+    color_ec_values, color_ec_range = _prepare_ec_color_values(
+        ec_values,
+        ec_range=ec_range,
+        enhance_contrast=enhance_contrast,
+    )
 
     ligand_sel = f"{obj_name} and resn {ligand_resname}"
     mesh_obj = f"ec_mesh_{ligand_resname}"
@@ -1527,11 +1697,11 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
 
     # 映射 EC 值到 B-factor
     if SCIPY_AVAILABLE:
-        _map_ec_to_bfactors_kdtree(mesh_obj, surface_points, ec_values,
-                                    enhance_contrast=enhance_contrast)
+        _map_ec_to_bfactors_kdtree(mesh_obj, surface_points, color_ec_values,
+                                    enhance_contrast=False)
     else:
-        _map_ec_to_bfactors_simple(mesh_obj, surface_points, ec_values,
-                                    enhance_contrast=enhance_contrast)
+        _map_ec_to_bfactors_simple(mesh_obj, surface_points, color_ec_values,
+                                    enhance_contrast=False)
 
     cmd.rebuild(mesh_obj)
 
@@ -1540,8 +1710,8 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
         mesh_name=mesh_obj,
         ligand_sel=ligand_sel,
         surface_points=surface_points,
-        ec_values=ec_values,
-        ec_range=ec_range,
+        ec_values=color_ec_values,
+        ec_range=color_ec_range,
         color_scheme=color_scheme,
         line_width=max(mesh_width, 0.7),
         edge_stride=3,
@@ -1559,6 +1729,13 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
             cmd.set('line_width', 1.5, protein_sel)
         cmd.hide('cartoon', obj_name)
         cmd.color('glint_protein_purple', f"{obj_name} and polymer")
+        _show_ec_contributing_residues(
+            obj_name=obj_name,
+            ligand_sel=ligand_sel,
+            surface_points=surface_points,
+            ec_values=ec_values,
+            protein_distance=protein_distance,
+        )
         cmd.zoom(ligand_sel, buffer=8)
 
         print(f"[visualize_ec_mesh_surface] ✅ Created mesh surface: {mesh_obj}")
@@ -1570,7 +1747,7 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
     cmd.set('mesh_width', mesh_width, mesh_obj)
 
     # Apply coloring
-    ec_min, ec_max = ec_range
+    ec_min, ec_max = color_ec_range
     b_min = ec_min * 100
     b_max = ec_max * 100
 
@@ -1599,6 +1776,13 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
 
     cmd.hide('cartoon', obj_name)
     cmd.color('glint_protein_purple', f"{obj_name} and polymer")
+    _show_ec_contributing_residues(
+        obj_name=obj_name,
+        ligand_sel=ligand_sel,
+        surface_points=surface_points,
+        ec_values=ec_values,
+        protein_distance=protein_distance,
+    )
 
     _set_publication_rendering()
     cmd.zoom(ligand_sel, buffer=8)
