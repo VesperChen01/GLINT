@@ -71,14 +71,16 @@ def get_conda_search_roots() -> List[str]:
     roots = []
 
     if is_windows():
+        local_appdata = os.environ.get("LOCALAPPDATA", "")
         roots = [
+            os.path.join(local_appdata, "GLINT", "conda-env"),
             os.path.join(home, "miniconda3"),
             os.path.join(home, "miniforge3"),
             os.path.join(home, "anaconda3"),
             os.path.join(home, "Miniconda3"),
             os.path.join(home, "Anaconda3"),
-            os.path.join(os.environ.get("LOCALAPPDATA", ""), "miniconda3"),
-            os.path.join(os.environ.get("LOCALAPPDATA", ""), "Continuum", "anaconda3"),
+            os.path.join(local_appdata, "miniconda3"),
+            os.path.join(local_appdata, "Continuum", "anaconda3"),
             os.path.join("C:\\", "ProgramData", "miniconda3"),
             os.path.join("C:\\", "ProgramData", "Anaconda3"),
         ]
@@ -280,8 +282,19 @@ def find_executable(
     if extra_paths:
         for path in extra_paths:
             expanded = os.path.expanduser(path)
+            if os.path.isdir(expanded):
+                for name in all_names:
+                    exe = _exe_name(name)
+                    candidate = os.path.join(expanded, exe)
+                    if _is_executable(candidate):
+                        return candidate
+                continue
             if _is_executable(expanded):
                 return expanded
+            if is_windows() and not expanded.lower().endswith(".exe"):
+                candidate = expanded + ".exe"
+                if _is_executable(candidate):
+                    return candidate
 
     return None
 

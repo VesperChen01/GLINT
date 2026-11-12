@@ -260,7 +260,7 @@ class SurfaceAnalysisWorker(QThread):
     error = pyqtSignal(str)
 
     def __init__(self, obj_name: str, out_csv: str, use_apbs: bool = True, ph: float = 7.4,
-                 surface_property: str = 'electrostatic'):
+                 surface_property: str = 'electrostatic', selection: str = "all"):
         """
         Initialize the SurfaceAnalysisWorker.
 
@@ -269,21 +269,31 @@ class SurfaceAnalysisWorker(QThread):
             out_csv: Optional path for CSV output
             use_apbs: Use APBS/PDB2PQR for accurate electrostatics (default: True)
             ph: pH for PDB2PQR protonation state (default: 7.4)
-            surface_property: 仅返回指定属性相关的 patch，'electrostatic' 或 'hydrophobicity'
+            surface_property: 仅返回指定属性相关的 patch，'electrostatic', 'hydrophobicity', 'curvature', or 'hbond'
+            selection: PyMOL selection inside obj_name to analyze
         """
         super().__init__()
         self.obj_name = obj_name
         self.out_csv = out_csv
         self.use_apbs = use_apbs
         self.ph = ph
-        # 中文注释：容错处理，未知值回退到 electrostatic
-        self.surface_property = surface_property if surface_property in ('electrostatic', 'hydrophobicity') else 'electrostatic'
+        self.selection = selection or "all"
+        # Fallback: unknown values revert to electrostatic
+        self.surface_property = surface_property if surface_property in ('electrostatic', 'hydrophobicity', 'curvature', 'hbond') else 'electrostatic'
         
     def run(self):
         try:
             self.progress.emit(f"Starting surface analysis for {self.obj_name}...")
-            if self.use_apbs:
+            self.progress.emit(f"  Analysis scope: {self.selection}")
+            effective_use_apbs = self.use_apbs and self.surface_property == 'electrostatic'
+            if effective_use_apbs:
                 self.progress.emit(f"  Using APBS/PDB2PQR for accurate electrostatics (pH={self.ph})")
+            elif self.surface_property == 'curvature':
+                self.progress.emit("  Using local surface-neighborhood curvature estimation")
+            elif self.surface_property == 'hbond':
+                self.progress.emit("  Using approximate donor/acceptor surface classification")
+            elif self.surface_property == 'hydrophobicity':
+                self.progress.emit("  Using residue hydrophobicity scale")
             else:
                 self.progress.emit("  Using residue-based electrostatic approximation")
             
@@ -292,16 +302,21 @@ class SurfaceAnalysisWorker(QThread):
             
             analyzer = SurfaceAnalyzer(
                 self.obj_name, 
-                use_apbs=self.use_apbs, 
-                ph=self.ph
+                use_apbs=effective_use_apbs,
+                ph=self.ph,
+                selection=self.selection,
             )
             patches = analyzer.analyze()
 
-            # 中文注释：按界面选择过滤 patch 类型，避免“Electrostatic/Hydrophobicity”两个选项显示同一批结果
+            # Filter patch types by UI selection to avoid duplicate results
             if self.surface_property == 'electrostatic':
-                patches = [p for p in patches if p.type in ('positive', 'negative')]
+                patches = [p for p in patches if p.type in ('electrostatic_pos', 'electrostatic_neg')]
             elif self.surface_property == 'hydrophobicity':
                 patches = [p for p in patches if p.type == 'hydrophobic']
+            elif self.surface_property == 'curvature':
+                patches = [p for p in patches if p.type == 'concave']
+            elif self.surface_property == 'hbond':
+                patches = [p for p in patches if p.type in ('hbond_donor', 'hbond_acceptor')]
 
             self.progress.emit(
                 f"Analysis complete. Found {len(patches)} patches (property={self.surface_property})."
@@ -311,7 +326,16 @@ class SurfaceAnalysisWorker(QThread):
             if self.out_csv:
                 import csv
                 with open(self.out_csv, 'w', newline='', encoding='utf-8') as f:
-                    fieldnames = ['id', 'type', 'area', 'score', 'center', 'avg_potential', 'residues']
+                    fieldnames = [
+                        'id', 'type', 'area', 'score', 'center',
+                        'avg_potential', 'avg_hydrophobicity',
+                        'curvature', 'avg_curvature', 'avg_signed_curvature',
+                        'avg_concavity', 'shape_index',
+                        'hydrophobic_fraction', 'polar_fraction',
+                        'positive_fraction', 'negative_fraction', 'aromatic_fraction',
+                        'hbond_donors', 'hbond_acceptors', 'avg_hbond_role',
+                        'num_residues', 'residues'
+                    ]
                     writer = csv.DictWriter(f, fieldnames=fieldnames, extrasaction='ignore')
                     writer.writeheader()
                     for p in patches:
@@ -333,12 +357,17 @@ class SurfaceSimilarityWorker(QThread):
     def __init__(self, obj1: str, obj2: str = None,
                  selection1: str = "all", selection2: str = "all",
                  analysis_type: str = "similarity",  # "similarity", "complementarity", or "search"
-                 patch_radius: float = 12.0,
+                 patch_radius: float = 9.0,
                  interface_distance: float = 4.0,
                  out_csv: str = None,
                  surface_method: str = "auto",
                  similarity_threshold: float = 0.5,
-                 top_k: int = 5):
+                 top_k: int = 5,
+                 receptor_anchor_coords=None,
+                 receptor_anchor_radius: float = 8.0,
+                 receptor_anchor_mode: str = "include",
+                 receptor_template_center=None,
+                 template_class: str = "imid"):
         super().__init__()
         self.obj1 = obj1
         self.obj2 = obj2
@@ -351,33 +380,32 @@ class SurfaceSimilarityWorker(QThread):
         self.surface_method = surface_method
         self.similarity_threshold = similarity_threshold
         self.top_k = top_k
+        self.receptor_anchor_coords = receptor_anchor_coords
+        self.receptor_anchor_radius = receptor_anchor_radius
+        self.receptor_anchor_mode = receptor_anchor_mode
+        self.receptor_template_center = receptor_template_center
+        self.template_class = template_class
 
     def _emit_backend_notice(self, analyzer) -> None:
         """Explain the active precision mode and how to enable the preferred backend."""
         resolved_method = getattr(analyzer.surface_generator, "last_resolved_method", self.surface_method)
-        open3d_available = resolved_method == "open3d"
         apbs_available = bool(find_executable("apbs"))
 
         self.progress.emit(f"  Active surface backend: {resolved_method}")
-        if self.surface_method == "auto":
-            self.progress.emit("  Auto mode policy: open3d -> edtsurf")
-
-        if not open3d_available:
-            self.progress.emit("  Precision notice: Open3D is unavailable, so GLINT is using the built-in EDTSurf fallback.")
-            self.progress.emit("  For higher-precision surface reconstruction, install Open3D or rerun the installer:")
-            self.progress.emit("    conda install -n glint -c conda-forge open3d")
-            self.progress.emit("    or bash install_glint.sh")
+        self.progress.emit("  Surface policy: MSMS only")
 
         if not apbs_available:
             self.progress.emit("  Electrostatics notice: APBS is unavailable, so electrostatics fall back to the Coulomb approximation.")
             self.progress.emit("  For higher-precision electrostatics, install APBS:")
             self.progress.emit("    conda install -n glint -c conda-forge apbs pdb2pqr")
+        else:
+            self.progress.emit("  Electrostatics: APBS/PDB2PQR enabled for surface potential sampling.")
         
     def run(self):
         try:
             from ..surface_similarity import SurfaceSimilarityAnalyzer
             
-            self.progress.emit(f"Initializing surface analyzer (method={self.surface_method}, electrostatics=APBS-first)...")
+            self.progress.emit(f"Initializing surface analyzer (method={self.surface_method}, electrostatics=APBS/PDB2PQR-first)...")
             
             analyzer = SurfaceSimilarityAnalyzer(
                 surface_method=self.surface_method,
@@ -392,31 +420,129 @@ class SurfaceSimilarityWorker(QThread):
                 result = analyzer.analyze_complementarity(
                     self.obj1, self.obj2,
                     self.selection1, self.selection2,
-                    self.interface_distance
+                    self.interface_distance,
+                    receptor_anchor_coords=self.receptor_anchor_coords,
+                    receptor_anchor_radius=self.receptor_anchor_radius,
+                    receptor_anchor_mode=self.receptor_anchor_mode,
+                    receptor_template_center=self.receptor_template_center,
+                    template_class=self.template_class,
                 )
                 self._emit_backend_notice(analyzer)
                 
                 self.progress.emit(
-                    f"Complementarity analysis complete ({getattr(result, 'analysis_mode', 'interface')}). "
+                    f"Complementarity analysis complete ({getattr(result, 'analysis_mode', 'patch')}). "
                     f"Score: {result.score:.3f}"
                 )
                 
-                # Export interface residues if CSV requested
+                # Export patch-based complementarity results if CSV requested
                 if self.out_csv:
                     import csv
                     with open(self.out_csv, 'w', newline='', encoding='utf-8') as f:
                         writer = csv.writer(f)
                         writer.writerow(['Metric', 'Value'])
                         writer.writerow(['Overall_Score', f"{result.score:.4f}"])
+                        writer.writerow(['Main_Model', getattr(result, 'main_model_name', 'HybridPatchScore')])
+                        writer.writerow(['Template_Class', getattr(result, 'template_class', self.template_class)])
+                        writer.writerow(['Core_Overall_Score', f"{getattr(result, 'core_overall_score', result.score):.4f}"])
                         writer.writerow(['Geometric_Complementarity', f"{result.geometric_complementarity:.4f}"])
                         writer.writerow(['Electrostatic_Complementarity', f"{result.electrostatic_complementarity:.4f}"])
+                        writer.writerow(['Directional_Electrostatic_Complementarity', f"{getattr(result, 'directional_electrostatic_complementarity', 0.0):.4f}"])
+                        writer.writerow(['Effective_Electrostatic_Complementarity', f"{getattr(result, 'effective_electrostatic_complementarity', result.electrostatic_complementarity):.4f}"])
                         writer.writerow(['Hydrophobic_Complementarity', f"{result.hydrophobic_complementarity:.4f}"])
-                        writer.writerow(['Interface_Area', f"{result.interface_area:.2f}"])
-                        writer.writerow(['N_Contacts', result.n_contacts])
+                        writer.writerow(['Hbond_DA_Complementarity', f"{getattr(result, 'hbond_complementarity', 0.0):.4f}"])
+                        writer.writerow(['Electrostatic_Gate_Threshold', f"{getattr(result, 'electrostatic_gate_threshold', 0.0):.4f}"])
+                        writer.writerow(['Electrostatic_Gate_Multiplier', f"{getattr(result, 'electrostatic_gate_multiplier', 1.0):.4f}"])
+                        writer.writerow(['Patch_Matches', getattr(result, 'n_patch_matches', 0)])
+                        writer.writerow(['Patch_Radius_A', f"{getattr(result, 'patch_radius', 0.0):.2f}"])
+                        writer.writerow(['Coordinate_Distance_Mode', 'ignored_for_independent_patch_search'])
                         writer.writerow(['', ''])
-                        writer.writerow(['Receptor_Residue', 'Ligand_Residue'])
-                        for r1, r2 in result.interface_residues:
-                            writer.writerow([r1, r2])
+                        writer.writerow([
+                            'Rank', 'Overall_Score', 'Geometric_Score',
+                            'Core_Overall_Score',
+                            'Electrostatic_Score', 'Directional_Electrostatic_Score',
+                            'Effective_Electrostatic_Score', 'Electrostatic_Gate_Multiplier',
+                            'Hydrophobic_Score', 'Hbond_DA_Score',
+                            'Interface_Score', 'Focused_Interface_Score',
+                            'Background_Score', 'Interface_Delta',
+                            'Fingerprint_Score', 'Fingerprint_Shape_Score',
+                            'Fingerprint_Curvature_Score', 'Fingerprint_ESP_Score',
+                            'Fingerprint_Hydro_Score', 'Fingerprint_Hbond_DA_Score',
+                            'Fingerprint_Hbond_Total_Score',
+                            'Template_Match_Score', 'Target_Pocketness_Gate',
+                            'Specificity_Score', 'Template_Anchor_Distance_A',
+                            'Receptor_Center_X', 'Receptor_Center_Y', 'Receptor_Center_Z',
+                            'Ligand_Center_X', 'Ligand_Center_Y', 'Ligand_Center_Z',
+                            'Receptor_Patch_Residues', 'Ligand_Patch_Residues'
+                        ])
+                        for idx, match in enumerate(getattr(result, 'patch_matches', []), start=1):
+                            writer.writerow([
+                                idx,
+                                f"{match.overall_score:.4f}",
+                                f"{match.geometric_score:.4f}",
+                                f"{getattr(match, 'core_overall_score', match.overall_score):.4f}",
+                                f"{match.electrostatic_score:.4f}",
+                                f"{getattr(match, 'directional_electrostatic_score', 0.0):.4f}",
+                                f"{getattr(match, 'effective_electrostatic_score', match.electrostatic_score):.4f}",
+                                f"{getattr(match, 'electrostatic_gate_multiplier', 1.0):.4f}",
+                                f"{match.hydrophobic_score:.4f}",
+                                f"{getattr(match, 'hbond_score', 0.0):.4f}",
+                                f"{getattr(match, 'interface_score', 0.0):.4f}",
+                                f"{getattr(match, 'focused_interface_score', 0.0):.4f}",
+                                f"{getattr(match, 'background_score', 0.0):.4f}",
+                                f"{getattr(match, 'interface_delta', 0.0):.4f}",
+                                f"{getattr(match, 'fingerprint_score', 0.0):.4f}",
+                                f"{getattr(match, 'fingerprint_shape_score', 0.0):.4f}",
+                                f"{getattr(match, 'fingerprint_curvature_score', 0.0):.4f}",
+                                f"{getattr(match, 'fingerprint_esp_score', 0.0):.4f}",
+                                f"{getattr(match, 'fingerprint_hydro_score', 0.0):.4f}",
+                                f"{getattr(match, 'fingerprint_hbond_score', 0.0):.4f}",
+                                f"{getattr(match, 'fingerprint_hbond_total_score', 0.0):.4f}",
+                                f"{getattr(match, 'template_match_score', 0.0):.4f}",
+                                f"{getattr(match, 'target_pocketness_score', 0.0):.4f}",
+                                f"{getattr(match, 'specificity_score', 0.0):.4f}",
+                                f"{getattr(match, 'template_anchor_distance', float('nan')):.4f}",
+                                f"{match.center1[0]:.3f}",
+                                f"{match.center1[1]:.3f}",
+                                f"{match.center1[2]:.3f}",
+                                f"{match.center2[0]:.3f}",
+                                f"{match.center2[1]:.3f}",
+                                f"{match.center2[2]:.3f}",
+                                ";".join(match.residues1),
+                                ";".join(match.residues2),
+                            ])
+                        ablation_rankings = getattr(result, 'ablation_rankings', {}) or {}
+                        if ablation_rankings:
+                            writer.writerow(['', ''])
+                            writer.writerow(['Ablation_Baseline_Rankings'])
+                            writer.writerow([
+                                'Model', 'Rank', 'Score_For_Model', 'Full_GLINT_Score',
+                                'Template_Match_Score', 'Target_Pocketness_Gate',
+                                'Specificity_Score', 'Target_Center_X', 'Target_Center_Y',
+                                'Target_Center_Z', 'Target_Patch_Residues'
+                            ])
+                            score_attr = {
+                                'Full_GLINT': 'overall_score',
+                                'TemplateMatch_only': 'template_only_score',
+                                'PocketGate_only': 'pocket_only_score',
+                                'TemplateMatch_x_SpecificityGate': 'template_specificity_score',
+                                'TemplateMatch_x_SoftPocketGate': 'template_pocket_score',
+                            }
+                            for model_name, matches in ablation_rankings.items():
+                                attr = score_attr.get(model_name, 'overall_score')
+                                for idx, match in enumerate(matches, start=1):
+                                    writer.writerow([
+                                        model_name,
+                                        idx,
+                                        f"{getattr(match, attr, 0.0):.4f}",
+                                        f"{getattr(match, 'overall_score', 0.0):.4f}",
+                                        f"{getattr(match, 'template_match_score', 0.0):.4f}",
+                                        f"{getattr(match, 'target_pocketness_score', 0.0):.4f}",
+                                        f"{getattr(match, 'specificity_score', 0.0):.4f}",
+                                        f"{match.center2[0]:.3f}",
+                                        f"{match.center2[1]:.3f}",
+                                        f"{match.center2[2]:.3f}",
+                                        ";".join(match.residues2),
+                                    ])
                     self.progress.emit(f"Results saved to {self.out_csv}")
             
             elif self.analysis_type == "search" and self.obj2:

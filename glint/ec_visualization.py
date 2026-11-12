@@ -138,13 +138,13 @@ def _ec_5color_interpolate(t: float):
     相邻锚点之间线性插Value。
 
     Args:
-        t: 归一化进degrees [0, 1]
+        t: normalized value [0, 1]
 
     Returns:
-        (r, g, b) 元组，每个分量 ∈ [0, 1]
+        (r, g, b) tuple, each component ∈ [0, 1]
     """
-    # 中文注释：使用更柔和、论文图风格更强的红白绿锚点，
-    # 降低饱和度与纯色冲击，减少当前表面的"塑料感"和硬切感。
+    # Note: Use softer, publication-style red-white-green anchors
+    # reduce saturation, soften surface appearance
     anchors = [
         (0.00, (0.72, 0.25, 0.25)),
         (0.25, (0.93, 0.63, 0.63)),
@@ -196,7 +196,7 @@ def _apply_5color_ec_gradient(surface_obj: str, b_min: float, b_max: float):
         b_min: B-factor 最小Value（对应 EC 最小Value * 100）
         b_max: B-factor 最大Value（对应 EC 最大Value * 100）
     """
-    # 中文注释：采用更柔和的论文风配色，保留红=冲突、绿=互补的语义，
+    # Note: Use softer publication-style colors, keep red=clash, green=complementary semantics
     # 同时降低纯色冲击，让 surface 看起来更高级、更自然。
     cmd.set_color('ec_dark_red', [0.72, 0.25, 0.25])
     cmd.set_color('ec_light_red', [0.93, 0.63, 0.63])
@@ -257,7 +257,7 @@ def _create_ec_real_surface_cgo(surface_name: str,
     k_neighbors = min(12, len(surface_points))
     distances, indices = tree.query(mesh.vertices, k=k_neighbors)
 
-    # 中文注释：对每个 mesh 顶点使用多个最近邻 EC 采样点做反距离加权平均，
+    # Note: Use IDW average from nearest EC samples for each mesh vertex
     # 减少单点投影造成的斑点/拼贴感，让 Solid Surface 更接近连续实体表面。
     if k_neighbors == 1:
         vertex_ec = ec_values[indices]
@@ -334,16 +334,16 @@ def _create_ec_real_mesh_cgo(mesh_name: str,
             s = (t - 0.5) * 2
             base = (1.0, 1.0 - s, 1.0 - s)
 
-        # 中文注释：向白色轻微混合，让点状外壳更接近参考图中的柔和电势云层。
+        # Note: Blend towards white for softer potential cloud appearance
         soft = float(np.clip(color_softness, 0.0, 0.8))
         return tuple((1.0 - soft) * c + soft * 1.0 for c in base)
 
-    # 中文注释：规则抽稀表面点，避免外壳过厚、过密，形成更轻盈的 dotted shell。
+    # Note: Thin surface points for lighter dotted shell appearance
     stride = max(int(edge_stride), 1)
     visible_points = surface_points[::stride]
     visible_ec = ec_values[::stride]
 
-    # 中文注释：小球半径使用较小固定值，使视觉更接近"点状 mesh"，而非连续 surface。
+    # Note: Use small sphere radius for dotted mesh look vs continuous surface
     sphere_radius = 0.18
     cgo_obj = []
     for point, ec_val in zip(visible_points, visible_ec):
@@ -612,7 +612,7 @@ def _show_ec_contributing_residues(obj_name: str,
     except Exception:
         pass
 
-    # 中文注释：EC residue 视图只允许红色冲突残基以 sticks 显示。
+    # Note: EC residue view only shows red clash residues as sticks
     # 先隐藏所有蛋白 sticks/licorice，避免全蛋白背景紫色或历史显示状态漏出来。
     try:
         cmd.hide('sticks', f"({obj_name} and polymer)")
@@ -636,7 +636,7 @@ def _show_ec_contributing_residues(obj_name: str,
         atom_meta.append((atom.chain, atom.resi, atom.resn))
 
 
-    # 中文注释：贡献残基着色前确保 EC 命名颜色可用，避免 Unknown color 异常。
+    # Note: Ensure EC colors are registered before residue coloring
     _ensure_ec_colors_registered()
 
     if not atom_coords:
@@ -679,7 +679,7 @@ def _show_ec_contributing_residues(obj_name: str,
     shown_count = 0
     red_residue_keys = []
     for (chain, resi, resn), mean_ec, strength, n_points in ranked:
-        # 中文注释：EC 残基提示只突出红色冲突残基；绿色互补已由 EC surface 表达。
+        # Note: EC residue hints highlight red clash residues; green shown by surface
         if mean_ec > -0.03:
             continue
         residue_sel = _make_residue_selection(obj_name, chain, resi, resn)
@@ -780,7 +780,7 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
 
     ligand_sel = f"{obj_name} and resn {ligand_resname}"
 
-    # 中文注释：清理旧 legend，避免 3D 图例对象干扰主分子视图。
+    # Note: Clear old legend to avoid interference with main molecular view
     for legend_obj in [
         "ec_legend_bar", "ec_legend_title",
         "ec_label_1", "ec_label_2", "ec_label_3", "ec_label_4", "ec_label_5"
@@ -793,14 +793,14 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
     surface_obj = f"ec_surface_{ligand_resname}"
     mesh_obj = f"ec_mesh_{ligand_resname}"
 
-    # 中文注释：切换到 solid 时顺便清理旧 mesh 对象，避免样式切换后彼此覆盖。
+    # Note: Clear old mesh when switching to solid to avoid overlap
     try:
         cmd.delete(mesh_obj)
     except Exception:
         pass
 
 
-    # 中文注释：先删除旧对象，避免重复创建后的显示状态残留。
+    # Note: Delete old objects first to avoid display state residue
     try:
         cmd.delete(surface_obj)
     except Exception:
@@ -875,7 +875,7 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
     cmd.set('surface_mode', 0, surface_obj)
     cmd.set('two_sided_lighting', 1, surface_obj)
 
-    # 中文注释：solid 默认改为更接近参考图的 molecular surface，
+    # Note: Solid defaults to molecular surface closer to reference images
     # 并适当降低透明度，减少 PyMOL 视口中的点阵/抖动感。
     surface_type_map = {
         'molecular': 0,
@@ -884,7 +884,7 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
     }
     cmd.set('surface_type', surface_type_map.get(surface_type, 2), surface_obj)
 
-    # 中文注释：solid 路线只保留平滑半透明 surface，不使用 mesh/三角壳逻辑。
+    # Note: Solid route keeps smooth semi-transparent surface, no mesh logic
     cmd.set('surface_quality', max(surface_quality, 4), surface_obj)
     cmd.set('surface_smooth_edges', 1, surface_obj)
     cmd.set('surface_proximity', 1, surface_obj)
@@ -913,7 +913,7 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
     cmd.set('surface_color_smoothing_threshold', 0.22)
     cmd.set('surface_quality', max(surface_quality, 4), surface_obj)
 
-    # 中文注释：solid 参考图里 sticks 是清楚但不过粗，因此适当减细并弱化碳颜色。
+    # Note: Sticks in reference are clear but not thick, so thin and soften carbon
     if show_ligand_sticks:
         cmd.show('sticks', ligand_sel)
         cmd.set('stick_radius', 0.18, ligand_sel)
@@ -930,7 +930,7 @@ def visualize_ec_smooth_surface(obj_name: str, ligand_resname: str,
         cmd.set('stick_transparency', 0.0, ligand_sel)
 
 
-    # 中文注释：在实际着色前先确保自定义紫色已注册，避免 Unknown color 异常。
+    # Note: Ensure custom purple is registered before coloring
     cmd.set_color('glint_protein_purple', [0.67, 0.55, 0.86])
 
     # Step 8: Show nearby protein residues
@@ -1068,7 +1068,7 @@ def _set_publication_rendering():
     # Anti-aliasing
     cmd.set('antialias', 2)
 
-    # 中文注释：使用更适合半透明实体表面的显示参数，避免视口里出现明显点阵/抖动感。
+    # Note: Use params suited for semi-transparent surfaces
     cmd.set('surface_smooth_edges', 1)
     cmd.set('two_sided_lighting', 1)
     cmd.set('transparency_mode', 2)
@@ -1076,7 +1076,7 @@ def _set_publication_rendering():
     # Background
     cmd.bg_color('white')
 
-    # 中文注释：将蛋白主体统一设为柔和紫色，提升和红绿 EC surface 的区分度。
+    # Note: Set protein to soft purple for contrast with red-green EC surface
     cmd.set_color('glint_protein_purple', [0.67, 0.55, 0.86])
 
     # Depth cueing
@@ -1213,7 +1213,7 @@ def create_ec_legend(position: str = 'bottom_right',
         bar_height = 1.2   # 水平色条高度
         step_w = bar_width / n_steps
 
-        # 中文注释：改为水平图例并向右下角偏移，降低透视倾斜和文字裁切问题。
+        # Note: Use horizontal legend offset to reduce perspective issues
         x_base = 18.0
         y_base = -12.0
         z_base = 0.0
@@ -1650,7 +1650,7 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
         ec_values = ec_result.get('ec_values', ec_values)
         surface_points = ec_result.get('surface_points', surface_points)
 
-    # 中文注释：清理旧 legend，避免 3D 图例对象干扰主分子视图。
+    # Note: Clear old legend to avoid interference with main molecular view
     for legend_obj in [
         "ec_legend_bar", "ec_legend_title",
         "ec_label_1", "ec_label_2", "ec_label_3", "ec_label_4", "ec_label_5"
@@ -1666,7 +1666,7 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
         return False
     surface_obj = f"ec_surface_{ligand_resname}"
 
-    # 中文注释：切换到 mesh 时顺便清理旧 solid surface 对象，避免旧壳层残留覆盖 mesh。
+    # Note: Clear old solid surface when switching to mesh
     try:
         cmd.delete(surface_obj)
     except Exception:
@@ -1685,7 +1685,7 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
     ligand_sel = f"{obj_name} and resn {ligand_resname}"
     mesh_obj = f"ec_mesh_{ligand_resname}"
 
-    # 中文注释：删除旧 mesh 对象，避免历史显示状态干扰本次绘制。
+    # Note: Delete old mesh objects to avoid history interference
     try:
         cmd.delete(mesh_obj)
     except Exception:
@@ -1705,7 +1705,7 @@ def visualize_ec_mesh_surface(obj_name: str, ligand_resname: str,
 
     cmd.rebuild(mesh_obj)
 
-    # 中文注释：优先使用真实 CGO 线框 mesh，确保在当前图形环境下也能稳定看到外壳。
+    # Note: Prefer real CGO wire mesh for stable visibility
     if _create_ec_real_mesh_cgo(
         mesh_name=mesh_obj,
         ligand_sel=ligand_sel,

@@ -47,27 +47,27 @@ class TargetDiscoveryTab(CommonTab):
         """User-facing note about fallback behavior and high-precision setup."""
         lines = [
             "Surface Similarity & Complementarity precision policy:",
-            "  Auto mode uses open3d first and falls back to built-in edtsurf if needed.",
+            "  Surface generation uses MSMS only.",
             "  Electrostatics run in APBS-first mode and fall back automatically if APBS is unavailable.",
             "",
             "For higher-precision setup:",
-            "  conda install -n glint -c conda-forge open3d apbs pdb2pqr",
+            "  conda install -n glint -c bioconda -c conda-forge scripps-msms",
+            "  conda install -n glint -c conda-forge apbs pdb2pqr",
             "  or rerun: bash install_glint.sh",
         ]
 
-        open3d_ready = False
         try:
-            import open3d  # noqa: F401
-            open3d_ready = True
+            from ...surface_similarity import SurfaceGenerator
+            msms_ready = bool(SurfaceGenerator("msms").msms_path)
         except Exception:
-            open3d_ready = False
+            msms_ready = False
 
         apbs_ready = bool(find_executable("apbs"))
 
         lines.extend([
             "",
             f"Current environment:",
-            f"  Open3D: {'available' if open3d_ready else 'missing -> edtsurf fallback may be used'}",
+            f"  MSMS: {'available' if msms_ready else 'missing -> install scripps-msms before running surface analysis'}",
             f"  APBS: {'available' if apbs_ready else 'missing -> Coulomb approximation may be used'}",
         ])
 
@@ -200,8 +200,6 @@ class TargetDiscoveryTab(CommonTab):
 
         gm_layout.addLayout(gm_btn_row)
 
-        layout.addWidget(grp_gm)
-
         # 4. Surface Analysis
         grp_surf = QFrame()
         grp_surf.setStyleSheet(self._get_card_style(is_dark))
@@ -247,14 +245,51 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.surf_color_mode.setMinimumHeight(32)
         self.parent_window.surf_color_mode.addItems([
             "Electrostatic Potential",
-            "Hydrophobicity"
+            "Hydrophobicity",
+            "Curvature / Concavity",
+            "Donor / Acceptor"
         ])
         self.parent_window.surf_color_mode.setToolTip(
             "Select surface coloring mode:\n"
             "• Electrostatic Potential: Red (negative) → White (neutral) → Blue (positive)\n"
-            "• Hydrophobicity: White (hydrophilic) → Green (hydrophobic)"
+            "• Hydrophobicity: White (hydrophilic) → Green (hydrophobic)\n"
+            "• Curvature / Concavity: Purple (concave) → light gray (flat) → gold (convex)\n"
+            "• Donor / Acceptor: Magenta (acceptor) → light gray (neutral) → cyan (donor)"
         )
         surf_grid.addWidget(self.parent_window.surf_color_mode, 1, 3)
+
+        # Row 2: Analysis scope
+        surf_grid.addWidget(QLabel("Scope:"), 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.surf_scope_mode = QComboBox()
+        self.parent_window.surf_scope_mode.setMinimumHeight(32)
+        self.parent_window.surf_scope_mode.addItems(["Full Surface", "Ligand Pocket"])
+        self.parent_window.surf_scope_mode.setToolTip(
+            "Choose which part of the object to analyze:\n"
+            "• Full Surface: all atoms in the object\n"
+            "• Ligand Pocket: polymer residues within radius of a ligand selection"
+        )
+        surf_grid.addWidget(self.parent_window.surf_scope_mode, 2, 1)
+
+        self.parent_window.surf_scope_label = QLabel("Ligand / Selection:")
+        surf_grid.addWidget(self.parent_window.surf_scope_label, 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.surf_scope_selection = QLineEdit("organic")
+        self.parent_window.surf_scope_selection.setMinimumHeight(32)
+        self.parent_window.surf_scope_selection.setPlaceholderText("organic or resn LIG")
+        self.parent_window.surf_scope_selection.setToolTip(
+            "Ligand Pocket mode: ligand selection, e.g. 'organic' or 'resn LIG'."
+        )
+        self.parent_window.surf_scope_radius = QLineEdit("6.0")
+        self.parent_window.surf_scope_radius.setMinimumHeight(32)
+        self.parent_window.surf_scope_radius.setMaximumWidth(72)
+        self.parent_window.surf_scope_radius.setToolTip("Ligand pocket radius in Å")
+        scope_row = QHBoxLayout()
+        scope_row.addWidget(self.parent_window.surf_scope_selection, 1)
+        self.parent_window.surf_scope_radius_label = QLabel("Å:")
+        scope_row.addWidget(self.parent_window.surf_scope_radius_label)
+        scope_row.addWidget(self.parent_window.surf_scope_radius)
+        surf_grid.addLayout(scope_row, 2, 3)
+        self.parent_window.surf_scope_mode.currentIndexChanged.connect(self._update_surface_scope_ui)
+        self._update_surface_scope_ui()
 
         surf_layout.addLayout(surf_grid)
 
@@ -267,22 +302,16 @@ class TargetDiscoveryTab(CommonTab):
         self.parent_window.surf_btn.setStyleSheet(self._get_primary_btn_style())
         self.parent_window.surf_btn.clicked.connect(self.start_surface_analysis)
 
-        self.parent_window.surf_vis_btn = QPushButton("Visualize Patches")
-        self.parent_window.surf_vis_btn.setMinimumHeight(36)
-        self.parent_window.surf_vis_btn.setStyleSheet(self._get_green_btn_style())
-        self.parent_window.surf_vis_btn.clicked.connect(self.render_surface_patches)
-
-        self.parent_window.surf_full_btn = QPushButton("Full Surface")
+        self.parent_window.surf_full_btn = QPushButton("Render Surface")
         self.parent_window.surf_full_btn.setMinimumHeight(36)
         self.parent_window.surf_full_btn.setStyleSheet(self._get_purple_btn_style())
         self.parent_window.surf_full_btn.setToolTip(
-            "Render complete protein surface with continuous color mapping.\n"
-            "Red = negative potential, White = neutral, Blue = positive potential"
+            "Render the selected scope with continuous color mapping.\n"
+            "Uses the selected surface property and scope: full surface or ligand pocket."
         )
         self.parent_window.surf_full_btn.clicked.connect(self.render_full_surface)
 
         surf_btn_row.addWidget(self.parent_window.surf_btn)
-        surf_btn_row.addWidget(self.parent_window.surf_vis_btn)
         surf_btn_row.addWidget(self.parent_window.surf_full_btn)
         surf_btn_row.addStretch(1)
 
@@ -321,7 +350,8 @@ class TargetDiscoveryTab(CommonTab):
         # Row 1: Selection 1 / Selection 2
         self.parent_window.sim_sel1_label = QLabel("Template Selection:")
         sim_grid.addWidget(self.parent_window.sim_sel1_label, 1, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.sim_sel1 = QLineEdit("all"); self.parent_window.sim_sel1.setMinimumHeight(32)
+        self.parent_window.sim_sel1 = QLineEdit("all")
+        self.parent_window.sim_sel1.setMinimumHeight(32)
         self.parent_window.sim_sel1.setToolTip(
             "Template region inside Object 1. Examples:\n"
             "  • 'all' - entire structure\n"
@@ -333,7 +363,8 @@ class TargetDiscoveryTab(CommonTab):
 
         self.parent_window.sim_sel2_label = QLabel("Target Selection:")
         sim_grid.addWidget(self.parent_window.sim_sel2_label, 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.sim_sel2 = QLineEdit("all"); self.parent_window.sim_sel2.setMinimumHeight(32)
+        self.parent_window.sim_sel2 = QLineEdit("all")
+        self.parent_window.sim_sel2.setMinimumHeight(32)
         self.parent_window.sim_sel2.setToolTip(
             "Target region inside Object 2. Examples:\n"
             "  • 'all' - entire structure\n"
@@ -346,39 +377,49 @@ class TargetDiscoveryTab(CommonTab):
         # Row 2: Template Region / Ligand Pocket
         self.parent_window.sim_template_region_label = QLabel("Template Source:")
         sim_grid.addWidget(self.parent_window.sim_template_region_label, 2, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.sim_template_region = QComboBox(); self.parent_window.sim_template_region.setMinimumHeight(32)
+        self.parent_window.sim_template_region = QComboBox()
+        self.parent_window.sim_template_region.setMinimumHeight(32)
         self.parent_window.sim_template_region.addItems(["Custom Region", "Ligand Pocket"])
         self.parent_window.sim_template_region.setToolTip(
             "Custom Region: use the Template Selection field.\n"
-            "Ligand Pocket: automatically build a binding-pocket selection around a ligand in Object 1."
+            "Ligand Pocket: constrain the fixed template patch around an anchor in Object 1."
         )
         self.parent_window.sim_template_region.setCurrentText("Ligand Pocket")
         sim_grid.addWidget(self.parent_window.sim_template_region, 2, 1)
 
-        self.parent_window.sim_pocket_label = QLabel("Pocket Ligand / Radius:")
+        self.parent_window.sim_pocket_label = QLabel("Anchor Position:")
         sim_grid.addWidget(self.parent_window.sim_pocket_label, 2, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.sim_pocket_ligand = QLineEdit("organic")
+        self.parent_window.sim_pocket_ligand = QLineEdit("LVY")
         self.parent_window.sim_pocket_ligand.setMinimumHeight(32)
         self.parent_window.sim_pocket_ligand.setToolTip(
-            "Ligand selection inside Object 1.\n"
-            "Examples: 'resn LIG', 'organic', 'chain B and resn LEN'"
+            "Anchor position inside Object 1. GLINT converts this selection to atom coordinates\n"
+            "and only generates Object 1 template patches within the specified radius.\n"
+            "Examples:\n"
+            "  • 'LVY' - interpreted as 'resn LVY'\n"
+            "  • 'resn LVY' - residue named LVY\n"
+            "  • 'organic' - any organic molecule\n"
+            "  • 'chain E and resn LVY' - chain-specific anchor"
         )
+        self.parent_window.sim_pocket_ligand.setPlaceholderText("e.g., LVY, resn LVY, organic")
         self.parent_window.sim_pocket_radius = QLineEdit("6.0")
         self.parent_window.sim_pocket_radius.setMinimumHeight(32)
         self.parent_window.sim_pocket_radius.setMaximumWidth(80)
         self.parent_window.sim_pocket_radius.setToolTip(
-            "Pocket radius around the ligand selection (Å).\n"
-            "Uses an atom-level polymer selection without automatic whole-residue expansion."
+            "Anchor radius around the input position (Å).\n"
+            "Typical values: 4-10 Å"
         )
-        self.parent_window.sim_pocket_row = QHBoxLayout(); self.parent_window.sim_pocket_row.addWidget(self.parent_window.sim_pocket_ligand, 1); self.parent_window.sim_pocket_row.addWidget(self.parent_window.sim_pocket_radius)
+        self.parent_window.sim_pocket_row = QHBoxLayout()
+        self.parent_window.sim_pocket_row.addWidget(self.parent_window.sim_pocket_ligand, 1)
+        self.parent_window.sim_pocket_row.addWidget(QLabel("Å:"))
+        self.parent_window.sim_pocket_row.addWidget(self.parent_window.sim_pocket_radius)
         sim_grid.addLayout(self.parent_window.sim_pocket_row, 2, 3)
 
         # Row 3: Surface Method / Output CSV
         self.parent_window.sim_surface_method_label = QLabel("Surface Method:")
         sim_grid.addWidget(self.parent_window.sim_surface_method_label, 3, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
         self.parent_window.sim_surface_method = QComboBox(); self.parent_window.sim_surface_method.setMinimumHeight(32)
-        self.parent_window.sim_surface_method.addItems(["auto", "open3d", "edtsurf"])
-        self.parent_window.sim_surface_method.setToolTip("auto: prefer open3d, then built-in edtsurf\nopen3d: preferred quality backend\nedtsurf: built-in fallback")
+        self.parent_window.sim_surface_method.addItems(["msms"])
+        self.parent_window.sim_surface_method.setToolTip("MSMS molecular surface. Install with: conda install -n glint -c bioconda -c conda-forge scripps-msms")
         sim_grid.addWidget(self.parent_window.sim_surface_method, 3, 1)
 
         sim_grid.addWidget(QLabel("Output CSV:"), 3, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
@@ -387,19 +428,25 @@ class TargetDiscoveryTab(CommonTab):
         r4_sim = QHBoxLayout(); r4_sim.addWidget(self.parent_window.sim_out_csv, 1); r4_sim.addWidget(self.parent_window.sim_out_browse)
         sim_grid.addLayout(r4_sim, 3, 3)
         
-        # Row 4: Patch Radius / Interface Distance
+        # Row 4: Patch Radius
         self.parent_window.sim_patch_radius_label = QLabel("Patch Radius (Å):")
         sim_grid.addWidget(self.parent_window.sim_patch_radius_label, 4, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.sim_patch_radius = QLineEdit("12.0"); self.parent_window.sim_patch_radius.setMinimumHeight(32)
-        self.parent_window.sim_patch_radius.setToolTip("Radius of surface patches for comparison (default: 12 Å)")
+        self.parent_window.sim_patch_radius = QLineEdit("9.0"); self.parent_window.sim_patch_radius.setMinimumHeight(32)
+        self.parent_window.sim_patch_radius.setToolTip("Radius of surface patches for comparison (default: 9 Å)")
         sim_grid.addWidget(self.parent_window.sim_patch_radius, 4, 1)
-        
-        self.parent_window.sim_interface_dist_label = QLabel("Interface Dist (Å):")
-        sim_grid.addWidget(self.parent_window.sim_interface_dist_label, 4, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self.parent_window.sim_interface_dist = QLineEdit("4.0"); self.parent_window.sim_interface_dist.setMinimumHeight(32)
-        self.parent_window.sim_interface_dist.setToolTip("Distance threshold for interface contacts (default: 4 Å)")
-        sim_grid.addWidget(self.parent_window.sim_interface_dist, 4, 3)
-        
+
+        self.parent_window.sim_template_class_label = QLabel("Template Class:")
+        sim_grid.addWidget(self.parent_window.sim_template_class_label, 4, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        self.parent_window.sim_template_class = QComboBox()
+        self.parent_window.sim_template_class.setMinimumHeight(32)
+        self.parent_window.sim_template_class.addItems(["IMiD / small glue", "Macrocycle / large glue"])
+        self.parent_window.sim_template_class.setToolTip(
+            "Ligand-class-aware fixed-template scoring.\n"
+            "IMiD: pocket-focused detection with stronger pocket gate.\n"
+            "Macrocycle: contact-focused detection with weaker pocket gate and stronger hydrophobic/curvature matching."
+        )
+        sim_grid.addWidget(self.parent_window.sim_template_class, 4, 3)
+
         sim_layout.addLayout(sim_grid)
 
         # Buttons - using Ternary Evaluation 风格
@@ -431,6 +478,7 @@ class TargetDiscoveryTab(CommonTab):
         
         layout.addWidget(grp_sim)
         layout.addLayout(sim_btn_row)
+        layout.addWidget(grp_gm)
         
         # Add stretch at the end to prevent compression
         layout.addStretch(1)
@@ -469,8 +517,55 @@ class TargetDiscoveryTab(CommonTab):
         if uses_ligand_pocket and self.parent_window.sim_sel1.text().strip() == "all":
             self.parent_window.sim_sel1.clear()
 
-        self._set_sim_widget_visible(self.parent_window.sim_interface_dist_label, True)
-        self._set_sim_widget_visible(self.parent_window.sim_interface_dist, True)
+    def _concavity_breaks(self, patches: list):
+        """Return relative concavity breakpoints for patch-level coloring."""
+        values = [
+            float(getattr(p, "avg_concavity", 0.0) or getattr(p, "curvature", 0.0) or 0.0)
+            for p in patches
+            if getattr(p, "type", None) == "concave"
+        ]
+        values = [v for v in values if np.isfinite(v)]
+        if len(values) < 3:
+            return None
+        return tuple(np.percentile(values, [33.0, 66.0]))
+
+    def _color_patch_object(self, cmd, patch, patch_name: str, concavity_breaks=None) -> str:
+        """Apply the GLINT patch color scheme and return a short color label."""
+        if patch.type == "electrostatic_pos":
+            cmd.color("blue", patch_name)
+            return "positive"
+        if patch.type == "electrostatic_neg":
+            cmd.color("red", patch_name)
+            return "negative"
+        if patch.type == "hydrophobic":
+            cmd.color("green", patch_name)
+            return "hydrophobic"
+        if patch.type == "hbond_donor":
+            cmd.set_color("glint_hbond_donor", [0.00, 0.62, 0.72])
+            cmd.color("glint_hbond_donor", patch_name)
+            return "donor"
+        if patch.type == "hbond_acceptor":
+            cmd.set_color("glint_hbond_acceptor", [0.78, 0.16, 0.54])
+            cmd.color("glint_hbond_acceptor", patch_name)
+            return "acceptor"
+        if patch.type == "concave":
+            cmd.set_color("glint_curv_shallow", [0.74, 0.56, 0.92])
+            cmd.set_color("glint_curv_medium", [0.50, 0.18, 0.78])
+            cmd.set_color("glint_curv_deep", [0.18, 0.04, 0.42])
+            concavity = float(getattr(patch, "avg_concavity", 0.0) or getattr(patch, "curvature", 0.0) or 0.0)
+            if concavity_breaks is None:
+                color_name, label = "glint_curv_medium", "concave"
+            elif concavity >= concavity_breaks[1]:
+                color_name, label = "glint_curv_deep", "deep concave"
+            elif concavity >= concavity_breaks[0]:
+                color_name, label = "glint_curv_medium", "medium concave"
+            else:
+                color_name, label = "glint_curv_shallow", "shallow concave"
+            cmd.color(color_name, patch_name)
+            return label
+
+        cmd.color("gray70", patch_name)
+        return "other"
 
     # --- G-Motif Logic ---
     def browse_gm_out_csv(self):
@@ -712,6 +807,7 @@ class TargetDiscoveryTab(CommonTab):
             from pymol import cmd
             
             # Prepare main object visualization
+            cmd.bg_color("white")
             cmd.show("cartoon", obj_name)
             cmd.hide("surface", obj_name)
             
@@ -722,6 +818,7 @@ class TargetDiscoveryTab(CommonTab):
             
             # Create separate objects for each patch
             patch_names = []
+            concavity_breaks = self._concavity_breaks(patches)
             for p in patches:
                 if not p.residues:
                     continue
@@ -739,14 +836,7 @@ class TargetDiscoveryTab(CommonTab):
                 cmd.hide("everything", patch_name)
                 cmd.show("surface", patch_name)
                 cmd.set("transparency", 0.3, patch_name)
-                
-                # Color based on type
-                if p.type == "electrostatic_pos":
-                    cmd.color("blue", patch_name)
-                elif p.type == "electrostatic_neg":
-                    cmd.color("red", patch_name)
-                elif p.type == "hydrophobic":
-                    cmd.color("green", patch_name)
+                self._color_patch_object(cmd, p, patch_name, concavity_breaks)
                 
                 # Reduce transparency for patches
                 cmd.set("transparency", 0.2, patch_name)
@@ -765,7 +855,8 @@ class TargetDiscoveryTab(CommonTab):
                     cmd.set("stick_radius", 0.2, gloop_sel)
             
             self.log(f"   Visualized {len(patches)} top patches on {obj_name}")
-            self.log("   Colors: Blue=positive, Red=negative, Green=hydrophobic")
+            self.log("   Colors: Blue=positive, Red=negative, Green=hydrophobic, Cyan=donor, Magenta=acceptor")
+            self.log("   Concavity colors: light purple=shallow, purple=medium, dark violet=deep")
             for p in patches:
                 self.log(f"     • patch_{p.id}_{p.type[:4]}: score={p.score:.2f}")
             
@@ -778,7 +869,10 @@ class TargetDiscoveryTab(CommonTab):
         
         with open(csv_path, 'w', newline='', encoding='utf-8') as f:
             fieldnames = ['Patch_ID', 'Type', 'Area_A2', 'Score', 'Center_X', 'Center_Y', 'Center_Z',
-                         'Avg_Potential', 'Avg_Hydrophobicity', 'Shape_Index', 'N_Residues', 'Residues']
+                         'Avg_Potential', 'Avg_Hydrophobicity', 'Avg_Curvature', 'Avg_Concavity',
+                         'Shape_Index', 'Hydrophobic_Fraction', 'Polar_Fraction',
+                         'Positive_Fraction', 'Negative_Fraction', 'Aromatic_Fraction',
+                         'HBond_Donors', 'HBond_Acceptors', 'N_Residues', 'Residues']
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
             
@@ -794,12 +888,74 @@ class TargetDiscoveryTab(CommonTab):
                     'Center_Z': f"{p.center[2]:.2f}",
                     'Avg_Potential': f"{p.avg_potential:.3f}",
                     'Avg_Hydrophobicity': f"{p.avg_hydrophobicity:.3f}",
+                    'Avg_Curvature': f"{p.avg_curvature:.4f}",
+                    'Avg_Concavity': f"{p.avg_concavity:.4f}",
                     'Shape_Index': f"{p.shape_index:.3f}",
+                    'Hydrophobic_Fraction': f"{p.hydrophobic_fraction:.3f}",
+                    'Polar_Fraction': f"{p.polar_fraction:.3f}",
+                    'Positive_Fraction': f"{p.positive_fraction:.3f}",
+                    'Negative_Fraction': f"{p.negative_fraction:.3f}",
+                    'Aromatic_Fraction': f"{p.aromatic_fraction:.3f}",
+                    'HBond_Donors': p.hbond_donors,
+                    'HBond_Acceptors': p.hbond_acceptors,
                     'N_Residues': len(p.residues),
                     'Residues': res_str
                 })
 
     # --- Surface Analysis Logic ---
+    def _update_surface_scope_ui(self):
+        """Update surface scope controls for full or pocket modes."""
+        mode = self.parent_window.surf_scope_mode.currentText().strip()
+        is_full = mode == "Full Surface"
+        is_pocket = mode == "Ligand Pocket"
+
+        self.parent_window.surf_scope_label.setVisible(not is_full)
+        self.parent_window.surf_scope_selection.setVisible(not is_full)
+        self.parent_window.surf_scope_radius.setVisible(is_pocket)
+        self.parent_window.surf_scope_radius_label.setVisible(is_pocket)
+
+        if is_pocket:
+            self.parent_window.surf_scope_label.setText("Pocket Ligand:")
+            self.parent_window.surf_scope_selection.setPlaceholderText("organic or resn LIG")
+            if not self.parent_window.surf_scope_selection.text().strip():
+                self.parent_window.surf_scope_selection.setText("organic")
+
+    def _get_surface_scope_selection(self, obj_name: str) -> Optional[str]:
+        """Build the PyMOL selection for the selected surface-analysis scope."""
+        mode = self.parent_window.surf_scope_mode.currentText().strip()
+        if mode == "Full Surface":
+            return "all"
+
+        ligand_expr = self.parent_window.surf_scope_selection.text().strip() or "organic"
+        try:
+            radius = float(self.parent_window.surf_scope_radius.text().strip() or "6.0")
+        except (ValueError, TypeError):
+            radius = 6.0
+
+        ligand_sel = f"({obj_name}) and ({ligand_expr})"
+        pocket_sel = f"byres ((({obj_name}) and polymer) within {radius:.2f} of ({ligand_sel}))"
+        try:
+            from pymol import cmd
+            ligand_count = cmd.count_atoms(ligand_sel)
+            pocket_count = cmd.count_atoms(pocket_sel)
+        except Exception as e:
+            show_message_box(self, "Error", f"Failed to build ligand pocket selection:\n{e}", "critical")
+            return None
+
+        if ligand_count <= 0:
+            show_message_box(self, "Warning", f"No ligand atoms found for selection:\n{ligand_expr}", "warning")
+            return None
+        if pocket_count <= 0:
+            show_message_box(
+                self,
+                "Warning",
+                f"No polymer pocket residues found within {radius:.1f} Å of:\n{ligand_expr}",
+                "warning",
+            )
+            return None
+
+        return pocket_sel
+
     def browse_surf_out_csv(self):
         fn, _ = QFileDialog.getSaveFileName(self, t("select_outcsv"), "", "CSV (*.csv);;All Files (*)")
         if fn: self.parent_window.surf_out_csv.setText(fn)
@@ -811,8 +967,12 @@ class TargetDiscoveryTab(CommonTab):
 
         if not obj or obj == t("no_object"):
             show_message_box(self, t("title"), t("no_object"), "warning"); return
+
+        scope_selection = self._get_surface_scope_selection(obj)
+        if scope_selection is None:
+            return
         
-        # Get pH value (APBS is always used)
+        # Get pH value (used when electrostatic APBS analysis is selected)
         try:
             ph = float(self.parent_window.surf_ph.text().strip() or "7.4")
         except (ValueError, TypeError):  # float() 转换可能Failed
@@ -820,14 +980,16 @@ class TargetDiscoveryTab(CommonTab):
             
         # Get surface property mode and map to internal key
         color_mode_idx = self.parent_window.surf_color_mode.currentIndex()
-        # 中文注释：Analyze Surface 需要根据用户选择筛选 patch 类型，避免两个选项返回相同结果
-        surface_property = 'electrostatic' if color_mode_idx == 0 else 'hydrophobicity'
+        # Analyze Surface filters patch types by user selection to avoid duplicate results
+        surface_properties = ['electrostatic', 'hydrophobicity', 'curvature', 'hbond']
+        surface_property = surface_properties[color_mode_idx] if color_mode_idx < len(surface_properties) else 'electrostatic'
 
         self.parent_window.surf_btn.setEnabled(False)
         self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
 
-        self.log(f"🔬 Starting surface analysis with APBS (pH={ph})...")
+        self.log(f"🔬 Starting surface analysis (pH={ph})...")
         self.log(f"   Surface property: {surface_property}")
+        self.log(f"   Scope: {self.parent_window.surf_scope_mode.currentText()} ({scope_selection})")
 
         self.parent_window.surf_thread = SurfaceAnalysisWorker(
             obj,
@@ -835,6 +997,7 @@ class TargetDiscoveryTab(CommonTab):
             use_apbs=True,
             ph=ph,
             surface_property=surface_property,
+            selection=scope_selection,
         )
         self.parent_window.surf_thread.progress.connect(self.log)
         self.parent_window.surf_thread.error.connect(self.on_error)
@@ -863,6 +1026,7 @@ class TargetDiscoveryTab(CommonTab):
                 return
 
             # Prepare main object visualization (show cartoon, hide old patches)
+            cmd.bg_color("white")
             cmd.show("cartoon", obj)
             cmd.hide("surface", obj)
             cmd.hide("lines", obj)
@@ -875,6 +1039,8 @@ class TargetDiscoveryTab(CommonTab):
             
             # Create separate objects for each patch
             patch_names = []
+            patch_color_labels = []
+            concavity_breaks = self._concavity_breaks(self._last_surf_patches)
             for p in self._last_surf_patches:
                 # Use residues to select patch area
                 if not p.residues: continue
@@ -891,20 +1057,16 @@ class TargetDiscoveryTab(CommonTab):
                 cmd.hide("everything", patch_name)
                 cmd.show("surface", patch_name)
                 cmd.set("transparency", 0.3, patch_name)
-                
-                # Color based on type
-                color = "red" # neg
-                if p.type == "electrostatic_pos": color = "blue"
-                elif p.type == "hydrophobic": color = "green"
-                elif p.type == "electrostatic_neg": color = "red"
-                
-                cmd.color(color, patch_name)
+                patch_color_labels.append(self._color_patch_object(cmd, p, patch_name, concavity_breaks))
                 
             # Group patches for cleaner object list
             if patch_names:
                 cmd.group("surface_patches", "patch_*")
                 
             self.log(f"Visualized {len(self._last_surf_patches)} patches on {obj} (created separate objects)")
+            if any(label.endswith("concave") or label == "concave" for label in patch_color_labels):
+                self.log("   Concavity colors: light purple=shallow, purple=medium, dark violet=deep")
+                self.log("   For continuous curvature with colorbar, use Surface Property=Curvature / Concavity then Render Surface.")
         
         except Exception as e:
             self.on_error(str(e))
@@ -919,22 +1081,31 @@ class TargetDiscoveryTab(CommonTab):
                 show_message_box(self, "Warning", "Please select an object first.", "warning")
                 return
 
-            # Get pH value (APBS is always used)
+            scope_selection = self._get_surface_scope_selection(obj)
+            if scope_selection is None:
+                return
+
+            # Get pH value (used when electrostatic APBS rendering is selected)
             try:
                 ph = float(self.parent_window.surf_ph.text().strip() or "7.4")
             except (ValueError, TypeError):  # float() 转换可能Failed
                 ph = 7.4
             
-            # Get color mode: 0=potential, 1=hydrophobicity
+            # Get color mode: 0=potential, 1=hydrophobicity, 2=curvature, 3=hbond
             color_mode_idx = self.parent_window.surf_color_mode.currentIndex()
-            color_modes = ['potential', 'hydrophobicity']
-            color_by = color_modes[color_mode_idx]
+            color_modes = ['potential', 'hydrophobicity', 'curvature', 'hbond']
+            color_by = color_modes[color_mode_idx] if color_mode_idx < len(color_modes) else 'potential'
 
-            self.log(f"🎨 Rendering full surface for {obj}...")
+            self.log(f"🎨 Rendering surface for {obj}...")
+            self.log(f"   Scope: {self.parent_window.surf_scope_mode.currentText()} ({scope_selection})")
             if color_by == 'potential':
                 self.log(f"   Using APBS electrostatics (pH={ph})")
             elif color_by == 'hydrophobicity':
                 self.log("   Coloring by hydrophobicity (Kyte-Doolittle scale)")
+            elif color_by == 'curvature':
+                self.log("   Coloring by signed surface curvature / concavity")
+            elif color_by == 'hbond':
+                self.log("   Coloring by approximate donor / acceptor distribution")
 
             # Import and run
             try:
@@ -958,16 +1129,17 @@ class TargetDiscoveryTab(CommonTab):
 
             success = render_protein_surface(
                 obj_name=obj,
-                use_apbs=True,  # Always use APBS
+                use_apbs=True,
                 ph=ph,
                 color_by=color_by,
                 transparency=0.0,
                 save_files=save_files,
-                output_dir=output_dir
+                output_dir=output_dir,
+                selection=scope_selection,
             )
 
             if success:
-                self.log(f"✅ Full surface rendered for {obj}")
+                self.log(f"✅ Surface rendered for {obj}")
                 if color_by == 'potential':
                     self.log("   Color scheme: Red (negative) → White (neutral) → Blue (positive)")
                     # ESP group contains: {obj}_ESP_surf, {obj}_ESP_map, {obj}_ESP_ramp
@@ -975,6 +1147,12 @@ class TargetDiscoveryTab(CommonTab):
                 elif color_by == 'hydrophobicity':
                     self.log("   Color scheme: White (hydrophilic) → Green (hydrophobic)")
                     surface_name = f"{obj}_hydro"
+                elif color_by == 'curvature':
+                    self.log("   Color scheme: Purple (concave) → light gray (flat) → gold (convex)")
+                    surface_name = f"{obj}_curvature"
+                elif color_by == 'hbond':
+                    self.log("   Color scheme: Magenta (acceptor) → light gray (neutral) → cyan (donor)")
+                    surface_name = f"{obj}_hbond"
                 else:
                     surface_name = f"{obj}_surface"
                 # Zoom to the surface
@@ -1004,9 +1182,9 @@ class TargetDiscoveryTab(CommonTab):
         self._maybe_show_surface_precision_notice(surface_method)
         
         try:
-            patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
+            patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "9.0")
         except (ValueError, TypeError):  # float() 转换可能Failed
-            patch_radius = 12.0
+            patch_radius = 9.0
         
         self.parent_window.progress_bar.setVisible(True); self.parent_window.progress_bar.setRange(0, 0)
         
@@ -1042,15 +1220,36 @@ class TargetDiscoveryTab(CommonTab):
         outcsv = self.parent_window.sim_out_csv.text().strip() or None
         surface_method = self.parent_window.sim_surface_method.currentText()
         self._maybe_show_surface_precision_notice(surface_method)
+        template_class_text = self.parent_window.sim_template_class.currentText().strip()
+        template_class = "macrocycle" if "Macrocycle" in template_class_text else "imid"
 
         if analysis_type in {"search", "complementarity"}:
             template_mode = self.parent_window.sim_template_region.currentText().strip()
+            receptor_anchor_coords = None
+            receptor_anchor_radius = 8.0
+            receptor_template_center = None
             if template_mode == "Ligand Pocket":
-                sel1 = self._build_ligand_pocket_selection(obj1)
+                pocket_info = self._build_ligand_pocket_selection(obj1)
+                if not pocket_info:
+                    return
+                sel1, receptor_anchor_coords, receptor_anchor_radius, receptor_template_center = pocket_info
                 if not sel1:
                     return
-                self.log(f"   Template region: ligand pocket")
-                self.log(f"   Template selection expanded to: {sel1}")
+                self.log("   Template region: fixed ligand-pocket template patch")
+                self.log(f"   Template surface selection: {sel1}")
+                self.log(
+                    f"   Template anchor constraint: anchor atoms={len(receptor_anchor_coords)}, "
+                    f"radius={receptor_anchor_radius:.1f} Å"
+                )
+                self.log(
+                    f"   Fixed template center: "
+                    f"[{receptor_template_center[0]:.3f}, {receptor_template_center[1]:.3f}, {receptor_template_center[2]:.3f}]"
+                )
+                self.log(f"   Template class: {template_class_text}")
+        else:
+            receptor_anchor_coords = None
+            receptor_anchor_radius = 8.0
+            receptor_template_center = None
 
         if obj1 == obj2 and sel1 == sel2:
             show_message_box(
@@ -1063,14 +1262,9 @@ class TargetDiscoveryTab(CommonTab):
             return
         
         try:
-            patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
+            patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "9.0")
         except (ValueError, TypeError):  # float() 转换可能Failed
-            patch_radius = 12.0
-        
-        try:
-            interface_dist = float(self.parent_window.sim_interface_dist.text().strip() or "4.0")
-        except (ValueError, TypeError):  # float() 转换可能Failed
-            interface_dist = 4.0
+            patch_radius = 9.0
         
         self._last_search_mode = analysis_type
         self.parent_window.sim_similarity_btn.setEnabled(False)
@@ -1089,11 +1283,16 @@ class TargetDiscoveryTab(CommonTab):
             selection1=sel1, selection2=sel2,
             analysis_type=analysis_type,
             patch_radius=patch_radius,
-            interface_distance=interface_dist,
+            interface_distance=4.0,
             out_csv=outcsv,
             surface_method=surface_method,
             similarity_threshold=0.5,  # Default threshold
-            top_k=5  # Return top 5 matches per template patch
+            top_k=5,  # Return top 5 matches per template patch
+            receptor_anchor_coords=receptor_anchor_coords,
+            receptor_anchor_radius=receptor_anchor_radius,
+            receptor_anchor_mode="include",
+            receptor_template_center=receptor_template_center,
+            template_class=template_class,
         )
         self.parent_window.sim_thread.progress.connect(self.log)
         self.parent_window.sim_thread.error.connect(self.on_error)
@@ -1108,9 +1307,32 @@ class TargetDiscoveryTab(CommonTab):
         """Run complementarity search between Object 1 and Object 2."""
         self._start_search("complementarity")
 
-    def _build_ligand_pocket_selection(self, obj_name: str) -> Optional[str]:
-        """Build a PyMOL selection for residues around a ligand in Object 1."""
-        ligand_expr = self.parent_window.sim_pocket_ligand.text().strip() or "organic"
+    def _normalize_anchor_position_expr(self, expr: str) -> str:
+        """Interpret a bare residue/ligand code like LVY as a residue-name selection."""
+        expr = (expr or "").strip()
+        if not expr:
+            return "organic"
+        import re
+        residue_tokens = re.findall(r"\b([A-Za-z]{3})(\d+[A-Za-z]?)\b", expr)
+        if residue_tokens:
+            return " or ".join(
+                f"(resn {resn.upper()} and resi {resi})"
+                for resn, resi in residue_tokens
+            )
+        lowered = expr.lower()
+        selection_keywords = (
+            "all", "organic", "inorganic", "polymer", "hetatm", "resn ", "resi ",
+            "chain ", "name ", "elem ", "id ", "index ", "segi ", "alt ", "model ",
+            "byres ", "br. ", "(", "not ", "and ", "or "
+        )
+        if lowered.startswith(selection_keywords) or any(op in lowered for op in (" and ", " or ", " within ")):
+            return expr
+        return f"resn {expr.upper()}"
+
+    def _build_ligand_pocket_selection(self, obj_name: str):
+        """Build a full-protein surface selection plus ligand anchor coordinates."""
+        raw_anchor_expr = self.parent_window.sim_pocket_ligand.text().strip() or "LVY"
+        ligand_expr = self._normalize_anchor_position_expr(raw_anchor_expr)
         try:
             radius = float(self.parent_window.sim_pocket_radius.text().strip() or "6.0")
         except (ValueError, TypeError):
@@ -1119,12 +1341,14 @@ class TargetDiscoveryTab(CommonTab):
         ligand_sel = f"({obj_name} and ({ligand_expr}))"
         pocket_sel = f"(({obj_name} and polymer) within {radius:.2f} of {ligand_sel})"
         residue_expanded_sel = f"byres {pocket_sel}"
+        protein_surface_sel = "polymer.protein"
 
         try:
             from pymol import cmd
             ligand_count = cmd.count_atoms(ligand_sel)
             pocket_count = cmd.count_atoms(pocket_sel)
             residue_expanded_count = cmd.count_atoms(residue_expanded_sel)
+            ligand_coords = cmd.get_coords(ligand_sel)
         except Exception as e:
             show_message_box(self, "Error", f"Failed to build ligand pocket selection:\n{e}", "critical")
             return None
@@ -1147,12 +1371,34 @@ class TargetDiscoveryTab(CommonTab):
             )
             return None
 
+        if ligand_coords is None or len(ligand_coords) <= 0:
+            show_message_box(
+                self,
+                "Warning",
+                f"Anchor selection produced no coordinates:\n{ligand_expr}",
+                "warning",
+            )
+            return None
+
+        anchor_coords = np.asarray(ligand_coords, dtype=float)
+        anchor_center = np.mean(anchor_coords, axis=0)
+        anchor_min = np.min(anchor_coords, axis=0)
+        anchor_max = np.max(anchor_coords, axis=0)
         self.log(
-            f"   Ligand pocket template: ligand atoms={ligand_count}, "
+            f"   Anchor position: input='{raw_anchor_expr}' -> selection='{ligand_expr}'"
+        )
+        self.log(
+            f"   Anchor coordinates: center=[{anchor_center[0]:.3f}, {anchor_center[1]:.3f}, {anchor_center[2]:.3f}], "
+            f"x=[{anchor_min[0]:.3f},{anchor_max[0]:.3f}], "
+            f"y=[{anchor_min[1]:.3f},{anchor_max[1]:.3f}], "
+            f"z=[{anchor_min[2]:.3f},{anchor_max[2]:.3f}]"
+        )
+        self.log(
+            f"   Anchor-local template: anchor atoms={ligand_count}, "
             f"pocket atoms={pocket_count}, byres-expanded atoms={residue_expanded_count}"
         )
 
-        return pocket_sel
+        return protein_surface_sel, anchor_coords, radius, anchor_center
 
     def on_finished_similarity(self, result, out_csv_path: str):
         """Handle single surface analysis completion"""
@@ -1182,16 +1428,25 @@ class TargetDiscoveryTab(CommonTab):
             self._last_complementarity_result = result
             self._last_surface_visual_mode = "complementarity"
             self.log(f"✅ Complementarity analysis complete:")
-            self.log(f"   Mode: {getattr(result, 'analysis_mode', 'interface')}")
+            self.log(f"   Mode: patch")
+            self.log(f"   Main Model: {getattr(result, 'main_model_name', 'HybridPatchScore')}")
             self.log(f"   Overall Score: {result.score:.3f}")
+            self.log(f"   Core Overall: {getattr(result, 'core_overall_score', result.score):.3f}")
             self.log(f"   Geometric: {result.geometric_complementarity:.3f}")
             self.log(f"   Electrostatic: {result.electrostatic_complementarity:.3f}")
+            self.log(f"   Directional ESP: {getattr(result, 'directional_electrostatic_complementarity', 0.0):.3f}")
+            self.log(f"   Gate ESP: {getattr(result, 'effective_electrostatic_complementarity', result.electrostatic_complementarity):.3f}")
             self.log(f"   Hydrophobic: {result.hydrophobic_complementarity:.3f}")
-            self.log(f"   Interface Area: {result.interface_area:.1f} Å²")
-            self.log(f"   Contacts: {result.n_contacts}")
-            if getattr(result, 'analysis_mode', 'interface') == "patch":
-                self.log(f"   Patch matches: {getattr(result, 'n_patch_matches', 0)}")
-                self.log(f"   Minimum surface distance: {getattr(result, 'min_distance', 0.0):.1f} Å")
+            self.log(f"   H-bond D/A: {getattr(result, 'hbond_complementarity', 0.0):.3f}")
+            gate_threshold = float(getattr(result, "electrostatic_gate_threshold", 0.0))
+            gate_multiplier = float(getattr(result, "electrostatic_gate_multiplier", 1.0))
+            if gate_threshold > 0.0 and gate_multiplier < 0.999:
+                self.log(
+                    f"   Electrostatic gate: threshold={gate_threshold:.2f}, "
+                    f"score multiplier={gate_multiplier:.2f}"
+                )
+            self.log(f"   Patch matches: {getattr(result, 'n_patch_matches', 0)}")
+            self.log("   Coordinate distance: ignored for independent proteins")
         elif hasattr(result, 'n_template_patches'):
             # SimilaritySearchResult - new search logic
             self._last_search_result = result
@@ -1247,21 +1502,25 @@ class TargetDiscoveryTab(CommonTab):
 
             if self._last_surface_visual_mode == "complementarity" and self._last_complementarity_result:
                 result = self._last_complementarity_result
-                if getattr(result, 'analysis_mode', 'interface') == "patch" and getattr(result, 'patch_matches', None):
-                    if not obj2 or obj2 == t("no_object") or obj2 == "(None - Single Surface)":
-                        show_message_box(self, "Warning", "Please select Object 2 before visualizing complementarity patches.", "warning")
-                        return
+                if not obj2 or obj2 == t("no_object") or obj2 == "(None - Single Surface)":
+                    show_message_box(self, "Warning", "Please select Object 2 before visualizing complementarity regions.", "warning")
+                    return
+
+                if getattr(result, 'patch_matches', None):
                     self._visualize_complementarity_patches(
                         obj1,
                         obj2,
                         result.patch_matches,
-                        getattr(result, 'patch_radius', 12.0),
+                        getattr(result, 'patch_radius', 9.0),
                     )
                     self.log(f"✅ Visualized top complementary regions between {obj1} and {obj2}")
                     self.log("   Muted cartoons: structural context")
                     self.log("   Shared patch colors and labels: matched patch pairs")
                     self.log("   Surface + sticks: highlighted complementary regions")
                     return
+
+                show_message_box(self, "Warning", "No complementary regions were available to visualize.", "warning")
+                return
 
             if self._last_surface_visual_mode == "search" and self._last_search_result:
                 result = self._last_search_result
@@ -1316,34 +1575,85 @@ class TargetDiscoveryTab(CommonTab):
 
             self._prepare_patch_comparison_scene(obj1, obj2, mode="complementarity")
 
-            top_matches = patch_matches[:4]
+            ranked_matches = sorted(
+                list(enumerate(patch_matches, start=1)),
+                key=lambda item: float(getattr(item[1], "overall_score", 0.0)),
+                reverse=True,
+            )
+
+            model_name = getattr(getattr(self, "_last_complementarity_result", None), "main_model_name", "HybridPatchScore")
+            if model_name == "FixedTemplateTargetScore":
+                template_class = getattr(getattr(self, "_last_complementarity_result", None), "template_class", "imid")
+                if template_class == "macrocycle":
+                    model_text = (
+                        "Macrocycle-contact TemplateMatch x SoftPocketGate x SpecificityGate"
+                    )
+                else:
+                    model_text = (
+                        "IMiD pocket-focused TemplateMatch x SoftPocketGate x SpecificityGate"
+                    )
+                self.log(
+                    "   Main GUI model: FixedTemplateTargetScore = "
+                    f"{model_text}"
+                )
+            else:
+                self.log(
+                    "   Main GUI model: HybridPatchScore = "
+                    "0.50 CoreOverall + 0.25 ESP-focused + 0.20 Fingerprint + 0.05 Specificity"
+                )
+            top_matches = ranked_matches[:20]
+            if ranked_matches:
+                best_focused_rank, best_focused_match = ranked_matches[0]
+                self.log(
+                    f"   Best main-model patch: Patch {best_focused_rank} "
+                    f"main_score={float(getattr(best_focused_match, 'overall_score', 0.0)):.3f}, "
+                    f"core_overall={float(getattr(best_focused_match, 'core_overall_score', 0.0)):.3f}, "
+                    f"focused_interface_score={float(getattr(best_focused_match, 'focused_interface_score', 0.0)):.3f}, "
+                    f"fingerprint_score={float(getattr(best_focused_match, 'fingerprint_score', 0.0)):.3f}, "
+                    f"template_match={float(getattr(best_focused_match, 'template_match_score', 0.0)):.3f}, "
+                    f"pocket_gate={float(getattr(best_focused_match, 'target_pocketness_score', 0.0)):.3f}, "
+                    f"specificity_score={float(getattr(best_focused_match, 'specificity_score', 0.0)):.3f}, "
+                    f"gate_esp={float(getattr(best_focused_match, 'effective_electrostatic_score', 0.0)):.3f}, "
+                    f"electrostatic={float(getattr(best_focused_match, 'electrostatic_score', 0.0)):.3f}"
+                )
             zoom_targets = []
-            for idx, match in enumerate(top_matches, start=1):
+            for color_idx, (idx, match) in enumerate(top_matches, start=1):
                 center1 = np.asarray(getattr(match, "center1", [0.0, 0.0, 0.0]), dtype=float)
                 center2 = np.asarray(getattr(match, "center2", [0.0, 0.0, 0.0]), dtype=float)
                 overall = float(getattr(match, "overall_score", 0.0))
+                core_overall = float(getattr(match, "core_overall_score", 0.0))
                 geo = float(getattr(match, "geometric_score", 0.0))
                 esp = float(getattr(match, "electrostatic_score", 0.0))
+                dir_esp = float(getattr(match, "directional_electrostatic_score", 0.0))
+                eff_esp = float(getattr(match, "effective_electrostatic_score", esp))
                 hydro = float(getattr(match, "hydrophobic_score", 0.0))
-                residues1 = list(getattr(match, "residues1", []) or [])
-                residues2 = list(getattr(match, "residues2", []) or [])
+                hbond = float(getattr(match, "hbond_score", 0.0))
+                interface_score = float(getattr(match, "interface_score", 0.0))
+                focused_interface_score = float(getattr(match, "focused_interface_score", 0.0))
+                fingerprint_score = float(getattr(match, "fingerprint_score", 0.0))
+                fingerprint_esp = float(getattr(match, "fingerprint_esp_score", 0.0))
+                fingerprint_hbond = float(getattr(match, "fingerprint_hbond_score", 0.0))
+                fingerprint_hydro = float(getattr(match, "fingerprint_hydro_score", 0.0))
+                fingerprint_curvature = float(getattr(match, "fingerprint_curvature_score", 0.0))
+                specificity_score = float(getattr(match, "specificity_score", 0.0))
+                target_pocketness = float(getattr(match, "target_pocketness_score", 0.0))
+                template_match_score = float(getattr(match, "template_match_score", 0.0))
+                background_score = float(getattr(match, "background_score", 0.0))
+                interface_delta = float(getattr(match, "interface_delta", 0.0))
+                gate_multiplier = float(getattr(match, "electrostatic_gate_multiplier", 1.0))
+                target_residues = list(getattr(match, "residues2", []) or [])
+                target_residue_text = ";".join(target_residues[:12])
+                if len(target_residues) > 12:
+                    target_residue_text += f";...(+{len(target_residues) - 12})"
                 region1_name = f"comp_region_{idx}_a"
                 region2_name = f"comp_region_{idx}_b"
                 label1_name = f"comp_label_{idx}_a"
                 label2_name = f"comp_label_{idx}_b"
                 pair_group = f"comp_pair_{idx}"
-                color_name = self._patch_pair_color(idx - 1)
+                color_name = self._patch_pair_color(color_idx - 1)
 
-                sel1 = self._build_residue_selection(obj1, residues1)
-                sel2 = self._build_residue_selection(obj2, residues2)
-                if sel1:
-                    cmd.create(region1_name, f"{obj1} and ({sel1})")
-                else:
-                    self._create_region_around_center(obj1, center1, patch_radius, region1_name)
-                if sel2:
-                    cmd.create(region2_name, f"{obj2} and ({sel2})")
-                else:
-                    self._create_region_around_center(obj2, center2, patch_radius, region2_name)
+                self._create_region_around_center(obj1, center1, patch_radius, region1_name)
+                self._create_region_around_center(obj2, center2, patch_radius, region2_name)
 
                 self._style_patch_region(region1_name, color_name, idx)
                 self._style_patch_region(region2_name, color_name, idx)
@@ -1352,9 +1662,23 @@ class TargetDiscoveryTab(CommonTab):
                 cmd.group(pair_group, f"{region1_name} {region2_name} {label1_name} {label2_name}")
                 zoom_targets.extend([region1_name, region2_name])
 
+                gate_text = f", esp_gate={gate_multiplier:.2f}" if gate_multiplier < 0.999 else ""
+                anchor_distance = float(getattr(match, "template_anchor_distance", float("nan")))
+                anchor_text = f", anchor_dist={anchor_distance:.2f} Å" if np.isfinite(anchor_distance) else ""
                 self.log(
-                    f"   Patch {idx}: overall={overall:.3f}, geometric={geo:.3f}, "
-                    f"electrostatic={esp:.3f}, hydrophobic={hydro:.3f}"
+                    f"   Patch {idx}: main_score={overall:.3f}, core_overall={core_overall:.3f}, geometric={geo:.3f}, "
+                    f"target_center=[{center2[0]:.2f},{center2[1]:.2f},{center2[2]:.2f}], "
+                    f"electrostatic={esp:.3f}, directional_esp={dir_esp:.3f}, "
+                    f"gate_esp={eff_esp:.3f}{gate_text}, hydrophobic={hydro:.3f}, "
+                    f"hbond_DA={hbond:.3f}, interface_score={interface_score:.3f}, "
+                    f"focused_interface_score={focused_interface_score:.3f}, "
+                    f"fingerprint_score={fingerprint_score:.3f}, "
+                    f"fp_esp={fingerprint_esp:.3f}, fp_hbond={fingerprint_hbond:.3f}, "
+                    f"fp_hydro={fingerprint_hydro:.3f}, fp_curvature={fingerprint_curvature:.3f}, "
+                    f"template_match={template_match_score:.3f}, pocket_gate={target_pocketness:.3f}, "
+                    f"specificity_score={specificity_score:.3f}, "
+                    f"background_score={background_score:.3f}, background_delta={interface_delta:.3f}"
+                    f"{anchor_text}, target_residues={target_residue_text}"
                 )
 
             if zoom_targets:
@@ -1376,10 +1700,13 @@ class TargetDiscoveryTab(CommonTab):
             resi = resi.strip()
             if not resi:
                 continue
-            clause = f"(chain {chain} and resi {resi}"
+            clause_parts = []
+            if chain:
+                clause_parts.append(f"chain {chain}")
+            clause_parts.append(f"resi {resi}")
             if resn:
-                clause += f" and resn {resn}"
-            clause += ")"
+                clause_parts.append(f"resn {resn}")
+            clause = f"({' and '.join(clause_parts)})"
             clauses.append(clause)
         if not clauses:
             return None
@@ -1407,7 +1734,7 @@ class TargetDiscoveryTab(CommonTab):
                 reverse=True,
             )[:4]
 
-            patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "12.0")
+            patch_radius = float(self.parent_window.sim_patch_radius.text().strip() or "9.0")
             zoom_targets = []
 
             for idx, pr in enumerate(sorted_results, start=1):
@@ -1500,8 +1827,15 @@ class TargetDiscoveryTab(CommonTab):
         anchor_name = f"{region_name}_anchor"
         cmd.delete(anchor_name)
         cmd.pseudoatom(anchor_name, pos=[float(v) for v in center])
-        cmd.create(region_name, f"byres ({obj_name} within {patch_radius:.2f} of {anchor_name})")
+        cmd.create(region_name, f"byres ((({obj_name}) and polymer.protein) within {patch_radius:.2f} of {anchor_name})")
         cmd.delete(anchor_name)
+
+    def _object_center(self, obj_name: str) -> np.ndarray:
+        """Return the center of a PyMOL object extent."""
+        from pymol import cmd
+
+        min_corner, max_corner = cmd.get_extent(obj_name)
+        return (np.asarray(min_corner, dtype=float) + np.asarray(max_corner, dtype=float)) / 2.0
 
     def _add_patch_label(self, label_name: str, center: np.ndarray, rank: int, color_name: str):
         """Add a compact numeric label at a patch center."""

@@ -776,7 +776,7 @@ class GasteigerChargeCalculator:
                     if not line.startswith(('ATOM', 'HETATM')):
                         continue
 
-                    # 中文注释：优先兼容 _fix_pqr_format 修复后的空格分隔格式，
+                    # Note: Prefer space-separated format from _fix_pqr_format fix
                     # 同时保留对旧固定列格式和异常拼接行的兼容能力。
                     parsed = (
                         _parse_pqr_whitespace(line)
@@ -881,10 +881,84 @@ class PDB2PQRRunner:
         """
         # Try Python API first (faster and more reliable)
         if self.use_python_api and PDB2PQR_PYTHON_AVAILABLE:
-            return self._run_python_api(input_pdb, output_pqr, ph, keep_chain, remove_water)
+            ok = self._run_python_api(input_pdb, output_pqr, ph, keep_chain, remove_water)
+        else:
+            # Fall back to command line
+            ok = self._run_command_line(input_pdb, output_pqr, ph, keep_chain, remove_water)
         
-        # Fall back to command line
-        return self._run_command_line(input_pdb, output_pqr, ph, keep_chain, remove_water)
+        if ok:
+            return True
+
+        cleaned_pdb = self._write_pdb2pqr_safe_pdb(input_pdb)
+        if not cleaned_pdb:
+            return False
+
+        print("[PDB2PQR] Retrying with protein-only complete-residue PDB...")
+        if self.use_python_api and PDB2PQR_PYTHON_AVAILABLE:
+            return self._run_python_api(cleaned_pdb, output_pqr, ph, keep_chain, remove_water=True)
+        return self._run_command_line(cleaned_pdb, output_pqr, ph, keep_chain, remove_water=True)
+
+    def _write_pdb2pqr_safe_pdb(self, input_pdb: str) -> Optional[str]:
+        """Write a PDB2PQR-safe protein PDB by dropping residues without CA atoms."""
+        standard_aa = {
+            'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE',
+            'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL'
+        }
+        residues = defaultdict(list)
+        passthrough = []
+
+        try:
+            with open(input_pdb, 'r') as f:
+                for line in f:
+                    if line.startswith(('ATOM', 'HETATM')):
+                        resname = line[17:20].strip().upper()
+                        if resname not in standard_aa:
+                            continue
+                        key = (
+                            line[21:22],
+                            line[22:26],
+                            line[26:27],
+                            resname,
+                        )
+                        residues[key].append(line)
+                    elif line.startswith(('MODEL', 'ENDMDL')):
+                        passthrough.append(line)
+        except OSError as exc:
+            print(f"[PDB2PQR] Could not clean input PDB: {exc}")
+            return None
+
+        cleaned_lines = []
+        dropped = 0
+        for lines in residues.values():
+            atom_names = {line[12:16].strip().upper() for line in lines}
+            if 'CA' not in atom_names:
+                dropped += 1
+                continue
+            cleaned_lines.extend(lines)
+            cleaned_lines.append('TER\n')
+
+        if not cleaned_lines:
+            print("[PDB2PQR] Cleaned input has no complete standard amino-acid residues")
+            return None
+
+        safe_pdb = os.path.join(
+            tempfile.gettempdir(),
+            f"glint_pdb2pqr_safe_{os.getpid()}_{os.path.basename(input_pdb)}",
+        )
+        try:
+            with open(safe_pdb, 'w') as f:
+                f.writelines(passthrough)
+                f.writelines(cleaned_lines)
+                f.write('END\n')
+        except OSError as exc:
+            print(f"[PDB2PQR] Could not write cleaned PDB: {exc}")
+            return None
+
+        print(
+            "[PDB2PQR] Cleaned input for retry: "
+            f"{len(residues) - dropped} residues kept, {dropped} incomplete residues dropped"
+        )
+        return safe_pdb
     
     def _run_python_api(self, input_pdb: str, output_pqr: str, ph: float = 7.4,
                         keep_chain: bool = True, remove_water: bool = True) -> bool:
@@ -996,7 +1070,7 @@ class PDB2PQRRunner:
             return False
         except FileNotFoundError:
             print(f"[PDB2PQR] ❌ pdb2pqr not found at: {self.pdb2pqr_path}")
-            print("[PDB2PQR] 💡 Install with: pip install pdb2pqr")
+            print("[PDB2PQR] 💡 Install with: conda install -n glint -c bioconda -c conda-forge pdb2pqr")
             return False
         except Exception as e:
             print(f"[PDB2PQR] ❌ Error: {e}")
@@ -1013,7 +1087,7 @@ try:
 except ImportError:
     pass
 
-# 尝试Import apbs-binary pip Package（安装器通过 pip install apbs-binary 安装）
+# 尝试Import apbs-binary Package（旧安装可用；新安装优先使用 conda APBS CLI）
 # 该Package提供 run_apbs / popen_apbs Function，内部调用打Package的 apbs 可执行File
 APBS_BINARY_AVAILABLE = False
 _apbs_binary_run = None
@@ -1104,8 +1178,13 @@ class APBSRunner:
                 if os.path.exists(base_apbs):
                     return base_apbs
 
-        # 7. macOS Homebrew Path
-        for homebrew_path in ['/usr/local/opt/apbs/bin/apbs', '/opt/homebrew/bin/apbs']:
+        # 7. macOS Homebrew / GLINT conda paths
+        for homebrew_path in [
+            '/opt/homebrew/Caskroom/miniconda/base/envs/glint/bin/apbs',
+            '/opt/homebrew/Caskroom/miniconda/base/bin/apbs',
+            '/usr/local/opt/apbs/bin/apbs',
+            '/opt/homebrew/bin/apbs',
+        ]:
             if os.path.exists(homebrew_path):
                 return homebrew_path
 
@@ -1220,7 +1299,7 @@ quit
                 return result
             print("[APBS] Python API 执行Failed，尝试其他方式...")
         
-        # 方式2: apbs-binary pip Package（安装器通过 pip install apbs-binary 安装）
+        # 方式2: apbs-binary Package（旧安装可用；新安装优先使用 conda APBS CLI）
         if self.use_apbs_binary and APBS_BINARY_AVAILABLE:
             result = self._run_apbs_binary(input_file, working_dir)
             if result:
@@ -1680,12 +1759,27 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     if output_dir: output_dir = os.path.normpath(output_dir)
 
     # Create output directory
+    # Note: PyMOL cmd.save may fail with paths containing non-ASCII characters (e.g., Chinese)
+    # Solution: use temp directory for PyMOL operations, then copy to user's output_dir
+    use_temp_for_pymol = output_dir is not None and any(
+        not (c.isascii() and c.isprintable()) for c in output_dir
+    )
+
     if output_dir is None:
-        output_dir = tempfile.mkdtemp(prefix='glint_ec_')
+        work_dir = tempfile.mkdtemp(prefix='glint_ec_')
+        final_output_dir = work_dir
+    elif use_temp_for_pymol:
+        work_dir = tempfile.mkdtemp(prefix='glint_ec_')
+        final_output_dir = output_dir
+        os.makedirs(final_output_dir, exist_ok=True)
+        print(f"[calculate_ligand_ec] Using temp directory for PyMOL operations (path has special chars)")
+        print(f"[calculate_ligand_ec] Final output will be copied to: {final_output_dir}")
     else:
-        os.makedirs(output_dir, exist_ok=True)
-    
-    print(f"[calculate_ligand_ec] Output directory: {output_dir}")
+        work_dir = output_dir
+        final_output_dir = output_dir
+        os.makedirs(work_dir, exist_ok=True)
+
+    print(f"[calculate_ligand_ec] Working directory: {work_dir}")
     
     # Step 1: Extract protein and ligand
     print("\n[Step 1] Extracting protein and ligand...")
@@ -1695,15 +1789,15 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         complex_pdb = pdb_file
     elif PYMOL_AVAILABLE and obj_name:
         # Export from PyMOL
-        complex_pdb = os.path.join(output_dir, 'complex.pdb')
+        complex_pdb = os.path.join(work_dir, 'complex.pdb')
         cmd.save(complex_pdb, obj_name)
     else:
         print("[calculate_ligand_ec] ❌ Need either PyMOL object or PDB file")
         return None
-    
+
     # Extract protein (remove ligand, water, ions)
-    protein_pdb = os.path.join(output_dir, 'protein.pdb')
-    ligand_sdf = os.path.join(output_dir, 'ligand.sdf')
+    protein_pdb = os.path.join(work_dir, 'protein.pdb')
+    ligand_sdf = os.path.join(work_dir, 'ligand.sdf')
     
     # 追踪保留的水分子Count（用于后续 advanced_features 记录）
     n_waters_kept = 0
@@ -1736,7 +1830,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
             try:
                 water_filter = BridgingWaterFilter()
                 # 先SavePackage含水的复合物临时File
-                complex_with_water_pdb = os.path.join(output_dir, 'complex_with_water.pdb')
+                complex_with_water_pdb = os.path.join(work_dir, 'complex_with_water.pdb')
                 cmd.save(complex_with_water_pdb, f"{obj_name} and (polymer or resn HOH)")
                 
                 # 筛选桥联水（ReturnValue为 (chain, resnum) 元组列表）
@@ -1799,7 +1893,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
             return None
         
         print(f"[calculate_ligand_ec] Found {ligand_atom_count} atoms in ligand selection")
-        
+
         # Save ligand to SDF format
         try:
             cmd.save(ligand_sdf, ligand_sel, format='sdf')
@@ -1807,7 +1901,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
             print(f"[calculate_ligand_ec] ❌ Failed to save ligand to SDF: {e}")
             # Try alternative: save as MOL2 then convert
             try:
-                ligand_mol2 = os.path.join(output_dir, 'ligand.mol2')
+                ligand_mol2 = os.path.join(work_dir, 'ligand.mol2')
                 cmd.save(ligand_mol2, ligand_sel, format='mol2')
                 print(f"[calculate_ligand_ec] Saved ligand as MOL2, converting to SDF...")
                 mol = Chem.MolFromMol2File(ligand_mol2, removeHs=False)
@@ -1881,7 +1975,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     # Step 2: Run PDB2PQR
     # 如果保留了桥联水，不要让 PDB2PQR Delete它们
     print("\n[Step 2] Running PDB2PQR...")
-    protein_pqr = os.path.join(output_dir, 'protein.pqr')
+    protein_pqr = os.path.join(work_dir, 'protein.pqr')
     
     should_remove_water = not (keep_bridging_waters and ADVANCED_PATCHES_AVAILABLE and n_waters_kept > 0)
     pdb2pqr = PDB2PQRRunner()
@@ -1899,7 +1993,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     # Determine grid size based on ligand position
     ligand_center = _get_molecule_center(ligand_mol)
     
-    apbs_prefix = os.path.join(output_dir, 'protein_pot')
+    apbs_prefix = os.path.join(work_dir, 'protein_pot')
     apbs_input = apbs.generate_input(
         protein_pqr, apbs_prefix,
         grid_center=ligand_center,
@@ -1908,7 +2002,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
         fine_len=(40, 40, 40)
     )
     
-    dx_file = apbs.run(apbs_input, output_dir)
+    dx_file = apbs.run(apbs_input, work_dir)
 
     # 追踪是否using了 Coulomb 近似回退
     _coulomb_fallback = False
@@ -2011,8 +2105,8 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
     # Step 8: Generate output files
     print("\n[Step 8] Generating output files...")
     
-    ec_pdb = os.path.join(output_dir, 'ec_map.pdb')
-    ec_csv = os.path.join(output_dir, 'ec_data.csv')
+    ec_pdb = os.path.join(work_dir, 'ec_map.pdb')
+    ec_csv = os.path.join(work_dir, 'ec_data.csv')
     
     ECMapWriter.write_pseudo_pdb(ec_pdb, surface_points, ec_values)
     ECMapWriter.write_csv(ec_csv, surface_points, ec_values, phi_protein, phi_ligand)
@@ -2033,6 +2127,25 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
             # Fallback to basic visualization
             _visualize_ec_map(obj_name, ec_pdb, ligand_resname)
     
+    # If using temp directory for PyMOL operations, copy files to final output directory
+    if use_temp_for_pymol and final_output_dir != work_dir:
+        print(f"[calculate_ligand_ec] Copying results to final output directory...")
+        try:
+            for filename in ['ec_map.pdb', 'ec_data.csv', 'protein.pqr', 'protein_pot.dx']:
+                src_file = os.path.join(work_dir, filename)
+                dst_file = os.path.join(final_output_dir, filename)
+                if os.path.exists(src_file):
+                    shutil.copy2(src_file, dst_file)
+            # Update file paths to final directory
+            ec_pdb = os.path.join(final_output_dir, 'ec_map.pdb')
+            ec_csv = os.path.join(final_output_dir, 'ec_data.csv')
+            protein_pqr = os.path.join(final_output_dir, 'protein.pqr')
+            if dx_file:
+                dx_file = os.path.join(final_output_dir, 'protein_pot.dx')
+            print(f"[calculate_ligand_ec] ✅ Results copied to: {final_output_dir}")
+        except Exception as e:
+            print(f"[calculate_ligand_ec] ⚠️ Failed to copy results: {e}")
+
     result = {
         'ec_score': ec_score,
         'ec_statistics': ec_stats,
@@ -2046,7 +2159,7 @@ def calculate_ligand_ec(obj_name: str = None, ligand_resname: str = None,
             'protein_pqr': protein_pqr,
             'apbs_dx': dx_file
         },
-        'output_dir': output_dir,
+        'output_dir': final_output_dir,
         'advanced_features': advanced_features,
         # Coulomb 回退标记：当 APBS 不可用时通知 GUI 层
         'coulomb_fallback': _coulomb_fallback,
@@ -2294,7 +2407,9 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     # Run PDB2PQR and APBS for protein A
     protein_a_pqr = os.path.join(protein_a_dir, 'protein_a.pqr')
     pdb2pqr = PDB2PQRRunner()
-    pdb2pqr.run(protein_a_pdb, protein_a_pqr, ph=ph, remove_water=should_remove_water)
+    if not pdb2pqr.run(protein_a_pdb, protein_a_pqr, ph=ph, remove_water=should_remove_water):
+        print("[analyze_ternary_ec] ⚠️ PDB2PQR failed for Protein A, using simple PQR fallback...")
+        protein_a_pqr = _simple_pdb_to_pqr(protein_a_pdb, protein_a_pqr)
     
     apbs = APBSRunner()
     apbs_prefix_a = os.path.join(protein_a_dir, 'protein_a_pot')
@@ -2303,12 +2418,15 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     # 修复: 根据 contact_cutoff 动态调整网格尺寸，确保覆盖整个接触区
     fine_size = max(30, int(contact_cutoff * 2 + 10))
     ternary_fine_len = (fine_size, fine_size, fine_size)
-    apbs_input_a = apbs.generate_input(
-        protein_a_pqr, apbs_prefix_a,
-        grid_center=glue_center,
-        fine_len=ternary_fine_len
+    apbs_input_a = (
+        apbs.generate_input(
+            protein_a_pqr, apbs_prefix_a,
+            grid_center=glue_center,
+            fine_len=ternary_fine_len
+        )
+        if protein_a_pqr else None
     )
-    dx_file_a = apbs.run(apbs_input_a, protein_a_dir)
+    dx_file_a = apbs.run(apbs_input_a, protein_a_dir) if protein_a_pqr else None
     
     # APBS Success时using DX 网格插Value，Failed时回退到 Coulomb 近似
     if dx_file_a:
@@ -2399,16 +2517,21 @@ def analyze_ternary_ec(obj_name: str = None, glue_resname: str = None,
     
     # Run PDB2PQR and APBS for protein B
     protein_b_pqr = os.path.join(protein_b_dir, 'protein_b.pqr')
-    pdb2pqr.run(protein_b_pdb, protein_b_pqr, ph=ph, remove_water=should_remove_water)
+    if not pdb2pqr.run(protein_b_pdb, protein_b_pqr, ph=ph, remove_water=should_remove_water):
+        print("[analyze_ternary_ec] ⚠️ PDB2PQR failed for Protein B, using simple PQR fallback...")
+        protein_b_pqr = _simple_pdb_to_pqr(protein_b_pdb, protein_b_pqr)
     
     apbs_prefix_b = os.path.join(protein_b_dir, 'protein_b_pot')
     # 同样using Glue 中心和动态网格
-    apbs_input_b = apbs.generate_input(
-        protein_b_pqr, apbs_prefix_b,
-        grid_center=glue_center,
-        fine_len=ternary_fine_len
+    apbs_input_b = (
+        apbs.generate_input(
+            protein_b_pqr, apbs_prefix_b,
+            grid_center=glue_center,
+            fine_len=ternary_fine_len
+        )
+        if protein_b_pqr else None
     )
-    dx_file_b = apbs.run(apbs_input_b, protein_b_dir)
+    dx_file_b = apbs.run(apbs_input_b, protein_b_dir) if protein_b_pqr else None
     
     # APBS Success时using DX 网格插Value，Failed时回退到 Coulomb 近似
     if dx_file_b:
@@ -4194,7 +4317,7 @@ if __name__ == '__main__':
     print(f"  SciPy: {'✅' if SCIPY_AVAILABLE else '❌'}")
     print(f"  PyMOL: {'✅' if PYMOL_AVAILABLE else '❌'}")
     print("\nElectrostatics Tools:")
-    print(f"  PDB2PQR Python API: {'✅' if PDB2PQR_PYTHON_AVAILABLE else '❌ (pip install pdb2pqr)'}")
-    print(f"  APBS Python API: {'✅' if APBS_PYTHON_AVAILABLE else '❌ (pip install apbs or use CLI)'}")
-    print(f"  APBS Binary Pkg: {'✅' if APBS_BINARY_AVAILABLE else '❌ (pip install apbs-binary)'}")
+    print(f"  PDB2PQR Python API: {'✅' if PDB2PQR_PYTHON_AVAILABLE else '❌ (conda install -n glint -c bioconda -c conda-forge pdb2pqr)'}")
+    print(f"  APBS Python API: {'✅' if APBS_PYTHON_AVAILABLE else '❌ (conda APBS CLI is preferred)'}")
+    print(f"  APBS Binary Pkg: {'✅' if APBS_BINARY_AVAILABLE else '❌ (optional legacy fallback)'}")
     print("\nNote: If Python APIs are not available, command-line tools will be used as fallback.")

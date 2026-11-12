@@ -31,6 +31,25 @@ except ImportError:
 from .feature_extractor import MolecularFeatureExtractor
 from .pocket_detector import PocketDetector
 
+# Residue-level chemistry used for lightweight surface summaries.
+HYDROPHOBIC_RESIDUES = {'ALA', 'VAL', 'ILE', 'LEU', 'MET', 'PHE', 'TRP', 'PRO', 'GLY'}
+POLAR_RESIDUES = {'SER', 'THR', 'CYS', 'TYR', 'ASN', 'GLN'}
+POSITIVE_RESIDUES = {'LYS', 'ARG', 'HIS'}
+NEGATIVE_RESIDUES = {'ASP', 'GLU'}
+AROMATIC_RESIDUES = {'PHE', 'TRP', 'TYR', 'HIS'}
+
+HBOND_DONOR_ATOMS = {
+    ('LYS', 'NZ'), ('ARG', 'NE'), ('ARG', 'NH1'), ('ARG', 'NH2'),
+    ('HIS', 'ND1'), ('HIS', 'NE2'), ('SER', 'OG'), ('THR', 'OG1'),
+    ('TYR', 'OH'), ('ASN', 'ND2'), ('GLN', 'NE2'), ('TRP', 'NE1'),
+    ('CYS', 'SG'),
+}
+HBOND_ACCEPTOR_ATOMS = {
+    ('ASP', 'OD1'), ('ASP', 'OD2'), ('GLU', 'OE1'), ('GLU', 'OE2'),
+    ('ASN', 'OD1'), ('GLN', 'OE1'), ('SER', 'OG'), ('THR', 'OG1'),
+    ('TYR', 'OH'), ('HIS', 'ND1'), ('HIS', 'NE2'), ('CYS', 'SG'),
+}
+
 # Try to import APBS/PDB2PQR runners
 try:
     from .ligand_ec_calculator import PDB2PQRRunner, APBSRunner, DXGrid
@@ -46,7 +65,7 @@ class SurfacePatch:
     
     def __init__(self, patch_id: int, patch_type: str):
         self.id = patch_id
-        self.type = patch_type  # 'electrostatic_pos', 'electrostatic_neg', 'hydrophobic'
+        self.type = patch_type  # 'electrostatic_pos', 'electrostatic_neg', 'hydrophobic', 'concave'
         self.points: List[Tuple[float, float, float]] = []  # Surface points (x,y,z)
         self.residues: List[Dict] = []  # Associated residues
         self.area: float = 0.0
@@ -56,8 +75,22 @@ class SurfacePatch:
         self.avg_potential: float = 0.0  # For electrostatic patches
         self.avg_hydrophobicity: float = 0.0  # For hydrophobic patches
         self.curvature: float = 0.0
+        self.avg_curvature: float = 0.0
+        self.avg_signed_curvature: float = 0.0
+        self.avg_concavity: float = 0.0
         self.shape_index: float = 0.0  # -1 (cup) to +1 (cap)
         self.score: float = 0.0  # Druggability/Importance score
+        self.grid_indices: List[Tuple[int, int, int]] = []
+
+        # Residue chemistry summary for this patch.
+        self.hydrophobic_fraction: float = 0.0
+        self.polar_fraction: float = 0.0
+        self.positive_fraction: float = 0.0
+        self.negative_fraction: float = 0.0
+        self.aromatic_fraction: float = 0.0
+        self.hbond_donors: int = 0
+        self.hbond_acceptors: int = 0
+        self.avg_hbond_role: float = 0.0
 
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary for serialization"""
@@ -69,8 +102,19 @@ class SurfacePatch:
             'avg_potential': float(self.avg_potential),
             'avg_hydrophobicity': float(self.avg_hydrophobicity),
             'curvature': float(self.curvature),
+            'avg_curvature': float(self.avg_curvature),
+            'avg_signed_curvature': float(self.avg_signed_curvature),
+            'avg_concavity': float(self.avg_concavity),
             'shape_index': float(self.shape_index),
             'score': float(self.score),
+            'hydrophobic_fraction': float(self.hydrophobic_fraction),
+            'polar_fraction': float(self.polar_fraction),
+            'positive_fraction': float(self.positive_fraction),
+            'negative_fraction': float(self.negative_fraction),
+            'aromatic_fraction': float(self.aromatic_fraction),
+            'hbond_donors': int(self.hbond_donors),
+            'hbond_acceptors': int(self.hbond_acceptors),
+            'avg_hbond_role': float(self.avg_hbond_role),
             'num_residues': len(self.residues),
             'residues': ";".join([f"{r['chain']}:{r['resn']}:{r['resi']}" for r in self.residues])
         }
@@ -80,7 +124,7 @@ class SurfaceAnalyzer:
     
     def __init__(self, obj_name: str, grid_spacing: float = 0.5, 
                  use_apbs: bool = True, ph: float = 7.4,
-                 output_dir: str = None):
+                 output_dir: str = None, selection: str = "all"):
         """
         Initialize surface analyzer.
         
@@ -90,8 +134,10 @@ class SurfaceAnalyzer:
             use_apbs: Use APBS/PDB2PQR for accurate electrostatics (default: True)
             ph: pH for PDB2PQR protonation state (default: 7.4)
             output_dir: Directory for temporary files (auto-created if None)
+            selection: PyMOL selection inside obj_name to analyze/render
         """
         self.obj_name = obj_name
+        self.selection = selection or "all"
         self.grid_spacing = grid_spacing
         self.use_apbs = use_apbs and APBS_AVAILABLE
         self.ph = ph
@@ -101,6 +147,7 @@ class SurfaceAnalyzer:
         self.origin = None
         self.dx_data = None  # APBS electrostatic potential grid
         self._temp_dir = None
+        self._surface_cache = None
         
     def analyze(self) -> List[SurfacePatch]:
         """Main analysis pipeline"""
@@ -154,12 +201,14 @@ class SurfaceAnalyzer:
         except ImportError:
             pass
             
-        properties = self._map_properties_to_surface(surface_coords, atom_kdtree, self.atoms)
+        properties = self._map_properties_to_surface(surface_coords, surface_points_indices, atom_kdtree, self.atoms)
         
         # 5. Detect Patches
         patches = []
         patches.extend(self._detect_electrostatic_patches(surface_points_indices, properties, surface_coords))
         patches.extend(self._detect_hydrophobic_patches(surface_points_indices, properties, surface_coords))
+        patches.extend(self._detect_curvature_patches(surface_points_indices, properties, surface_coords))
+        patches.extend(self._detect_hbond_patches(surface_points_indices, properties, surface_coords))
         
         # 6. Calculate Geometric Features & Score
         self._calculate_geometry_and_score(patches, surface_coords)
@@ -194,7 +243,7 @@ class SurfaceAnalyzer:
             
             # Step 1: Export protein to PDB
             protein_pdb = os.path.join(work_dir, 'protein.pdb')
-            cmd.save(protein_pdb, self.obj_name)
+            cmd.save(protein_pdb, self._selection_expr())
             
             if not os.path.exists(protein_pdb) or os.path.getsize(protein_pdb) == 0:
                 print("  ❌ Failed to export protein PDB")
@@ -307,7 +356,7 @@ class SurfaceAnalyzer:
         """Extract atoms from PyMOL"""
         atoms = []
         try:
-            model = cmd.get_model(self.obj_name)
+            model = cmd.get_model(self._selection_expr())
             for atom in model.atom:
                 atoms.append({
                     'coord': np.array(atom.coord),
@@ -322,7 +371,14 @@ class SurfaceAnalyzer:
             print(f"Error getting atoms: {e}")
         return atoms
 
-    def _map_properties_to_surface(self, surface_coords, kdtree, atoms):
+    def _selection_expr(self) -> str:
+        """Return the PyMOL expression for the active analysis scope."""
+        selection = (self.selection or "all").strip()
+        if not selection or selection == "all":
+            return self.obj_name
+        return f"({self.obj_name}) and ({selection})"
+
+    def _map_properties_to_surface(self, surface_coords, surface_indices, kdtree, atoms):
         """
         Map electrostatic potential and hydrophobicity to surface points.
         
@@ -334,6 +390,8 @@ class SurfaceAnalyzer:
         n_points = len(surface_coords)
         potentials = np.zeros(n_points)
         hydrophobicities = np.zeros(n_points)  # 1.0 = hydrophobic, 0.0 = hydrophilic
+        hbond_roles = np.zeros(n_points)  # +1 donor, -1 acceptor, 0 neutral/unknown
+        nearest_atom_indices = np.zeros(n_points, dtype=int)
         
         # Hydrophobicity scale (Kyte-Doolittle normalized to 0-1)
         hydro_scale = {
@@ -355,10 +413,12 @@ class SurfaceAnalyzer:
             # Map hydrophobicity from nearest atoms
             if kdtree:
                 dists, indices = kdtree.query(surface_coords, k=1)
+                nearest_atom_indices = np.asarray(indices, dtype=int)
                 for i, idx in enumerate(indices):
                     atom = atoms[idx]
                     resn = atom['resn']
                     hydrophobicities[i] = hydro_scale.get(resn, 0.5)
+                    hbond_roles[i] = self._get_hbond_role(atom)
         
         # === Method 2: Fallback to residue-based approximation ===
         else:
@@ -366,6 +426,7 @@ class SurfaceAnalyzer:
             if kdtree:
                 # Find nearest atom for each surface point
                 dists, indices = kdtree.query(surface_coords, k=1)
+                nearest_atom_indices = np.asarray(indices, dtype=int)
                 
                 for i, idx in enumerate(indices):
                     atom = atoms[idx]
@@ -373,6 +434,7 @@ class SurfaceAnalyzer:
                     
                     # Hydrophobicity
                     hydrophobicities[i] = hydro_scale.get(resn, 0.5)
+                    hbond_roles[i] = self._get_hbond_role(atom)
                     
                     # Electrostatics (residue-based approximation)
                     charge = atom.get('partial_charge', 0.0)
@@ -386,8 +448,113 @@ class SurfaceAnalyzer:
                             charge = 0.5  # pH dependent
                     
                     potentials[i] = charge
-                    
-        return {'potential': potentials, 'hydrophobicity': hydrophobicities}
+
+        curvature = self._compute_surface_curvature(
+            surface_coords,
+            np.array([a['coord'] for a in atoms]),
+            nearest_atom_indices,
+        )
+
+        self._surface_cache = {
+            'surface_coords': surface_coords,
+            'surface_indices': surface_indices,
+            'nearest_atom_indices': nearest_atom_indices,
+            'properties': {
+                'potential': potentials,
+                'hydrophobicity': hydrophobicities,
+                'hbond_role': hbond_roles,
+                **curvature,
+            },
+        }
+
+        return self._surface_cache['properties']
+
+    def _get_hbond_role(self, atom: Dict[str, Any]) -> float:
+        """Approximate whether an atom behaves as a donor or acceptor on the surface."""
+        resn = str(atom.get('resn', '')).upper()
+        name = str(atom.get('name', '')).upper()
+        element = str(atom.get('element', '')).upper()
+
+        donor = (resn, name) in HBOND_DONOR_ATOMS or (name == 'N' and element == 'N')
+        acceptor = (resn, name) in HBOND_ACCEPTOR_ATOMS or (name == 'O' and element == 'O')
+
+        if donor and not acceptor:
+            return 1.0
+        if acceptor and not donor:
+            return -1.0
+        return 0.0
+
+    def _compute_surface_curvature(self, surface_coords: np.ndarray,
+                                   atom_coords: np.ndarray,
+                                   nearest_atom_indices: np.ndarray) -> Dict[str, np.ndarray]:
+        """
+        Estimate local surface curvature from neighboring surface points.
+
+        The signed value is a local geometric heuristic:
+        negative values indicate concave/cup-like regions, positive values indicate
+        convex/cap-like regions, and values near zero indicate flatter surface.
+        """
+        n_points = len(surface_coords)
+        curvature = np.zeros(n_points)
+        signed_curvature = np.zeros(n_points)
+        shape_index = np.zeros(n_points)
+
+        if n_points == 0:
+            return {
+                'curvature': curvature,
+                'signed_curvature': signed_curvature,
+                'concavity': curvature,
+                'shape_index': shape_index,
+            }
+
+        try:
+            from scipy.spatial import cKDTree
+            tree = cKDTree(surface_coords)
+            radius = max(2.0, self.grid_spacing * 4.0)
+
+            for i, point in enumerate(surface_coords):
+                neighbor_ids = tree.query_ball_point(point, r=radius)
+                if len(neighbor_ids) < 6:
+                    _, neighbor_ids = tree.query(point, k=min(12, n_points))
+                    neighbor_ids = np.atleast_1d(neighbor_ids).tolist()
+
+                neighbors = surface_coords[neighbor_ids]
+                centered = neighbors - neighbors.mean(axis=0)
+                cov = np.cov(centered, rowvar=False)
+                eigvals = np.linalg.eigvalsh(cov)
+                eigvals = np.clip(eigvals, 0.0, None)
+                denom = float(eigvals.sum())
+                if denom <= 1e-12:
+                    continue
+
+                # Surface variation: small on flat patches, larger in highly curved regions.
+                curv_mag = float(eigvals[0] / denom)
+                curvature[i] = curv_mag
+
+                nearest_atom = atom_coords[nearest_atom_indices[i]]
+                normal = point - nearest_atom
+                norm = np.linalg.norm(normal)
+                if norm > 1e-8:
+                    normal = normal / norm
+                    local_offset = neighbors.mean(axis=0) - point
+                    # Convex surfaces have neighbor centroids slightly inward.
+                    sign = -1.0 if np.dot(local_offset, normal) > 0 else 1.0
+                else:
+                    sign = 1.0
+
+                signed_curvature[i] = sign * curv_mag
+                shape_index[i] = float(np.tanh(signed_curvature[i] * 24.0))
+
+        except Exception as e:
+            print(f"  Warning: curvature estimation failed: {e}")
+
+        concavity = np.maximum(-signed_curvature, 0.0)
+        return {
+            'curvature': curvature,
+            'signed_curvature': signed_curvature,
+            'concavity': concavity,
+            'shape_index': shape_index,
+        }
     
     def _sample_dx_at_points(self, points: np.ndarray) -> np.ndarray:
         """
@@ -491,9 +658,9 @@ class SurfaceAnalyzer:
         
         # Store average potential in patches
         for p in pos_patches:
-            p.avg_potential = np.mean(pot[pos_mask]) if np.any(pos_mask) else 0.0
+            self._assign_patch_property_averages(p, surface_indices, properties)
         for p in neg_patches:
-            p.avg_potential = np.mean(pot[neg_mask]) if np.any(neg_mask) else 0.0
+            self._assign_patch_property_averages(p, surface_indices, properties)
         
         patches.extend(pos_patches)
         patches.extend(neg_patches)
@@ -504,8 +671,46 @@ class SurfaceAnalyzer:
         """Cluster hydrophobic regions"""
         hy = properties['hydrophobicity']
         mask = hy > 0.6 # High hydrophobicity
-        
-        return self._cluster_surface(surface_indices[mask], "hydrophobic", surface_coords[mask])
+
+        patches = self._cluster_surface(surface_indices[mask], "hydrophobic", surface_coords[mask])
+        for p in patches:
+            self._assign_patch_property_averages(p, surface_indices, properties)
+        return patches
+
+    def _detect_curvature_patches(self, surface_indices, properties, surface_coords):
+        """Cluster concave high-curvature regions."""
+        concavity = properties.get('concavity')
+        if concavity is None or len(concavity) == 0:
+            return []
+
+        nonzero = concavity[concavity > 0]
+        if len(nonzero) == 0:
+            return []
+
+        threshold = max(float(np.percentile(nonzero, 75)), 0.015)
+        mask = concavity >= threshold
+        print(f"  Curvature threshold: concavity >= {threshold:.4f}")
+
+        patches = self._cluster_surface(surface_indices[mask], "concave", surface_coords[mask])
+        for p in patches:
+            self._assign_patch_property_averages(p, surface_indices, properties)
+        return patches
+
+    def _detect_hbond_patches(self, surface_indices, properties, surface_coords):
+        """Cluster approximate donor and acceptor surface regions."""
+        role = properties.get('hbond_role')
+        if role is None or len(role) == 0:
+            return []
+
+        donor_mask = role > 0.5
+        acceptor_mask = role < -0.5
+        donor_patches = self._cluster_surface(surface_indices[donor_mask], "hbond_donor", surface_coords[donor_mask])
+        acceptor_patches = self._cluster_surface(surface_indices[acceptor_mask], "hbond_acceptor", surface_coords[acceptor_mask])
+
+        for p in donor_patches + acceptor_patches:
+            self._assign_patch_property_averages(p, surface_indices, properties)
+
+        return donor_patches + acceptor_patches
 
     def _cluster_surface(self, indices, ptype, coords):
         """Generic clustering for surface points using distance"""
@@ -545,6 +750,9 @@ class SurfaceAnalyzer:
             # Get real coords
             loc_indices = np.argwhere(mask)
             glob_indices = loc_indices + mins
+            real_coords = self.origin + glob_indices * self.grid_spacing
+            patch.grid_indices = [tuple(int(v) for v in idx) for idx in glob_indices]
+            patch.points = [tuple(float(v) for v in coord) for coord in real_coords]
             
             # Map back to subset coords to filter them
             # This is tricky because we need original coords match
@@ -562,35 +770,79 @@ class SurfaceAnalyzer:
             
         return patches
 
+    def _assign_patch_property_averages(self, patch: SurfacePatch,
+                                        surface_indices: np.ndarray,
+                                        properties: Dict[str, np.ndarray]) -> None:
+        """Populate patch-level average electrostatic, hydrophobic, and curvature values."""
+        if not patch.grid_indices:
+            return
+
+        index_to_pos = {tuple(int(v) for v in idx): i for i, idx in enumerate(surface_indices)}
+        positions = [index_to_pos[idx] for idx in patch.grid_indices if idx in index_to_pos]
+        if not positions:
+            return
+
+        patch.avg_potential = float(np.mean(properties['potential'][positions]))
+        patch.avg_hydrophobicity = float(np.mean(properties['hydrophobicity'][positions]))
+        patch.avg_curvature = float(np.mean(properties['curvature'][positions]))
+        patch.avg_signed_curvature = float(np.mean(properties['signed_curvature'][positions]))
+        patch.avg_concavity = float(np.mean(properties['concavity'][positions]))
+        patch.avg_hbond_role = float(np.mean(properties['hbond_role'][positions]))
+        patch.curvature = patch.avg_curvature
+        patch.shape_index = float(np.mean(properties['shape_index'][positions]))
+
     def _calculate_geometry_and_score(self, patches, all_surface_coords):
         """
         Calculate curvature and other geometric features.
         Score patches based on area and geometry.
         """
         for p in patches:
-            # Curvature estimation (Shape Index)
-            # Simplified: compare surface area to volume of convex hull or simpler metric
-            # Here: just random placeholder or simple convexity check needed
-            # Valid Shape Index: -1 (cup/concave) to +1 (cap/convex)
-            # Binding sites are often concave (-0.5 to -1.0)
-            
-            # Since we don't have local mesh, we use a heuristic
-            # If patch center is 'deeper' than surrounding, it's concave
-            
-            p.shape_index = -0.5 # Assume slightly concave for interesting patches
-            
             # Scoring
             # Area is good, concavity is good for binding
             # Hydrophobic: larger area = better
             # Electrostatic: extreme charge = better
             
             size_score = min(p.area / 100.0, 1.0) # 100 A^2 max score
-            p.score = size_score * (1.0 - p.shape_index) # Favor concave
+            concavity_score = min(p.avg_concavity / 0.05, 1.0)
+            if p.type == "concave":
+                p.score = 0.6 * size_score + 0.4 * concavity_score
+            else:
+                p.score = size_score * (1.0 + concavity_score)
             
             # Identify residues
             # Need to search atoms near p.center
             # Using simple distance check
             p.residues = self._find_residues_near(p.center, 6.0) # 6A radius
+            self._assign_patch_residue_summary(p)
+
+    def _assign_patch_residue_summary(self, patch: SurfacePatch) -> None:
+        """Summarize residue chemistry classes around a patch."""
+        residues = patch.residues or []
+        n_res = len(residues)
+        if n_res == 0:
+            return
+
+        resn_list = [str(r.get('resn', '')).upper() for r in residues]
+        patch.hydrophobic_fraction = sum(r in HYDROPHOBIC_RESIDUES for r in resn_list) / n_res
+        patch.polar_fraction = sum(r in POLAR_RESIDUES for r in resn_list) / n_res
+        patch.positive_fraction = sum(r in POSITIVE_RESIDUES for r in resn_list) / n_res
+        patch.negative_fraction = sum(r in NEGATIVE_RESIDUES for r in resn_list) / n_res
+        patch.aromatic_fraction = sum(r in AROMATIC_RESIDUES for r in resn_list) / n_res
+
+        residue_keys = {(r['chain'], r['resn'], r['resi']) for r in residues}
+        donors = 0
+        acceptors = 0
+        for atom in self.atoms:
+            key = (atom['chain'], atom['resn'], atom['resi'])
+            if key not in residue_keys:
+                continue
+            role = self._get_hbond_role(atom)
+            if role > 0:
+                donors += 1
+            elif role < 0:
+                acceptors += 1
+        patch.hbond_donors = donors
+        patch.hbond_acceptors = acceptors
 
     def _find_residues_near(self, center, radius):
         """Find residues within radius of center"""
@@ -646,7 +898,7 @@ class SurfaceAnalyzer:
         For hydrophobicity: Uses B-factor coloring with Kyte-Doolittle scale.
         
         Args:
-            color_by: 'potential', 'hydrophobicity', or 'combined'
+            color_by: 'potential', 'hydrophobicity', 'curvature', 'hbond', or 'combined'
             surface_name: Name for the surface object (default: obj_name + '_ESP')
             transparency: Surface transparency (0.0 = opaque)
             color_range: (min, max) for color scale, or None for auto
@@ -664,6 +916,8 @@ class SurfaceAnalyzer:
         if not cmd:
             print("Error: PyMOL not available")
             return False
+
+        cmd.bg_color('white')
         
         # Use different default names for different surface types
         # ESP = Electrostatic Potential
@@ -672,6 +926,10 @@ class SurfaceAnalyzer:
                 surface_name = f"{self.obj_name}_ESP"
             elif color_by == 'hydrophobicity':
                 surface_name = f"{self.obj_name}_hydro"
+            elif color_by == 'curvature':
+                surface_name = f"{self.obj_name}_curvature"
+            elif color_by == 'hbond':
+                surface_name = f"{self.obj_name}_hbond"
             else:
                 surface_name = f"{self.obj_name}_surface"
         
@@ -693,6 +951,14 @@ class SurfaceAnalyzer:
         elif color_by == 'hydrophobicity':
             # Use B-factor method for hydrophobicity
             return self._render_hydrophobicity_surface(surface_name, transparency, color_range)
+
+        elif color_by == 'curvature':
+            # Use B-factor method for signed curvature / concavity
+            return self._render_curvature_surface(surface_name, transparency, color_range)
+
+        elif color_by == 'hbond':
+            # Use B-factor method for approximate donor/acceptor surface roles
+            return self._render_hbond_surface(surface_name, transparency, color_range)
             
         elif color_by == 'combined':
             # Combined mode
@@ -700,6 +966,97 @@ class SurfaceAnalyzer:
         else:
             print(f"  Unknown color mode: {color_by}")
             return False
+
+    def _interpolate_rgb(self, colors: List[Tuple[float, float, float]], t: float) -> Tuple[float, float, float]:
+        """Interpolate across a list of RGB color stops."""
+        if not colors:
+            return (1.0, 1.0, 1.0)
+        if len(colors) == 1:
+            return colors[0]
+        t = max(0.0, min(1.0, float(t)))
+        pos = t * (len(colors) - 1)
+        idx = min(int(math.floor(pos)), len(colors) - 2)
+        frac = pos - idx
+        c0 = np.array(colors[idx], dtype=float)
+        c1 = np.array(colors[idx + 1], dtype=float)
+        c = c0 * (1.0 - frac) + c1 * frac
+        return tuple(float(x) for x in c)
+
+    def _create_surface_colorbar(self, group_name: str,
+                                 colors: List[Tuple[float, float, float]],
+                                 value_min: float,
+                                 value_max: float,
+                                 title: str,
+                                 value_format: str = "{:.2f}") -> Optional[str]:
+        """Create a compact 3D colorbar next to the rendered molecular surface."""
+        if not cmd:
+            return None
+
+        try:
+            from pymol.cgo import COLOR, CYLINDER
+        except Exception:
+            return None
+
+        try:
+            cmd.delete(f"{group_name}_colorbar*")
+        except Exception:
+            pass
+
+        try:
+            min_corner, max_corner = cmd.get_extent(self._selection_expr())
+        except Exception:
+            min_corner, max_corner = ([0.0, 0.0, 0.0], [20.0, 20.0, 20.0])
+
+        min_corner = np.asarray(min_corner, dtype=float)
+        max_corner = np.asarray(max_corner, dtype=float)
+        span = np.maximum(max_corner - min_corner, 1.0)
+
+        height = max(float(span[2]) * 0.45, 10.0)
+        radius = max(height * 0.018, 0.12)
+        x = float(max_corner[0] + max(span[0] * 0.12, 4.0))
+        y = float(max_corner[1] + max(span[1] * 0.05, 1.5))
+        z0 = float(min_corner[2] + span[2] * 0.25)
+        z1 = z0 + height
+
+        n_segments = 28
+        cgo_obj = []
+        for i in range(n_segments):
+            t0 = i / n_segments
+            t1 = (i + 1) / n_segments
+            c0 = self._interpolate_rgb(colors, t0)
+            c1 = self._interpolate_rgb(colors, t1)
+            za = z0 + height * t0
+            zb = z0 + height * t1
+            cgo_obj.extend([
+                CYLINDER,
+                x, y, za,
+                x, y, zb,
+                radius,
+                c0[0], c0[1], c0[2],
+                c1[0], c1[1], c1[2],
+            ])
+
+        bar_obj = f"{group_name}_colorbar_bar"
+        cmd.load_cgo(cgo_obj, bar_obj)
+
+        label_specs = [
+            (f"{group_name}_colorbar_max", value_format.format(value_max), z1),
+            (f"{group_name}_colorbar_mid", value_format.format((value_min + value_max) / 2.0), (z0 + z1) / 2.0),
+            (f"{group_name}_colorbar_min", value_format.format(value_min), z0),
+            (f"{group_name}_colorbar_title", title, z1 + height * 0.10),
+        ]
+        label_objs = []
+        for obj_name, text, z in label_specs:
+            cmd.pseudoatom(obj_name, pos=[x + radius * 3.5, y, z])
+            cmd.label(obj_name, f'"{text}"')
+            cmd.set('label_color', 'black', obj_name)
+            cmd.set('label_size', 14, obj_name)
+            cmd.hide('nonbonded', obj_name)
+            label_objs.append(obj_name)
+
+        colorbar_group = f"{group_name}_colorbar"
+        cmd.group(colorbar_group, " ".join([bar_obj] + label_objs))
+        return colorbar_group
     
     def _render_potential_surface_native(self, surface_name: str,
                                           transparency: float = 0.0,
@@ -771,7 +1128,7 @@ class SurfaceAnalyzer:
         # Step 2: Create a copy of the object for the surface
         # This avoids modifying the original object's surface display
         surface_obj = f"{group_name}_surf"
-        cmd.create(surface_obj, self.obj_name)
+        cmd.create(surface_obj, self._selection_expr())
         
         # Step 3: Hide everything on the surface object, then show only surface
         cmd.hide('everything', surface_obj)
@@ -789,6 +1146,14 @@ class SurfaceAnalyzer:
         # Step 6: Enable surface_ramp_above_mode (critical for proper coloring)
         # PyMOL Wiki: set surface_ramp_above_mode
         cmd.set('surface_ramp_above_mode', 1)
+        colorbar_group = self._create_surface_colorbar(
+            group_name,
+            colors=[(1.0, 0.0, 0.0), (1.0, 1.0, 1.0), (0.0, 0.0, 1.0)],
+            value_min=vmin,
+            value_max=vmax,
+            title="Electrostatic kT/e",
+            value_format="{:.1f}",
+        )
         
         # === Advanced rendering settings ===
         # Depth and lighting
@@ -826,7 +1191,10 @@ class SurfaceAnalyzer:
         
         # Step 7: Group all ESP-related objects together
         # This keeps the PyMOL object list clean and organized
-        cmd.group(group_name, f"{map_name} {ramp_name} {surface_obj}")
+        group_members = f"{map_name} {ramp_name} {surface_obj}"
+        if colorbar_group:
+            group_members += f" {colorbar_group}"
+        cmd.group(group_name, group_members)
         
         # Don't cleanup temp dir yet - we need the DX file for the ramp
         # The map will be deleted when PyMOL session ends
@@ -835,6 +1203,8 @@ class SurfaceAnalyzer:
         print("   Method: PyMOL native ramp_new (same as APBS plugin)")
         print("   Color scheme: Red (negative) → White (neutral) → Blue (positive)")
         print(f"   Group contains: {surface_obj}, {map_name}, {ramp_name}")
+        if colorbar_group:
+            print(f"   Colorbar: {colorbar_group}")
         
         # Export per-residue electrostatic potential to CSV if output_dir is set
         if self.output_dir:
@@ -965,6 +1335,36 @@ class SurfaceAnalyzer:
         print(f"   Potential range: [{min(all_potentials):.2f}, {max(all_potentials):.2f}] kT/e")
         
         return csv_path
+
+    def _ensure_surface_cache(self) -> bool:
+        """Build surface points and mapped properties if they are not already cached."""
+        if self._surface_cache is not None:
+            return True
+
+        if not self.atoms:
+            self.atoms = self._get_atoms()
+        if not self.atoms:
+            return False
+
+        pd = PocketDetector(grid_spacing=self.grid_spacing)
+        self.grid_info, self.origin, atom_coords = pd._build_grid(self.atoms)
+        occupied = pd._mark_occupied(self.grid_info, atom_coords, self.origin)
+        struct = ndimage.generate_binary_structure(3, 1)
+        dilated = ndimage.binary_dilation(occupied, structure=struct)
+        surface_mask = dilated & (~occupied)
+        surface_indices = np.argwhere(surface_mask)
+        if len(surface_indices) == 0:
+            return False
+
+        surface_coords = self.origin + surface_indices * self.grid_spacing
+        try:
+            from scipy.spatial import cKDTree
+            atom_kdtree = cKDTree(atom_coords)
+        except ImportError:
+            atom_kdtree = None
+
+        self._map_properties_to_surface(surface_coords, surface_indices, atom_kdtree, self.atoms)
+        return self._surface_cache is not None
     
     def _render_potential_surface_fallback(self, surface_name: str,
                                             transparency: float = 0.0,
@@ -983,7 +1383,7 @@ class SurfaceAnalyzer:
         print(f"  Charge range: [{values.min():.2f}, {values.max():.2f}]")
         
         # Create surface and color by B-factor
-        cmd.create(surface_name, self.obj_name)
+        cmd.create(surface_name, self._selection_expr())
         
         model = cmd.get_model(surface_name)
         for i, atom in enumerate(model.atom):
@@ -994,6 +1394,14 @@ class SurfaceAnalyzer:
         cmd.hide('everything', surface_name)
         cmd.show('surface', surface_name)
         cmd.spectrum('b', 'red_white_blue', surface_name, minimum=vmin, maximum=vmax)
+        self._create_surface_colorbar(
+            surface_name,
+            colors=[(1.0, 0.0, 0.0), (1.0, 1.0, 1.0), (0.0, 0.0, 1.0)],
+            value_min=vmin,
+            value_max=vmax,
+            title="Charge",
+            value_format="{:.1f}",
+        )
         
         if transparency > 0:
             cmd.set('transparency', transparency, surface_name)
@@ -1010,6 +1418,266 @@ class SurfaceAnalyzer:
         print("   Color scheme: Red (negative) → White (neutral) → Blue (positive)")
         
         return True
+
+    def _render_curvature_surface(self, surface_name: str,
+                                  transparency: float = 0.0,
+                                  color_range: tuple = None) -> bool:
+        """
+        Render signed surface curvature using B-factor coloring.
+
+        Negative values are concave/cup-like regions, positive values are convex/cap-like
+        regions. This is intended to expose grooves, shallow pockets, and curved surface
+        patches alongside electrostatic and hydrophobic surface analysis.
+        """
+        if not self._ensure_surface_cache():
+            print("  Error: failed to calculate surface curvature")
+            return False
+
+        cache = self._surface_cache
+        props = cache['properties']
+        nearest_atom_indices = cache['nearest_atom_indices']
+        signed = props['signed_curvature']
+
+        atom_values = np.zeros(len(self.atoms), dtype=float)
+        atom_counts = np.zeros(len(self.atoms), dtype=int)
+        for value, atom_idx in zip(signed, nearest_atom_indices):
+            atom_values[atom_idx] += value
+            atom_counts[atom_idx] += 1
+        has_values = atom_counts > 0
+        atom_values[has_values] /= atom_counts[has_values]
+
+        if color_range:
+            vmin, vmax = color_range
+        else:
+            populated = atom_values[has_values]
+            if len(populated):
+                max_abs = float(np.percentile(np.abs(populated), 95))
+                max_abs = max(max_abs, 0.02)
+            else:
+                max_abs = 0.05
+            vmin, vmax = -max_abs, max_abs
+
+        print(f"  Signed curvature range: [{atom_values.min():.4f}, {atom_values.max():.4f}]")
+        print(f"  Color scale: [{vmin:.4f}, {vmax:.4f}]")
+
+        cmd.create(surface_name, self._selection_expr())
+
+        model = cmd.get_model(surface_name)
+        for i, atom in enumerate(model.atom):
+            if i < len(atom_values):
+                atom.b = float(atom_values[i])
+        cmd.load_model(model, surface_name, state=1)
+
+        cmd.hide('everything', surface_name)
+        cmd.show('surface', surface_name)
+        cmd.set_color('glint_curv_concave', [0.50, 0.18, 0.78])
+        cmd.set_color('glint_curv_flat', [0.88, 0.88, 0.84])
+        cmd.set_color('glint_curv_convex', [0.95, 0.66, 0.14])
+        try:
+            cmd.spectrum(
+                'b',
+                'glint_curv_concave glint_curv_flat glint_curv_convex',
+                surface_name,
+                minimum=vmin,
+                maximum=vmax
+            )
+        except Exception:
+            cmd.spectrum('b', 'purple_white_orange', surface_name, minimum=vmin, maximum=vmax)
+        self._create_surface_colorbar(
+            surface_name,
+            colors=[(0.50, 0.18, 0.78), (0.88, 0.88, 0.84), (0.95, 0.66, 0.14)],
+            value_min=vmin,
+            value_max=vmax,
+            title="Signed Curvature",
+            value_format="{:.3f}",
+        )
+
+        if transparency > 0:
+            cmd.set('transparency', transparency, surface_name)
+
+        cmd.set('surface_quality', 1, surface_name)
+        cmd.hide('surface', self.obj_name)
+
+        if self.output_dir:
+            self._export_curvature_csv(atom_values)
+
+        self._cleanup()
+
+        print(f"✅ Curvature surface rendered as '{surface_name}'")
+        print("   Method: local surface-neighborhood curvature")
+        print("   Color scheme: Purple (concave) → light gray (flat) → gold (convex)")
+
+        return True
+
+    def _export_curvature_csv(self, atom_values: np.ndarray) -> str:
+        """Export per-residue signed curvature and concavity values to CSV."""
+        import csv
+
+        if not self.output_dir:
+            return None
+
+        csv_path = os.path.join(self.output_dir, 'surface_curvature.csv')
+        residue_values = {}
+        for atom, value in zip(self.atoms, atom_values):
+            key = (atom['chain'], atom['resi'], atom['resn'])
+            residue_values.setdefault(key, []).append(float(value))
+
+        rows = []
+        for (chain, resi, resn), values in residue_values.items():
+            vals = np.array(values, dtype=float)
+            mean_signed = float(np.mean(vals))
+            rows.append({
+                'chain': chain,
+                'resi': resi,
+                'resn': resn,
+                'signed_curvature': mean_signed,
+                'curvature': float(np.mean(np.abs(vals))),
+                'concavity': max(-mean_signed, 0.0),
+            })
+
+        rows = sorted(rows, key=lambda x: (x['chain'], int(x['resi']) if str(x['resi']).isdigit() else 0))
+
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = [
+                'Chain', 'Residue_Number', 'Residue_Name',
+                'Signed_Curvature', 'Curvature_Magnitude', 'Concavity'
+            ]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({
+                    'Chain': row['chain'],
+                    'Residue_Number': row['resi'],
+                    'Residue_Name': row['resn'],
+                    'Signed_Curvature': f"{row['signed_curvature']:.5f}",
+                    'Curvature_Magnitude': f"{row['curvature']:.5f}",
+                    'Concavity': f"{row['concavity']:.5f}",
+                })
+
+        print(f"   Curvature CSV saved: {os.path.basename(csv_path)}")
+        print(f"   Total residues: {len(rows)}")
+
+        return csv_path
+
+    def _render_hbond_surface(self, surface_name: str,
+                              transparency: float = 0.0,
+                              color_range: tuple = None) -> bool:
+        """Render approximate hydrogen-bond donor/acceptor distribution."""
+        if not self._ensure_surface_cache():
+            print("  Error: failed to calculate donor/acceptor surface roles")
+            return False
+
+        cache = self._surface_cache
+        role_values = cache['properties']['hbond_role']
+        nearest_atom_indices = cache['nearest_atom_indices']
+
+        atom_values = np.zeros(len(self.atoms), dtype=float)
+        atom_counts = np.zeros(len(self.atoms), dtype=int)
+        for value, atom_idx in zip(role_values, nearest_atom_indices):
+            atom_values[atom_idx] += value
+            atom_counts[atom_idx] += 1
+        has_values = atom_counts > 0
+        atom_values[has_values] /= atom_counts[has_values]
+
+        vmin, vmax = color_range if color_range else (-1.0, 1.0)
+        print(f"  Donor/acceptor role range: [{atom_values.min():.2f}, {atom_values.max():.2f}]")
+
+        cmd.create(surface_name, self._selection_expr())
+        model = cmd.get_model(surface_name)
+        for i, atom in enumerate(model.atom):
+            if i < len(atom_values):
+                atom.b = float(atom_values[i])
+        cmd.load_model(model, surface_name, state=1)
+
+        cmd.hide('everything', surface_name)
+        cmd.show('surface', surface_name)
+        cmd.set_color('glint_hbond_acceptor', [0.78, 0.16, 0.54])
+        cmd.set_color('glint_hbond_neutral', [0.88, 0.88, 0.84])
+        cmd.set_color('glint_hbond_donor', [0.00, 0.62, 0.72])
+        try:
+            cmd.spectrum(
+                'b',
+                'glint_hbond_acceptor glint_hbond_neutral glint_hbond_donor',
+                surface_name,
+                minimum=vmin,
+                maximum=vmax
+            )
+        except Exception:
+            cmd.spectrum('b', 'magenta_white_cyan', surface_name, minimum=vmin, maximum=vmax)
+        self._create_surface_colorbar(
+            surface_name,
+            colors=[(0.78, 0.16, 0.54), (0.88, 0.88, 0.84), (0.00, 0.62, 0.72)],
+            value_min=vmin,
+            value_max=vmax,
+            title="Acceptor / Donor",
+            value_format="{:.1f}",
+        )
+
+        if transparency > 0:
+            cmd.set('transparency', transparency, surface_name)
+        cmd.set('surface_quality', 1, surface_name)
+        cmd.hide('surface', self.obj_name)
+
+        if self.output_dir:
+            self._export_hbond_csv(atom_values)
+
+        self._cleanup()
+        print(f"✅ Donor/acceptor surface rendered as '{surface_name}'")
+        print("   Color scheme: magenta (acceptor) → light gray (neutral) → cyan (donor)")
+        return True
+
+    def _export_hbond_csv(self, atom_values: np.ndarray) -> str:
+        """Export per-residue approximate donor/acceptor role values."""
+        import csv
+
+        if not self.output_dir:
+            return None
+
+        csv_path = os.path.join(self.output_dir, 'hbond_donor_acceptor.csv')
+        residue_data = {}
+        for atom, value in zip(self.atoms, atom_values):
+            key = (atom['chain'], atom['resi'], atom['resn'])
+            if key not in residue_data:
+                residue_data[key] = {'values': [], 'donors': 0, 'acceptors': 0}
+            residue_data[key]['values'].append(float(value))
+            role = self._get_hbond_role(atom)
+            if role > 0:
+                residue_data[key]['donors'] += 1
+            elif role < 0:
+                residue_data[key]['acceptors'] += 1
+
+        rows = []
+        for (chain, resi, resn), data in residue_data.items():
+            rows.append({
+                'chain': chain,
+                'resi': resi,
+                'resn': resn,
+                'role': float(np.mean(data['values'])),
+                'donors': data['donors'],
+                'acceptors': data['acceptors'],
+            })
+        rows = sorted(rows, key=lambda x: (x['chain'], int(x['resi']) if str(x['resi']).isdigit() else 0))
+
+        with open(csv_path, 'w', newline='', encoding='utf-8') as f:
+            fieldnames = [
+                'Chain', 'Residue_Number', 'Residue_Name',
+                'Donor_Acceptor_Role', 'Approx_Donor_Atoms', 'Approx_Acceptor_Atoms'
+            ]
+            writer = csv.DictWriter(f, fieldnames=fieldnames)
+            writer.writeheader()
+            for row in rows:
+                writer.writerow({
+                    'Chain': row['chain'],
+                    'Residue_Number': row['resi'],
+                    'Residue_Name': row['resn'],
+                    'Donor_Acceptor_Role': f"{row['role']:.4f}",
+                    'Approx_Donor_Atoms': row['donors'],
+                    'Approx_Acceptor_Atoms': row['acceptors'],
+                })
+
+        print(f"   Donor/acceptor CSV saved: {os.path.basename(csv_path)}")
+        print(f"   Total residues: {len(rows)}")
+        return csv_path
     
     def _render_hydrophobicity_surface(self, surface_name: str,
                                         transparency: float = 0.0,
@@ -1026,7 +1694,7 @@ class SurfaceAnalyzer:
         print(f"  Hydrophobicity range: [{values.min():.2f}, {values.max():.2f}]")
         
         # Create surface and color by B-factor
-        cmd.create(surface_name, self.obj_name)
+        cmd.create(surface_name, self._selection_expr())
         
         model = cmd.get_model(surface_name)
         for i, atom in enumerate(model.atom):
@@ -1037,6 +1705,14 @@ class SurfaceAnalyzer:
         cmd.hide('everything', surface_name)
         cmd.show('surface', surface_name)
         cmd.spectrum('b', 'white_green', surface_name, minimum=vmin, maximum=vmax)
+        self._create_surface_colorbar(
+            surface_name,
+            colors=[(1.0, 1.0, 1.0), (0.0, 0.55, 0.15)],
+            value_min=vmin,
+            value_max=vmax,
+            title="Hydrophobicity",
+            value_format="{:.2f}",
+        )
         
         if transparency > 0:
             cmd.set('transparency', transparency, surface_name)
@@ -1154,7 +1830,7 @@ class SurfaceAnalyzer:
         hydro_threshold = 0.6  # Kyte-Doolittle normalized
         
         # Create a copy of the object
-        cmd.create(surface_name, self.obj_name)
+        cmd.create(surface_name, self._selection_expr())
         
         # Calculate combined color values
         # Priority: charged > hydrophobic > neutral
@@ -1233,7 +1909,8 @@ class SurfaceAnalyzer:
 def render_protein_surface(obj_name: str, use_apbs: bool = True, ph: float = 7.4,
                           color_by: str = 'potential', transparency: float = 0.0,
                           color_min: float = None, color_max: float = None,
-                          save_files: bool = False, output_dir: str = None) -> bool:
+                          save_files: bool = False, output_dir: str = None,
+                          selection: str = "all") -> bool:
     """
     Render complete protein surface with APBS electrostatics using PyMOL native surface.
     
@@ -1244,12 +1921,13 @@ def render_protein_surface(obj_name: str, use_apbs: bool = True, ph: float = 7.4
         obj_name: PyMOL object name
         use_apbs: Use APBS for accurate electrostatics (default: True)
         ph: pH for PDB2PQR protonation (default: 7.4)
-        color_by: 'potential' or 'hydrophobicity'
+        color_by: 'potential', 'hydrophobicity', 'curvature', or 'hbond'
         transparency: Surface transparency (0.0 = opaque)
         color_min: Minimum value for color scale (default: auto)
         color_max: Maximum value for color scale (default: auto)
         save_files: If True, save intermediate files (PDB, PQR, DX) to output_dir
         output_dir: Directory to save files (required if save_files=True)
+        selection: PyMOL selection inside obj_name to analyze/render
         
     Returns:
         True if successful
@@ -1257,6 +1935,8 @@ def render_protein_surface(obj_name: str, use_apbs: bool = True, ph: float = 7.4
     Usage in PyMOL:
         render_protein_surface '8D7Z', use_apbs=True, ph=7.4
         render_protein_surface '8D7Z', color_by='hydrophobicity'
+        render_protein_surface '8D7Z', color_by='curvature'
+        render_protein_surface '8D7Z', color_by='hbond'
         render_protein_surface '8D7Z', save_files=True, output_dir='/path/to/output'
     """
     color_range = None
@@ -1264,7 +1944,8 @@ def render_protein_surface(obj_name: str, use_apbs: bool = True, ph: float = 7.4
         color_range = (color_min, color_max)
     
     analyzer = SurfaceAnalyzer(obj_name, grid_spacing=0.5,
-                               use_apbs=use_apbs, ph=ph)
+                               use_apbs=use_apbs, ph=ph,
+                               selection=selection)
     return analyzer.render_full_surface(color_by=color_by,
                                         transparency=transparency,
                                         color_range=color_range,

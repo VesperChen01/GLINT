@@ -5,7 +5,7 @@ Surface Similarity and Complementarity Analysis Module
 MaSIF-inspired protein surface analysis for GLINT.
 
 Features:
-- Surface mesh generation (Open3D or built-in EDTSurf fallback)
+- Surface mesh generation with MSMS
 - Geometric features: curvature, shape index, curvedness
 - Chemical features: electrostatics, hydrophobicity, H-bond capacity
 - Surface similarity comparison
@@ -14,7 +14,7 @@ Features:
 
 Dependencies:
 - Required: numpy, scipy
-- Recommended: open3d (preferred surface generation backend)
+- Required for surface analysis: MSMS executable
 - Optional: APBS (for accurate electrostatics)
 
 Cross-platform support: macOS, Windows, Linux
@@ -24,6 +24,10 @@ from __future__ import annotations
 import os
 import math
 import platform
+import subprocess
+import tempfile
+import shutil
+import gzip
 from typing import List, Dict, Tuple, Optional, Any, Union
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -38,6 +42,15 @@ try:
     HAS_LIGAND_FEATURES = True
 except ImportError:
     HAS_LIGAND_FEATURES = False
+
+try:
+    from .ligand_ec_calculator import PDB2PQRRunner, APBSRunner, DXGrid
+    HAS_APBS_RUNNERS = True
+except ImportError:
+    PDB2PQRRunner = None
+    APBSRunner = None
+    DXGrid = None
+    HAS_APBS_RUNNERS = False
 from scipy.spatial.distance import cdist
 from scipy import ndimage
 
@@ -81,6 +94,7 @@ class SurfacePoint:
     
     # Metadata
     nearest_residue: Optional[str] = None  # "A:ALA:123"
+    surface_residues: List[str] = field(default_factory=list)
     
     def to_feature_vector(self, include_geometry: bool = True, 
                           include_chemistry: bool = True) -> np.ndarray:
@@ -242,18 +256,28 @@ class ComplementarityResult:
     # Component scores
     geometric_complementarity: float = 0.0  # Shape matching
     electrostatic_complementarity: float = 0.0  # Charge matching
+    directional_electrostatic_complementarity: float = 0.0  # Spatially organized charge matching
+    effective_electrostatic_complementarity: float = 0.0  # Charge score used by gate
     hydrophobic_complementarity: float = 0.0  # Hydrophobic matching
+    hbond_complementarity: float = 0.0  # Donor/acceptor matching
     
     # Interface analysis
     interface_area: float = 0.0
     n_contacts: int = 0
     gap_volume: float = 0.0
     min_distance: float = 0.0
-    analysis_mode: str = "interface"
+    analysis_mode: str = "patch"
     n_patch_matches: int = 0
     patch_radius: float = 0.0
-    
-    # Residue pairs at interface
+    patch_score_std: float = 0.0
+    electrostatic_gate_threshold: float = 0.0
+    electrostatic_gate_multiplier: float = 1.0
+    core_overall_score: float = 0.0
+    main_model_name: str = "HybridPatchScore"
+    template_class: str = "imid"
+    ablation_rankings: Dict[str, List["ComplementarityPatchMatch"]] = field(default_factory=dict)
+
+    # Representative residue pairs from best patch matches
     interface_residues: List[Tuple[str, str]] = field(default_factory=list)
     patch_matches: List["ComplementarityPatchMatch"] = field(default_factory=list)
 
@@ -267,6 +291,30 @@ class ComplementarityPatchMatch:
     geometric_score: float
     electrostatic_score: float
     hydrophobic_score: float
+    core_overall_score: float = 0.0
+    directional_electrostatic_score: float = 0.0
+    effective_electrostatic_score: float = 0.0
+    hbond_score: float = 0.0
+    interface_score: float = 0.0
+    focused_interface_score: float = 0.0
+    background_score: float = 0.0
+    interface_delta: float = 0.0
+    fingerprint_score: float = 0.0
+    fingerprint_shape_score: float = 0.0
+    fingerprint_curvature_score: float = 0.0
+    fingerprint_esp_score: float = 0.0
+    fingerprint_hydro_score: float = 0.0
+    fingerprint_hbond_score: float = 0.0
+    fingerprint_hbond_total_score: float = 0.0
+    specificity_score: float = 0.0
+    target_pocketness_score: float = 0.0
+    template_match_score: float = 0.0
+    template_only_score: float = 0.0
+    pocket_only_score: float = 0.0
+    template_specificity_score: float = 0.0
+    template_pocket_score: float = 0.0
+    template_anchor_distance: float = float("nan")
+    electrostatic_gate_multiplier: float = 1.0
     residues1: List[str] = field(default_factory=list)
     residues2: List[str] = field(default_factory=list)
 
@@ -277,11 +325,10 @@ class ComplementarityPatchMatch:
 
 class SurfaceGenerator:
     """
-    Generate molecular surface using various methods.
+    Generate molecular surface using MSMS.
     
     Supports:
-    - Open3D ball pivoting (preferred backend)
-    - EDTSurf (built-in approximation / fallback)
+    - MSMS molecular surface
     """
     
     def __init__(self, method: str = "auto"):
@@ -289,30 +336,62 @@ class SurfaceGenerator:
         Initialize surface generator.
         
         Args:
-            method: "auto", "open3d", or "edtsurf"
+            method: "auto" or "msms". Both use MSMS.
         """
         self.method = (method or "auto").lower()
         self.last_requested_method = self.method
         self.last_resolved_method = self.method
+        self.msms_path = self._find_msms()
+
+    def _find_msms(self) -> Optional[str]:
+        """Find an MSMS executable."""
+        resolved = find_executable("msms")
+        if resolved and self._is_usable_msms(resolved):
+            return resolved
+
+        candidates = [
+            "/opt/homebrew/Caskroom/miniconda/base/envs/glint/bin/msms",
+            "/opt/homebrew/Caskroom/miniconda/base/bin/msms",
+            os.path.expanduser("~/miniconda3/envs/glint/bin/msms"),
+            os.path.expanduser("~/anaconda3/envs/glint/bin/msms"),
+            os.path.expanduser("~/ADFRsuite/bin/msms"),
+            "/usr/local/bin/msms",
+            "/opt/homebrew/bin/msms",
+        ]
+        for candidate in candidates:
+            if os.path.exists(candidate) and os.access(candidate, os.X_OK) and self._is_usable_msms(candidate):
+                return candidate
+        return None
+
+    def _is_usable_msms(self, path: str) -> bool:
+        """Return True only if MSMS can be launched on this machine."""
+        try:
+            result = subprocess.run([path], capture_output=True, text=True, timeout=5)
+            combined = f"{result.stdout}\n{result.stderr}".lower()
+            if "bad cpu type" in combined or "exec format" in combined:
+                return False
+            return True
+        except OSError:
+            return False
+        except subprocess.TimeoutExpired:
+            return True
 
     def _resolve_method(self, requested: str) -> str:
-        """Resolve a requested method to the best currently available backend."""
+        """Resolve a requested method. GLINT surface complementarity uses MSMS only."""
         method = (requested or "auto").lower()
 
-        if method == "auto":
-            if HAS_OPEN3D:
-                return "open3d"
-            return "edtsurf"
+        if method in {"auto", "msms"}:
+            if self.msms_path:
+                return "msms"
+            raise RuntimeError(
+                "MSMS is required for surface analysis, but no compatible executable is available. "
+                "Install it in the GLINT conda environment with: "
+                "conda install -n glint -c bioconda -c conda-forge scripps-msms"
+            )
 
-        if method == "open3d" and not HAS_OPEN3D:
-            print("⚠️  Open3D requested but not available. Falling back to built-in EDTSurf.")
-            return "edtsurf"
-
-        if method not in {"open3d", "edtsurf"}:
-            print(f"⚠️  Unknown surface method '{method}'. Falling back to auto selection.")
-            return self._resolve_method("auto")
-
-        return method
+        raise RuntimeError(
+            f"Unsupported surface method '{requested}'. GLINT surface complementarity uses MSMS only."
+        )
     
     def generate(self, atoms: List[Dict], probe_radius: float = 1.4) -> SurfaceMesh:
         """
@@ -330,8 +409,7 @@ class SurfaceGenerator:
         self.last_resolved_method = method
 
         generators = {
-            "open3d": self._generate_open3d,
-            "edtsurf": self._generate_edtsurf,
+            "msms": self._generate_msms,
         }
 
         try:
@@ -341,345 +419,90 @@ class SurfaceGenerator:
             mesh.generation_method = method
             return mesh
         except Exception as exc:
-            if method == "edtsurf":
-                raise RuntimeError(f"Built-in EDTSurf surface generation failed: {exc}")
+            raise RuntimeError(f"MSMS surface generation failed: {exc}")
 
-            print(f"⚠️  Surface generation with '{method}' failed: {exc}")
-            print("   Falling back to built-in EDTSurf approximation.")
-            fallback = self._generate_edtsurf(atoms, probe_radius)
-            fallback.generation_method = "edtsurf"
-            self.last_resolved_method = "edtsurf"
-            return fallback
-    
-    def _generate_open3d(self, atoms: List[Dict], probe_radius: float) -> SurfaceMesh:
-        """Generate surface using Open3D."""
-        if not HAS_OPEN3D:
-            raise RuntimeError("Open3D not available")
-        
-        # Create point cloud from atom positions
-        coords = np.array([a['coord'] for a in atoms])
-        radii = np.array([a.get('radius', 1.7) for a in atoms])
-        
-        # Expand points to surface using spherical sampling
-        surface_points = []
-        for coord, radius in zip(coords, radii):
-            # Sample points on sphere surface
-            n_samples = max(10, int(4 * np.pi * (radius + probe_radius)**2))
-            phi = np.random.uniform(0, 2*np.pi, n_samples)
-            costheta = np.random.uniform(-1, 1, n_samples)
-            theta = np.arccos(costheta)
-            
-            r = radius + probe_radius
-            x = coord[0] + r * np.sin(theta) * np.cos(phi)
-            y = coord[1] + r * np.sin(theta) * np.sin(phi)
-            z = coord[2] + r * np.cos(theta)
-            
-            surface_points.extend(zip(x, y, z))
-        
-        surface_points = np.array(surface_points)
-        
-        # Create point cloud
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(surface_points)
-        
-        # Estimate normals
-        pcd.estimate_normals(search_param=o3d.geometry.KDTreeSearchParamHybrid(
-            radius=2.0, max_nn=30))
-        
-        # Ball pivoting reconstruction
-        radii_list = [0.5, 1.0, 1.5, 2.0]
-        mesh = o3d.geometry.TriangleMesh.create_from_point_cloud_ball_pivoting(
-            pcd, o3d.utility.DoubleVector(radii_list))
-        
-        # Extract vertices, faces, normals
-        vertices = np.asarray(mesh.vertices)
-        faces = np.asarray(mesh.triangles)
-        
-        # Compute vertex normals
-        mesh.compute_vertex_normals()
-        normals = np.asarray(mesh.vertex_normals)
-        
-        return SurfaceMesh(
-            vertices=vertices,
-            faces=faces,
-            normals=normals,
-            generation_method="open3d"
-        )
-    
-    def _generate_edtsurf(self, atoms: List[Dict], probe_radius: float) -> SurfaceMesh:
-        """
-        Generate a built-in approximate molecular surface without external tools.
+    def _generate_msms(self, atoms: List[Dict], probe_radius: float) -> SurfaceMesh:
+        """Generate a molecular surface with external MSMS."""
+        if not self.msms_path:
+            raise RuntimeError("MSMS executable not found")
 
-        If scikit-image is available, use a grid-based EDT + marching cubes path.
-        Otherwise, use a faster point-cloud approximation based on solvent-accessible
-        sphere sampling plus local triangulation. The fallback is less precise than
-        MSMS, but it keeps similarity/complementarity analysis functional.
-        """
-        try:
-            from skimage.measure import marching_cubes  # noqa: F401
-            has_skimage = True
-        except ImportError:
-            has_skimage = False
+        with tempfile.TemporaryDirectory(prefix="glint_msms_") as work_dir:
+            xyzr_path = os.path.join(work_dir, "surface.xyzr")
+            out_prefix = os.path.join(work_dir, "surface")
 
-        if not has_skimage:
-            return self._generate_sampled_surface(atoms, probe_radius)
+            with open(xyzr_path, "w", encoding="utf-8") as fh:
+                for atom in atoms:
+                    coord = atom["coord"]
+                    radius = atom.get("radius", 1.7)
+                    fh.write(f"{coord[0]:.4f} {coord[1]:.4f} {coord[2]:.4f} {radius:.4f}\n")
 
-        coords = np.array([a['coord'] for a in atoms])
-        radii = np.array([a.get('radius', 1.7) for a in atoms])
-        
-        # Grid parameters
-        grid_spacing = 0.5
-        padding = probe_radius + 3.0
-        
-        min_coords = coords.min(axis=0) - padding - radii.max()
-        max_coords = coords.max(axis=0) + padding + radii.max()
-        
-        grid_size = np.ceil((max_coords - min_coords) / grid_spacing).astype(int)
-        
-        # Create distance field
-        distance_field = np.full(grid_size, np.inf)
-        
-        # Mark atom interiors
-        for coord, radius in zip(coords, radii):
-            grid_coord = ((coord - min_coords) / grid_spacing).astype(int)
-            r_grid = int(np.ceil((radius + probe_radius) / grid_spacing)) + 1
-            
-            for i in range(max(0, grid_coord[0]-r_grid), min(grid_size[0], grid_coord[0]+r_grid+1)):
-                for j in range(max(0, grid_coord[1]-r_grid), min(grid_size[1], grid_coord[1]+r_grid+1)):
-                    for k in range(max(0, grid_coord[2]-r_grid), min(grid_size[2], grid_coord[2]+r_grid+1)):
-                        point = min_coords + np.array([i, j, k]) * grid_spacing
-                        dist = np.linalg.norm(point - coord) - radius - probe_radius
-                        distance_field[i, j, k] = min(distance_field[i, j, k], dist)
-        
-        # Extract isosurface at distance = 0 using marching cubes
-        vertices, faces, normals = self._marching_cubes(
-            distance_field, 0.0, min_coords, grid_spacing)
-        
-        return SurfaceMesh(
-            vertices=vertices,
-            faces=faces,
-            normals=normals,
-            generation_method="edtsurf"
-        )
+            cmd_parts = [
+                self.msms_path,
+                "-if", xyzr_path,
+                "-of", out_prefix,
+                "-probe_radius", str(probe_radius),
+                "-density", "3.0",
+            ]
+            result = subprocess.run(cmd_parts, capture_output=True, text=True, timeout=180)
+            if result.returncode != 0:
+                raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "MSMS failed")
 
-    def _generate_sampled_surface(self, atoms: List[Dict], probe_radius: float) -> SurfaceMesh:
-        """Approximate the molecular surface using solvent-accessible point sampling."""
-        coords = np.array([a['coord'] for a in atoms], dtype=float)
-        radii = np.array([a.get('radius', 1.7) for a in atoms], dtype=float)
+            vert_path = out_prefix + ".vert"
+            face_path = out_prefix + ".face"
+            if not os.path.exists(vert_path) or not os.path.exists(face_path):
+                raise RuntimeError("MSMS did not generate .vert/.face files")
 
-        if len(coords) == 0:
-            return SurfaceMesh(
-                vertices=np.empty((0, 3), dtype=float),
-                faces=np.empty((0, 3), dtype=int),
-                normals=np.empty((0, 3), dtype=float),
-                generation_method="edtsurf"
-            )
-
-        atom_tree = cKDTree(coords)
-        golden_angle = math.pi * (3.0 - math.sqrt(5.0))
-
-        sampled_vertices = []
-        sampled_normals = []
-
-        for atom_idx, (coord, radius) in enumerate(zip(coords, radii)):
-            accessible_radius = radius + probe_radius
-            n_samples = max(48, min(192, int(24.0 * accessible_radius * accessible_radius)))
-
-            for sample_idx in range(n_samples):
-                y = 1.0 - (2.0 * sample_idx + 1.0) / n_samples
-                radial = math.sqrt(max(0.0, 1.0 - y * y))
-                theta = golden_angle * sample_idx
-                direction = np.array([
-                    math.cos(theta) * radial,
-                    y,
-                    math.sin(theta) * radial,
-                ], dtype=float)
-                point = coord + accessible_radius * direction
-
-                neighbor_indices = atom_tree.query_ball_point(point, accessible_radius + radii.max() + 0.1)
-                buried = False
-                for neighbor_idx in neighbor_indices:
-                    if neighbor_idx == atom_idx:
+            vertices = []
+            normals = []
+            with open(vert_path, "r", encoding="utf-8", errors="ignore") as fh:
+                for line in fh:
+                    parts = line.split()
+                    if len(parts) < 6:
                         continue
-                    cutoff = radii[neighbor_idx] + probe_radius - 0.05
-                    if np.linalg.norm(point - coords[neighbor_idx]) < cutoff:
-                        buried = True
-                        break
+                    try:
+                        vals = [float(x) for x in parts[:6]]
+                    except ValueError:
+                        continue
+                    vertices.append(vals[:3])
+                    normal = np.array(vals[3:6], dtype=float)
+                    norm = np.linalg.norm(normal)
+                    normals.append((normal / norm).tolist() if norm > 0 else [0.0, 0.0, 1.0])
 
-                if not buried:
-                    sampled_vertices.append(point)
-                    sampled_normals.append(direction)
+            faces = []
+            with open(face_path, "r", encoding="utf-8", errors="ignore") as fh:
+                for line in fh:
+                    parts = line.split()
+                    if len(parts) < 3:
+                        continue
+                    try:
+                        face = [int(parts[0]) - 1, int(parts[1]) - 1, int(parts[2]) - 1]
+                    except ValueError:
+                        continue
+                    if min(face) >= 0:
+                        faces.append(face)
 
-        if not sampled_vertices:
-            raise RuntimeError("No exposed surface points could be sampled")
-
-        vertices = np.asarray(sampled_vertices, dtype=float)
-        normals = np.asarray(sampled_normals, dtype=float)
-        vertices, normals = self._deduplicate_surface_points(vertices, normals, spacing=1.0)
-        faces = self._triangulate_surface_points(vertices, normals, spacing=1.25)
+        if not vertices:
+            raise RuntimeError("MSMS generated an empty surface")
 
         return SurfaceMesh(
-            vertices=vertices,
-            faces=faces,
-            normals=normals,
-            generation_method="edtsurf"
+            vertices=np.asarray(vertices, dtype=float),
+            faces=np.asarray(faces, dtype=int) if faces else np.empty((0, 3), dtype=int),
+            normals=np.asarray(normals, dtype=float),
+            generation_method="msms"
         )
-
-    def _deduplicate_surface_points(self, vertices: np.ndarray, normals: np.ndarray,
-                                    spacing: float) -> Tuple[np.ndarray, np.ndarray]:
-        """Merge nearby sampled points to keep the fallback surface compact and stable."""
-        if len(vertices) == 0:
-            return vertices, normals
-
-        quantized = np.round(vertices / spacing).astype(int)
-        buckets: Dict[Tuple[int, int, int], List[int]] = {}
-        for idx, key in enumerate(map(tuple, quantized)):
-            buckets.setdefault(key, []).append(idx)
-
-        merged_vertices = []
-        merged_normals = []
-        for indices in buckets.values():
-            pts = vertices[indices]
-            nrm = normals[indices]
-            avg_normal = nrm.mean(axis=0)
-            norm = np.linalg.norm(avg_normal)
-            if norm == 0:
-                avg_normal = np.array([0.0, 0.0, 1.0], dtype=float)
-            else:
-                avg_normal = avg_normal / norm
-            merged_vertices.append(pts.mean(axis=0))
-            merged_normals.append(avg_normal)
-
-        return np.asarray(merged_vertices, dtype=float), np.asarray(merged_normals, dtype=float)
     
-    def _marching_cubes(self, volume: np.ndarray, level: float,
-                        origin: np.ndarray, spacing: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """
-        Simple marching cubes implementation.
-        For production, consider using skimage.measure.marching_cubes
-        """
-        try:
-            from skimage.measure import marching_cubes
-            verts, faces, normals, _ = marching_cubes(volume, level, spacing=(spacing, spacing, spacing))
-            verts = verts + origin
-            return verts, faces, normals
-        except ImportError:
-            # Fallback: simple surface extraction
-            return self._simple_surface_extraction(volume, level, origin, spacing)
-    
-    def _simple_surface_extraction(self, volume: np.ndarray, level: float,
-                                   origin: np.ndarray, spacing: float) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-        """Simple surface point extraction (fallback)."""
-        # Find surface voxels (sign change)
-        surface_mask = np.zeros(volume.shape, dtype=bool)
-
-        # Check neighbors for sign change
-        for axis in range(3):
-            shifted_pos = np.roll(volume, 1, axis=axis)
-            shifted_neg = np.roll(volume, -1, axis=axis)
-            surface_mask |= ((volume * shifted_pos) < 0) | ((volume * shifted_neg) < 0)
-
-        # Extract surface points
-        indices = np.argwhere(surface_mask & (np.abs(volume) < spacing))
-        vertices = origin + indices * spacing
-
-        # Estimate normals from gradient
-        grad = np.gradient(volume)
-        normals = np.zeros((len(vertices), 3))
-        for i, idx in enumerate(indices):
-            n = np.array([grad[0][tuple(idx)], grad[1][tuple(idx)], grad[2][tuple(idx)]])
-            norm = np.linalg.norm(n)
-            normals[i] = n / norm if norm > 0 else [0, 0, 1]
-
-        # Create triangulation using nearest neighbors
-        faces = self._triangulate_surface_points(vertices, normals, spacing)
-
-        return vertices, faces, normals
-
-    def _triangulate_surface_points(self, vertices: np.ndarray, normals: np.ndarray,
-                                    spacing: float) -> np.ndarray:
-        """
-        Create triangular faces from surface points using local Delaunay-like triangulation.
-        This is a simplified approach that works for molecular surfaces.
-        """
-        if len(vertices) < 3:
-            return np.array([]).reshape(0, 3).astype(int)
-
-        # Use KDTree for efficient neighbor finding
-        tree = cKDTree(vertices)
-
-        faces = []
-        used_triangles = set()
-
-        # For each vertex, try to form triangles with nearby vertices
-        # Use a distance threshold based on grid spacing
-        max_edge_length = spacing * 2.5
-
-        for i in range(len(vertices)):
-            # Find nearby vertices
-            nearby_indices = tree.query_ball_point(vertices[i], max_edge_length)
-            nearby_indices = [j for j in nearby_indices if j != i]
-
-            if len(nearby_indices) < 2:
-                continue
-
-            # Sort by distance
-            distances = [np.linalg.norm(vertices[j] - vertices[i]) for j in nearby_indices]
-            sorted_neighbors = [x for _, x in sorted(zip(distances, nearby_indices))]
-
-            # Try to form triangles with pairs of nearby vertices
-            for j_idx, j in enumerate(sorted_neighbors[:8]):  # Limit to 8 nearest
-                for k in sorted_neighbors[j_idx+1:8]:
-                    # Check if j and k are also close to each other
-                    jk_dist = np.linalg.norm(vertices[j] - vertices[k])
-                    if jk_dist > max_edge_length:
-                        continue
-
-                    # Create canonical triangle representation (sorted indices)
-                    tri = tuple(sorted([i, j, k]))
-                    if tri in used_triangles:
-                        continue
-
-                    # Check normal consistency - triangle normal should roughly align with vertex normals
-                    v0, v1, v2 = vertices[i], vertices[j], vertices[k]
-                    edge1 = v1 - v0
-                    edge2 = v2 - v0
-                    tri_normal = np.cross(edge1, edge2)
-                    tri_norm_len = np.linalg.norm(tri_normal)
-
-                    if tri_norm_len < 1e-10:
-                        continue  # Degenerate triangle
-
-                    tri_normal = tri_normal / tri_norm_len
-
-                    # Check if triangle normal aligns with average vertex normal
-                    avg_normal = (normals[i] + normals[j] + normals[k]) / 3
-                    avg_norm_len = np.linalg.norm(avg_normal)
-                    if avg_norm_len > 0:
-                        avg_normal = avg_normal / avg_norm_len
-                        dot = np.dot(tri_normal, avg_normal)
-
-                        # Accept if normals are roughly aligned (allow some tolerance)
-                        if abs(dot) > 0.3:
-                            # Ensure consistent winding order
-                            if dot < 0:
-                                faces.append([i, k, j])  # Flip winding
-                            else:
-                                faces.append([i, j, k])
-                            used_triangles.add(tri)
-
-        if len(faces) == 0:
-            return np.array([]).reshape(0, 3).astype(int)
-
-        return np.array(faces, dtype=int)
-
-
 # =============================================================================
 # Feature Extraction
 # =============================================================================
 
 class FeatureExtractor:
     """Extract geometric and chemical features for surface points."""
+
+    STANDARD_AMINO_ACIDS = {
+        'ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE',
+        'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL',
+        'MSE',
+    }
     
     # Kyte-Doolittle hydrophobicity scale (normalized to [0, 1])
     HYDROPHOBICITY_SCALE = {
@@ -698,16 +521,19 @@ class FeatureExtractor:
         'OE1': -0.5, 'OE2': -0.5,  # Glu
     }
     
-    def __init__(self, atoms: List[Dict], apbs_path: Optional[str] = None):
+    def __init__(self, atoms: List[Dict], apbs_path: Optional[str] = None,
+                 pdb_source: Optional[str] = None):
         """
         Initialize feature extractor.
         
         Args:
             atoms: List of atom dicts with 'coord', 'element', 'resn', 'resi', 'chain', 'name'
             apbs_path: Path to APBS binary for accurate electrostatics (optional)
+            pdb_source: PDB file for PDB2PQR/APBS preparation.
         """
         self.atoms = atoms
         self.apbs_path = apbs_path or self._find_apbs()
+        self.pdb_source = pdb_source
         
         # Build spatial index
         self.coords = np.array([a['coord'] for a in atoms])
@@ -727,6 +553,8 @@ class FeatureExtractor:
         search_paths = []
         if system == "darwin":
             search_paths = [
+                "/opt/homebrew/Caskroom/miniconda/base/envs/glint/bin/apbs",
+                "/opt/homebrew/Caskroom/miniconda/base/bin/apbs",
                 "/usr/local/bin/apbs",
                 os.path.expanduser("~/bin/apbs"),
                 "/opt/homebrew/bin/apbs",
@@ -805,7 +633,7 @@ class FeatureExtractor:
         curvatures = self._compute_curvatures(mesh)
         
         # Compute electrostatics
-        if use_apbs and self.apbs_path:
+        if use_apbs:
             electrostatics = self._compute_apbs_electrostatics(mesh)
         else:
             electrostatics = self._compute_coulomb_electrostatics(mesh)
@@ -1016,13 +844,75 @@ class FeatureExtractor:
     
     def _compute_apbs_electrostatics(self, mesh: SurfaceMesh) -> np.ndarray:
         """Compute electrostatic potential using APBS."""
-        if not self.apbs_path:
+        if not self.pdb_source:
             return self._compute_coulomb_electrostatics(mesh)
-        
-        # This would require PDB2PQR and APBS setup
-        # For now, fall back to Coulomb
-        print("APBS integration not yet implemented, using Coulomb approximation")
-        return self._compute_coulomb_electrostatics(mesh)
+
+        try:
+            try:
+                from .ligand_ec_calculator import PDB2PQRRunner as _PDB2PQRRunner
+                from .ligand_ec_calculator import APBSRunner as _APBSRunner
+                from .ligand_ec_calculator import DXGrid as _DXGrid
+            except Exception as exc:
+                print(f"APBS runner import failed ({exc}), using Coulomb approximation")
+                return self._compute_coulomb_electrostatics(mesh)
+
+            with tempfile.TemporaryDirectory(prefix="glint_apbs_") as work_dir:
+                input_pdb = os.path.join(work_dir, "input.pdb")
+                protein_pqr = os.path.join(work_dir, "protein.pqr")
+                apbs_prefix = os.path.join(work_dir, "protein_pot")
+
+                if str(self.pdb_source).endswith(".gz"):
+                    with gzip.open(self.pdb_source, "rt", encoding="utf-8", errors="ignore") as src:
+                        with open(input_pdb, "w", encoding="utf-8") as dst:
+                            shutil.copyfileobj(src, dst)
+                else:
+                    shutil.copyfile(self.pdb_source, input_pdb)
+
+                pdb2pqr = _PDB2PQRRunner()
+                print("Running PDB2PQR for surface electrostatics...")
+                if not pdb2pqr.run(input_pdb, protein_pqr, ph=7.4):
+                    print("PDB2PQR failed, using Coulomb approximation")
+                    return self._compute_coulomb_electrostatics(mesh)
+
+                coords = self.coords
+                center = coords.mean(axis=0)
+                min_coords = coords.min(axis=0)
+                max_coords = coords.max(axis=0)
+                extent = max_coords - min_coords
+                padding = 20.0
+                fine_len = extent + 2.0 * padding
+                coarse_len = fine_len * 2.0
+                grid_spacing = 0.5
+                grid_dims = np.ceil(fine_len / grid_spacing).astype(int)
+                grid_dims = grid_dims + (1 - grid_dims % 2)
+                grid_dims = np.clip(grid_dims, 65, 225)
+
+                apbs = _APBSRunner(apbs_path=self.apbs_path)
+                print("Running APBS for surface electrostatics...")
+                apbs_input = apbs.generate_input(
+                    protein_pqr,
+                    apbs_prefix,
+                    grid_center=center.tolist(),
+                    grid_dims=tuple(grid_dims.tolist()),
+                    coarse_len=tuple(coarse_len.tolist()),
+                    fine_len=tuple(fine_len.tolist()),
+                )
+                dx_file = apbs.run(apbs_input, work_dir)
+                if not dx_file or not os.path.exists(dx_file):
+                    print("APBS failed to generate DX grid, using Coulomb approximation")
+                    return self._compute_coulomb_electrostatics(mesh)
+
+                dx_grid = _DXGrid(dx_file)
+                potentials = dx_grid.interpolate(mesh.vertices)
+                print(
+                    "Using APBS electrostatics for surface points "
+                    f"(range {np.nanmin(potentials):.2f} to {np.nanmax(potentials):.2f} kT/e)"
+                )
+                return np.nan_to_num(potentials, nan=0.0, posinf=0.0, neginf=0.0)
+
+        except Exception as exc:
+            print(f"APBS electrostatics failed ({exc}), using Coulomb approximation")
+            return self._compute_coulomb_electrostatics(mesh)
     
     def _compute_local_properties(self, point: SurfacePoint):
         """Compute local chemical properties for a surface point."""
@@ -1036,6 +926,9 @@ class FeatureExtractor:
         # Nearest residue
         nearest_atom = self.atoms[indices[0]]
         point.nearest_residue = f"{nearest_atom.get('chain', '')}:{nearest_atom.get('resn', '')}:{nearest_atom.get('resi', '')}"
+        point.surface_residues = self._surface_residues_near_point(point.coord, radius=4.5)
+        if not point.surface_residues and nearest_atom.get('resn', '') in self.STANDARD_AMINO_ACIDS:
+            point.surface_residues = [point.nearest_residue]
         
         # Hydrophobicity (weighted average of nearby atoms/residues)
         hydro_sum = 0.0
@@ -1081,6 +974,18 @@ class FeatureExtractor:
         point.hbond_donor_density = donor_count / 10.0  # Normalize
         point.hbond_acceptor_density = acceptor_count / 10.0
 
+    def _surface_residues_near_point(self, coord: np.ndarray, radius: float = 4.5) -> List[str]:
+        """Collect protein residues with atoms close to an MSMS surface point."""
+        indices = self.kdtree.query_ball_point(coord, radius)
+        residues = set()
+        for idx in indices:
+            atom = self.atoms[idx]
+            resn = atom.get('resn', '')
+            if resn not in self.STANDARD_AMINO_ACIDS:
+                continue
+            residues.add(f"{atom.get('chain', '')}:{resn}:{atom.get('resi', '')}")
+        return sorted(residues)
+
 
 # =============================================================================
 # Similarity and Complementarity Analysis
@@ -1088,8 +993,17 @@ class FeatureExtractor:
 
 class SurfaceComparator:
     """Compare surfaces for similarity and complementarity."""
+
+    COMPLEMENTARITY_WEIGHTS = {
+        "geometric": 0.40,
+        "hydrophobic": 0.30,
+        "hbond": 0.30,
+    }
+    ELECTROSTATIC_DIRECTIONAL_WEIGHT = 0.40
+    ELECTROSTATIC_GATE_THRESHOLD = 0.60
+    ELECTROSTATIC_GATE_MIN_MULTIPLIER = 0.35
     
-    def __init__(self, patch_radius: float = 12.0, n_patches: int = 100):
+    def __init__(self, patch_radius: float = 9.0, n_patches: int = 100):
         """
         Initialize comparator.
         
@@ -1176,143 +1090,349 @@ class SurfaceComparator:
     def compute_complementarity(self, mesh1: SurfaceMesh, mesh2: SurfaceMesh,
                                 points1: List[SurfacePoint],
                                 points2: List[SurfacePoint],
-                                interface_distance: float = 4.0) -> ComplementarityResult:
+                                interface_distance: float = 4.0,
+                                reference_anchor_coords: Optional[np.ndarray] = None,
+                                reference_anchor_radius: float = 8.0,
+                                reference_anchor_mode: str = "include",
+                                reference_template_center: Optional[np.ndarray] = None,
+                                template_class: str = "imid") -> ComplementarityResult:
         """
-        Compute complementarity between two surfaces (for PPI analysis).
+        Compute patch-search complementarity between two independent surfaces.
 
         Args:
             mesh1, mesh2: Surface meshes
             points1, points2: Surface points with features
-            interface_distance: Distance threshold for interface contacts (Å)
+            interface_distance: Kept for backward compatibility; independent
+                patch-search mode does not use coordinate-space contacts.
 
         Returns:
             ComplementarityResult
 
         Note:
-            This analysis is designed for surfaces that are in contact (e.g.,
-            receptor-ligand interface within the same complex). If the two
-            surfaces are from different structures that are not spatially
-            aligned, no interface will be found.
+            Object coordinates are not interpreted as a physical complex here.
+            Two independently loaded proteins can overlap in PyMOL coordinates
+            by accident, so spatial distance is deliberately ignored.
         """
-        # Find interface points
-        coords1 = np.array([p.coord for p in points1])
-        coords2 = np.array([p.coord for p in points2])
+        print("\nPatch-search surface complementarity")
+        print("   Mode: independent template patches vs target patches")
+        print("   Coordinate-space distances are ignored.")
+        if reference_anchor_coords is not None and len(reference_anchor_coords) > 0:
+            anchor_mode = "excluding" if reference_anchor_mode == "exclude" else "keeping"
+            print(
+                f"   Reference anchor: {anchor_mode} template patch centers within "
+                f"{reference_anchor_radius:.1f} Å of {len(reference_anchor_coords)} anchor atoms."
+            )
+        if reference_template_center is not None:
+            center = np.asarray(reference_template_center, dtype=float).reshape(-1)
+            if center.size == 3:
+                print(
+                    "   Fixed template patch center requested: "
+                    f"[{center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f}]"
+                )
+            print(f"   Template class: {self._normalize_template_class(template_class)}")
+        return self._compute_patch_complementarity(
+            mesh1,
+            mesh2,
+            points1,
+            points2,
+            reference_anchor_coords=reference_anchor_coords,
+            reference_anchor_radius=reference_anchor_radius,
+            reference_anchor_mode=reference_anchor_mode,
+            reference_template_center=reference_template_center,
+            template_class=template_class,
+        )
 
-        tree2 = cKDTree(coords2)
+    def _compute_interface_complementarity(self, points1: List[SurfacePoint],
+                                           points2: List[SurfacePoint],
+                                           min_distance: float) -> ComplementarityResult:
+        """Compute complementarity from nearest surface point pairs at an interface."""
+        geo = self._geometric_complementarity(points1, points2)
+        esp = self._electrostatic_complementarity(points1, points2)
+        directional_esp = esp
+        effective_esp = self._effective_electrostatic_complementarity(esp, directional_esp)
+        hydro = self._hydrophobic_complementarity(points1, points2)
+        hbond = self._hbond_complementarity(points1, points2)
+        overall = self._combined_complementarity_score(geo, effective_esp, hydro, hbond)
 
-        interface_pairs = []
-        interface_points1 = []
-        interface_points2 = []
-
-        # Also track minimum distance for diagnostic purposes
-        min_distance = float('inf')
-
-        for i, coord in enumerate(coords1):
-            distances, indices = tree2.query(coord, k=1)
-            if distances < min_distance:
-                min_distance = distances
-            if distances < interface_distance:
-                interface_pairs.append((i, indices))
-                interface_points1.append(points1[i])
-                interface_points2.append(points2[indices])
-
-        if not interface_pairs:
-            # Provide diagnostic information
-            print(f"\n⚠️  No interface found between the two surfaces!")
-            print(f"   Minimum distance between surfaces: {min_distance:.1f} Å")
-            print(f"   Interface distance threshold: {interface_distance:.1f} Å")
-            if min_distance > 50:
-                print(f"\n💡 The surfaces appear to be from different structures that are not spatially aligned.")
-                print(f"   Switching to patch-based complementarity across the two surfaces.")
-            elif min_distance > interface_distance:
-                print(f"\n💡 No direct contacts at {interface_distance:.1f} Å. Switching to patch-based complementarity.")
-
-            return self._compute_patch_complementarity(mesh1, mesh2, points1, points2, min_distance)
-        
-        # Compute complementarity scores
-        geo_comp = self._geometric_complementarity(interface_points1, interface_points2)
-        esp_comp = self._electrostatic_complementarity(interface_points1, interface_points2)
-        hydro_comp = self._hydrophobic_complementarity(interface_points1, interface_points2)
-        
-        # Estimate interface area
-        interface_area = len(interface_pairs) * (interface_distance ** 2) * 0.5
-        
-        # Get interface residues
-        interface_residues = []
+        residue_pairs = []
         seen = set()
-        for p1, p2 in zip(interface_points1, interface_points2):
+        for p1, p2 in zip(points1, points2):
             pair = (p1.nearest_residue, p2.nearest_residue)
-            if pair not in seen:
+            if pair[0] and pair[1] and pair not in seen:
                 seen.add(pair)
-                interface_residues.append(pair)
-        
-        # Overall score (weighted average)
-        overall = 0.4 * geo_comp + 0.35 * esp_comp + 0.25 * hydro_comp
-        
+                residue_pairs.append(pair)
+
         return ComplementarityResult(
-            score=overall,
-            geometric_complementarity=geo_comp,
-            electrostatic_complementarity=esp_comp,
-            hydrophobic_complementarity=hydro_comp,
-            interface_area=interface_area,
-            n_contacts=len(interface_pairs),
+            score=float(overall),
+            geometric_complementarity=float(geo),
+            electrostatic_complementarity=float(esp),
+            directional_electrostatic_complementarity=float(directional_esp),
+            effective_electrostatic_complementarity=float(effective_esp),
+            hydrophobic_complementarity=float(hydro),
+            hbond_complementarity=float(hbond),
+            interface_area=float(len(points1)) * 0.5,
+            n_contacts=len(points1),
             min_distance=min_distance,
             analysis_mode="interface",
-            interface_residues=interface_residues
+            n_patch_matches=0,
+            patch_radius=self.patch_radius,
+            electrostatic_gate_threshold=self.ELECTROSTATIC_GATE_THRESHOLD,
+            electrostatic_gate_multiplier=self._electrostatic_gate_multiplier(effective_esp),
+            interface_residues=residue_pairs[:50],
+            patch_matches=[],
         )
 
     def _compute_patch_complementarity(self, mesh1: SurfaceMesh, mesh2: SurfaceMesh,
                                        points1: List[SurfacePoint],
                                        points2: List[SurfacePoint],
-                                       min_distance: float) -> ComplementarityResult:
+                                       min_distance: float = float('nan'),
+                                       reference_anchor_coords: Optional[np.ndarray] = None,
+                                       reference_anchor_radius: float = 8.0,
+                                       reference_anchor_mode: str = "include",
+                                       reference_template_center: Optional[np.ndarray] = None,
+                                       template_class: str = "imid") -> ComplementarityResult:
         """Compute cross-structure complementarity using best matching surface patches."""
+        template_class = self._normalize_template_class(template_class)
         patches1 = self._extract_patches(mesh1, points1)
+        original_n_patches = self.n_patches
+        if reference_template_center is not None:
+            fixed_patch = self._extract_patch_at_center(points1, reference_template_center)
+            patches1 = [fixed_patch] if fixed_patch is not None else []
+            self.n_patches = max(self.n_patches * 4, 400)
+            if patches1:
+                center = patches1[0].center
+                print(
+                    "   Fixed template patch: nearest protein surface center "
+                    f"[{center[0]:.3f}, {center[1]:.3f}, {center[2]:.3f}]"
+                )
+                print(f"   Target global patch sampling: {self.n_patches} centers")
+            else:
+                print("   WARNING: fixed template patch could not be created.")
+        elif reference_anchor_coords is not None and len(reference_anchor_coords) > 0:
+            if reference_anchor_mode == "exclude":
+                patches1 = self._filter_patches_near_anchor(
+                    patches1,
+                    reference_anchor_coords,
+                    reference_anchor_radius,
+                    exclude=True,
+                )
+            else:
+                patches1 = self._extract_patches_near_anchor(
+                    points1,
+                    reference_anchor_coords,
+                    reference_anchor_radius,
+                )
+            if not patches1:
+                print("   WARNING: no template patches remained after reference anchor selection.")
         patches2 = self._extract_patches(mesh2, points2)
+        self.n_patches = original_n_patches
 
         patch_scores = []
+        core_overall_scores = []
         geo_scores = []
         esp_scores = []
+        directional_esp_scores = []
+        effective_esp_scores = []
         hydro_scores = []
+        hbond_scores = []
         residue_pairs = []
         best_patch_matches = []
+        fixed_template_mode = reference_template_center is not None
+
+        def _build_patch_match(p1: SurfacePatch, p2: SurfacePatch, components) -> ComplementarityPatchMatch:
+            (
+                main_score,
+                core_overall,
+                geo,
+                esp,
+                directional_esp,
+                effective_esp,
+                hydro,
+                hbond,
+                interface_score,
+                focused_interface_score,
+                background_score,
+                specificity_score,
+                fingerprint_scores,
+                target_pocketness,
+                template_match_score,
+                template_only_score,
+                pocket_only_score,
+                template_specificity_score,
+                template_pocket_score,
+            ) = components
+            residues1 = self._surface_residues_for_patch(p1)
+            residues2 = self._surface_residues_for_patch(p2) if p2 else []
+            template_anchor_distance = self._distance_to_anchor(p1.center, reference_anchor_coords)
+            return ComplementarityPatchMatch(
+                center1=p1.center.copy(),
+                center2=p2.center.copy() if p2 is not None else np.zeros(3, dtype=float),
+                overall_score=main_score,
+                core_overall_score=core_overall,
+                geometric_score=geo,
+                electrostatic_score=esp,
+                hydrophobic_score=hydro,
+                directional_electrostatic_score=directional_esp,
+                effective_electrostatic_score=effective_esp,
+                hbond_score=hbond,
+                interface_score=interface_score,
+                focused_interface_score=focused_interface_score,
+                background_score=background_score,
+                interface_delta=interface_score - background_score,
+                fingerprint_score=fingerprint_scores.get("combined", 0.0),
+                fingerprint_shape_score=fingerprint_scores.get("shape", 0.0),
+                fingerprint_curvature_score=fingerprint_scores.get("curvature", 0.0),
+                fingerprint_esp_score=fingerprint_scores.get("esp", 0.0),
+                fingerprint_hydro_score=fingerprint_scores.get("hydro", 0.0),
+                fingerprint_hbond_score=fingerprint_scores.get("hbond", 0.0),
+                fingerprint_hbond_total_score=fingerprint_scores.get("hbond_total", 0.0),
+                specificity_score=specificity_score,
+                target_pocketness_score=target_pocketness,
+                template_match_score=template_match_score,
+                template_only_score=template_only_score,
+                pocket_only_score=pocket_only_score,
+                template_specificity_score=template_specificity_score,
+                template_pocket_score=template_pocket_score,
+                template_anchor_distance=template_anchor_distance,
+                electrostatic_gate_multiplier=self._electrostatic_gate_multiplier(effective_esp),
+                residues1=residues1,
+                residues2=residues2,
+            )
 
         for p1 in patches1:
             best = None
-            best_components = (0.0, 0.0, 0.0, 0.0)
+            best_components = None
             best_pair = (None, None)
             best_patch = None
+            target_candidate_records = []
             for p2 in patches2:
                 geo = self._geometric_patch_complementarity(p1, p2)
                 esp = self._electrostatic_patch_complementarity(p1, p2)
+                directional_esp = self._directional_electrostatic_patch_complementarity(p1, p2)
+                effective_esp = self._effective_electrostatic_complementarity(esp, directional_esp)
                 hydro = self._hydrophobic_patch_complementarity(p1, p2)
-                overall = 0.4 * geo + 0.35 * esp + 0.25 * hydro
-                if best is None or overall > best:
-                    best = overall
-                    best_components = (overall, geo, esp, hydro)
+                hbond = self._hbond_patch_complementarity(p1, p2)
+                core_overall = self._combined_complementarity_score(geo, effective_esp, hydro, hbond)
+                interface_score = self._interface_diagnostic_score(hydro, hbond, directional_esp)
+                focused_interface_score = self._focused_interface_diagnostic_score(hydro, hbond, esp, effective_esp)
+                fingerprint_scores = self._patch_fingerprint_complementarity(p1, p2)
+                if fixed_template_mode:
+                    fixed_interface_score = self._fixed_template_interface_score(
+                        geo,
+                        esp,
+                        fingerprint_scores,
+                        template_class=template_class,
+                    )
+                    background_score = self._fixed_template_background_score(geo)
+                    target_pocketness = self._target_pocketness_score(p2)
+                    specificity_score = self._specificity_residual_score(fixed_interface_score - background_score)
+                    soft_pocket_gate = self._fixed_template_soft_pocket_gate(
+                        target_pocketness,
+                        template_class=template_class,
+                    )
+                    template_only_score = fixed_interface_score
+                    pocket_only_score = target_pocketness
+                    template_specificity_score = float(np.clip(
+                        fixed_interface_score * specificity_score,
+                        0.0,
+                        1.0,
+                    ))
+                    template_pocket_score = float(np.clip(
+                        fixed_interface_score * soft_pocket_gate,
+                        0.0,
+                        1.0,
+                    ))
+                    main_score = self._fixed_template_target_patch_score(
+                        fixed_interface_score,
+                        target_pocketness,
+                        specificity_score,
+                        template_class=template_class,
+                    )
+                else:
+                    background_score = self._background_diagnostic_score(geo, hydro)
+                    target_pocketness = 1.0
+                    fixed_interface_score = fingerprint_scores.get("combined", 0.0)
+                    specificity_score = self._specificity_residual_score(interface_score - background_score)
+                    template_only_score = fixed_interface_score
+                    pocket_only_score = target_pocketness
+                    template_specificity_score = fixed_interface_score * specificity_score
+                    template_pocket_score = fixed_interface_score
+                    main_score = self._hybrid_main_patch_score(
+                        core_overall,
+                        focused_interface_score,
+                        fingerprint_scores.get("combined", 0.0),
+                        specificity_score,
+                    )
+                components = (
+                    main_score,
+                    core_overall,
+                    geo,
+                    esp,
+                    directional_esp,
+                    effective_esp,
+                    hydro,
+                    hbond,
+                    interface_score,
+                    focused_interface_score,
+                    background_score,
+                    specificity_score,
+                    fingerprint_scores,
+                    target_pocketness,
+                    fixed_interface_score,
+                    template_only_score,
+                    pocket_only_score,
+                    template_specificity_score,
+                    template_pocket_score,
+                )
+                res1 = p1.points[0].nearest_residue if p1.points else None
+                res2 = p2.points[0].nearest_residue if p2.points else None
+                target_candidate_records.append((main_score, p2, components, (res1, res2)))
+                if best is None or main_score > best:
+                    best = main_score
+                    best_components = components
                     best_patch = p2
 
-                    res1 = p1.points[0].nearest_residue if p1.points else None
-                    res2 = p2.points[0].nearest_residue if p2.points else None
                     best_pair = (res1, res2)
 
             if best is not None:
-                overall, geo, esp, hydro = best_components
-                patch_scores.append(overall)
+                (
+                    main_score,
+                    core_overall,
+                    geo,
+                    esp,
+                    directional_esp,
+                    effective_esp,
+                    hydro,
+                    hbond,
+                    interface_score,
+                    focused_interface_score,
+                    background_score,
+                    specificity_score,
+                    fingerprint_scores,
+                    target_pocketness,
+                    template_match_score,
+                    template_only_score,
+                    pocket_only_score,
+                    template_specificity_score,
+                    template_pocket_score,
+                ) = best_components
+                patch_scores.append(main_score)
+                core_overall_scores.append(core_overall)
                 geo_scores.append(geo)
                 esp_scores.append(esp)
+                directional_esp_scores.append(directional_esp)
+                effective_esp_scores.append(effective_esp)
                 hydro_scores.append(hydro)
-                residues1 = sorted({pt.nearest_residue for pt in p1.points if pt.nearest_residue})
-                residues2 = sorted({pt.nearest_residue for pt in best_patch.points if pt.nearest_residue}) if best_patch else []
-                best_patch_matches.append(ComplementarityPatchMatch(
-                    center1=p1.center.copy(),
-                    center2=best_patch.center.copy() if best_patch is not None else np.zeros(3, dtype=float),
-                    overall_score=overall,
-                    geometric_score=geo,
-                    electrostatic_score=esp,
-                    hydrophobic_score=hydro,
-                    residues1=residues1,
-                    residues2=residues2,
-                ))
+                hbond_scores.append(hbond)
+                if fixed_template_mode:
+                    target_candidate_records.sort(key=lambda item: item[0], reverse=True)
+                    target_matches = [
+                        _build_patch_match(p1, candidate_patch, components)
+                        for _, candidate_patch, components, _ in target_candidate_records
+                    ]
+                    best_patch_matches.extend(self._diversify_patch_matches(target_matches, max_matches=20))
+                else:
+                    best_patch_matches.append(_build_patch_match(p1, best_patch, best_components))
                 if best_pair[0] and best_pair[1]:
                     residue_pairs.append(best_pair)
 
@@ -1324,21 +1444,488 @@ class SurfaceComparator:
                 unique_pairs.append(pair)
 
         best_patch_matches.sort(key=lambda x: x.overall_score, reverse=True)
+        diverse_patch_matches = self._diversify_patch_matches(best_patch_matches, max_matches=20)
+        ablation_rankings = {}
+        if fixed_template_mode and best_patch_matches:
+            ablation_rankings = {
+                "Full_GLINT": self._diversify_patch_matches(
+                    sorted(best_patch_matches, key=lambda x: x.overall_score, reverse=True),
+                    max_matches=20,
+                ),
+                "TemplateMatch_only": self._diversify_patch_matches(
+                    sorted(best_patch_matches, key=lambda x: x.template_only_score, reverse=True),
+                    max_matches=20,
+                ),
+                "PocketGate_only": self._diversify_patch_matches(
+                    sorted(best_patch_matches, key=lambda x: x.pocket_only_score, reverse=True),
+                    max_matches=20,
+                ),
+                "TemplateMatch_x_SpecificityGate": self._diversify_patch_matches(
+                    sorted(best_patch_matches, key=lambda x: x.template_specificity_score, reverse=True),
+                    max_matches=20,
+                ),
+                "TemplateMatch_x_SoftPocketGate": self._diversify_patch_matches(
+                    sorted(best_patch_matches, key=lambda x: x.template_pocket_score, reverse=True),
+                    max_matches=20,
+                ),
+            }
 
         return ComplementarityResult(
             score=float(np.mean(patch_scores)) if patch_scores else 0.0,
             geometric_complementarity=float(np.mean(geo_scores)) if geo_scores else 0.0,
             electrostatic_complementarity=float(np.mean(esp_scores)) if esp_scores else 0.0,
+            directional_electrostatic_complementarity=float(np.mean(directional_esp_scores)) if directional_esp_scores else 0.0,
+            effective_electrostatic_complementarity=float(np.mean(effective_esp_scores)) if effective_esp_scores else 0.0,
             hydrophobic_complementarity=float(np.mean(hydro_scores)) if hydro_scores else 0.0,
+            hbond_complementarity=float(np.mean(hbond_scores)) if hbond_scores else 0.0,
             interface_area=0.0,
             n_contacts=0,
             min_distance=min_distance,
-            analysis_mode="patch",
-            n_patch_matches=len(patch_scores),
+            analysis_mode="patch_search",
+            n_patch_matches=len(diverse_patch_matches),
             patch_radius=self.patch_radius,
+            patch_score_std=float(np.std(patch_scores, ddof=1)) if len(patch_scores) > 1 else 0.0,
+            electrostatic_gate_threshold=self.ELECTROSTATIC_GATE_THRESHOLD,
+            electrostatic_gate_multiplier=float(np.mean([
+                self._electrostatic_gate_multiplier(score) for score in effective_esp_scores
+            ])) if effective_esp_scores else 1.0,
+            core_overall_score=float(np.mean(core_overall_scores)) if core_overall_scores else 0.0,
+            main_model_name="FixedTemplateTargetScore" if fixed_template_mode else "HybridPatchScore",
+            template_class=template_class,
+            ablation_rankings=ablation_rankings,
             interface_residues=unique_pairs[:20],
-            patch_matches=best_patch_matches[:20],
+            patch_matches=diverse_patch_matches,
         )
+
+    def _filter_patches_near_anchor(self, patches: List[SurfacePatch],
+                                    anchor_coords: np.ndarray,
+                                    radius: float,
+                                    exclude: bool = False) -> List[SurfacePatch]:
+        """Keep or exclude patches whose centers are close to at least one anchor atom."""
+        anchors = np.asarray(anchor_coords, dtype=float)
+        if anchors.ndim != 2 or anchors.shape[1] != 3:
+            return patches
+        tree = cKDTree(anchors)
+        kept = []
+        for patch in patches:
+            is_near = float(tree.query(patch.center, k=1)[0]) <= radius
+            if is_near != exclude:
+                kept.append(patch)
+        mode = "exclusion" if exclude else "inclusion"
+        print(f"   Template patches after anchor {mode} filter: {len(kept)}/{len(patches)}")
+        return kept
+
+    def _extract_patches_near_anchor(self, points: List[SurfacePoint],
+                                     anchor_coords: np.ndarray,
+                                     radius: float) -> List[SurfacePatch]:
+        """Extract template patches from surface centers close to anchor atoms."""
+        anchors = np.asarray(anchor_coords, dtype=float)
+        if anchors.ndim != 2 or anchors.shape[1] != 3 or not points:
+            return []
+
+        coords = np.asarray([p.coord for p in points], dtype=float)
+        anchor_tree = cKDTree(anchors)
+        distances, _ = anchor_tree.query(coords, k=1)
+        local_centers = coords[distances <= radius]
+        if len(local_centers) == 0:
+            return []
+        if len(local_centers) > self.n_patches:
+            centers = self._farthest_point_sampling(local_centers, self.n_patches)
+        else:
+            centers = local_centers
+
+        surface_tree = cKDTree(coords)
+        patches = []
+        for center in centers:
+            indices = surface_tree.query_ball_point(center, self.patch_radius)
+            patch_points = [points[i] for i in indices]
+            if len(patch_points) >= 5:
+                patches.append(SurfacePatch(
+                    center=center,
+                    radius=self.patch_radius,
+                    points=patch_points,
+                ))
+        print(f"   Template anchor-local patches: {len(patches)} centers within {radius:.1f} Å")
+        return patches
+
+    def _extract_patch_at_center(self, points: List[SurfacePoint],
+                                 requested_center: np.ndarray) -> Optional[SurfacePatch]:
+        """Extract one patch centered at the surface point nearest to requested_center."""
+        if not points:
+            return None
+        coords = np.asarray([p.coord for p in points], dtype=float)
+        center = np.asarray(requested_center, dtype=float).reshape(-1)
+        if center.size != 3:
+            return None
+        surface_tree = cKDTree(coords)
+        _, center_idx = surface_tree.query(center, k=1)
+        surface_center = coords[int(center_idx)]
+        indices = surface_tree.query_ball_point(surface_center, self.patch_radius)
+        patch_points = [points[i] for i in indices]
+        if len(patch_points) < 5:
+            return None
+        return SurfacePatch(
+            center=surface_center,
+            radius=self.patch_radius,
+            points=patch_points,
+        )
+
+    def _distance_to_anchor(self, center: np.ndarray,
+                            anchor_coords: Optional[np.ndarray]) -> float:
+        """Nearest distance from a patch center to anchor atoms."""
+        if anchor_coords is None:
+            return float("nan")
+        anchors = np.asarray(anchor_coords, dtype=float)
+        if anchors.ndim != 2 or anchors.shape[1] != 3 or len(anchors) == 0:
+            return float("nan")
+        return float(np.min(np.linalg.norm(anchors - np.asarray(center, dtype=float), axis=1)))
+
+    def _diversify_patch_matches(self, matches: List[ComplementarityPatchMatch],
+                                 max_matches: int = 20) -> List[ComplementarityPatchMatch]:
+        """
+        Keep high-scoring patch pairs while suppressing near-duplicate locations.
+
+        Patch extraction uses overlapping neighborhoods. Without this step, the top
+        ranked complementarity hits can all describe the same physical region.
+        """
+        if not matches:
+            return []
+
+        min_center_distance = max(2.0, self.patch_radius * 0.90)
+        selected: List[ComplementarityPatchMatch] = []
+        overflow: List[ComplementarityPatchMatch] = []
+
+        for match in matches:
+            is_duplicate = False
+            for kept in selected:
+                dist1 = float(np.linalg.norm(match.center1 - kept.center1))
+                dist2 = float(np.linalg.norm(match.center2 - kept.center2))
+                # In fixed-template searches all template centers are identical;
+                # target-side spatial diversity is what prevents one region from
+                # occupying the whole ranked list.
+                if dist2 < min_center_distance or (dist1 < min_center_distance and dist2 < min_center_distance):
+                    is_duplicate = True
+                    break
+
+            if is_duplicate:
+                overflow.append(match)
+                continue
+
+            selected.append(match)
+            if len(selected) >= max_matches:
+                return selected
+
+        if len(selected) < max_matches:
+            selected.extend(overflow[: max_matches - len(selected)])
+
+        return selected
+
+    def _combined_complementarity_score(self, geo: float, esp: float,
+                                        hydro: float, hbond: float) -> float:
+        """
+        Combine patch component scores for ranking.
+
+        Combine geometry, hydrophobicity, and donor/acceptor matching, then
+        use electrostatic complementarity as a gate. This keeps electrostatics
+        from being counted twice while still penalizing weak charge matching.
+        """
+        weights = self.COMPLEMENTARITY_WEIGHTS
+        weighted_score = (
+            weights["geometric"] * geo
+            + weights["hydrophobic"] * hydro
+            + weights["hbond"] * hbond
+        )
+        if esp >= self.ELECTROSTATIC_GATE_THRESHOLD:
+            return weighted_score
+
+        return weighted_score * self._electrostatic_gate_multiplier(esp)
+
+    def _effective_electrostatic_complementarity(self, esp: float, directional_esp: float) -> float:
+        """Blend distributional and radial electrostatic complementarity for gating."""
+        directional_weight = self.ELECTROSTATIC_DIRECTIONAL_WEIGHT
+        effective = (1.0 - directional_weight) * esp + directional_weight * directional_esp
+        return float(np.clip(effective, 0.0, 1.0))
+
+    def _electrostatic_gate_multiplier(self, esp: float) -> float:
+        """Return the score multiplier applied for weak electrostatic complementarity."""
+        if esp >= self.ELECTROSTATIC_GATE_THRESHOLD:
+            return 1.0
+
+        multiplier = max(
+            self.ELECTROSTATIC_GATE_MIN_MULTIPLIER,
+            esp / self.ELECTROSTATIC_GATE_THRESHOLD,
+        )
+        return float(multiplier)
+
+    def _interface_diagnostic_score(self, hydro: float, hbond: float, directional_esp: float) -> float:
+        """Chemistry-first patch score used for interface diagnostics, not GUI ranking."""
+        return float(np.clip(0.70 * hbond + 0.15 * hydro + 0.15 * directional_esp, 0.0, 1.0))
+
+    def _focused_interface_diagnostic_score(self, hydro: float, hbond: float, esp: float, effective_esp: float) -> float:
+        """ESP-focused interface diagnostic for separating real interface patches from background."""
+        return float(np.clip(0.45 * hbond + 0.15 * hydro + 0.25 * effective_esp + 0.15 * esp, 0.0, 1.0))
+
+    def _background_diagnostic_score(self, geo: float, hydro: float) -> float:
+        """Geometry/hydrophobic background score that can dominate broad surface matches."""
+        return float(np.clip(0.60 * geo + 0.40 * hydro, 0.0, 1.0))
+
+    def _fixed_template_background_score(self, geo: float) -> float:
+        """
+        Background penalty for fixed ligand-pocket template searches.
+
+        Hydrophobic agreement is meaningful for molecular-glue recruitment
+        patches, so it should not be treated as non-specific background here.
+        Penalize only broad geometry matches, which are common across unrelated
+        protein surfaces.
+        """
+        return float(np.clip(0.70 * geo, 0.0, 1.0))
+
+    def _specificity_residual_score(self, interface_delta: float) -> float:
+        """Convert interface-vs-background residual into a bounded weak specificity term."""
+        return float(np.clip(0.5 + interface_delta, 0.0, 1.0))
+
+    def _hybrid_main_patch_score(
+        self,
+        core_overall: float,
+        focused_interface: float,
+        fingerprint: float,
+        specificity: float,
+    ) -> float:
+        """Primary GUI patch score: conservative hybrid of legacy and spatial evidence."""
+        score = (
+            0.50 * core_overall
+            + 0.25 * focused_interface
+            + 0.20 * fingerprint
+            + 0.05 * specificity
+        )
+        return float(np.clip(score, 0.0, 1.0))
+
+    def _normalize_template_class(self, template_class: Optional[str]) -> str:
+        """Normalize ligand template class names used by fixed-template scoring."""
+        value = str(template_class or "imid").strip().lower()
+        if value in {"macro", "macrocycle", "large", "large_glue", "macrocycle_contact"}:
+            return "macrocycle"
+        return "imid"
+
+    def _fixed_template_interface_score(
+        self,
+        geo: float,
+        esp: float,
+        fingerprint_scores: Dict[str, float],
+        template_class: str = "imid",
+    ) -> float:
+        """
+        Multi-channel template-matching score for fixed ligand-pocket search.
+
+        This score compares the fixed template pocket against each target patch
+        after channel-specific complementarity transforms: shape and ESP are
+        inverted, hydrophobicity is matched, and donor/acceptor channels are
+        swapped in _patch_fingerprint_complementarity().
+        """
+        esp_balance = 1.0 - abs(float(esp) - 0.75) / 0.75
+        esp_balance = float(np.clip(esp_balance, 0.0, 1.0))
+        if self._normalize_template_class(template_class) == "macrocycle":
+            score = (
+                0.40 * fingerprint_scores.get("hydro", 0.0)
+                + 0.20 * fingerprint_scores.get("curvature", 0.0)
+                + 0.15 * fingerprint_scores.get("shape", geo)
+                + 0.15 * fingerprint_scores.get("esp", 0.0)
+                + 0.05 * fingerprint_scores.get("hbond", 0.0)
+                + 0.05 * esp_balance
+            )
+        else:
+            score = (
+                0.35 * fingerprint_scores.get("hydro", 0.0)
+                + 0.25 * fingerprint_scores.get("esp", 0.0)
+                + 0.15 * fingerprint_scores.get("hbond", 0.0)
+                + 0.10 * fingerprint_scores.get("shape", geo)
+                + 0.10 * esp_balance
+                + 0.05 * fingerprint_scores.get("curvature", 0.0)
+            )
+        return float(np.clip(score, 0.0, 1.0))
+
+    def _fixed_template_target_patch_score(
+        self,
+        interface_score: float,
+        pocket_gate: float,
+        specificity: float,
+        template_class: str = "imid",
+    ) -> float:
+        """
+        Target-side score after the ligand-pocket template has been fixed.
+
+        Fixed-template search is treated as multi-channel surface template
+        matching with two gates: target pocketness and interface specificity.
+        The multiplicative gates keep flat/background patches from outranking
+        true pocket-like regions just because ESP or H-bond histograms match.
+        """
+        pocket_factor = self._fixed_template_soft_pocket_gate(pocket_gate, template_class)
+        score = interface_score * pocket_factor * specificity
+        return float(np.clip(score, 0.0, 1.0))
+
+    def _fixed_template_soft_pocket_gate(
+        self,
+        pocket_gate: float,
+        template_class: str = "imid",
+    ) -> float:
+        """Class-aware softened pocket gate used by fixed-template ranking."""
+        if self._normalize_template_class(template_class) == "macrocycle":
+            return 0.72 + 0.28 * float(np.clip(pocket_gate, 0.0, 1.0))
+        return 0.55 + 0.45 * float(np.clip(pocket_gate, 0.0, 1.0))
+
+    def _target_pocketness_score(self, patch: SurfacePatch) -> float:
+        """
+        Estimate whether a target patch is pocket-like enough for ranking.
+
+        Shape-index sign can vary with surface normal conventions, so this uses
+        both the dominant concavity signal and the stronger of the two signed
+        alternatives. It also rewards radial depth and curvature contrast, while
+        penalizing nearly flat patches.
+        """
+        if not patch.points:
+            return 0.0
+
+        shape = np.asarray([pt.shape_index for pt in patch.points], dtype=float)
+        curv = np.asarray([pt.curvedness for pt in patch.points], dtype=float)
+        finite = np.isfinite(shape) & np.isfinite(curv)
+        if not np.any(finite):
+            return 0.0
+        shape = shape[finite]
+        curv = curv[finite]
+
+        concave_negative = float(np.mean(np.clip(-shape, 0.0, 1.0)))
+        concave_positive = float(np.mean(np.clip(shape, 0.0, 1.0)))
+        concavity_score = max(concave_negative, concave_positive)
+
+        mean_curv = float(np.mean(np.abs(curv))) + 1e-8
+        curvature_contrast = float(np.clip(np.std(curv) / (mean_curv + np.std(curv) + 1e-8), 0.0, 1.0))
+
+        coords = np.asarray([pt.coord for pt in patch.points], dtype=float)[finite]
+        distances = np.linalg.norm(coords - patch.center, axis=1)
+        scaled = np.clip(distances / max(float(patch.radius), 1e-8), 0.0, 0.999999)
+        center_mask = scaled <= 0.35
+        rim_mask = scaled >= 0.70
+        radial_depth = 0.0
+        if np.any(center_mask) and np.any(rim_mask):
+            signed_shape = shape if concave_positive >= concave_negative else -shape
+            center_concavity = float(np.mean(np.clip(signed_shape[center_mask], 0.0, 1.0)))
+            rim_concavity = float(np.mean(np.clip(signed_shape[rim_mask], 0.0, 1.0)))
+            radial_depth = float(np.clip(center_concavity - rim_concavity + 0.5, 0.0, 1.0))
+
+        flat_shape = np.abs(shape) < 0.12
+        low_curv = np.abs(curv) < np.percentile(np.abs(curv), 40)
+        flatness_penalty = float(np.mean(flat_shape & low_curv))
+
+        raw = (
+            2.5 * concavity_score
+            + 1.5 * curvature_contrast
+            + 1.0 * radial_depth
+            - 1.5 * flatness_penalty
+            - 1.2
+        )
+        return float(np.clip(1.0 / (1.0 + np.exp(-raw)), 0.0, 1.0))
+
+    def _patch_fingerprint(self, patch: SurfacePatch, n_bins: int = 4) -> Dict[str, np.ndarray]:
+        """Return radial multi-channel fingerprint profiles for one patch."""
+        if not patch.points:
+            zero = np.zeros(n_bins, dtype=float)
+            return {
+                "shape": zero.copy(),
+                "curvature": zero.copy(),
+                "esp": zero.copy(),
+                "hydro": zero.copy(),
+                "donor": zero.copy(),
+                "acceptor": zero.copy(),
+                "hbond_total": zero.copy(),
+            }
+
+        shape = np.asarray([pt.shape_index for pt in patch.points], dtype=float)
+        curvature = np.asarray([pt.curvedness for pt in patch.points], dtype=float)
+        esp = np.tanh(np.asarray([pt.electrostatic_potential for pt in patch.points], dtype=float) / 5.0)
+        hydro = np.asarray([pt.hydrophobicity for pt in patch.points], dtype=float)
+        donor = np.asarray([pt.hbond_donor_density for pt in patch.points], dtype=float)
+        acceptor = np.asarray([pt.hbond_acceptor_density for pt in patch.points], dtype=float)
+
+        return {
+            "shape": self._patch_radial_profile(patch, shape, n_bins),
+            "curvature": self._patch_radial_profile(patch, curvature, n_bins),
+            "esp": self._patch_radial_profile(patch, esp, n_bins),
+            "hydro": self._patch_radial_profile(patch, hydro, n_bins),
+            "donor": self._patch_radial_profile(patch, donor, n_bins),
+            "acceptor": self._patch_radial_profile(patch, acceptor, n_bins),
+            "hbond_total": self._patch_radial_profile(patch, donor + acceptor, n_bins),
+        }
+
+    def _patch_radial_profile(self, patch: SurfacePatch, values: np.ndarray, n_bins: int) -> np.ndarray:
+        """Average patch values in radial bins from center to patch edge."""
+        if not patch.points:
+            return np.zeros(n_bins, dtype=float)
+        coords = np.asarray([pt.coord for pt in patch.points], dtype=float)
+        distances = np.linalg.norm(coords - patch.center, axis=1)
+        if float(np.max(distances, initial=0.0)) <= 1e-8:
+            return np.full(n_bins, self._finite_mean_or_zero(values), dtype=float)
+        scaled = np.clip(distances / max(float(patch.radius), 1e-8), 0.0, 0.999999)
+        bin_ids = np.floor(scaled * n_bins).astype(int)
+        profile = np.zeros(n_bins, dtype=float)
+        for bin_id in range(n_bins):
+            profile[bin_id] = self._finite_mean_or_zero(values[bin_ids == bin_id])
+        return profile
+
+    def _patch_fingerprint_complementarity(self, patch1: SurfacePatch, patch2: SurfacePatch) -> Dict[str, float]:
+        """Compare patch fingerprints using channel-specific complementarity rules."""
+        fp1 = self._patch_fingerprint(patch1)
+        fp2 = self._patch_fingerprint(patch2)
+        shape = self._profile_match(fp1["shape"], fp2["shape"], opposite=True)
+        curvature = self._profile_match(fp1["curvature"], fp2["curvature"], opposite=False)
+        esp = self._profile_match(fp1["esp"], fp2["esp"], opposite=True)
+        hydro = self._profile_match(fp1["hydro"], fp2["hydro"], opposite=False)
+        donor_acceptor = self._profile_match(fp1["donor"], fp2["acceptor"], opposite=False)
+        acceptor_donor = self._profile_match(fp1["acceptor"], fp2["donor"], opposite=False)
+        hbond = 0.5 * donor_acceptor + 0.5 * acceptor_donor
+        hbond_total = self._profile_similarity(fp1["hbond_total"], fp2["hbond_total"])
+        combined = (
+            0.20 * shape
+            + 0.10 * curvature
+            + 0.25 * esp
+            + 0.15 * hydro
+            + 0.25 * hbond
+            + 0.05 * hbond_total
+        )
+        return {
+            "shape": float(shape),
+            "curvature": float(curvature),
+            "esp": float(esp),
+            "hydro": float(hydro),
+            "hbond": float(hbond),
+            "hbond_total": float(hbond_total),
+            "combined": float(np.clip(combined, 0.0, 1.0)),
+        }
+
+    def _profile_match(self, a: np.ndarray, b: np.ndarray, opposite: bool = False) -> float:
+        target_b = -b if opposite else b
+        diff = float(np.mean(np.abs(a - target_b))) if a.size and b.size else 2.0
+        return float(np.clip(1.0 - diff / 2.0, 0.0, 1.0))
+
+    def _profile_similarity(self, a: np.ndarray, b: np.ndarray) -> float:
+        denom = float(np.linalg.norm(a) * np.linalg.norm(b))
+        if denom <= 1e-8:
+            return 0.5
+        return float(np.clip((float(np.dot(a, b)) / denom + 1.0) / 2.0, 0.0, 1.0))
+
+    def _finite_mean_or_zero(self, values: np.ndarray) -> float:
+        finite = values[np.isfinite(values)]
+        return float(np.mean(finite)) if finite.size else 0.0
+
+    def _surface_residues_for_patch(self, patch: SurfacePatch) -> List[str]:
+        """Return protein residues represented by surface points in a patch."""
+        residues = set()
+        for point in patch.points:
+            for residue in getattr(point, "surface_residues", []) or []:
+                if residue:
+                    residues.add(residue)
+            if not getattr(point, "surface_residues", None) and point.nearest_residue:
+                residues.add(point.nearest_residue)
+        return sorted(residues)
     
     def _extract_patches(self, mesh: SurfaceMesh, 
                         points: List[SurfacePoint]) -> List[SurfacePatch]:
@@ -1489,6 +2076,41 @@ class SurfaceComparator:
         esp1 = np.tanh(np.array([pt.electrostatic_potential for pt in p1.points]) / 5.0)
         esp2 = -np.tanh(np.array([pt.electrostatic_potential for pt in p2.points]) / 5.0)
         return self._histogram_correlation(esp1, esp2)
+
+    def _directional_electrostatic_patch_complementarity(self, p1: SurfacePatch, p2: SurfacePatch) -> float:
+        """
+        Compare spatially organized electrostatic complementarity.
+
+        The regular electrostatic score compares only the distribution of charge
+        values. This keeps a lightweight notion of direction by comparing
+        center-to-rim radial electrostatic profiles across the two patches.
+        """
+        profile1 = self._radial_electrostatic_profile(p1)
+        profile2 = self._radial_electrostatic_profile(p2)
+        valid = np.isfinite(profile1) & np.isfinite(profile2)
+        if not np.any(valid):
+            return self._electrostatic_patch_complementarity(p1, p2)
+        # Opposite potentials in the same radial shell are complementary.
+        shell_scores = 1.0 - np.abs(profile1[valid] + profile2[valid]) / 2.0
+        return float(np.clip(np.mean(shell_scores), 0.0, 1.0))
+
+    def _radial_electrostatic_profile(self, patch: SurfacePatch, n_bins: int = 4) -> np.ndarray:
+        """Mean normalized electrostatic potential from patch center to rim."""
+        if not patch.points:
+            return np.full(n_bins, np.nan, dtype=float)
+        coords = np.asarray([pt.coord for pt in patch.points], dtype=float)
+        esp = np.tanh(np.asarray([pt.electrostatic_potential for pt in patch.points], dtype=float) / 5.0)
+        distances = np.linalg.norm(coords - patch.center, axis=1)
+        if np.max(distances, initial=0.0) <= 1e-8:
+            return np.full(n_bins, np.nan, dtype=float)
+        scaled = np.clip(distances / self.patch_radius, 0.0, 0.999999)
+        bin_ids = np.floor(scaled * n_bins).astype(int)
+        profile = np.full(n_bins, np.nan, dtype=float)
+        for bin_id in range(n_bins):
+            values = esp[bin_ids == bin_id]
+            if len(values) > 0:
+                profile[bin_id] = float(np.mean(values))
+        return profile
     
     def _hydrophobic_complementarity(self, points1: List[SurfacePoint],
                                      points2: List[SurfacePoint]) -> float:
@@ -1516,6 +2138,38 @@ class SurfaceComparator:
         hydro1 = np.array([pt.hydrophobicity for pt in p1.points])
         hydro2 = np.array([pt.hydrophobicity for pt in p2.points])
         return self._histogram_correlation(hydro1, hydro2)
+
+    def _hbond_patch_complementarity(self, p1: SurfacePatch, p2: SurfacePatch) -> float:
+        """Compute patch-level donor/acceptor complementarity."""
+        donor1 = np.array([pt.hbond_donor_density for pt in p1.points])
+        acceptor1 = np.array([pt.hbond_acceptor_density for pt in p1.points])
+        donor2 = np.array([pt.hbond_donor_density for pt in p2.points])
+        acceptor2 = np.array([pt.hbond_acceptor_density for pt in p2.points])
+
+        if (
+            np.max(donor1 + acceptor1, initial=0.0) < 1e-8
+            or np.max(donor2 + acceptor2, initial=0.0) < 1e-8
+        ):
+            return 0.5
+
+        directed_scores = [
+            self._directed_hbond_complementarity(donor1, acceptor2),
+            self._directed_hbond_complementarity(acceptor1, donor2),
+        ]
+        weighted_sum = sum(score * weight for score, weight in directed_scores)
+        total_weight = sum(weight for _, weight in directed_scores)
+        return weighted_sum / total_weight if total_weight > 1e-8 else 0.5
+
+    def _directed_hbond_complementarity(self, values1: np.ndarray, values2: np.ndarray) -> Tuple[float, float]:
+        """Compare one donor/acceptor direction without rewarding absent signal as perfect."""
+        has_signal1 = np.max(values1, initial=0.0) >= 1e-8
+        has_signal2 = np.max(values2, initial=0.0) >= 1e-8
+        weight = float(np.mean(values1) + np.mean(values2))
+        if not has_signal1 and not has_signal2:
+            return 0.5, 0.0
+        if has_signal1 != has_signal2:
+            return 0.0, weight
+        return self._histogram_correlation(values1, values2), weight
     
     def _histogram_correlation(self, values1: np.ndarray,
                                values2: np.ndarray,
@@ -1717,13 +2371,13 @@ class SurfaceSimilarityAnalyzer:
                  surface_method: str = "auto",
                  apbs_path: Optional[str] = None,
                  use_apbs: bool = True,
-                 patch_radius: float = 12.0,
+                 patch_radius: float = 9.0,
                  max_feature_vertices: int = 12000):
         """
         Initialize analyzer.
         
         Args:
-            surface_method: "auto", "open3d", or "edtsurf"
+            surface_method: "auto" or "msms". Both require MSMS.
             apbs_path: Path to APBS binary
             use_apbs: Prefer APBS electrostatics when available
             patch_radius: Radius for surface patches (Å)
@@ -1777,6 +2431,16 @@ class SurfaceSimilarityAnalyzer:
         print(f"Analyzing surface: {len(atoms)} atoms")
         if use_apbs is None:
             use_apbs = self.use_apbs
+        pdb_source = pdb_file
+        temp_pdb_source = None
+        if use_apbs and obj_name and HAS_PYMOL:
+            normalized_selection = self._normalize_selection(obj_name, selection)
+            full_selection = obj_name if normalized_selection == "all" else f"({obj_name}) and ({normalized_selection})"
+            tmp = tempfile.NamedTemporaryFile(prefix="glint_surface_", suffix=".pdb", delete=False)
+            temp_pdb_source = tmp.name
+            tmp.close()
+            cmd.save(temp_pdb_source, full_selection)
+            pdb_source = temp_pdb_source
         
         # Generate surface
         mesh = self.surface_generator.generate(atoms)
@@ -1795,8 +2459,15 @@ class SurfaceSimilarityAnalyzer:
             )
         
         # Extract features
-        extractor = FeatureExtractor(atoms, self.apbs_path)
-        points = extractor.extract_features(feature_mesh, use_apbs=use_apbs)
+        try:
+            extractor = FeatureExtractor(atoms, self.apbs_path, pdb_source=pdb_source)
+            points = extractor.extract_features(feature_mesh, use_apbs=use_apbs)
+        finally:
+            if temp_pdb_source and os.path.exists(temp_pdb_source):
+                try:
+                    os.remove(temp_pdb_source)
+                except OSError:
+                    pass
         
         mesh.points = points
         mesh.feature_vertex_count = feature_vertex_count
@@ -1832,14 +2503,21 @@ class SurfaceSimilarityAnalyzer:
     def analyze_complementarity(self, receptor: str, ligand: str,
                                receptor_sel: str = "all",
                                ligand_sel: str = "all",
-                               interface_distance: float = 4.0) -> ComplementarityResult:
+                               interface_distance: float = 4.0,
+                               receptor_anchor_resn: Optional[str] = None,
+                               receptor_anchor_coords: Optional[np.ndarray] = None,
+                               receptor_anchor_radius: float = 8.0,
+                               receptor_anchor_mode: str = "include",
+                               receptor_template_center: Optional[np.ndarray] = None,
+                               template_class: str = "imid") -> ComplementarityResult:
         """
         Analyze surface complementarity between receptor and ligand.
         
         Args:
             receptor, ligand: PyMOL object names or PDB files
             receptor_sel, ligand_sel: PyMOL selections
-            interface_distance: Distance threshold for interface (Å)
+            interface_distance: Backward-compatible argument; patch mode does not
+                use a direct-contact threshold.
         
         Returns:
             ComplementarityResult
@@ -1847,16 +2525,53 @@ class SurfaceSimilarityAnalyzer:
         # Analyze both surfaces
         mesh1, points1 = self._get_or_analyze(receptor, receptor_sel)
         mesh2, points2 = self._get_or_analyze(ligand, ligand_sel)
+        anchor_coords = None
+        if receptor_anchor_resn:
+            anchor_coords = self._anchor_atom_coords(receptor, receptor_sel, receptor_anchor_resn)
+            if anchor_coords.size == 0:
+                print(f"WARNING: no anchor atoms found for receptor resn {receptor_anchor_resn!r}.")
+        if receptor_anchor_coords is not None:
+            supplied_coords = np.asarray(receptor_anchor_coords, dtype=float)
+            if supplied_coords.ndim == 2 and supplied_coords.shape[1] == 3 and len(supplied_coords) > 0:
+                if anchor_coords is not None and len(anchor_coords) > 0:
+                    anchor_coords = np.vstack([anchor_coords, supplied_coords])
+                else:
+                    anchor_coords = supplied_coords
+            else:
+                print("WARNING: supplied receptor_anchor_coords had invalid shape; ignoring.")
         
         # Compute complementarity
         result = self.comparator.compute_complementarity(
-            mesh1, mesh2, points1, points2, interface_distance)
+            mesh1,
+            mesh2,
+            points1,
+            points2,
+            interface_distance,
+            reference_anchor_coords=anchor_coords,
+            reference_anchor_radius=receptor_anchor_radius,
+            reference_anchor_mode=receptor_anchor_mode,
+            reference_template_center=receptor_template_center,
+            template_class=template_class,
+        )
         
         return result
+
+    def _anchor_atom_coords(self, obj: str, selection: str, resn: str) -> np.ndarray:
+        """Return atom coordinates for a residue name used as an anchor."""
+        if os.path.isfile(obj):
+            atoms = self._get_atoms(None, obj, selection)
+        else:
+            atoms = self._get_atoms(obj, None, selection)
+        wanted = resn.strip().upper()
+        coords = [
+            atom["coord"] for atom in atoms
+            if str(atom.get("resn", "")).strip().upper() == wanted
+        ]
+        return np.asarray(coords, dtype=float)
     
     def _get_or_analyze(self, obj: str, selection: str) -> Tuple[SurfaceMesh, List[SurfacePoint]]:
         """Get cached analysis or perform new analysis."""
-        cache_key = f"{obj}_{selection}|apbs={int(bool(self.use_apbs))}"
+        cache_key = f"{obj}|{selection}|apbs={int(bool(self.use_apbs))}"
         
         if cache_key in self._cache:
             return self._cache[cache_key]
@@ -2025,7 +2740,8 @@ class SurfaceSimilarityAnalyzer:
                     'name': atom.name
                 })
         elif pdb_file:
-            with open(pdb_file, 'r') as f:
+            opener = gzip.open if str(pdb_file).endswith(".gz") else open
+            with opener(pdb_file, 'rt') as f:
                 for line in f:
                     if line.startswith('ATOM') or line.startswith('HETATM'):
                         try:
@@ -2098,7 +2814,7 @@ def analyze_surface_similarity(obj1: str, obj2: str = None,
                                selection1: str = "all",
                                selection2: str = "all",
                                output_csv: str = None,
-                               patch_radius: float = 12.0) -> Union[SimilarityResult, Tuple[SurfaceMesh, List[SurfacePoint]]]:
+                               patch_radius: float = 9.0) -> Union[SimilarityResult, Tuple[SurfaceMesh, List[SurfacePoint]]]:
     """
     PyMOL command: Analyze surface similarity.
     
@@ -2172,20 +2888,53 @@ def analyze_surface_complementarity(receptor: str, ligand: str,
     print(f"  Geometric:     {result.geometric_complementarity:.3f}")
     print(f"  Electrostatic: {result.electrostatic_complementarity:.3f}")
     print(f"  Hydrophobic:   {result.hydrophobic_complementarity:.3f}")
-    print(f"\nInterface:")
-    print(f"  Area: {result.interface_area:.1f} Ų")
-    print(f"  Contacts: {result.n_contacts}")
-    print(f"  Residue pairs: {len(result.interface_residues)}")
+    print(f"  H-bond D/A:    {result.hbond_complementarity:.3f}")
+    print(f"\nPatch-based matching:")
+    print(f"  Patch matches: {result.n_patch_matches}")
+    print(f"  Patch radius: {result.patch_radius:.1f} Å")
+    print(f"  Minimum surface distance: {result.min_distance:.1f} Å")
     print("="*50)
     
     if output_csv:
         import csv
         with open(output_csv, 'w', newline='', encoding='utf-8') as f:
             writer = csv.writer(f)
-            writer.writerow(['Receptor_Residue', 'Ligand_Residue'])
-            for r1, r2 in result.interface_residues:
-                writer.writerow([r1, r2])
-        print(f"Interface residues saved to {output_csv}")
+            writer.writerow([
+                'Rank', 'Overall_Score', 'Geometric_Score',
+                'Electrostatic_Score', 'Hydrophobic_Score', 'Hbond_DA_Score',
+                'Interface_Score', 'Focused_Interface_Score',
+                'Background_Score', 'Interface_Delta',
+                'Template_Match_Score', 'Target_Pocketness_Gate',
+                'Specificity_Score',
+                'Receptor_Center_X', 'Receptor_Center_Y', 'Receptor_Center_Z',
+                'Ligand_Center_X', 'Ligand_Center_Y', 'Ligand_Center_Z',
+                'Receptor_Patch_Residues', 'Ligand_Patch_Residues'
+            ])
+            for idx, match in enumerate(result.patch_matches, start=1):
+                writer.writerow([
+                    idx,
+                    f"{match.overall_score:.4f}",
+                    f"{match.geometric_score:.4f}",
+                    f"{match.electrostatic_score:.4f}",
+                    f"{match.hydrophobic_score:.4f}",
+                    f"{match.hbond_score:.4f}",
+                    f"{getattr(match, 'interface_score', 0.0):.4f}",
+                    f"{getattr(match, 'focused_interface_score', 0.0):.4f}",
+                    f"{getattr(match, 'background_score', 0.0):.4f}",
+                    f"{getattr(match, 'interface_delta', 0.0):.4f}",
+                    f"{getattr(match, 'template_match_score', 0.0):.4f}",
+                    f"{getattr(match, 'target_pocketness_score', 0.0):.4f}",
+                    f"{getattr(match, 'specificity_score', 0.0):.4f}",
+                    f"{match.center1[0]:.3f}",
+                    f"{match.center1[1]:.3f}",
+                    f"{match.center1[2]:.3f}",
+                    f"{match.center2[0]:.3f}",
+                    f"{match.center2[1]:.3f}",
+                    f"{match.center2[2]:.3f}",
+                    ";".join(match.residues1),
+                    ";".join(match.residues2),
+                ])
+        print(f"Patch complementarity results saved to {output_csv}")
     
     return result
 
@@ -2206,7 +2955,7 @@ class BatchSurfaceAnalyzer:
     
     def __init__(self,
                  surface_method: str = "auto",
-                 patch_radius: float = 12.0,
+                 patch_radius: float = 9.0,
                  n_jobs: int = 1):
         """
         Initialize batch analyzer.
@@ -2452,7 +3201,7 @@ def batch_analyze_surfaces(pdb_files: List[str] = None,
                           pdb_directory: str = None,
                           output_dir: str = None,
                           surface_method: str = "auto",
-                          patch_radius: float = 12.0) -> BatchSurfaceAnalyzer:
+                          patch_radius: float = 9.0) -> BatchSurfaceAnalyzer:
     """
     PyMOL command: Batch analyze multiple protein surfaces.
     
